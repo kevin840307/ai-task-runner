@@ -770,3 +770,14 @@ def test_stage_test_has_real_stop_control():
     assert "async function stopStageTest()" in text
     assert 'tx("stop_test")' in text
     assert "result.cancelled" in text
+
+
+
+def test_stage_backend_model_fields_are_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+    registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
+
+    assert 'fields: ["backend", "model", "run_state"' in text
+    assert 'item.name == "backend"' in registry
+    assert 'backend_names()' in registry
+    assert '"qwen", "opencode"' not in text
