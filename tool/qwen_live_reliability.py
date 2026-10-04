@@ -451,7 +451,7 @@ def runner_command(
         command.extend([
             "--planning-timeout", "1",
             "--agent-timeout", "1",
-            "--stage-retries", "1",
+            "--stage-retries", "2",
         ])
     if final_ai:
         command.extend([
