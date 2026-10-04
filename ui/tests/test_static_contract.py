@@ -273,5 +273,12 @@ class StaticContractTests(unittest.TestCase):
         self.assertNotIn("/api/project/trace", self.app_js)
 
 
+    def test_prompt_used_by_height_is_bounded(self):
+        css = (ROOT / "ui" / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+        self.assertIn(".prompt-used-by-list", css)
+        self.assertIn("max-height: 92px", css)
+        self.assertIn("overflow: auto", css)
+
+
 if __name__ == "__main__":
     unittest.main()
