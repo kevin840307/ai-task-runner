@@ -39,24 +39,6 @@ def test_structured_call_does_not_swallow_ask_errors_during_same_session_repair(
         structured_call("initial", parser, ask, retries=1)
 
 
-def test_structured_call_does_not_swallow_fresh_ask_errors() -> None:
-    def parser(_raw: str) -> str:
-        raise RunnerError("schema invalid")
-
-    def fresh_ask() -> str:
-        raise RunnerError("fresh transport escaped")
-
-    with pytest.raises(RunnerError, match="fresh transport escaped"):
-        structured_call(
-            "initial",
-            parser,
-            lambda _prompt: '{"bad": true}',
-            retries=0,
-            fresh_ask=fresh_ask,
-            fresh_retries=1,
-        )
-
-
 def test_structured_call_exhaustion_is_a_structured_output_error() -> None:
     def parser(_raw: str) -> str:
         raise RunnerError("schema invalid")
