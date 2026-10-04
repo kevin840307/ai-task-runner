@@ -373,6 +373,12 @@ High-value runner work remaining:
     reproduce -> deterministic regression test -> fix -> rerun gates.
 
 [ ] Verify state/log/history growth during soak.
+    - Implemented: resource-observation.jsonl plus require_resource_bounds() safety rails.
+    - Soak now fails on leftover active process markers, large harness thread/handle/RSS leakage,
+      catastrophic per-project state/session/dynamic/review growth, oversized expanded workflows,
+      or excessive per-project debug history.
+    - run_root_bytes is intentionally observation-only because each soak iteration retains a new Project.
+    - Deterministic safety-rail coverage added; still requires real high-density + 24H evidence before marking complete.
     - No unbounded state.json growth.
     - No unbounded warning/debug/history growth.
     - No repeated stale dynamic/session entries after completion/resume.
@@ -483,3 +489,9 @@ CURRENT IMPLEMENTATION NOTES
 - Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
 
 - Designer output handles are now explicitly kept above existing edges with pointer hit priority so PASS/FAIL/HANDOFF can be re-used for additional connections after an edge already exists. Browser Handoff multi-target E2E remains the verification gate before this is considered closed.
+
+CURRENT TODO IMPLEMENTATION IN PROGRESS
+---------------------------------------
+- Edge -> empty canvas -> Add Stage: implemented with React Flow onConnectStart/onConnectEnd, reusing the same applyConnectionToVisual routing mutation. Source/Browser contracts added; awaiting same-HEAD CI before marking complete.
+- Run from here / Test path: workflow_dryrun.py now supports --from-stage and Studio exposes saved-Workflow path testing without mutating canonical YAML or production state. Backend/React/Browser regressions added; awaiting same-HEAD CI before marking complete.
+- Soak resource bounds: deterministic safety rails are implemented; real high-density/24H evidence remains required.
