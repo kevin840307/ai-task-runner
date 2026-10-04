@@ -622,9 +622,9 @@ class WorkflowStudioMixin:
             raise ValueError("Stage test id is required")
         lock, processes, cancelled = self._stage_test_runtime()
         with lock:
+            cancelled.add(key)
             process = processes.get(key)
             if process is None:
-                cancelled.add(key)
                 return {"ok": True, "cancelled": True, "pending": True}
         self._terminate_stage_test_process(process)
         return {"ok": True, "cancelled": True, "pending": False}
@@ -726,12 +726,11 @@ class WorkflowStudioMixin:
                 raise ValueError("Stage test timed out after 900 seconds") from exc
             finally:
                 with lock:
+                    was_cancelled = key in cancelled
                     processes.pop(key, None)
                     cancelled.discard(key)
 
-            if process.returncode is not None and process.returncode < 0:
-                return {"ok": False, "cancelled": True, "test_id": key}
-            if cancel_immediately:
+            if was_cancelled or cancel_immediately:
                 return {"ok": False, "cancelled": True, "test_id": key}
             completed = subprocess.CompletedProcess(command, process.returncode or 0, stdout, stderr)
 
