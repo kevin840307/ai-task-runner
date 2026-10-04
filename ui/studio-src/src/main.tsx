@@ -417,7 +417,8 @@ function executionTargetOverrideActive(
   stage: Stage,
   constraint: CatalogExecutionTargetConstraint | null,
 ): boolean {
-  return (constraint?.paired_fields || []).some((field) => String(stage[field] || "").trim());
+  const pair = constraint?.paired_fields || [];
+  return pair.length > 0 && pair.every((field) => String(stage[field] || "").trim());
 }
 
 function applyExecutionTargetConstraint(
@@ -443,7 +444,7 @@ function applyExecutionTargetConstraint(
   const next = { ...stage, [field]: value };
   if (
     pair.includes(field)
-    && String(value || "").trim()
+    && executionTargetOverrideActive(next, constraint)
     && sessionField
     && incompatible.has(currentSession)
   ) {
