@@ -2356,3 +2356,24 @@ def test_review_failure_routing_workflow_dryrun_closes_validator_fail_loop(tmp_p
         assert ctx.state.completed is True
     finally:
         _close(ctx)
+
+
+
+def test_timeout_probe_budget_reaches_fresh_session_rotation(tmp_path: Path):
+    config = live.settings(tmp_path)
+    project = tmp_path / "timeout-project"
+    project.mkdir()
+    (project / "prompt.md").write_text("goal", encoding="utf-8")
+    (project / "validation.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    command = live.runner_command(config, project, timeout_probe=True)
+
+    assert command[command.index("--stage-retries") + 1] == "2"
+    assert command[command.index("--agent-timeout") + 1] == "1"
+    assert command[command.index("--planning-timeout") + 1] == "1"
+    assert command[command.index("--retry-delay") + 1] == "0"
+
+    from runner.config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
+    assert DEFAULT_PER_SESSION_ATTEMPTS == 2
+    # initial attempt + retry #1 reaches the per-session cap; retry #2 is
+    # therefore the Fresh Session attempt that timeout_probe expects to observe.
