@@ -49,17 +49,12 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
 
     stage_class = STAGE_REGISTRY[stage_type]
     if issubclass(stage_class, BaseStage):
-        try:
-            BaseStage.validate_execution_target(
-                name,
-                str(values.get("backend") or ""),
-                str(values.get("model") or ""),
-                str(values.get("session_policy") or "auto"),
-            )
-        except Exception as error:
-            if isinstance(error, RunnerError):
-                raise
-            raise RunnerError(str(error)) from error
+        BaseStage.validate_execution_target(
+            name,
+            str(values.get("backend") or ""),
+            str(values.get("model") or ""),
+            str(values.get("session_policy") or "auto"),
+        )
 
     if values.get("validator") not in {None, "ai"}:
         raise RunnerError(f"workflow stage {name} validator must be ai")
