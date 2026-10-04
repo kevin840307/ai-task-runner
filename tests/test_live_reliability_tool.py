@@ -2573,7 +2573,7 @@ def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
     ("events", "message"),
     [
         (
-            [{"type": "runner.recovery", "action": "retry", "retry_mode": "recover"}],
+            [{"type": "runner.recovery", "action": "retry", "retry": 2, "retry_mode": "recover"}],
             "without controlled Runner fresh-session evidence",
         ),
         (
@@ -2582,7 +2582,7 @@ def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
         ),
         (
             [
-                {"type": "runner.recovery", "action": "retry", "retry_mode": "recover"},
+                {"type": "runner.recovery", "action": "retry", "retry": 2, "retry_mode": "recover"},
                 {"type": "runner.session", "action": "fresh", "previous_session": "other"},
             ],
             "does not match the observed pre-outage session",
