@@ -424,12 +424,10 @@ def create_ai_client(
             allow_project_read=allow_project_read,
             sandbox=getattr(config, "sandbox", False),
         )
-    inherited_model = (
-        model_from_args(config.backend, config.agent_args)
-        if backend_name != config.backend
-        else ""
-    )
-    effective_model = str(model_override or inherited_model).strip()
+    # Model identifiers are backend-owned. When a Stage switches backend,
+    # an empty model override must use the target backend's own default instead
+    # of leaking the run-level model name from a different provider.
+    effective_model = str(model_override or "").strip()
     if effective_model:
         args = configure_model_args(backend_name, args, effective_model)
     client = constructor(
