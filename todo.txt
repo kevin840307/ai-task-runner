@@ -357,6 +357,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed real-Qwen expired-session classification for current Qwen output.
+    - Real Windows probe completed the resume path but failed its evidence assertion because Qwen reports
+      a missing durable chat as "No saved session found"; the generic SESSION_INVALID_MARKERS did not include
+      that already-known Qwen message, so AIClient never emitted session_recovery_action=reset_session.
+    - Added the generic "no saved session found" invalid-session marker; AIClient now clears only the unavailable
+      session and lets the existing StageExecutor recovery envelope continue in a Fresh Session.
+    - The live probe remains fail-closed and now includes the relevant model prompt/result diagnostics when
+      reset_session evidence is missing, so future backend wording changes are actionable instead of opaque.
+    - Added deterministic classifier coverage; no FlowEngine routing or retry ownership changed.
+
 [x] Hardened all API outage probes with a deterministic arm/active handshake.
     - Root cause found before another live failure: the prior 0.5s short outage could expire during the
       fixed 2s arm delay before the execute AI Stage issued its request.
