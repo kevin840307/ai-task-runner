@@ -2179,9 +2179,9 @@ def test_finish_run_clears_primary_session_by_contract():
 
 
 
-def test_api_disconnect_fixture_has_deterministic_outage_boundary(tmp_path: Path):
-    project = live.create_project(tmp_path, "api-disconnect-fixture")
-    workflow, marker = live._prepare_api_disconnect_fixture(project)
+def test_api_recovery_fixture_has_deterministic_outage_handshake(tmp_path: Path):
+    project = live.create_project(tmp_path, "api-recovery-fixture")
+    workflow, armed, active = live._prepare_api_recovery_fixture(project)
 
     loaded = live.load_workflow(workflow)
     assert [stage["name"] for stage in loaded] == [
@@ -2192,22 +2192,29 @@ def test_api_disconnect_fixture_has_deterministic_outage_boundary(tmp_path: Path
     ]
     assert loaded[0]["session_policy"] == "main"
     assert loaded[2]["session_policy"] == "main"
-    assert marker == project / ".ai-task-runner" / "api-outage-armed"
-    assert not marker.exists()
-    assert "time.sleep(2)" in (project / "api_outage_arm.py").read_text(encoding="utf-8")
+    assert armed == project / ".ai-task-runner" / "api-outage-armed"
+    assert active == project / ".ai-task-runner" / "api-outage-active"
+    assert not armed.exists()
+    assert not active.exists()
+
+    arm_source = (project / "api_outage_arm.py").read_text(encoding="utf-8")
+    assert "marker.write_text" in arm_source
+    assert "while not active.is_file()" in arm_source
+    assert "API outage harness did not acknowledge arm marker" in arm_source
 
 
-def test_api_disconnect_probe_waits_for_arm_marker_before_injecting_outage():
+def test_api_recovery_probe_acknowledges_active_outage_before_execute():
     source = (
         Path(__file__).resolve().parents[1]
         / "tool"
         / "qwen_live_reliability.py"
     ).read_text(encoding="utf-8")
 
-    assert "outage_armed = (" in source
     assert "outage_marker.is_file()" in source
-    assert "not session_id\\n                    and outage_armed" in source
-    assert "workflow, outage_marker = _prepare_api_disconnect_fixture(project)" in source
+    assert "not session_id\n                    and outage_armed" in source
+    assert "workflow, outage_marker, outage_active_marker = _prepare_api_recovery_fixture(project)" in source
+    assert 'outage_active_marker.write_text("active\\n", encoding="utf-8")' in source
+    assert "API_RECOVERY_SHORT_OUTAGE_SECONDS = 5.0" in source
 
 
 def test_api_recovery_probe_disables_backend_internal_retry():
