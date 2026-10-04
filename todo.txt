@@ -193,6 +193,8 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Manual YAML backend/model edits refresh back into Designer immediately through the same canonical Workflow view-switch path.
     - UI prevents the invalid backend/model override + session_policy=main combination instead of deferring it to a runtime surprise.
     - Chromium E2E covers Designer -> YAML -> Designer round-trip using OpenCode and Qwen values.
+    - Current source/browser build exposes the fields, but the committed ui/static/workflow-studio-app bundle is still stale; packaged/local UI may not show them until the generated bundle is rebuilt and committed.
+    - Do not mark this item complete until the committed bundle and real backend evidence both match current source.
     - Deterministic coverage verifies OpenCode model override, plugin/future-backend custom model syntax, YAML/catalog/UI parity, session ownership and Resume/dynamic-child behavior.
     - Real-Qwen Stage Probe coverage is wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
     - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
