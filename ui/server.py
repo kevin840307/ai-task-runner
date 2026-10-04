@@ -62,7 +62,12 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/projects":
-                return self._json(self.state.projects_payload())
+                query = parse_qs(parsed.query)
+                return self._json(
+                    self.state.projects_payload(
+                        exclude_runtime_path=query.get("exclude_runtime", [""])[0]
+                    )
+                )
             if parsed.path == "/api/backends":
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])
