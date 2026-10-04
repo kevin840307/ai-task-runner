@@ -114,6 +114,17 @@ type StageTestResult = {
   test_retry_policy?: string;
 };
 
+type PathTestResult = {
+  ok: boolean;
+  exit_code: number;
+  from_stage: string;
+  completed: boolean;
+  error?: string | null;
+  cycle?: number | null;
+  stage?: string | null;
+  transitions: Array<{ number: number; stage: string; label?: string | null; status: string }>;
+};
+
 type InspectorTab = "form" | "yaml" | "routing" | "test";
 type WorkflowEditorView = "designer" | "yaml";
 type StageTestMode = "stage" | "agent_ping";
@@ -898,6 +909,9 @@ function App() {
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
+  const [pathTestResult, setPathTestResult] = useState<PathTestResult | null>(null);
+  const [pathTestError, setPathTestError] = useState("");
+  const [pathTesting, setPathTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
   const [snapEnabled, setSnapEnabled] = useState(readSnapPreference());
@@ -1231,6 +1245,8 @@ function App() {
     }
     setDirtyGraph(true);
     setTestResult(null);
+    setPathTestResult(null);
+    setPathTestError("");
   }
 
   async function testStage() {
@@ -1253,6 +1269,33 @@ function App() {
       setTestError(error instanceof Error ? error.message : String(error));
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function testPathFromStage(stageName = draft?.name || "") {
+    if (!visual || !stageName || pathTesting || busy) return;
+    if (dirtyGraph) {
+      setPathTestResult(null);
+      setPathTestError("Save the Workflow before testing a path.");
+      return;
+    }
+    setPathTesting(true);
+    setPathTestResult(null);
+    setPathTestError("");
+    try {
+      const result = await api<PathTestResult>("/api/studio/path/test", {
+        method: "POST",
+        body: JSON.stringify({
+          id: visual.id,
+          project: query().project,
+          stage: stageName,
+        }),
+      });
+      setPathTestResult(result);
+    } catch (error) {
+      setPathTestError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPathTesting(false);
     }
   }
 
@@ -1986,6 +2029,9 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         {contextMenu && <div className="stage-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseLeave={() => setContextMenu(null)}>
           <button type="button" onClick={() => { openStageEditor(contextMenu.stage); setContextMenu(null); }}>⚙ {tx("stage_settings")}</button>
+          <button type="button" disabled={dirtyGraph || busy || pathTesting}
+            title={dirtyGraph ? "Save Workflow before testing path" : "Dry-run this saved path to END"}
+            onClick={() => { const stage = contextMenu.stage; setContextMenu(null); void testPathFromStage(stage); }}>▶ Test path to END</button>
           <button type="button" onClick={() => { copyStageByName(contextMenu.stage); setContextMenu(null); }}>⧉ {tx("copy")} <kbd>Ctrl+C</kbd></button>
           <button type="button" disabled={!copiedStage} onClick={() => { pasteStage(); setContextMenu(null); }}>▣ {tx("paste")} <kbd>Ctrl+V</kbd></button>
           <button type="button" onClick={() => { void duplicateStage(contextMenu.stage); setContextMenu(null); }}>⊕ {tx("duplicate")}</button>
@@ -2270,9 +2316,17 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       <small>{tx("test_input_help")}</small>
                     </label>
                   : <div className="ping-prompt"><strong>{tx("fixed_prompt")}</strong><code>{AGENT_PING_PROMPT}</code><small>{tx("ping_help")}</small></div>}
-                <button type="button" className="primary" onClick={() => void testStage()}
-                  disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
+                <div className="test-action-row">
+                  <button type="button" className="primary" onClick={() => void testStage()}
+                    disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
+                  <button type="button" onClick={() => void testPathFromStage()}
+                    disabled={pathTesting || busy || dirtyGraph}
+                    title={dirtyGraph ? "Save Workflow before testing path" : "Dry-run saved Workflow from this Stage to END"}>
+                    {pathTesting ? "Testing path…" : "Test path to END"}
+                  </button>
+                </div>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
+                {pathTestError && <p className="test-error" role="alert">{pathTestError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
                   <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
                     {testMode === "stage" && <span>{tx("next_label")}：<strong>{testResult.next}</strong></span>}
@@ -2281,6 +2335,16 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   <strong>Output</strong><pre>{testResult.output || tx("no_output")}</pre>
                   {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>{tx("structured_data")}</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
                   {!!testResult.changed_files?.length && <details><summary>{tx("changed_files")} · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
+                </div>}
+                {pathTestResult && <div className="test-result path-test-result" aria-live="polite">
+                  <div className="test-result-summary">
+                    <span className={`result-status ${pathTestResult.completed ? "pass" : "fail"}`}>{pathTestResult.completed ? "CLOSED" : "STOPPED"}</span>
+                    <span>From：<strong>{pathTestResult.from_stage}</strong></span>
+                    <span>Steps：<strong>{pathTestResult.transitions.length}</strong></span>
+                  </div>
+                  <strong>Path</strong>
+                  <pre>{pathTestResult.transitions.map((item) => `${String(item.number).padStart(3, "0")}  ${item.stage}  ${item.status.toUpperCase()}`).join("\n") || "(no transitions)"}</pre>
+                  {pathTestResult.error && <p className="test-error">{pathTestResult.error}</p>}
                 </div>}
               </div>}
               </div>
