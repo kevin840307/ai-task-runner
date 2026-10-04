@@ -364,6 +364,95 @@ const nodeTypes = {
   stage: StageNode,
 };
 
+const PALETTE_SECTIONS: { id: string; icon: string }[] = [
+  { id: "build", icon: "✦" },
+  { id: "validate", icon: "✓" },
+  { id: "handoff", icon: "↔" },
+  { id: "tools", icon: "›" },
+];
+
+function catalogStageMeta(catalog: Catalog | null, type: string) {
+  const meta = catalog?.stage_types?.[type];
+  return {
+    title: String(meta?.title || type),
+    description: String(meta?.description || ""),
+    category: String(meta?.category || "extensions"),
+  };
+}
+
+const SNAP_PREF_KEY = "workflow-designer.snap:v1";
+
+function readSnapPreference(): boolean {
+  try { return localStorage.getItem(SNAP_PREF_KEY) === "1"; } catch { return false; }
+}
+
+function writeSnapPreference(enabled: boolean): void {
+  try { localStorage.setItem(SNAP_PREF_KEY, enabled ? "1" : "0"); } catch { /* local-only convenience */ }
+}
+
+function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
+  return catalog?.stage_types?.[stageType]?.options?.find((item) => item.name === name)?.default;
+}
+
+function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
+  const explicit = String(stage.prompt || "").trim();
+  if (explicit) return explicit;
+  if (stage.type === "base") {
+    const profile = String(stage.profile || "generic");
+    const prompt = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
+    if (typeof prompt === "string" && prompt.trim()) return prompt.trim();
+  }
+  return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
+}
+
+function executionTargetConstraint(
+  catalog: Catalog | null,
+  stage: Stage | null,
+): CatalogExecutionTargetConstraint | null {
+  if (!stage) return null;
+  return catalog?.stage_types?.[stage.type]?.constraints?.execution_target || null;
+}
+
+function executionTargetOverrideActive(
+  stage: Stage,
+  constraint: CatalogExecutionTargetConstraint | null,
+): boolean {
+  return (constraint?.paired_fields || []).some((field) => String(stage[field] || "").trim());
+}
+
+function applyExecutionTargetConstraint(
+  stage: Stage,
+  constraint: CatalogExecutionTargetConstraint | null,
+  field: string,
+  value: unknown,
+): { stage: Stage; blocked: boolean; sessionReset: boolean } {
+  if (!constraint) {
+    return { stage: { ...stage, [field]: value }, blocked: false, sessionReset: false };
+  }
+  const pair = constraint.paired_fields || [];
+  const sessionField = String(constraint.session_policy_field || "");
+  const incompatible = new Set((constraint.incompatible_session_policies || []).map(String));
+  const currentSession = sessionField ? String(stage[sessionField] || "") : "";
+  if (
+    field === sessionField
+    && incompatible.has(String(value))
+    && executionTargetOverrideActive(stage, constraint)
+  ) {
+    return { stage, blocked: true, sessionReset: false };
+  }
+  const next = { ...stage, [field]: value };
+  if (
+    pair.includes(field)
+    && String(value || "").trim()
+    && sessionField
+    && incompatible.has(currentSession)
+  ) {
+    delete next[sessionField];
+    return { stage: next, blocked: false, sessionReset: true };
+  }
+  return { stage: next, blocked: false, sessionReset: false };
+}
+
 type CanvasPosition = { x: number; y: number };
 type PendingEdgeCreate = { source: string; sourceHandle: string; position: CanvasPosition };
 type CanvasLayout = Record<string, CanvasPosition>;
