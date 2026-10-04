@@ -3114,6 +3114,20 @@ def test_controlled_backoff_agent_is_present():
     text = agent.read_text(encoding="utf-8")
     assert "HTTP 503 Service Unavailable" in text
     assert "BACKOFF_TEST_STATE_DIR" in text
+    assert "BACKOFF_TEST_FAILURES" in text
+
+
+def test_runner_backoff_cap_preflight_uses_real_exponential_retry_timing():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tool"
+        / "qwen_live_reliability.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"--retry-delay", str(LIVE_RETRY_DELAY_SECONDS)' in source
+    assert 'os.environ["BACKOFF_TEST_FAILURES"] = "5"' in source
+    assert "expected_waits = [2.0, 4.0, 8.0, 16.0" in source
+    assert "controlled Runner backoff sequence did not reach the cap monotonically" in source
 
 
 def test_api_rotation_contract_accepts_event_proven_session_when_state_poll_lags():
