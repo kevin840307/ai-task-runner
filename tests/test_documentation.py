@@ -123,3 +123,23 @@ def test_todo_keeps_only_current_runtime_and_remaining_acceptance_gates():
     assert "24H ACCEPTANCE" in value
     assert "high-density soak" in value
     assert "future.txt" not in value
+
+
+
+def test_test_matrix_documents_selectable_live_probe_starts():
+    root = Path(__file__).resolve().parents[1]
+    for relative in (
+        "docs/development/TEST_MATRIX.md",
+        "docs/development/TEST_MATRIX.zh-TW.md",
+    ):
+        text = (root / relative).read_text(encoding="utf-8")
+        assert "--list-probes" in text
+        assert "--start-probe" in text
+        assert "review-failure-routing" in text
+
+    for relative in (
+        "tool/qwen_live_reliability_24h.bat",
+        "tool/qwen_live_reliability_0_5h.bat",
+    ):
+        text = (root / relative).read_text(encoding="utf-8")
+        assert "%*" in text
