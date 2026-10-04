@@ -344,6 +344,27 @@ flow:
                 assert saved["stages"]["worker"]["backend"] == "qwen"
                 assert saved["stages"]["worker"]["model"] == "local-model-y"
 
+                # Invalid execution targets entered in YAML must fail at the same
+                # canonical Save boundary and must not mutate the saved Workflow.
+                page.locator(".modal-close-button").click()
+                page.get_by_role("tab", name="YAML").click()
+                yaml_editor = page.locator(".workflow-yaml-editor")
+                before_invalid_target = workflow.read_text(encoding="utf-8")
+                yaml_editor.fill(
+                    """stages:
+  worker:
+    type: base
+    profile: generic
+    backend: does-not-exist
+flow:
+  - worker
+"""
+                )
+                page.get_by_role("tab", name="Designer").click()
+                page.locator(".workflow-yaml-error").wait_for(state="visible")
+                assert page.get_by_role("tab", name="YAML").get_attribute("aria-selected") == "true"
+                assert workflow.read_text(encoding="utf-8") == before_invalid_target
+
                 assert not errors
                 browser.close()
         finally:
