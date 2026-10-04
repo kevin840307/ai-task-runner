@@ -1021,6 +1021,7 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
     assert workflow[0]["profile"] == "execute"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["routes"] == {"fail": "execute"}
+    assert workflow[4]["routes"] == {"fail": "execute"}
     assert workflow[3]["type"] == "base"
     assert workflow[3]["profile"] == "review"
     assert all(
@@ -2323,3 +2324,35 @@ def test_session_expiry_preflight_requires_stageexecutor_recovery_event():
     assert 'event.get("action") == "retry"' in source
     assert '"HTTP 503" in str(event.get("error") or "")' in source
     assert "production CLI transient Stage failure emitted no runner.recovery/retry evidence" in source
+
+
+
+def test_review_failure_routing_workflow_dryrun_closes_validator_fail_loop(tmp_path: Path):
+    from runner.workflow.loader import load_workflow
+    from tool.workflow_dryrun import Scenario, _execute, _close
+
+    workflow_path = tmp_path / "workflow.yaml"
+    workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
+    workflow = load_workflow(workflow_path)
+
+    scenario = Scenario({
+        "stages": {
+            "execute": ["pass", "pass", "pass"],
+            "seed": "pass",
+            "review": "fail",
+            "review_verify": ["pass", "pass"],
+            "validate_file": ["fail", "pass"],
+        }
+    })
+    ctx, executor, error = _execute(workflow, scenario, 20)
+    try:
+        assert error == ""
+        starts = [stage for _number, stage, _label, _status in executor.trace]
+        assert starts == [
+            "execute", "seed", "review",
+            "execute", "review_verify", "validate_file",
+            "execute", "review_verify", "validate_file",
+        ]
+        assert ctx.state.completed is True
+    finally:
+        _close(ctx)
