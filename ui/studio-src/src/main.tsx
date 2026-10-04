@@ -999,8 +999,8 @@ function App() {
         api<Catalog>("/api/workflow/catalog"),
         api<{ prompts?: StudioFile[] }>(filesUrl),
         api<BackendCatalog>(query().project
-          ? `/api/backends?project=${encodeURIComponent(query().project)}`
-          : "/api/backends"),
+          ? `/api/backends?project=${encodeURIComponent(query().project)}&models=1`
+          : "/api/backends?models=1"),
       ]);
       const canonicalYaml = String(file.content || "");
       const localDraft = readWorkflowDraft(v.id);
