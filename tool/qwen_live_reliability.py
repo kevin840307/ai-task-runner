@@ -2410,6 +2410,39 @@ flow:
 """
 
 
+def _assert_dynamic_session_policy_evidence(
+    project: Path,
+    state: dict[str, object],
+) -> None:
+    stage_sessions = state.get("stage_sessions")
+    if not isinstance(stage_sessions, dict):
+        raise RuntimeError("Dynamic Handoff live state missing stage_sessions")
+
+    main_results = stage_result_sessions(project, "main_role")
+    stable_results = stage_result_sessions(project, "stable_role")
+    fresh_results = stage_result_sessions(project, "fresh_role")
+    if len(main_results) < 2 or len(set(main_results[-2:])) != 1:
+        raise RuntimeError(
+            "session_policy=main did not reuse the primary Runner session"
+        )
+    if len(stable_results) < 2 or len(set(stable_results[-2:])) != 1:
+        raise RuntimeError(
+            "session_policy=role did not reuse the same role-specific session"
+        )
+    if not fresh_results:
+        raise RuntimeError("session_policy=fresh produced no real model session evidence")
+    if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
+        raise RuntimeError(
+            "Dynamic Handoff session policies did not produce isolated session identities"
+        )
+
+    # Completed runs keep semantic event evidence, not active-only checkpoints.
+    if state.get("ai_session_id") or stage_sessions:
+        raise RuntimeError(
+            "completed Dynamic Handoff run retained active-only session state"
+        )
+
+
 def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None:
     """Exercise Dynamic Handoff plus main/role/fresh session transport with real Qwen."""
     project = create_project(
@@ -2494,35 +2527,7 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
             f"expected={expected}, observed={starts}"
         )
 
-    state = read_state(project)
-    stage_sessions = state.get("stage_sessions")
-    if not isinstance(stage_sessions, dict):
-        raise RuntimeError("Dynamic Handoff live state missing stage_sessions")
-
-    main_results = stage_result_sessions(project, "main_role")
-    stable_results = stage_result_sessions(project, "stable_role")
-    fresh_results = stage_result_sessions(project, "fresh_role")
-    if len(main_results) < 2 or len(set(main_results[-2:])) != 1:
-        raise RuntimeError(
-            "session_policy=main did not reuse the primary Runner session"
-        )
-    if len(stable_results) < 2 or len(set(stable_results[-2:])) != 1:
-        raise RuntimeError(
-            "session_policy=role did not reuse the same role-specific session"
-        )
-    if not fresh_results:
-        raise RuntimeError("session_policy=fresh produced no real model session evidence")
-    if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
-        raise RuntimeError(
-            "Dynamic Handoff session policies did not produce isolated session identities"
-        )
-
-    # Session identity is verified from durable model events above. Completed
-    # runs must not retain active-only session checkpoints in state.json.
-    if state.get("ai_session_id") or stage_sessions:
-        raise RuntimeError(
-            "completed Dynamic Handoff run retained active-only session state"
-        )
+    _assert_dynamic_session_policy_evidence(project, read_state(project))
 
 
 
