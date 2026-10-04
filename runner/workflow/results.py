@@ -300,9 +300,17 @@ def finish_task(ctx: StageContext) -> None:
 def finish_run(ctx: StageContext) -> None:
     if any(task.status != "completed" for task in ctx.state.tasks):
         raise ConfigurationError("workflow ended with pending planned tasks")
-    ctx.state.ai_session_id = ""
-    ctx.state.transition_previous = {}
-    ctx.state.completed = True
+    state = ctx.state
+    state.ai_session_id = ""
+    state.transition_previous = {}
+    # These maps only support active/resumable execution. Once the run is
+    # complete they are stale technical state, not history, so retaining them
+    # only grows state.json and risks confusing later inspection.
+    state.stage_sessions.clear()
+    state.review_failures.clear()
+    state.dynamic_groups.clear()
+    state.dynamic_task_groups.clear()
+    state.completed = True
     ctx.ai_client.session_id = ""
     ctx.set_stage("completed", "")
     progress.set_status("全部完成", "Workflow PASS")
