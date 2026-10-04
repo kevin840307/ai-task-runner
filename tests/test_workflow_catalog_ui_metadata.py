@@ -21,6 +21,11 @@ def test_workflow_catalog_exposes_stage_presentation_metadata():
     assert stage_types["plan"]["test_examples"]["pass"]
     assert stage_types["handoff"]["test_examples"]["error"]
 
+    execution = base["constraints"]["execution_target"]
+    assert execution["paired_fields"] == ["backend", "model"]
+    assert execution["session_policy_field"] == "session_policy"
+    assert execution["incompatible_session_policies"] == ["main"]
+
 
 def test_unknown_plugin_fields_default_to_advanced_without_ui_branching():
     from dataclasses import dataclass, field
