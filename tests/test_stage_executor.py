@@ -408,6 +408,50 @@ def test_long_transient_window_remains_bounded_and_recovers(monkeypatch):
 
 
 
+def test_transient_backoff_survives_fresh_session_rotation(monkeypatch):
+    class Transient(RunnerError):
+        transient = True
+
+    class LongOutage(Stage):
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return f"session-{self.resets}"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 5:
+                return StageResult.error_result(
+                    self.name,
+                    Transient(f"temporary outage {self.calls}"),
+                )
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 2
+    ctx.config.retry_max_delay = 10
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = LongOutage()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.resets == 2
+    assert sleeps == [2.0, 4.0, 8.0, 10.0, 10.0]
+
+
 def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path, monkeypatch):
     class PartialWrite(Stage):
         track_changes = True
