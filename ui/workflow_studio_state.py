@@ -847,6 +847,17 @@ class WorkflowStudioMixin:
         produces = fields.get("produces")
         if produces not in (None, "", "tasks", "stages"):
             raise ValueError("Stage produces must be tasks or stages when specified")
+        backend = str(fields.get("backend") or "").strip()
+        if backend:
+            known_backends = set(self.backend_catalog().get("backends") or [])
+            if backend not in known_backends:
+                raise ValueError(f"Stage backend is unsupported: {backend}")
+        model = str(fields.get("model") or "").strip()
+        if len(model) > 200 or any(ord(ch) < 32 for ch in model):
+            raise ValueError("Stage model is invalid")
+        if (backend or model) and fields.get("session_policy") == "main":
+            raise ValueError("Stage backend/model override cannot use session_policy: main")
+
         session_policy = fields.get("session_policy", "auto")
         if session_policy not in {"auto", "main", "role", "fresh"}:
             raise ValueError("Stage session_policy must be auto, main, role, or fresh")
