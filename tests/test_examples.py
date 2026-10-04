@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXPECTED = {
     "01_basic_command_validator",
-    "02_repair_cycle",
+    "02_validator_reroute_cycle",
     "03_ai_validator_voting",
     "04_mixed_validation",
-    "05_ai_quality_repair",
+    "05_ai_quality_gate",
     "06_yaml_driven_tool",
     "07_blackbox_medium",
     "08_config_driven_data_pipeline",
@@ -186,7 +186,7 @@ def test_starter_states_match_example_purpose():
     # These cases intentionally start incomplete or broken so the Runner has work to do.
     for name in (
         "01_basic_command_validator",
-        "02_repair_cycle",
+        "02_validator_reroute_cycle",
         "04_mixed_validation",
         "06_yaml_driven_tool",
         "07_blackbox_medium",
@@ -199,13 +199,13 @@ def test_starter_states_match_example_purpose():
         assert "VALIDATION_FAILED" in result.stdout
 
     # Example 05 deliberately hard-passes first; its AI semantic gate should catch the sample-specific starter.
-    result = run_validator("05_ai_quality_repair")
+    result = run_validator("05_ai_quality_gate")
     assert result.returncode == 0, result.stdout
     assert "VALIDATION_PASSED" in result.stdout
 
 
 def test_ai_examples_have_visible_custom_prompts():
-    for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_repair"):
+    for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_gate"):
         text = (EXAMPLES / name / "project" / "ai_validation.md").read_text(encoding="utf-8")
         assert len(text.splitlines()) >= 3
 
