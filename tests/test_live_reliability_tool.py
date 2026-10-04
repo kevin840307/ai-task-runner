@@ -3321,6 +3321,17 @@ def test_list_probes_exits_before_qwen_command_validation(monkeypatch, capsys):
     assert f"{review_index:02d}  review-failure-routing" in output
 
 
+def test_fail_start_launcher_defaults_to_current_failed_probe_and_allows_override():
+    root = Path(__file__).resolve().parents[1]
+    launcher = root / "run_qwen_live_reliability_fail_start.bat"
+    text = launcher.read_text(encoding="utf-8")
+
+    assert launcher.is_file()
+    assert "--start-probe real-session-expiry" in text
+    assert "%*" in text
+    assert "run_qwen_live_reliability_from_api_disconnect" not in text
+
+
 def test_batch_gates_forward_live_probe_selector_arguments():
     root = Path(__file__).resolve().parents[1]
     for name in ("qwen_live_reliability_24h.bat", "qwen_live_reliability_0_5h.bat"):
