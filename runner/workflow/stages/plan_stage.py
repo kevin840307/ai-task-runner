@@ -47,13 +47,30 @@ class PlanStage(BaseStage):
             raise RunnerError("Plan Stage must produce validated tasks")
         return replace(
             result,
-            data={"tasks": tasks, "stages": self._plan_child_stages(tasks)},
+            data={
+                "tasks": tasks,
+                "stages": self._plan_child_stages(
+                    tasks,
+                    backend=str(self.spec.backend or "").strip(),
+                    model=str(self.spec.model or "").strip(),
+                ),
+            },
             kind="tasks",
         )
 
     @staticmethod
-    def _plan_child_stages(tasks: list[Task]) -> list[dict[str, object]]:
+    def _plan_child_stages(
+        tasks: list[Task],
+        *,
+        backend: str = "",
+        model: str = "",
+    ) -> list[dict[str, object]]:
         stages: list[dict[str, object]] = []
+        execution_target = {
+            key: value
+            for key, value in (("backend", backend), ("model", model))
+            if value
+        }
         for index, task in enumerate(tasks, 1):
             token = f"task_{index:03d}"
             execute = f"{token}_execute"
@@ -64,6 +81,7 @@ class PlanStage(BaseStage):
                     "type": "base",
                     "profile": "execute",
                     "task_id": task.id,
+                    **execution_target,
                 },
                 {
                     "name": review,
@@ -72,6 +90,7 @@ class PlanStage(BaseStage):
                     "task_id": task.id,
                     "task_complete": True,
                     "routes": {"fail": execute},
+                    **execution_target,
                 },
             ])
         return [apply_ai_profile_defaults(stage) for stage in stages]
