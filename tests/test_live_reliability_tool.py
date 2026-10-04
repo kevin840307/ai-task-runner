@@ -3092,6 +3092,37 @@ def test_api_rotation_contract_accepts_durable_fresh_when_polling_misses_rotatio
     )
 
 
+def test_long_http_probe_separates_runner_backoff_from_real_qwen_transport(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(
+        live,
+        "runner_backoff_cap_preflight",
+        lambda root: calls.append(("backoff", root)) or {"cap_reached": True},
+    )
+    monkeypatch.setattr(
+        live,
+        "api_recovery_probe",
+        lambda settings, root, name, **kwargs: calls.append(
+            ("qwen", name, kwargs["status_code"], kwargs["outage_seconds"])
+        ) or True,
+    )
+    settings = object()
+
+    statuses = live.long_http_recovery_probe(settings, tmp_path, 180)
+
+    assert statuses == live.API_RECOVERY_STATUS_CODES
+    assert calls[0] == ("backoff", tmp_path)
+    assert [item[2] for item in calls[1:]] == list(live.API_RECOVERY_STATUS_CODES)
+    assert all(item[3] == 180 for item in calls[1:])
+
+
+def test_controlled_backoff_agent_is_present():
+    agent = Path(__file__).resolve().parent / "transient_backoff_agent.py"
+    text = agent.read_text(encoding="utf-8")
+    assert "HTTP 503 Service Unavailable" in text
+    assert "BACKOFF_TEST_STATE_DIR" in text
+
+
 def test_api_rotation_contract_accepts_event_proven_session_when_state_poll_lags():
     live._assert_controlled_api_session_rotation(
         "stale-polled-session",
