@@ -2178,6 +2178,38 @@ def test_finish_run_clears_primary_session_by_contract():
 
 
 
+
+def test_api_disconnect_fixture_has_deterministic_outage_boundary(tmp_path: Path):
+    project = live.create_project(tmp_path, "api-disconnect-fixture")
+    workflow, marker = live._prepare_api_disconnect_fixture(project)
+
+    loaded = live.load_workflow(workflow)
+    assert [stage["name"] for stage in loaded] == [
+        "warmup",
+        "arm",
+        "execute",
+        "validate_file",
+    ]
+    assert loaded[0]["session_policy"] == "main"
+    assert loaded[2]["session_policy"] == "main"
+    assert marker == project / ".ai-task-runner" / "api-outage-armed"
+    assert not marker.exists()
+    assert "time.sleep(2)" in (project / "api_outage_arm.py").read_text(encoding="utf-8")
+
+
+def test_api_disconnect_probe_waits_for_arm_marker_before_injecting_outage():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tool"
+        / "qwen_live_reliability.py"
+    ).read_text(encoding="utf-8")
+
+    assert "outage_armed = (" in source
+    assert "outage_marker.is_file()" in source
+    assert "not session_id\\n                    and outage_armed" in source
+    assert "workflow, outage_marker = _prepare_api_disconnect_fixture(project)" in source
+
+
 def test_api_recovery_probe_disables_backend_internal_retry():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
 
