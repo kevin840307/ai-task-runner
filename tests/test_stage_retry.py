@@ -178,9 +178,9 @@ def test_transient_service_errors_stay_in_same_session_and_backoff_in_seconds(
 
     assert result.status == "pass"
     assert stage.calls == ["session-A", "session-A", "", ""]
-    # Transient backoff grows within a session and resets after the bounded
-    # per-session cap rotates this Stage to a Fresh Session.
-    assert sleeps == [1, 1, 2]
+    # Service backoff is outage-scoped, independent from the bounded
+    # Same Session -> Fresh Session rotation policy.
+    assert sleeps == [1, 2, 4]
 
 
 def test_error_after_project_change_rotates_session_and_recovers(tmp_path):
