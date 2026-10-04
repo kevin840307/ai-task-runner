@@ -439,6 +439,34 @@ def arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def source_revision(root: Path = ROOT) -> tuple[str, bool | None]:
+    """Return the exact Git revision plus tracked working-tree dirtiness when available."""
+    if not shutil.which("git"):
+        return "", None
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if head.returncode != 0:
+            return "", None
+        revision = head.stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        dirty = bool(status.stdout.strip()) if status.returncode == 0 else None
+        return revision, dirty
+    except (OSError, subprocess.SubprocessError):
+        return "", None
+
+
 def print_probe_list() -> None:
     for index, name in enumerate(PROBE_ORDER, start=1):
         print(f"{index:02d}  {name}")
@@ -4089,7 +4117,13 @@ def main() -> int:
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
+    revision, source_dirty = source_revision()
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
+    print(
+        f"SOURCE_REVISION={revision or '<unavailable>'} "
+        f"DIRTY={source_dirty if source_dirty is not None else '<unknown>'}",
+        flush=True,
+    )
     if start_probe:
         print(
             f"START_PROBE={start_probe + 1:02d} {PROBE_ORDER[start_probe]}",
@@ -4261,6 +4295,8 @@ def main() -> int:
                 print(f"PASS copied-example real-agent smoke {case.name}", flush=True)
     summary = {
         "passed": True,
+        "source_revision": revision,
+        "source_dirty": source_dirty,
         "sandbox": settings.sandbox,
         "high_density": args.high_density,
         "hours_requested": args.hours,
