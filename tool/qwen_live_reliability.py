@@ -3390,12 +3390,12 @@ def _assert_controlled_api_session_rotation(
         raise RuntimeError(
             "API outage rotated Fresh Session without runner.recovery mode=recover evidence"
         )
-    if session_rotated and not any(
+    if not any(
         str(event.get("previous_session") or "") == session_id
         for event in fresh_events
     ):
         raise RuntimeError(
-            "API outage rotated the observed session without matching previous_session evidence"
+            "API outage Fresh Session evidence does not match the observed pre-outage session"
         )
 
 
