@@ -485,7 +485,7 @@ class WorkflowStudioMixin:
             "type", "profile", "status", "label", "routes", "error_policy", "max_failures", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
-            "structured_fresh_retries", "runs", "required_passes",
+            "runs", "required_passes",
             "readonly_safety", "track_changes", "tolerate_restored_changes",
             "timeout", "session_key", "session_policy", "produces", "min_tasks",
             "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
