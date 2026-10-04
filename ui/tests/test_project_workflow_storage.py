@@ -276,3 +276,40 @@ def test_studio_path_test_rejects_unknown_stage_before_subprocess(tmp_path: Path
         assert str(exc) == "Stage not found: missing"
     else:
         raise AssertionError("unknown Stage path test must fail")
+
+
+
+def test_stage_test_cancel_handles_pending_and_active_processes(tmp_path: Path, monkeypatch) -> None:
+    state, _project = _state(tmp_path)
+    stopped = []
+
+    class FakeProcess:
+        pid = 12345
+        def poll(self):
+            return None
+
+    fake = FakeProcess()
+    monkeypatch.setattr(state, "_terminate_stage_test_process", lambda process: stopped.append(process))
+
+    pending = state.studio_stage_test_cancel("pending-test")
+    assert pending == {"ok": True, "cancelled": True, "pending": True}
+
+    lock, processes, cancelled = state._stage_test_runtime()
+    assert "pending-test" in cancelled
+
+    with lock:
+        processes["active-test"] = fake
+    active = state.studio_stage_test_cancel("active-test")
+    assert active == {"ok": True, "cancelled": True, "pending": False}
+    assert stopped == [fake]
+    assert "active-test" in cancelled
+
+
+def test_stage_test_pending_cancel_is_bounded(tmp_path: Path) -> None:
+    state, _project = _state(tmp_path)
+
+    for index in range(80):
+        state.studio_stage_test_cancel(f"cancel-{index}")
+
+    _lock, _processes, cancelled = state._stage_test_runtime()
+    assert len(cancelled) <= 64
