@@ -61,6 +61,41 @@ def _fake_qwen_command(tmp_path: Path) -> str:
     return f'"{sys.executable}" "{fake}"'
 
 
+def _install_fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    script = tmp_path / "fake_opencode.py"
+    script.write_text(
+        "import json, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args and args[0] == 'models':\n"
+        "    print('provider/model-oc')\n"
+        "else:\n"
+        "    sys.stdin.read()\n"
+        "    answer = json.dumps({'completed': True, 'reason': 'checked', 'missing_items': []})\n"
+        "    print(json.dumps({'type':'text','sessionID':'oc-session','part':{'text':answer}}))\n",
+        encoding="utf-8",
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if os.name == "nt":
+        executable = bin_dir / "opencode.cmd"
+        executable.write_text(
+            f'@"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8",
+        )
+    else:
+        executable = bin_dir / "opencode"
+        executable.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n',
+            encoding="utf-8",
+        )
+        executable.chmod(0o755)
+    monkeypatch.setenv(
+        "PATH",
+        str(bin_dir) + os.pathsep + os.environ.get("PATH", ""),
+    )
+    return executable
+
+
 def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -114,27 +149,15 @@ def test_stage_probe_live_preflight_executes_real_stage_override_with_fake_openc
     monkeypatch: pytest.MonkeyPatch,
 ):
     import runner.agent
-    from runner.agent.opencode import OpenCodeBackend
 
-    fake = tmp_path / "fake_opencode.py"
-    fake.write_text(
-        "import json, sys\n"
-        "prompt = sys.stdin.read()\n"
-        "answer = json.dumps({'completed': True, 'reason': 'checked', 'missing_items': []})\n"
-        "print(json.dumps({'type':'text','sessionID':'oc-session','part':{'text':answer}}))\n",
-        encoding="utf-8",
-    )
-    command = f'"{sys.executable}" "{fake}"'
+    _install_fake_opencode(tmp_path, monkeypatch)
     config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
     monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
-    monkeypatch.setattr(runner.agent, "default_command", lambda backend: command)
     monkeypatch.setattr(
         runner.agent,
         "available_models",
         lambda backend, root: ["provider/model-oc"],
     )
-    monkeypatch.setattr(OpenCodeBackend, "default_command", command)
-    monkeypatch.setattr(live.shutil, "which", lambda value: sys.executable)
 
     result = live.stage_probe_live_preflight(config)
 
