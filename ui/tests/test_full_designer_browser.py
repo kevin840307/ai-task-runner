@@ -69,6 +69,43 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
     page.wait_for_timeout(120)
 
 
+def _drop_connection_on_empty_canvas(page, source_selector: str) -> None:
+    fit = page.locator(".react-flow__controls-fitview")
+    if fit.count():
+        fit.click()
+        page.wait_for_timeout(80)
+    source = page.locator(source_selector)
+    assert source.is_visible()
+    start = source.bounding_box()
+    pane = page.locator(".react-flow__pane").bounding_box()
+    assert start and pane
+
+    candidates = [
+        (pane["x"] + pane["width"] - 90, pane["y"] + 110),
+        (pane["x"] + pane["width"] - 90, pane["y"] + pane["height"] / 2),
+        (pane["x"] + 90, pane["y"] + pane["height"] - 90),
+    ]
+    target = None
+    for x, y in candidates:
+        occupied = page.evaluate(
+            """([x, y]) => {
+                const el = document.elementFromPoint(x, y);
+                return Boolean(el?.closest('.react-flow__node,.react-flow__handle,.react-flow__controls,.react-flow__minimap'));
+            }""",
+            [x, y],
+        )
+        if not occupied:
+            target = (x, y)
+            break
+    assert target is not None
+
+    page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(target[0], target[1], steps=12)
+    page.mouse.up()
+    page.wait_for_timeout(120)
+
+
 def _save_editor(page) -> None:
     button = page.locator(".studio-header button.primary")
     assert button.is_enabled()
@@ -717,6 +754,90 @@ flow:
                 page.locator("#studioPromptTextarea").wait_for(state="visible")
                 assert page.locator("#studioPromptTextarea").input_value().strip()
                 assert page.locator("#studioFileName").inner_text() == prompt["name"]
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_edge_drop_on_empty_canvas_creates_and_connects_stage() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-edge-drop-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "edge-drop.yaml"
+        workflow.write_text(
+            """stages:
+  after:
+    type: command
+    command:
+      - "{python}"
+      - "-c"
+      - "print('after')"
+flow:
+  - after
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "edge-drop.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="after"]').wait_for(state="attached")
+
+                _drop_connection_on_empty_canvas(
+                    page,
+                    '.react-flow__node[data-id="after"] .react-flow__handle.pass',
+                )
+                page.locator(".add-stage-command").wait_for(state="visible")
+                page.locator('.add-stage-command-list button[data-stage-type="base"]').click()
+                page.locator(".create-stage-card").wait_for(state="visible")
+                page.get_by_role("button", name="Create Stage").click()
+
+                page.locator('.react-flow__node[data-id="ai_stage"]').wait_for(state="attached")
+                page.locator('.react-flow__edge[data-id="after:pass:ai_stage"]').wait_for(state="attached")
+                _save_editor(page)
+
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["flow"] == ["after", "ai_stage"]
+                assert saved["stages"]["ai_stage"]["type"] == "base"
+                assert "routes" not in saved["stages"]["after"]
+
+                dryrun = subprocess.run(
+                    [sys.executable, str(ROOT / "tool" / "workflow_dryrun.py"), str(workflow), "--json"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                assert dryrun.returncode == 0, dryrun.stdout + dryrun.stderr
+                payload = json.loads(dryrun.stdout)
+                assert [item["stage"] for item in payload["transitions"]] == ["after", "ai_stage"]
+                assert payload["completed"] is True
+                assert not errors
                 browser.close()
         finally:
             server.shutdown()
