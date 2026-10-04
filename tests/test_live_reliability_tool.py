@@ -1739,10 +1739,21 @@ def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, mon
     assert sample["threads"] >= 1
     assert sample["handles"] == 77
     assert "run_root_bytes" not in sample
-    assert sample["active_process_markers"] == 1
+    assert sample["active_process_markers"] == 0
 
-    final_sample = live.resource_snapshot(tmp_path, include_run_root_bytes=True)
+    marker_sample = live.resource_snapshot(
+        tmp_path,
+        include_active_process_markers=True,
+    )
+    assert marker_sample["active_process_markers"] == 1
+
+    final_sample = live.resource_snapshot(
+        tmp_path,
+        include_run_root_bytes=True,
+        include_active_process_markers=True,
+    )
     assert final_sample["run_root_bytes"] >= 13
+    assert final_sample["active_process_markers"] == 1
 
 
 def test_completed_project_state_cleanup_accepts_empty_active_maps(tmp_path):
@@ -1780,6 +1791,15 @@ def test_completed_project_state_cleanup_rejects_stale_active_maps(tmp_path):
 
     with pytest.raises(RuntimeError, match="stale technical state"):
         live.assert_completed_project_state_clean(project)
+
+
+def test_soak_avoids_recursive_run_root_marker_scan_per_iteration():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    soak_source = source[source.index("def soak("):source.index("def require_resource_bounds(")]
+
+    assert "sample = resource_snapshot(\n            project," in soak_source
+    assert "include_active_process_markers=True" in soak_source
+    assert "sample = resource_snapshot(root)" not in soak_source
 
 
 def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
