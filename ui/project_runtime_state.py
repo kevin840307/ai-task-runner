@@ -24,6 +24,10 @@ except ImportError:  # direct ui/main.py execution
 
 UI_STATE_DIR = ".ai-task-runner/ui"
 MESSAGES_FILE = "messages.jsonl"
+CHAT_MESSAGE_READ_LIMIT = 200
+CHAT_MESSAGE_RETAIN = 400
+CHAT_MESSAGE_COMPACT_TRIGGER = 600
+CHAT_MESSAGE_MAX_BYTES = 10 * 1024 * 1024
 CHAT_STATE_FILE = "chat-state.json"
 LAUNCH_STATE_FILE = "launching.json"
 LAUNCH_RESERVATION_GRACE = 30.0
@@ -711,7 +715,7 @@ class ProjectRuntimeMixin:
                         rows.append(item)
         except OSError:
             return []
-        return rows[-200:]
+        return rows[-CHAT_MESSAGE_READ_LIMIT:]
 
     def run_history(self, project: Path) -> list[dict]:
         """Derive recent UI run history from existing chat/runtime evidence.
@@ -774,6 +778,40 @@ class ProjectRuntimeMixin:
         return list(reversed(rows[-20:]))
 
 
+    @staticmethod
+    def _compact_messages(path: Path) -> None:
+        try:
+            if not path.is_file():
+                return
+            raw = path.read_text(encoding="utf-8").splitlines()
+            if (
+                len(raw) <= CHAT_MESSAGE_COMPACT_TRIGGER
+                and path.stat().st_size <= CHAT_MESSAGE_MAX_BYTES
+            ):
+                return
+            kept: list[str] = []
+            size = 0
+            for line in reversed(raw):
+                encoded = len(line.encode("utf-8")) + 1
+                if kept and (
+                    len(kept) >= CHAT_MESSAGE_RETAIN
+                    or size + encoded > CHAT_MESSAGE_MAX_BYTES
+                ):
+                    break
+                kept.append(line)
+                size += encoded
+            kept.reverse()
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(
+                ("\n".join(kept) + "\n") if kept else "",
+                encoding="utf-8",
+            )
+            os.replace(temporary, path)
+        except OSError:
+            # Chat retention is a UI maintenance path; never fail a run/message
+            # because compaction could not be completed.
+            return
+
     def append_message(self, project: Path, role: str, content: str, *, run_id: str = "") -> None:
         with self._chat_lock:
             folder = project / UI_STATE_DIR
@@ -781,8 +819,10 @@ class ProjectRuntimeMixin:
             row = {"role": role, "content": content, "time": time.time()}
             if run_id:
                 row["run_id"] = run_id
-            with (folder / MESSAGES_FILE).open("a", encoding="utf-8") as handle:
+            path = folder / MESSAGES_FILE
+            with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            self._compact_messages(path)
 
     def clear_chat_history(self, project: Path, *, reset_stopped: bool = False) -> dict:
         """Clear persisted UI conversation history.
