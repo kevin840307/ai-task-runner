@@ -821,7 +821,7 @@ Final-pass rules:
 P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
 ---------------------------------------------------
 
-[ ] Simplify StageExecutor recovery branches without changing semantics
+[x] Simplify StageExecutor recovery branches without changing semantics
     - Remove duplicate Same Session / Fresh Session decision code shared by transient and normal technical errors.
     - Keep partial-write recovery explicit: preserve maintained-source changes and rotate only the affected Stage session.
     - Keep outage-scoped exponential backoff for transient service failures; Fresh Session rotation must not reset outage backoff.
@@ -831,7 +831,7 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
     - Production-code target: normally net reduction (~20-50 lines), but correctness/readability wins over the target.
     - Regression/live contracts for 429/502/503/raw disconnect/partial write/session rotation must remain unchanged.
 
-[ ] Audit deterministic-vs-recoverable technical error boundary
+[x] Audit deterministic-vs-recoverable technical error boundary
     - No unknown programming/config/state/snapshot corruption should silently enter infinite retry.
     - Known service/backend/session/timeout failures that are actually recoverable remain unattended-retry capable.
     - ConfigurationError and equivalent deterministic failures stay fail-closed.
@@ -839,7 +839,7 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
     - Reuse the existing error boundary; do not create a large error taxonomy/framework.
     - Add only the smallest production classification change needed for ambiguous current cases.
 
-[ ] Centralize active Run lifecycle cleanup ownership
+[x] Centralize active Run lifecycle cleanup ownership
     - Audit every production mutation/cleanup of ai_session_id, stage_sessions, review_failures,
       dynamic_groups, dynamic_task_groups, task bindings, active process/control ownership and completion flags.
     - Prefer lifecycle owners such as start_run / finish_task / finish_run / reset over scattered cleanup.
@@ -848,7 +848,7 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
     - Remove duplicate cleanup code when an existing lifecycle owner can own it.
     - Goal: fewer stale-session/dynamic/ownership leaks across stop/crash/resume/complete.
 
-[ ] Add a small Resume integrity fail-closed check only where current state validation is insufficient
+[x] Add a small Resume integrity fail-closed check only where current state validation is insufficient
     - Before continuing a durable Resume, verify only invariants required for safe continuation:
       current Workflow position/Stage, frozen Workflow/resources, dynamic child references/task binding,
       and live ownership consistency.
@@ -860,7 +860,7 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
       has direct 24H value.
     - If current code already proves every listed invariant centrally, document the evidence and do not add code.
 
-[ ] Confirm dynamic child expansion has one generic production path
+[x] Confirm dynamic child expansion has one generic production path
     - Any Stage may return tasks/stages; Plan remains only one producer.
     - Plan/custom/plugin/command producers must converge on the same StageResult -> expand_stage_result ->
       FlowEngine execution path.
@@ -868,7 +868,7 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
     - Child cleanup/resume must remain generic and bounded.
     - Do not create Plan-specific Runner semantics merely for convenience.
 
-[ ] Reduce BaseStage/Profile double ownership
+[x] Reduce BaseStage/Profile double ownership
     - Review Loader/profile normalization versus BaseStage.__init__ profile interpretation.
     - Profile defaults/semantics should have one canonical owner; BaseStage should execute a normalized AI Stage
       rather than redundantly re-derive Execute/Review defaults where practical.
@@ -876,12 +876,40 @@ P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
     - Preserve genuine runtime-only differences where normalization cannot own them cleanly.
     - Accept small production-code growth when it removes duplicated ownership; avoid abstraction layers with no caller benefit.
 
+
+FINAL OPTIMIZATION RUNTIME EVIDENCE (2026-10-04)
+------------------------------------------------
+- Exact implementation HEAD 965c4ab40b0a5a794cc12299e9ab25a6733bf073 passed GitHub Actions PR run 37203987530:
+  Ubuntu Python PASS, Windows Python PASS, Chromium Browser E2E PASS, Studio build + committed-bundle verification PASS.
+- StageExecutor Same/Fresh Session selection is now one small helper shared by transient/non-transient technical errors.
+  Partial-write recovery remains explicit; transient outage backoff still survives Fresh Session rotation; retry safety floor remains unchanged.
+- Technical error boundary now retries declared RunnerError and OS-level technical failures while unexpected programming exceptions
+  fail closed as ConfigurationError. KeyboardInterrupt/SystemExit propagation remains unchanged.
+- Resume now requires the frozen Workflow snapshot and validates workflow_position, unique Stage names/routes,
+  dynamic task bindings and durable Stage-session references before continuing. Deterministic corruption fails closed.
+- Lifecycle audit found the existing owners are already correctly separated, so no LifecycleManager was added:
+  StageContext.reset_sessions owns global session reset; dynamic expansion owns replaced-child cleanup;
+  finish_task owns completed-task Review cleanup; finish_run owns active-only completion cleanup;
+  Supervisor/ProcessRunner continue to own process/orphan/lock/heartbeat cleanup only.
+- Dynamic child audit confirmed one production path: StageResult(kind=tasks/stages) -> reduce_result ->
+  expand_stage_result -> FlowEngine. Plan is only one producer; generic/nested/custom producer dry-run coverage already uses the same path.
+  No Plan-specific Core branch was added.
+- BaseStage no longer reapplies Loader/Profile defaults for Execute/Review. Normalization owns profile defaults;
+  BaseStage retains only runtime-only behavior such as parser/result-kind/backend-mode/session behavior.
+  This removed roughly 30 lines of duplicated production logic from BaseStage.
+- Profile identity is now registry metadata/helpers instead of repeated generic/execute/review literals in Schema/FlowEngine/BaseStage/result-kind logic.
+- Generic-provider final audit: FlowEngine, WorkflowRunner, UI server, project runtime projection and Full Designer source contain no
+  Qwen/OpenCode provider branch; provider-specific behavior remains adapter-owned.
+- Tasks/Chat compact Runtime Console and lightweight Workflow/Prompt libraries were already present and canonical-Runtime-View driven;
+  these TODOs were closed by audit instead of adding another dashboard/library layer.
+- Real-Qwen soak gates remain intentionally open: this deterministic pass does not substitute for 0.5H/high-density/24H evidence.
+
 P0.5 - FINAL UI/UX SIMPLIFICATION
 ---------------------------------
 Goal: a new user should understand what is running, whether action is required, and how to edit/test a
 Workflow without understanding Runner internals.
 
-[ ] Make Tasks/Chat the single compact Run Console
+[x] Make Tasks/Chat the single compact Run Console
     - Keep one primary runtime summary instead of adding Dashboard/Monitoring pages.
     - At a glance show human-readable state + current Stage/Task/progress/elapsed/recovery when relevant.
     - Common examples:
@@ -930,7 +958,7 @@ Workflow without understanding Runner internals.
     - Avoid maintaining localStorage/UI machinery for speculative future scale.
     - This is a UX/code-reduction decision based on current usage, not a requirement to delete features blindly.
 
-[ ] Keep Workflow/Prompt libraries task-focused and visually light
+[x] Keep Workflow/Prompt libraries task-focused and visually light
     - Workflow high-frequency actions: open, new, Show/Hide in Chat; secondary actions stay in context menus.
     - Prompt high-frequency actions: edit, Used By impact, save; variable insertion/large usage detail should not dominate.
     - Do not add Dashboard, analytics, tags/collections, activity feed or platform-scale navigation.
@@ -947,7 +975,7 @@ P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
     - Do not make the UI unusable when catalog loading fails: fail visibly/closed rather than inventing provider/Stage semantics.
     - Production code should normally shrink because duplicate frontend metadata is removed.
 
-[ ] Canonicalize Profile/Stage semantic knowledge
+[x] Canonicalize Profile/Stage semantic knowledge
     - Remove repeated production definitions such as hardcoded generic/execute/review lists when profile_names()
       or equivalent canonical metadata already exists.
     - Centralize the minimum semantic identity needed for Review/Execute behavior instead of repeatedly testing
@@ -955,7 +983,7 @@ P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
     - FlowEngine may still own Review fail-soft routing semantics; Stage/Profile metadata owns what a Review profile is.
     - Do not introduce ReviewStrategy/Policy/Handler class stacks.
 
-[ ] Remove unnecessary generic-layer backend/provider hardcodes
+[x] Remove unnecessary generic-layer backend/provider hardcodes
     - Generic Runner/UI/Studio code must not branch on qwen/opencode or hardcode model ids.
     - Backend adapters/registry own command construction, model discovery and provider-specific behavior.
     - Generic catalog/UI should consume registry capabilities.
@@ -1051,15 +1079,13 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact HEAD 5cea32157b873cb91c416f59984a0bda5c7fd20e passed all required deterministic gates
-      in GitHub Actions run 37200043096.
+    - Exact implementation HEAD 965c4ab40b0a5a794cc12299e9ab25a6733bf073 passed all required deterministic gates
+      in GitHub Actions PR run 37203987530.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - Commit 5cea32157b873cb91c416f59984a0bda5c7fd20e differs from implementation HEAD
-      685253c670243b748a1dff2b029a6f806f05dc75 only by todo.txt evidence maintenance, so no runtime/UI/test code
-      changed between the implementation HEAD and this exact green evidence HEAD.
+    - The suite caught one incomplete programming-error boundary edit on the prior HEAD; it was fixed before this evidence was accepted.
     - If any runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
