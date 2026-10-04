@@ -434,14 +434,15 @@ class WorkflowStudioMixin:
         if original_type and "type" not in parsed:
             parsed["type"] = original_type
 
-        # Stage YAML may represent a not-yet-saved Designer Stage. Validate the
-        # isolated Stage with the same Runner schema used by the production
-        # Workflow loader; the complete Workflow is validated again on Save.
-        try:
-            from runner.workflow.schema import validate_stage
-            validate_stage(stage_name, parsed)
-        except Exception as exc:
-            raise ValueError(str(exc)) from exc
+        # Validate through the same complete-Workflow boundary used by Save.
+        # Unsaved Designer Stages are inserted only into this temporary candidate;
+        # nothing is persisted until the user saves the Workflow.
+        candidate = path.read_text(encoding="utf-8")
+        if isinstance(saved, dict):
+            candidate = self._patch_stage_fields(candidate, stage_name, parsed)
+        else:
+            candidate = self._insert_stage_block(candidate, stage_name, parsed)
+        self._validate_workflow_before_write(path, candidate)
         return {"ok": True, "fields": parsed}
 
     def studio_path_test(
