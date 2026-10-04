@@ -843,7 +843,7 @@ flow:
                 # workflow_dryrun/FlowEngine and must not execute the prior Stage.
                 page.locator('.react-flow__node[data-id="ai_stage"]').dblclick()
                 page.locator(".stage-editor-modal").wait_for(state="visible")
-                page.get_by_role("tab", name="Test").click()
+                page.locator('[data-inspector-tab="test"]').click()
                 path_button = page.get_by_role("button", name="Test path to END")
                 assert path_button.is_enabled()
                 path_button.click()
