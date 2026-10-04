@@ -219,7 +219,6 @@ class WorkflowStudioMixin:
     ) -> dict:
         """Create one editable Workflow in Global or Project assets."""
         with self._edit_lock:
-            self._require_editable()
             raw = self._normalize_studio_asset_name("workflow", name)
             scope = self._normalize_asset_scope(destination)
             root = self._asset_root("workflow", scope, project)
@@ -259,10 +258,6 @@ class WorkflowStudioMixin:
 
     def studio_save(self, file_id: str, content: str, expected_hash: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            guard = self.edit_guard()
-            if not guard["editable"]:
-                names = ", ".join(p["name"] for p in guard["active_projects"])
-                raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if path.suffix.lower() not in EDITABLE_SUFFIXES:
@@ -319,10 +314,6 @@ class WorkflowStudioMixin:
 
     def studio_visual_save(self, file_id: str, flow: list, expected_hash: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            guard = self.edit_guard()
-            if not guard["editable"]:
-                names = ", ".join(p["name"] for p in guard["active_projects"])
-                raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
@@ -362,7 +353,6 @@ class WorkflowStudioMixin:
     ) -> dict:
         """Patch or validate one n8n-style Stage node."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope_name)
             if kind != "workflow":
@@ -769,7 +759,6 @@ class WorkflowStudioMixin:
     ) -> dict:
         """Insert one Stage with minimal YAML churn, then optionally append it to flow."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope_name)
             if kind != "workflow":
@@ -939,12 +928,6 @@ class WorkflowStudioMixin:
                 raise ValueError(
                     f"Stage routes.{status} references unknown Stage: {target}"
                 )
-
-    def _require_editable(self) -> None:
-        guard = self.edit_guard()
-        if not guard["editable"]:
-            names = ", ".join(p["name"] for p in guard["active_projects"])
-            raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
 
     def _require_hash(self, content: str, expected_hash: str) -> None:
         if expected_hash and expected_hash != self._hash_text(content):
@@ -1241,7 +1224,6 @@ class WorkflowStudioMixin:
         project: Path | None = None,
     ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             raw = self._normalize_studio_asset_name("prompt", name)
             scope = self._normalize_asset_scope(destination)
             root = self._asset_root("prompt", scope, project)
@@ -1258,7 +1240,6 @@ class WorkflowStudioMixin:
 
     def studio_delete(self, file_id: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             usages = self._prompt_usages(path, project) if kind == "prompt" else []
@@ -1315,7 +1296,6 @@ class WorkflowStudioMixin:
         project: Path | None = None,
     ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             if kind == "prompt":
                 usages = self._prompt_usages(path, project)
@@ -1349,7 +1329,6 @@ class WorkflowStudioMixin:
         project: Path | None = None,
     ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             raw = self._normalize_studio_asset_name(kind, name)
             root = self._asset_root(kind, scope, project)
@@ -1439,7 +1418,6 @@ class WorkflowStudioMixin:
     ) -> dict:
         """Delete one Stage node after proving no result edge still targets it."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
@@ -1506,7 +1484,6 @@ class WorkflowStudioMixin:
         PASS-to-next edge; graph save validates the complete draft before writing YAML.
         """
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
@@ -1631,7 +1608,6 @@ class WorkflowStudioMixin:
         project: Path | None = None,
     ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             kind = str(kind or "").strip().lower()
             if kind not in {"workflow", "prompt"}:
                 raise ValueError("Import kind must be workflow or prompt")
