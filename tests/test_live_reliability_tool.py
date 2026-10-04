@@ -65,8 +65,12 @@ def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    import runner.agent
+
     config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
     monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
+    monkeypatch.setattr(runner.agent, "default_command", lambda backend: "missing-opencode")
+    monkeypatch.setattr(live.shutil, "which", lambda command: None)
 
     result = live.stage_probe_live_preflight(config)
 
@@ -76,6 +80,69 @@ def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
         "real_stage_next": "done",
         "stage_backend": "qwen",
         "stage_model": "model-probe",
+        "opencode_stage": {
+            "available": False,
+            "tested": False,
+            "reason": "command_not_found",
+        },
+    }
+
+
+def test_stage_probe_live_preflight_reports_installed_opencode_without_models(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import runner.agent
+
+    config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
+    monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
+    monkeypatch.setattr(runner.agent, "default_command", lambda backend: "opencode-test")
+    monkeypatch.setattr(runner.agent, "available_models", lambda backend, root: [])
+    monkeypatch.setattr(live.shutil, "which", lambda command: "/fake/opencode")
+
+    result = live.stage_probe_live_preflight(config)
+
+    assert result["opencode_stage"] == {
+        "available": True,
+        "tested": False,
+        "reason": "no_models",
+    }
+
+
+def test_stage_probe_live_preflight_executes_real_stage_override_with_fake_opencode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import runner.agent
+    from runner.agent.opencode import OpenCodeBackend
+
+    fake = tmp_path / "fake_opencode.py"
+    fake.write_text(
+        "import json, sys\n"
+        "prompt = sys.stdin.read()\n"
+        "answer = json.dumps({'completed': True, 'reason': 'checked', 'missing_items': []})\n"
+        "print(json.dumps({'type':'text','sessionID':'oc-session','part':{'text':answer}}))\n",
+        encoding="utf-8",
+    )
+    command = f'"{sys.executable}" "{fake}"'
+    config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
+    monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
+    monkeypatch.setattr(runner.agent, "default_command", lambda backend: command)
+    monkeypatch.setattr(
+        runner.agent,
+        "available_models",
+        lambda backend, root: ["provider/model-oc"],
+    )
+    monkeypatch.setattr(OpenCodeBackend, "default_command", command)
+    monkeypatch.setattr(live.shutil, "which", lambda value: sys.executable)
+
+    result = live.stage_probe_live_preflight(config)
+
+    assert result["opencode_stage"] == {
+        "available": True,
+        "tested": True,
+        "status": "pass",
+        "model": "provider/model-oc",
     }
 
 
