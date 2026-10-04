@@ -232,7 +232,7 @@ class StageExecutor:
                 pass
             raise
         except Exception as error:
-            result = StageResult.error_result(stage.name, error)
+            result = self._recoverable_error_result(stage.name, error)
 
         if before is not None:
             changed = changed_project_files(ctx.root, ctx.work, before)
