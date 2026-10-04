@@ -246,6 +246,90 @@ flow:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_workflow_yaml_switch_immediately_refreshes_designer_and_rejects_invalid_yaml() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-yaml-switch-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "yaml-switch.yaml"
+        workflow.write_text(
+            """stages:
+  execute:
+    type: base
+    profile: execute
+flow:
+  - execute
+""",
+            encoding="utf-8",
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                file_id = next(item["id"] for item in files["workflows"] if item["name"] == "yaml-switch.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(file_id)}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="execute"]').wait_for(state="attached")
+
+                page.get_by_role("tab", name="YAML").click()
+                editor = page.locator(".workflow-yaml-editor")
+                editor.wait_for(state="visible")
+                editor.fill(
+                    """stages:
+  execute:
+    type: base
+    profile: execute
+  review:
+    type: base
+    profile: review
+    routes:
+      fail: execute
+flow:
+  - execute
+  - review
+"""
+                )
+                assert page.locator(".studio-header .unsaved-badge").count() == 1
+
+                page.get_by_role("tab", name="Designer").click()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
+                assert page.locator(".designer-confirm-dialog").count() == 0
+                assert page.locator(".studio-header .saved-badge").count() == 1
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["flow"] == ["execute", "review"]
+                assert saved["stages"]["review"]["profile"] == "review"
+
+                page.get_by_role("tab", name="YAML").click()
+                editor.fill("stages:\n  broken: [\n")
+                before_invalid = workflow.read_text(encoding="utf-8")
+                page.get_by_role("tab", name="Designer").click()
+                page.locator(".workflow-yaml-error").wait_for(state="visible")
+                assert page.get_by_role("tab", name="YAML").get_attribute("aria-selected") == "true"
+                assert workflow.read_text(encoding="utf-8") == before_invalid
+                assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
@@ -680,6 +764,8 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 )
                 page.reload()
                 page.get_by_text("Unsaved local draft found").wait_for(state="visible")
+                recovery_box = page.locator(".workflow-draft-recovery").bounding_box()
+                assert recovery_box and recovery_box["height"] <= 48
                 page.get_by_role("button", name="Restore Draft").click()
                 page.locator('.react-flow__node[data-id="execute"]').get_by_text("Recovered Local Draft").wait_for(state="visible")
                 assert page.locator(".unsaved-badge").is_visible()
