@@ -115,6 +115,8 @@ type StageTestResult = {
   changed_files?: string[];
   test_retry_limit?: number;
   test_retry_policy?: string;
+  effective_backend?: string;
+  effective_model?: string;
 };
 
 type PathTestResult = {
@@ -1132,8 +1134,9 @@ function App() {
     if (!draft || !catalog) return [];
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
+  const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name));
   const parameterOptions = options.filter((o) => {
-    if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"].includes(o.name)) return false;
+    if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
     return true;
   });
   const parameterGroups = PARAMETER_SECTIONS.map((section) => ({
@@ -2225,6 +2228,24 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 <label><span>{tx("display_name")}{tx("display_name_suffix")}</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>{tx("run_status")}</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 </section>
+                {executionTargetOptions.length > 0 && <section className="stage-form-section stage-execution-target">
+                  <div className="stage-form-section-head"><strong>{tx("section_execution")}</strong><small>Backend / Model / Session</small></div>
+                  {executionTargetOptions.map((option) => (
+                    <Field
+                      key={option.name}
+                      option={{
+                        ...option,
+                        description: option.description || (
+                          option.name === "backend" ? tx("stage_backend_help")
+                          : option.name === "model" ? tx("stage_model_help")
+                          : undefined
+                        ),
+                      }}
+                      value={draft[option.name]}
+                      onChange={(value) => editDraftOption(option, value)}
+                    />
+                  ))}
+                </section>}
                 <section className="stage-form-section">
                   <div className="stage-form-section-head"><strong>{tx("parameters")}</strong><small>{parameterOptions.length} fields</small></div>
                 {parameterOptions.length === 0 && <p className="section-empty">{tx("no_parameters")}</p>}
@@ -2355,7 +2376,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   <button type="button" role="tab" aria-selected={testMode === "agent_ping"} className={testMode === "agent_ping" ? "active" : ""}
                     onClick={() => { setTestMode("agent_ping"); setTestResult(null); setTestError(""); }}>Agent Ping</button>
                 </div>
-                <label><span>Backend</span><select value={testBackend} onChange={(e) => setTestBackend(e.target.value)}>
+                <label><span>{testMode === "stage" ? "Fallback Backend" : "Backend"}</span><select value={testBackend} onChange={(e) => setTestBackend(e.target.value)}>
                   {(backendCatalog.backends || []).map((name) => <option key={name} value={name}>{name}{name === backendCatalog.default ? "（default）" : ""}</option>)}
                 </select></label>
                 {testMode === "stage"
@@ -2389,7 +2410,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {pathTestError && <p className="test-error" role="alert">{pathTestError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{String(draft.backend || testBackend)}</strong></span>{Boolean(draft.model) && <span>Model：<strong>{String(draft.model)}</strong></span>}
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{String(testResult.effective_backend || (testResult.data as Record<string, unknown> | undefined)?.backend || testBackend)}</strong></span>{Boolean(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model) && <span>Model：<strong>{String(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model)}</strong></span>}
                     {testMode === "stage" && <span>{tx("next_label")}：<strong>{testResult.next}</strong></span>}
                     {testMode === "stage" && testResult.test_retry_policy && <span>{tx("retry_label")}：<strong>{testResult.test_retry_policy}</strong></span>}
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">{tx("retry_exhausted_skip")}</span>}</div>
