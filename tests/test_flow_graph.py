@@ -153,6 +153,35 @@ def test_unrouted_non_pass_stops_without_advancing(tmp_path, status):
     assert ctx.state.completed is False
 
 
+def test_run_completion_clears_only_stale_technical_state(tmp_path):
+    workflow = [node("only")]
+    ctx = context(tmp_path, workflow)
+    ctx.state.stage_sessions = {"only": "session-1"}
+    ctx.state.review_failures = {"only::__run__": 2}
+    ctx.state.dynamic_groups = {"producer": "producer__g1"}
+    ctx.state.dynamic_task_groups = {"producer": ["producer__g1__task"]}
+    ctx.state.transition_history = [{
+        "stage": "previous",
+        "status": "pass",
+        "target": "only",
+        "cycle": 1,
+        "kind": "generic",
+        "timestamp": 1.0,
+    }]
+
+    assert FlowEngine(ctx).run(
+        Executor(lambda stage, *_: StageResult(stage.name, "pass"))
+    ) == 0
+
+    assert ctx.state.completed is True
+    assert ctx.state.stage_sessions == {}
+    assert ctx.state.review_failures == {}
+    assert ctx.state.dynamic_groups == {}
+    assert ctx.state.dynamic_task_groups == {}
+    # Bounded semantic history remains useful after completion.
+    assert ctx.state.transition_history
+
+
 def test_done_edge_completes_immediately(tmp_path):
     workflow = [node("gate", routes={"pass": "done"}), node("never")]
     ctx = context(tmp_path, workflow)
