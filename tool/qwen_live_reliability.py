@@ -2983,12 +2983,18 @@ def api_recovery_probe(
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
         stream = log.open("w", encoding="utf-8")
+        probe_env = os.environ.copy()
+        # This probe owns the recovery boundary. Qwen Code can independently
+        # enable persistent unattended retry; force it off here so injected
+        # outages must escape to StageExecutor / runner.api.
+        probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"
         options: dict[str, object] = {
             "cwd": ROOT,
             "stdin": subprocess.DEVNULL,
             "stdout": stream,
             "stderr": subprocess.STDOUT,
             "text": True,
+            "env": probe_env,
         }
         if os.name == "nt":
             options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
