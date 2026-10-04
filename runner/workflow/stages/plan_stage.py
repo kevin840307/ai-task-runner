@@ -29,6 +29,11 @@ class PlanStage(BaseStage):
     ui_title = "Plan"
     ui_description = "Plan work and generate a producer-defined dynamic child Workflow."
     ui_category = "build"
+    ui_test_examples = {
+        "pass": "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Return valid structured output.",
+        "fail": "Create a plan that intentionally leaves one acceptance criterion unresolved, so downstream review can identify a concrete missing item. Return valid structured output.",
+        "error": "Technical ERROR is injected by the Stage Test harness; the model is not asked to fail.",
+    }
     result_kind = "tasks"
     protocol_kind = "plan_tasks"
     backend_mode = "planning"
