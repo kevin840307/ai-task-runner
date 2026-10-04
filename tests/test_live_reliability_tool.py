@@ -3115,6 +3115,8 @@ def test_controlled_backoff_agent_is_present():
     assert "HTTP 503 Service Unavailable" in text
     assert "BACKOFF_TEST_STATE_DIR" in text
     assert "BACKOFF_TEST_FAILURES" in text
+    assert 'args.index("--resume")' in text
+    assert 'resumed_session() or f"backoff-session-{attempt}"' in text
 
 
 def test_runner_backoff_cap_preflight_uses_real_exponential_retry_timing():
