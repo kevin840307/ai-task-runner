@@ -264,7 +264,8 @@ async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
-      const data = await api("/api/projects", { timeoutMs: 15000 }), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
+      const exclude = state.project?.path && state.runtime ? "?exclude_runtime=" + encodeURIComponent(state.project.path) : "";
+      const data = await api("/api/projects" + exclude, { timeoutMs: 15000 }), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
       applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
@@ -1093,7 +1094,7 @@ async function switchView(view) {
     $("promptNav").classList.toggle("active", kind === "prompt");
     renderStudioFiles(); renderWorkflowPicker();
     setViewLoading("workflowView", true, kind === "prompt" ? "Loading prompts…" : "Loading workflows…");
-    try { await refreshStudioFiles(); }
+    try { await Promise.all([refreshStudioFiles(), refreshStudioGuard()]); }
     catch (error) { showActionError(error.message, kind === "prompt" ? "Prompt loading failed" : "Workflow loading failed"); }
     finally { setViewLoading("workflowView", false); }
     return true;
@@ -2122,5 +2123,10 @@ window.addEventListener("resize", () => {
   await restoreWorkflowStudioNavigation();
   await restoreActiveWorkflowGenerator();
 }); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) Promise.allSettled([refreshRuntime(), refreshProjectStatuses(), refreshStudioGuard()]); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  const work = [refreshRuntime(), refreshProjectStatuses()];
+  if (state.view === "workflow" || state.view === "prompt") work.push(refreshStudioGuard());
+  Promise.allSettled(work);
+});
 
