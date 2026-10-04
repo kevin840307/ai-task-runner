@@ -2994,6 +2994,20 @@ def _structured_recovery_event(event: dict[str, object]) -> bool:
     )
 
 
+def _proxy_recovery_observed(
+    session_id: str,
+    proxy,
+    successes_before_outage: int,
+) -> bool:
+    return bool(
+        session_id
+        and proxy.failures > 0
+        and not proxy.fail
+        and not proxy.disconnect
+        and proxy.successes > successes_before_outage
+    )
+
+
 def api_recovery_probe(
     settings: Settings,
     root: Path,
@@ -3061,12 +3075,10 @@ def api_recovery_probe(
                 if (proxy.fail or proxy.disconnect) and time.monotonic() >= outage_until:
                     proxy.fail = False
                     proxy.disconnect = False
-                recovered = recovered or (
-                    session_id != ""
-                    and proxy.failures > 0
-                    and not proxy.fail
-                    and not proxy.disconnect
-                    and proxy.successes > successes_before_outage
+                recovered = recovered or _proxy_recovery_observed(
+                    session_id,
+                    proxy,
+                    successes_before_outage,
                 )
                 if (
                     not recovered
@@ -3088,6 +3100,14 @@ def api_recovery_probe(
             stream.close()
         code = process.returncode or 0
         assert_completed(project, code)
+        # The final successful upstream request can complete the run between two
+        # 100ms polling iterations. Re-read proxy counters after process exit so
+        # a clean recovery is not lost merely because the child exited quickly.
+        recovered = recovered or _proxy_recovery_observed(
+            session_id,
+            proxy,
+            successes_before_outage,
+        )
         events = runner_events(project)
         console_events = jsonl_events(log)
         # Always do one final scan after process exit. Recovery can complete
@@ -3100,7 +3120,12 @@ def api_recovery_probe(
         all_events = [*console_events, *events]
         evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in all_events)
         if not session_id or not recovered or "verdict=RESET_SESSION" in evidence:
-            raise RuntimeError("API outage did not recover cleanly")
+            raise RuntimeError(
+                "API outage did not recover cleanly: "
+                f"session={bool(session_id)}, recovered={recovered}, "
+                f"failures={proxy.failures}, successes_before={successes_before_outage}, "
+                f"successes_after={proxy.successes}, disconnect={disconnect}"
+            )
 
         fresh_events = [
             event for event in all_events
