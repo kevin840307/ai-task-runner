@@ -77,8 +77,8 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
                 getattr(stage_class, "ui_test_examples", None) or DEFAULT_TEST_EXAMPLES
             ),
             "options": [
-                _field_info(item)
-                for item in fields(stage_class.spec_class)
+                _field_info(item, order=index)
+                for index, item in enumerate(fields(stage_class.spec_class))
                 if item.name != "name"
                 and item.name not in CATALOG_HIDDEN_FIELDS
                 and not (item.name == "profile" and name != "base")
@@ -151,12 +151,13 @@ def create_stage(definition: dict[str, Any]):
         raise RunnerError(f"invalid workflow Stage {name or stage_type}: {error}") from error
 
 
-def _field_info(item: Any) -> dict[str, Any]:
+def _field_info(item: Any, *, order: int = 0) -> dict[str, Any]:
     required = item.default is MISSING and item.default_factory is MISSING
     result: dict[str, Any] = {
         "name": item.name,
         "required": required,
         "type": _type_name(item.type),
+        "order": int(order),
     }
     raw_type = str(result["type"]).lower().replace("nonetype", "none")
     if item.name == "profile":
@@ -185,6 +186,7 @@ def _field_info(item: Any) -> dict[str, Any]:
     if section not in {"content", "execution", "result", "advanced"}:
         section = "advanced"
     result["section"] = section
+    result["visible"] = bool(metadata.get("ui_visible", True))
     if item.name == "session_policy":
         result["type"] = "enum"
         result["values"] = ["auto", "main", "role", "fresh"]
