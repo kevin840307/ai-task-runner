@@ -2585,7 +2585,7 @@ def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
                 {"type": "runner.recovery", "action": "retry", "retry_mode": "recover"},
                 {"type": "runner.session", "action": "fresh", "previous_session": "other"},
             ],
-            "without matching previous_session evidence",
+            "does not match the observed pre-outage session",
         ),
     ],
 )
