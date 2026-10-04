@@ -12,6 +12,8 @@ from runner.agent import (
     BaseBackend,
     backend_names,
     configure_backend_args,
+    configure_model_args,
+    create_ai_client,
     create_backend,
     is_transient_service_error,
     sandbox_supported,
@@ -687,3 +689,64 @@ def test_opencode_runtime_permission_environment_reaches_process_runner(tmp_path
     assert result.return_code == 0
     permission = json.loads(captured["environment"]["OPENCODE_CONFIG_CONTENT"])["permission"]
     assert permission["external_directory"] == "deny"
+
+
+
+def test_backend_adapter_owns_model_override(monkeypatch):
+    assert configure_model_args(
+        "qwen",
+        ["--existing", "--model", "old-model", "--model=older-model"],
+        "new-model",
+    ) == ["--existing", "--model", "new-model"]
+
+    class CustomBackend(BaseBackend):
+        name = "custom-model"
+        default_command = "custom-model"
+
+        @classmethod
+        def configure_model_args(cls, extra_args, model):
+            return [*extra_args, f"--chosen-model={model}"]
+
+        def build_command(self, prompt, session_id):
+            return []
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, CustomBackend.name, CustomBackend)
+    assert configure_model_args("custom-model", ["--x"], "m1") == [
+        "--x",
+        "--chosen-model=m1",
+    ]
+
+
+def test_ai_client_backend_override_uses_target_default_command_and_model(tmp_path):
+    from runner.config.runtime import RuntimeConfig
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.session_id = kwargs.get("session_id", "")
+        def set_runtime(self, *args, **kwargs):
+            captured["runtime"] = (args, kwargs)
+
+    config = RuntimeConfig(
+        backend="qwen",
+        command="custom-qwen-command",
+        agent_args=["--model", "global-model"],
+    )
+    create_ai_client(
+        config,
+        tmp_path,
+        backend_override="opencode",
+        model_override="stage-model",
+        constructor=FakeClient,
+    )
+
+    assert captured["backend"] == "opencode"
+    assert captured["command"] is None
+    assert captured["extra_args"].count("--model") == 1
+    assert captured["extra_args"][captured["extra_args"].index("--model") + 1] == "stage-model"
+    assert "--auto" in captured["extra_args"]
