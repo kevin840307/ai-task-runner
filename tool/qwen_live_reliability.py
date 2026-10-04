@@ -3496,10 +3496,11 @@ def api_recovery_probe(
                     and current_session
                     and current_session != session_id
                 ):
-                    if disconnect:
-                        session_rotated = True
-                    else:
-                        raise RuntimeError("API recovery replaced the healthy session")
+                    # Do not decide here whether rotation was legal. Polling is
+                    # intentionally racy with fast retry/recovery. Record the
+                    # observation and validate it once against durable Runner
+                    # session/recovery events after the child exits.
+                    session_rotated = True
                 time.sleep(0.1)
         finally:
             proxy.fail = False
