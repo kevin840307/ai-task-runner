@@ -136,12 +136,19 @@ class ProjectRuntimeMixin:
             raise ValueError("Environment check returned invalid result")
         return data
 
-    def backend_catalog(self, project: Path | None = None) -> dict:
+    def backend_catalog(
+        self,
+        project: Path | None = None,
+        *,
+        include_models: bool = False,
+    ) -> dict:
         """Return Runner-owned backend/model choices without importing Core into UI."""
         tool = self.repo_root / "tool" / "backend_catalog.py"
         command = [sys.executable, str(tool)]
         if project is not None:
             command.extend(["--project-root", str(project)])
+        if include_models:
+            command.append("--models")
         try:
             completed = subprocess.run(
                 command,
