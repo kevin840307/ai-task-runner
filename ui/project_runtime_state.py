@@ -647,8 +647,6 @@ class ProjectRuntimeMixin:
                 current_task = str(task.get("title") or task.get("id") or "")
         completed = script_completed if script_mode else bool(state.get("completed"))
         resumable = bool(state and not completed)
-        if not running and completed and not script_mode:
-            self.sync_completion(project)
         payload = {
             "running": running,
             "launching": launching,
