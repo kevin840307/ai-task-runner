@@ -859,3 +859,89 @@ flow:
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
+
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_full_designer_stage_test_stop_and_action_spacing() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-stage-stop-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "stage-stop.yaml"
+        workflow.write_text(
+            """stages:
+  worker:
+    type: base
+    profile: generic
+flow:
+  - worker
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        state = server.RequestHandlerClass.state
+        started = threading.Event()
+        cancelled = threading.Event()
+        cancel_ids: list[str] = []
+
+        def fake_stage_test(*args, test_id="", **kwargs):
+            started.set()
+            cancelled.wait(timeout=10)
+            return {"ok": False, "cancelled": True, "test_id": test_id}
+
+        def fake_cancel(test_id: str):
+            cancel_ids.append(test_id)
+            cancelled.set()
+            return {"ok": True, "cancelled": True, "pending": False}
+
+        state.studio_stage_test = fake_stage_test
+        state.studio_stage_test_cancel = fake_cancel
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "stage-stop.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                page.locator(".stage-editor-modal").wait_for(state="visible")
+                page.locator('[data-inspector-tab="test"]').click()
+
+                run_button = page.get_by_role("button", name="Run Real Stage")
+                path_button = page.get_by_role("button", name="Test path to END")
+                run_box = run_button.bounding_box()
+                path_box = path_button.bounding_box()
+                assert run_box and path_box
+                assert path_box["x"] - (run_box["x"] + run_box["width"]) >= 8
+
+                run_button.click()
+                assert started.wait(timeout=3)
+                stop_button = page.get_by_role("button", name="Stop Test")
+                stop_button.wait_for(state="visible")
+                stop_button.click()
+                page.get_by_role("alert").wait_for(state="visible")
+                assert "Test stopped" in page.get_by_role("alert").inner_text()
+                assert len(cancel_ids) == 1
+                assert cancel_ids[0]
+
+                browser.close()
+        finally:
+            cancelled.set()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
