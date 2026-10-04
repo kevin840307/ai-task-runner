@@ -1371,3 +1371,6 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
 .active-run-details summary { min-height: 30px; display: flex; align-items: center; cursor: pointer; font-weight: 800; color: var(--text); }
 .active-run-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; padding: 0 0 10px; }
 .active-run-grid strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 700; }
+
+.runtime-guidance-buttons { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.runtime-guidance-buttons .action-button { min-height: 26px; padding: 0 8px; font-size: 10px; }
