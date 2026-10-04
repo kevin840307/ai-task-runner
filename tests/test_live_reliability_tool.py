@@ -2203,6 +2203,32 @@ def test_api_recovery_fixture_has_deterministic_outage_handshake(tmp_path: Path)
     assert "API outage harness did not acknowledge arm marker" in arm_source
 
 
+def test_api_recovery_arm_gate_blocks_until_harness_acknowledges(tmp_path: Path):
+    project = live.create_project(tmp_path, "api-recovery-arm-behavior")
+    _, armed, active = live._prepare_api_recovery_fixture(project)
+
+    process = subprocess.Popen(
+        [sys.executable, str(project / "api_outage_arm.py")],
+        cwd=project,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        deadline = live.time.monotonic() + 5
+        while not armed.is_file() and live.time.monotonic() < deadline:
+            live.time.sleep(0.02)
+        assert armed.is_file()
+        assert process.poll() is None
+
+        active.write_text("active\n", encoding="utf-8")
+        assert process.wait(timeout=5) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
 def test_api_recovery_probe_acknowledges_active_outage_before_execute():
     source = (
         Path(__file__).resolve().parents[1]
