@@ -345,10 +345,15 @@ def test_stage_editor_accepts_backend_model_override(tmp_path: Path) -> None:
     assert parsed["fields"]["model"] == "stage-model"
 
 
-def test_stage_editor_rejects_backend_override_with_main_session(tmp_path: Path) -> None:
+def test_stage_editor_propagates_canonical_execution_target_validation(tmp_path: Path, monkeypatch) -> None:
     state, project = _state(tmp_path)
     created = state.studio_workflow_create("backend_model_main", "project", project)
     file_id = created["item"]["id"]
+    calls = []
+    def reject(path, content):
+        calls.append((path, content))
+        raise ValueError("production schema rejected session_policy=main")
+    monkeypatch.setattr(state, "_validate_workflow_before_write", reject)
 
     import pytest
     with pytest.raises(ValueError, match="session_policy=main"):
@@ -366,3 +371,4 @@ def test_stage_editor_rejects_backend_override_with_main_session(tmp_path: Path)
                 "session_policy: main\n"
             ),
         )
+    assert len(calls) == 1
