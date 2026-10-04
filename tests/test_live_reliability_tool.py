@@ -2685,43 +2685,38 @@ def test_api_recovery_arm_gate_blocks_until_harness_acknowledges(tmp_path: Path)
             process.wait(timeout=5)
 
 
-def test_long_http_recovery_probe_reuses_one_path_for_all_statuses(
+def test_long_http_recovery_probe_proves_runner_cap_then_reuses_one_qwen_path_for_all_statuses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     calls = []
-    observed = []
 
-    def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
-        calls.append((name, outage_seconds, disconnect, status_code))
-        (root / name).mkdir()
-        return True
-
-    def fake_backoff(project):
-        observed.append(project.name)
-        return {
-            "count": 5,
-            "min_wait_seconds": 2.0,
+    monkeypatch.setattr(
+        live,
+        "runner_backoff_cap_preflight",
+        lambda root: calls.append(("backoff", root)) or {
+            "count": 1,
+            "min_wait_seconds": float(live.LIVE_RETRY_MAX_DELAY_SECONDS),
             "max_wait_seconds": float(live.LIVE_RETRY_MAX_DELAY_SECONDS),
             "configured_max_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
             "cap_reached": True,
-        }
+        },
+    )
+
+    def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
+        calls.append(("qwen", name, outage_seconds, disconnect, status_code))
+        return True
 
     monkeypatch.setattr(live, "api_recovery_probe", fake_probe)
-    monkeypatch.setattr(live, "recovery_backoff_observation", fake_backoff)
 
     statuses = live.long_http_recovery_probe(settings(tmp_path), tmp_path, 45.0)
 
     assert statuses == live.API_RECOVERY_STATUS_CODES
     assert calls == [
-        ("api-long-http-429-probe", 45.0, False, 429),
-        ("api-long-http-502-probe", 45.0, False, 502),
-        ("api-long-http-503-probe", 45.0, False, 503),
-    ]
-    assert observed == [
-        "api-long-http-429-probe",
-        "api-long-http-502-probe",
-        "api-long-http-503-probe",
+        ("backoff", tmp_path),
+        ("qwen", "api-long-http-429-probe", 45.0, False, 429),
+        ("qwen", "api-long-http-502-probe", 45.0, False, 502),
+        ("qwen", "api-long-http-503-probe", 45.0, False, 503),
     ]
 
 
