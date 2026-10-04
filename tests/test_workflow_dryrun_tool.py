@@ -166,7 +166,7 @@ def test_dryrun_json_contract_is_small_and_machine_readable():
     payload = json.loads(result.stdout)
 
     assert set(payload) == {
-        "valid", "completed", "workflow", "executions", "error", "cycle", "stage", "transitions"
+        "valid", "completed", "workflow", "from_stage", "executions", "error", "cycle", "stage", "transitions"
     }
     assert payload["valid"] is True
     assert payload["completed"] is True
@@ -310,3 +310,94 @@ stages:
     assert payload["completed"] is False
     assert payload["stage"] == "max_cycles_exhausted"
     assert payload["cycle"] == 3
+
+
+
+def test_dryrun_from_stage_skips_prior_stages_and_reuses_flow_engine(tmp_path: Path):
+    workflow = tmp_path / "from-stage.yaml"
+    workflow.write_text(
+        """
+stages:
+  first:
+    type: base
+    profile: generic
+  middle:
+    type: base
+    profile: generic
+  final:
+    type: base
+    profile: generic
+flow: [first, middle, final]
+""",
+        encoding="utf-8",
+    )
+
+    result = run(
+        str(workflow),
+        "--from-stage", "middle",
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["from_stage"] == "middle"
+    assert [item["stage"] for item in payload["transitions"]] == ["middle", "final"]
+    assert payload["completed"] is True
+
+
+def test_dryrun_from_stage_still_obeys_semantic_fail_routing(tmp_path: Path):
+    workflow = tmp_path / "from-stage-fail.yaml"
+    workflow.write_text(
+        """
+stages:
+  first:
+    type: base
+    profile: generic
+  review:
+    type: base
+    profile: review
+    routes:
+      fail: fix
+  fix:
+    type: base
+    profile: generic
+  final:
+    type: base
+    profile: generic
+flow: [first, review, fix, final]
+""",
+        encoding="utf-8",
+    )
+    scenario = tmp_path / "scenario.yaml"
+    scenario.write_text("stages:\n  review: fail\n", encoding="utf-8")
+
+    result = run(
+        str(workflow),
+        "--from-stage", "review",
+        "--scenario", str(scenario),
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert [item["stage"] for item in payload["transitions"]] == ["review", "fix", "final"]
+    assert [item["status"] for item in payload["transitions"]] == ["fail", "pass", "pass"]
+
+
+def test_dryrun_from_stage_rejects_unknown_stage(tmp_path: Path):
+    workflow = tmp_path / "unknown-stage.yaml"
+    workflow.write_text(
+        """
+stages:
+  only:
+    type: base
+    profile: generic
+flow: [only]
+""",
+        encoding="utf-8",
+    )
+
+    result = run(str(workflow), "--from-stage", "missing", "--json")
+
+    assert result.returncode == 2
+    assert "unknown --from-stage: missing" in result.stderr
