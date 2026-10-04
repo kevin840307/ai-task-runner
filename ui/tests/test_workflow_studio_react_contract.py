@@ -758,3 +758,15 @@ def test_stage_test_actions_are_visually_separated():
     assert 'className="test-action-row"' in source
     assert ".test-action-row { display: flex;" in styles
     assert "gap: 10px" in styles
+
+
+
+def test_stage_test_has_real_stop_control():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'stageTestIdRef = useRef("")' in text
+    assert 'test_id: testId' in text
+    assert '"/api/studio/stage/test/cancel"' in text
+    assert "async function stopStageTest()" in text
+    assert 'tx("stop_test")' in text
+    assert "result.cancelled" in text
