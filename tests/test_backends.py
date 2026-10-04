@@ -814,6 +814,40 @@ def test_ai_client_reports_effective_model_from_backend_adapter(tmp_path, monkey
     assert client.model == "next-model"
 
 
+def test_backend_catalog_discovers_plugin_backends_before_listing_models(tmp_path, monkeypatch, capsys):
+    import tool.backend_catalog as catalog_tool
+
+    calls = []
+    monkeypatch.setattr(
+        catalog_tool,
+        "discover_plugins",
+        lambda: calls.append("discover"),
+    )
+    monkeypatch.setattr(
+        catalog_tool,
+        "backend_names",
+        lambda: ("qwen", "plugin-backend"),
+    )
+    monkeypatch.setattr(
+        catalog_tool,
+        "available_models",
+        lambda name, root: [f"{name}/model-a"],
+    )
+
+    assert catalog_tool.main([
+        "--project-root", str(tmp_path),
+        "--models",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == ["discover"]
+    assert payload["backends"] == ["qwen", "plugin-backend"]
+    assert payload["models"] == {
+        "qwen": ["qwen/model-a"],
+        "plugin-backend": ["plugin-backend/model-a"],
+    }
+
+
 def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
     import runner.agent.opencode as opencode_module
