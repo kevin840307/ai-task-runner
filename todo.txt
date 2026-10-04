@@ -244,6 +244,19 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed API recovery live false failure caused by ignoring the outer Runner retry layer.
+    - There are two valid structured recovery layers:
+      StageExecutor emits runner.recovery/retry for Stage-local retry/backoff,
+      while runner.api emits runner.retry/retry when a transient failure escapes the Stage run
+      and the whole Runner resumes from durable state.
+    - The live API recovery probe previously mentioned "runner.recovery/retry" in its error
+      but only accepted runner.recovery, so successful Runner-level recovery was misclassified.
+    - The probe now accepts both structured contracts through one helper.
+    - API-level runner.retry events are also appended to the bounded production log with
+      layer=runner_api, so detached UI/debug/live evidence is durable instead of stdout-only.
+    - Added deterministic coverage for both structured event layers and bounded log persistence.
+    - 429/502/503/raw-disconnect probes all reuse this shared structured recovery contract.
+
 [x] Fixed API outage recovery observability false failures.
     - Root cause: the live gate treated transient UI status (runner.status=Recovering)
       and a 100ms polling observation of durable last_error as mandatory evidence.
