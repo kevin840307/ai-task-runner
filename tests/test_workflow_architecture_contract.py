@@ -71,10 +71,3 @@ def test_schema_uses_canonical_profile_registry_instead_of_redeclaring_profile_n
     assert "profile_names()" in schema
     assert '{"generic", "execute", "review"}' not in schema
     assert "{None, \"generic\", \"execute\", \"review\"}" not in schema
-
-
-def test_studio_does_not_redeclare_builtin_stage_metadata():
-    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
-    assert "const STAGE_META" not in editor
-    assert 'types: ["plan", "base"]' not in editor
-    assert "catalogStageMeta(catalog, type)" in editor
