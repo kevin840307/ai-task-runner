@@ -5,7 +5,6 @@ UIState composition remains in server.py.
 """
 from __future__ import annotations
 
-import ast
 import csv
 import json
 import os
@@ -137,42 +136,35 @@ class ProjectRuntimeMixin:
             raise ValueError("Environment check returned invalid result")
         return data
 
-    def backend_catalog(self) -> dict:
-        """Return backend names without importing Runner Core into the UI."""
-        names: set[str] = set()
-        backends_root = self.repo_root / "runner" / "agent"
-        for path in backends_root.glob("*.py") if backends_root.is_dir() else ():
-            if path.name.startswith("_"):
-                continue
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
-                continue
-            for node in tree.body:
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                for child in node.body:
-                    if not isinstance(child, (ast.Assign, ast.AnnAssign)):
-                        continue
-                    target = child.targets[0] if isinstance(child, ast.Assign) and child.targets else getattr(child, "target", None)
-                    value = child.value if isinstance(child, (ast.Assign, ast.AnnAssign)) else None
-                    if isinstance(target, ast.Name) and target.id == "name" and isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        if value.value.strip():
-                            names.add(value.value.strip())
-        default = ""
-        defaults = self.repo_root / "runner" / "config" / "defaults.py"
+    def backend_catalog(self, project: Path | None = None) -> dict:
+        """Return Runner-owned backend/model choices without importing Core into UI."""
+        tool = self.repo_root / "tool" / "backend_catalog.py"
+        command = [sys.executable, str(tool)]
+        if project is not None:
+            command.extend(["--project-root", str(project)])
         try:
-            tree = ast.parse(defaults.read_text(encoding="utf-8"))
-            for node in tree.body:
-                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "DEFAULT_BACKEND" for t in node.targets):
-                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                        default = node.value.value.strip()
-                        break
-        except (OSError, SyntaxError):
-            pass
-        if default:
-            names.add(default)
-        return {"default": default, "backends": sorted(names)}
+            completed = subprocess.run(
+                command,
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Backend catalog unavailable: {exc}") from exc
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise ValueError("Backend catalog failed: " + detail[-2000:])
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Backend catalog returned invalid JSON") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("backends"), list):
+            raise ValueError("Backend catalog is missing backends")
+        if not isinstance(payload.get("models"), dict):
+            payload["models"] = {}
+        return payload
 
     def workflow_catalog(self) -> dict:
         """Return the Runner-owned Stage/editor contract without importing Runner modules.
