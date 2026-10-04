@@ -267,6 +267,15 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed API raw-disconnect live outage-boundary race.
+    - The disconnect probe now uses a deterministic explicit Workflow:
+      warmup(main session) -> arm command -> execute(main session) -> validate_file.
+    - The arm command writes a marker before the execute AI call; the harness injects the disconnect
+      only after that marker exists, so the outage is guaranteed to target the next model call instead
+      of racing an already-completed warmup request.
+    - Runner retry/session semantics were intentionally unchanged.
+    - Mock regressions verify fixture topology, main-session reuse and marker-gated outage injection.
+
 [x] Fixed Stage-local backend/model override being erased at runtime.
     - Root cause: BaseStage correctly created a Stage-local AI client with backend/model override,
       but _run_once() then called global configure_ai_client() for every client. That rebuilt
