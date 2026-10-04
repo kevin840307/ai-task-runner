@@ -2558,6 +2558,7 @@ def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
             {
                 "type": "runner.recovery",
                 "action": "retry",
+                "retry": 2,
                 "retry_mode": "recover",
             },
             {
@@ -2594,17 +2595,16 @@ def test_api_rotation_contract_rejects_uncontrolled_session_replacement(events, 
         live._assert_controlled_api_session_rotation("session-A", True, events)
 
 
-def test_long_disconnect_probe_allows_only_controlled_fresh_rotation():
+def test_all_api_outages_share_controlled_bounded_session_rotation_contract():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
 
-    assert "if disconnect:" in source
-    assert "session_rotated = True" in source
     assert "_assert_controlled_api_session_rotation" in source
     assert "API outage replaced the session without controlled Runner fresh-session evidence" in source
     assert "runner.session" in source
     assert "mode=recover evidence" in source
     assert "short API outage unexpectedly rotated the healthy session" not in source
-    assert "bounded-session recovery probe" in source
+    assert "API recovery replaced the healthy session" not in source
+    assert source.count("bounded-session recovery probe") >= 4
 
 
 
