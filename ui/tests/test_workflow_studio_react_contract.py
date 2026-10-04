@@ -486,6 +486,8 @@ def test_stage_form_sections_and_test_examples_are_catalog_driven():
     assert "PARAMETER_SECTIONS" not in text
     assert "PARAMETER_SECTION_ORDER" in text
     assert "option.section || \"advanced\"" in text
+    assert "o.visible === false" in text
+    assert "Number(a.order || 0) - Number(b.order || 0)" in text
     assert "profile?.test_examples?.[scenario]" in text
     assert "stageType?.test_examples?.[scenario]" in text
     assert "stageTestPrompt(draft, catalog, scenario)" in text
