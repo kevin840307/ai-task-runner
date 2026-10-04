@@ -316,3 +316,55 @@ def test_stage_backend_override_rejects_unknown_backend():
             prompt="unused",
             backend="does-not-exist",
         ))
+
+
+
+def test_stage_backend_model_override_survives_runtime_configuration(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    calls = []
+
+    class LocalClient:
+        def __init__(self):
+            self.session_id = ""
+            self.backend = "opencode"
+            self.extra_args = ["--model", "provider/model-a"]
+            self.model = "provider/model-a"
+
+        def set_runtime(self, mode, *, allow_project_read=False, sandbox=False):
+            calls.append((mode, allow_project_read, sandbox, list(self.extra_args)))
+
+        def ask(self, prompt, **kwargs):
+            self.session_id = "stage-session"
+            return "OK"
+
+    client = LocalClient()
+
+    def fake_create(*args, **kwargs):
+        assert kwargs["backend_override"] == "opencode"
+        assert kwargs["model_override"] == "provider/model-a"
+        assert kwargs["allow_project_read"] is True
+        return client
+
+    def fail_global_configure(*args, **kwargs):
+        raise AssertionError("Stage-local client must not be rebuilt from global backend args")
+
+    monkeypatch.setattr("runner.workflow.stages.base_stage.create_ai_client", fake_create)
+    monkeypatch.setattr("runner.workflow.stages.base_stage.configure_ai_client", fail_global_configure)
+
+    stage = BaseStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        backend="opencode",
+        model="provider/model-a",
+        session_policy="auto",
+        allow_project_read=True,
+    ))
+    monkeypatch.setattr(stage, "_prompt", lambda *_args, **_kwargs: "prompt")
+
+    result = stage.run(ctx)
+
+    assert result.status == "pass"
+    assert client.extra_args == ["--model", "provider/model-a"]
+    assert calls
+    assert calls[0][1] is True
+    assert ctx.state.stage_sessions["worker"] == "stage-session"
