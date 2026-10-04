@@ -266,6 +266,15 @@ flow:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         server = UIServer(ROOT, "127.0.0.1", port)
+        state = server.RequestHandlerClass.state
+        state.backend_catalog = lambda project=None: {
+            "default": "qwen",
+            "backends": ["qwen", "opencode"],
+            "models": {
+                "qwen": ["local-model-y"],
+                "opencode": ["provider/model-x"],
+            },
+        }
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -294,7 +303,7 @@ flow:
                 backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
                 model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
                 backend_select = backend_field.locator("select")
-                model_input = model_field.locator("input")
+                model_select = model_field.locator("select")
                 session_field = modal.locator("label").filter(has=page.locator("span", has_text="session_policy")).first
                 session_select = session_field.locator("select")
                 assert "opencode" in backend_select.locator("option").all_text_contents()
@@ -305,7 +314,8 @@ flow:
                 session_select.select_option("main")
                 backend_select.select_option("opencode")
                 assert session_select.input_value() == ""
-                model_input.fill("provider/model-x")
+                assert model_select.is_enabled()
+                model_select.select_option("provider/model-x")
                 page.locator(".modal-close-button").click()
                 _save_editor(page)
 
@@ -339,7 +349,7 @@ flow:
                 backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
                 model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
                 assert backend_field.locator("select").input_value() == "qwen"
-                assert model_field.locator("input").input_value() == "local-model-y"
+                assert model_field.locator("select").input_value() == "local-model-y"
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["worker"]["backend"] == "qwen"
                 assert saved["stages"]["worker"]["model"] == "local-model-y"
