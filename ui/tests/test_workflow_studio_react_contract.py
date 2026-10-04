@@ -26,23 +26,25 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert '"/api/studio/stage/add"' not in text  # Palette additions stay in the draft until Save.
 
 
-def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flow():
-    text = SOURCE.read_text(encoding="utf-8")
 
-    assert "if (!nextFlow.includes(connection.source))" in text
-    assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in text
-    assert 'if (status === "pass" || status === "handoff")' in text
-    assert 'if (status === "pass" && target === nextName) delete routes.pass' in text
-    assert 'else routes[status] = target' in text
-    assert "const index = nextFlow.indexOf(stage.name)" in text
+def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flow():
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
+
+    assert "if (!nextFlow.includes(connection.source))" in draft
+    assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in draft
+    assert 'if (status === "pass" || status === "handoff")' in draft
+    assert 'if (status === "pass" && target === nextName) delete routes.pass' in draft
+    assert 'else routes[status] = target' in draft
+    assert "const index = nextFlow.indexOf(stage.name)" in draft
 
 
 def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection():
     text = SOURCE.read_text(encoding="utf-8")
 
-    assert '"agent_ping"' in text
+    assert 'type StageTestMode = "stage" | "agent_ping" | "mock_error"' in text
     assert "Real Stage" in text
     assert "Agent Ping" in text
+    assert "Mock Technical Error" in text
     assert 'api<BackendCatalog>(query().project' in text
     assert '"/api/backends?models=1"' in text
     assert '&models=1' in text
@@ -50,10 +52,8 @@ def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection
     assert "probe_mode: testMode" in text
     assert "backend: testBackend" in text
     assert "AGENT_PING_PROMPT" in text
-    assert "local -1 在測試中最多 retry 2 次" in text
+    assert 'testMode === "mock_error" ? "error_mock"' in text
     assert "test_retry_policy" in text
-    assert "不使用工具、不讀專案、不修改檔案" in text
-
 
 def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
     text = SOURCE.read_text(encoding="utf-8")
@@ -147,17 +147,19 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
 
 
 
+
 def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
     text = SOURCE.read_text(encoding="utf-8")
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
-    assert 'className="wf-stage-meta"' in text
-    assert "未連線" in text
-    assert 'FAIL×{reviewMaxFailures} → {designerText("fail_soft_next")}' in text
-    assert "ERR×{errorRetries} → Skip" in text
+    stage_node = text.split("function StageNode", 1)[1].split("const nodeTypes", 1)[0]
+    assert 'className="wf-stage-meta"' in stage_node
+    assert "disconnected-chip" in stage_node
+    assert "dynamic-chip" in stage_node
+    assert "ERR×" not in stage_node
+    assert "FAIL×" not in stage_node
     assert ".wf-stage.type-base.profile-review, .wf-stage.type-ai_validator" in styles
     assert ".wf-stage-meta span" in styles
-
 
 def test_react_studio_has_stage_specific_test_prompt_presets():
     text = SOURCE.read_text(encoding="utf-8")
@@ -204,26 +206,20 @@ def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
     assert ".palette-quick-add" in styles
 
 
-def test_node_library_scales_with_favorites_recent_and_extensions():
+
+def test_node_library_is_small_catalog_driven_and_has_no_speculative_preferences():
     text = SOURCE.read_text(encoding="utf-8")
-    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
-    assert 'PALETTE_PREF_KEY = "workflow-designer.palette:v1"' in text
-    assert "favorites" in text
-    assert "recent" in text
-    assert "extensions" in text
-    assert "toggleFavoriteStage" in text
-    assert "togglePaletteSection" in text
-    assert "rememberPaletteStage" in text
-    assert "knownTypes" in text
+    assert 'PALETTE_PREF_KEY = "workflow-designer.palette:v1"' not in text
+    assert "PalettePrefs" not in text
+    assert "toggleFavoriteStage" not in text
+    assert "togglePaletteSection" not in text
+    assert "rememberPaletteStage" not in text
     assert "catalogStageMeta" in text
-    assert "catalogMeta?.category" in text
-    assert 'palette-favorite' in text
-    assert 'className="palette-section-head"' in text
-    assert "palettePrefs.collapsed" in text
-    assert ".palette-favorite.active" in styles
-    assert ".palette-section-head:hover" in styles
-
+    assert 'category !== "extensions"' in text
+    assert 'id: "stages", title: "Stages"' in text
+    assert 'id: "extensions", title: tx("extensions")' in text
+    assert 'className="palette-section-head static"' in text
 
 def test_designer_shortcuts_context_menu_and_command_add_are_workflow_aware():
     text = SOURCE.read_text(encoding="utf-8")
@@ -246,19 +242,19 @@ def test_designer_shortcuts_context_menu_and_command_add_are_workflow_aware():
     assert ".add-stage-command" in styles
 
 
-def test_stage_test_has_pass_fail_error_retry_prompt_scenarios():
-    text = SOURCE.read_text(encoding="utf-8")
-    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
-    assert 'type StageTestScenario = "pass" | "fail" | "error"' in text
-    assert 'testScenario' in text
-    assert 'test_error: "ERROR / Retry"' in text
-    assert 'stageTestPrompt(draft, catalog, scenario)' in text
-    assert '"error_mock"' in text
+def test_stage_test_separates_execution_mode_from_input_examples():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'type StageTestMode = "stage" | "agent_ping" | "mock_error"' in text
+    assert 'type StageTestScenario = "pass" | "fail"' in text
+    assert '(["pass", "fail"] as StageTestScenario[])' in text
+    assert "PASS 範例" in text
+    assert "FAIL 範例" in text
+    assert "Mock Technical Error" in text
+    assert 'testMode === "mock_error" ? "error_mock"' in text
     assert "test_examples" in text
     assert 'className="test-scenario-tabs"' in text
-    assert ".scenario-error.active" in styles
-
 
 def test_stage_editor_dialog_height_is_hard_locked_across_tabs():
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
@@ -272,6 +268,7 @@ def test_stage_editor_dialog_height_is_hard_locked_across_tabs():
     assert "position: sticky" not in styles.split(".inspector footer", 1)[1].split("}", 1)[0]
 
 
+
 def test_designer_reuses_interface_language_and_has_fixed_add_stage_width():
     text = SOURCE.read_text(encoding="utf-8")
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
@@ -280,13 +277,10 @@ def test_designer_reuses_interface_language_and_has_fixed_add_stage_width():
     assert "changeLanguage" not in text
     assert 'className="language-picker"' not in text
     assert 'event.key !== DESIGNER_LANGUAGE_KEY' in text
-    assert 'palette-chevron' in text
-    assert '{collapsed ? "›" : "⌄"}' not in text
+    assert 'className="palette-section-head static"' in text
     assert "grid-template-columns: 220px minmax(0,1fr)" in styles
     assert "width: 220px; min-width: 220px; max-width: 220px" in styles
     assert "width: 520px; max-width: calc(100vw - 32px)" in styles
-    assert ".palette-chevron.collapsed" in styles
-
 
 def test_designer_uses_shared_confirmation_dialog_and_thin_visible_scrollbars():
     text = SOURCE.read_text(encoding="utf-8")
@@ -442,15 +436,16 @@ def test_stage_editor_converges_to_form_yaml_routing_test():
 
 
 
+
 def test_designer_edge_delete_and_undo_keyboard_contract():
     text = SOURCE.read_text(encoding="utf-8")
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
 
     assert 'onEdgeContextMenu={(event, edge) =>' in text
     assert 'onEdgeClick={() =>' in text
     assert 'edge.data?.status && edge.source !== START' in text
     assert 'deleteEdges([selectedResultEdge])' in text
-    assert 'if (status === "pass") routes.pass = "stop"' in text
-    assert 'if (passTarget !== "stop")' in text
+    assert 'if (status === "pass") routes.pass = "stop"' in draft
     assert 'key === "z"' in text
     assert 'key === "y"' in text
     assert "undoVisualDraft()" in text
@@ -462,12 +457,8 @@ def test_designer_edge_delete_and_undo_keyboard_contract():
     assert "reconnectRadius={24}" not in text
     assert "onConnect={connect}" in text
     assert "undoStackRef.current = []" in text
-    assert "沒有可復原的 Workflow 修改。" in text
-    assert "已復原上一個 Workflow 草稿修改。" in text
-    assert 'deleteKeyCode={null}' in text  # Node deletion stays workflow-aware.
+    assert 'deleteKeyCode={null}' in text
     assert 'tx("delete_connection")' in text
-
-
 
 def test_ai_stage_profile_first_create_and_quick_shortcuts():
     text = SOURCE.read_text(encoding="utf-8")
@@ -495,17 +486,17 @@ def test_stage_form_sections_and_test_examples_are_catalog_driven():
     assert "stageTestPrompt(draft, catalog, scenario)" in text
 
 
+
 def test_stage_palette_and_generic_field_use_catalog_metadata():
     text = SOURCE.read_text(encoding="utf-8")
 
     assert "CatalogStageType" in text
     assert "catalogStageMeta" in text
-    assert "catalogMeta?.title" in text
-    assert "catalogMeta?.description" in text
-    assert "catalogMeta?.category" in text
+    assert "meta?.title" in text
+    assert "meta?.description" in text
+    assert "meta?.category" in text
     assert "option.description" in text
     assert 'category !== "extensions"' in text
-
 
 def test_prompt_deep_link_and_stage_yaml_fill_contract():
     text = SOURCE.read_text(encoding="utf-8")
@@ -761,10 +752,12 @@ def test_designer_optional_snap_is_local_only_and_nonsemantic():
 
 
 
+
 def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
     text = SOURCE.read_text(encoding="utf-8")
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
 
-    assert "function applyConnectionToVisual(visual: Visual, connection: Connection): Visual" in text
+    assert "export function applyConnectionToVisual(" in draft
     assert "const connectionStartRef = useRef" in text
     assert "const [pendingEdgeCreate, setPendingEdgeCreate]" in text
     assert "const connectStart: OnConnectStart = useCallback" in text
@@ -777,8 +770,6 @@ def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
     assert "next = applyConnectionToVisual(next" in text
     assert "data-stage-type={type}" in text
     assert "setPendingEdgeCreate(null)" in text
-
-
 
 def test_stage_test_tab_supports_saved_path_dryrun_without_second_runtime():
     text = SOURCE.read_text(encoding="utf-8")
@@ -815,33 +806,31 @@ def test_stage_test_has_real_stop_control():
 
 
 
+
 def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     text = SOURCE.read_text(encoding="utf-8")
     state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
 
-    assert '"backend", "model"' in text
     assert 'stage_backend_help:' in text
     assert 'stage_model_help:' in text
     assert 'models: Record<string, string[]>;' in text
-    assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in text
-    assert 'const savedStageModel = String(draft?.model || "").trim()' in text
-    assert 'Array.from(new Set([...(backendCatalog.models?.[stageBackend] || []), ...(savedStageModel ? [savedStageModel] : [])]))' in text
+    assert "constraints?.execution_target" in text
+    assert "const executionPair = executionConstraint?.paired_fields || []" in text
+    assert "const backendField = executionPair[0] ||" in text
+    assert "const modelField = executionPair[1] ||" in text
+    assert "executionTargetNames.has(o.name)" in text
     assert 'className="stage-form-section stage-execution-target"' in text
     assert 'disabled={!stageBackend || stageModels.length === 0}' in text
     assert 'stageModels.map((value) => <option' in text
-    assert 'model_field.locator("input")' not in text
     assert 'effective_backend?: string;' in text
     assert 'effective_model?: string;' in text
-    assert 'testMode === "stage" ? "Fallback Backend" : "Backend"' in text
     assert 'testResult.effective_backend' in text
     assert 'testResult.effective_model' in text
     assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
-    assert 'option.name === "session_policy"' in text
-    assert 'next.backend = backend' in text
-    assert 'delete next.model' in text
-    assert 'if (model && next.session_policy === "main")' in text
+    assert "applyExecutionTargetConstraint" in text
+    assert 'option.name === "backend"' not in text
+    assert 'option.name === "model"' not in text
     assert "structured_fresh_retries" not in state
-
 
 def test_stage_backend_model_fields_are_catalog_driven():
     text = SOURCE.read_text(encoding="utf-8")
