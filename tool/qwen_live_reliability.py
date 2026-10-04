@@ -1302,6 +1302,18 @@ def session_expiry_recovery_preflight() -> None:
         if not (root / "done.txt").is_file():
             raise RuntimeError("expired-session recovery did not complete from durable Runner state")
         events = runner_events(root)
+        stage_recovery = [
+            event for event in events
+            if event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and int(event.get("retry") or 0) >= 1
+            and str(event.get("retry_mode") or "") in {"retry", "recover"}
+            and "HTTP 503" in str(event.get("error") or "")
+        ]
+        if not stage_recovery:
+            raise RuntimeError(
+                "production CLI transient Stage failure emitted no runner.recovery/retry evidence"
+            )
         reset_indexes = [
             index for index, event in enumerate(events)
             if event.get("type") == "model.result"
@@ -3068,14 +3080,13 @@ def api_recovery_probe(
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
-        # runner.recovery/retry is the stable StageExecutor recovery evidence.
-        # last_error is deliberately transient and cleared on success, so a live
-        # polling loop must not require observing that intermediate state.
-        if not recovery_event_seen:
-            raise RuntimeError(
-                "API outage recovered, but no structured runner.recovery/retry event "
-                "was observed in the probe JSON stream or production log"
-            )
+        # Real Qwen may absorb/retry transport failures below StageExecutor even
+        # with SDK retry knobs minimized. This probe owns end-to-end outage
+        # resilience and same-session continuity, not the exact recovery layer.
+        # StageExecutor structured recovery is proved separately by the production
+        # CLI session_expiry_recovery_preflight above. If we do observe a
+        # runner.recovery/runner.retry event here, it is useful extra evidence but
+        # not mandatory for a valid backend-level self-recovery.
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
             raise RuntimeError("successful API recovery left stale last_error in durable state")
