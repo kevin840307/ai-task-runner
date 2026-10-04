@@ -10,6 +10,7 @@ from runner.agent import (
     BackendError,
     BackendResult,
     BaseBackend,
+    available_models,
     backend_names,
     configure_backend_args,
     configure_model_args,
@@ -844,3 +845,68 @@ def test_ai_client_reports_effective_model_from_backend_adapter(tmp_path, monkey
     assert client.model == "stage-model"
     client.set_extra_args(["--model", "next-model"])
     assert client.model == "next-model"
+
+
+def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+    import runner.agent.opencode as opencode_module
+
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    (qwen_home / "settings.json").write_text(
+        """{
+  // user selectable models
+  "model": {"name": "qwen-user"},
+  "modelProviders": {
+    "openai": [
+      {"id": "qwen-a"},
+      {"id": "qwen-b"}
+    ]
+  }
+}""",
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    (project / ".qwen").mkdir(parents=True)
+    (project / ".qwen" / "settings.json").write_text(
+        '{"modelProviders":{"openai":[{"id":"qwen-project"}]}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    monkeypatch.setenv("QWEN_MODEL", "qwen-env")
+    assert available_models("qwen", project) == [
+        "qwen-a",
+        "qwen-b",
+        "qwen-env",
+        "qwen-project",
+        "qwen-user",
+    ]
+
+    monkeypatch.setattr(
+        opencode_module,
+        "run_process",
+        lambda *args, **kwargs: ProcessResult(
+            "provider/model-b\nprovider/model-a\nprovider/model-b\n",
+            0,
+        ),
+    )
+    assert available_models("opencode", project) == [
+        "provider/model-a",
+        "provider/model-b",
+    ]
+
+    qwen = QwenBackend(
+        sys.executable,
+        project,
+        configure_model_args("qwen", [], "qwen-project"),
+    )
+    qwen_command = qwen.build_command("prompt", "")
+    assert qwen_command[qwen_command.index("--model") + 1] == "qwen-project"
+
+    opencode = OpenCodeBackend(
+        sys.executable,
+        project,
+        configure_model_args("opencode", ["--auto"], "provider/model-a"),
+    )
+    opencode_command = opencode.build_command("prompt", "")
+    assert opencode_command[opencode_command.index("--model") + 1] == "provider/model-a"
