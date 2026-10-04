@@ -199,6 +199,26 @@ flow:
         load_workflow(path)
 
 
+@pytest.mark.parametrize(
+    "fields",
+    ["backend: qwen", "model: qwen-only-model"],
+)
+def test_ai_stage_backend_model_must_be_configured_together(tmp_path, fields):
+    path = write_workflow(
+        tmp_path,
+        f"""
+stages:
+  worker:
+    type: base
+    {fields}
+flow:
+  - worker
+""",
+    )
+    with pytest.raises(ConfigurationError, match="backend and model must be configured together"):
+        load_workflow(path)
+
+
 def test_invalid_ai_stage_backend_fails_during_workflow_load(tmp_path):
     path = write_workflow(
         tmp_path,
@@ -207,6 +227,7 @@ stages:
   worker:
     type: base
     backend: does-not-exist
+    model: unavailable-model
 flow:
   - worker
 """,
@@ -245,6 +266,7 @@ def test_ai_stage_model_length_is_validated_during_workflow_load(tmp_path):
 stages:
   worker:
     type: base
+    backend: qwen
     model: {model}
 flow:
   - worker
