@@ -1699,24 +1699,33 @@ class WorkflowStudioTests(unittest.TestCase):
 
     def test_stage_test_forwards_backend_probe_mode_and_draft(self) -> None:
         item = self._workflow_item()
-        fake = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout=json.dumps({
-                "ok": True,
-                "stage": "review",
-                "status": "pass",
-                "output": "AGENT_PING_OK",
-                "data": {"backend": "qwen"},
-                "changed_files": [],
-                "next": "not-run",
-                "route": "agent_ping",
-                "kind": "agent_ping",
-            }),
-            stderr="",
-        )
+        payload = json.dumps({
+            "ok": True,
+            "stage": "review",
+            "status": "pass",
+            "output": "AGENT_PING_OK",
+            "data": {"backend": "qwen"},
+            "changed_files": [],
+            "next": "not-run",
+            "route": "agent_ping",
+            "kind": "agent_ping",
+        })
+        captured = {}
+        class FakePopen:
+            pid = 12345
+            returncode = 0
+            def __init__(self, command, **kwargs):
+                self.command = command
+                self.kwargs = kwargs
+            def communicate(self, input_text, timeout=None):
+                captured["input"] = input_text
+                captured["timeout"] = timeout
+                return payload, ""
+            def poll(self):
+                return self.returncode
+
         graph = self.state.studio_visual(item["id"], self.project)
-        with patch("ui.workflow_studio_state.subprocess.run", return_value=fake) as run:
+        with patch("ui.workflow_studio_state.subprocess.Popen", side_effect=FakePopen) as popen:
             result = self.state.studio_stage_test(
                 item["id"],
                 "review",
@@ -1736,9 +1745,9 @@ class WorkflowStudioTests(unittest.TestCase):
             )
 
         self.assertEqual(result["route"], "agent_ping")
-        command = run.call_args.args[0]
+        command = popen.call_args.args[0]
         self.assertEqual(command[command.index("--backend") + 1], "qwen")
-        request = json.loads(run.call_args.kwargs["input"])
+        request = json.loads(captured["input"])
         self.assertEqual(request["probe_mode"], "agent_ping")
         self.assertEqual(request["test_scenario"], "error_mock")
         self.assertIn("workflow", request)
