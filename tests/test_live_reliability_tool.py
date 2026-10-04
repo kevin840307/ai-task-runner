@@ -1535,6 +1535,7 @@ def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
         "dynamic_groups": {"producer": "producer__g2"},
         "dynamic_task_groups": {"producer": ["t1", "t2"]},
         "review_failures": {"review::__run__": 2},
+        "transition_history": [{"stage": "a"}, {"stage": "b"}, {"stage": "c"}],
         "expanded_workflow": [{"name": "a"}, {"name": "b"}, {"name": "c"}],
     }
     work.mkdir(parents=True, exist_ok=True)
@@ -1548,6 +1549,7 @@ def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
     assert sample["project_dynamic_groups"] == 1
     assert sample["project_dynamic_task_groups"] == 1
     assert sample["project_review_failures"] == 1
+    assert sample["project_transition_history"] == 3
     assert sample["project_expanded_workflow_stages"] == 3
     assert sample["project_debug_history_bytes"] == 17
 
@@ -2273,6 +2275,7 @@ def test_soak_resource_bounds_ignore_expected_run_root_growth():
             "project_dynamic_groups": 10,
             "project_dynamic_task_groups": 10,
             "project_review_failures": 5,
+            "project_transition_history": live.MAX_TRANSITION_HISTORY,
             "project_expanded_workflow_stages": 200,
             "project_debug_history_bytes": 4 * 1024 * 1024,
         },
@@ -2294,6 +2297,7 @@ def test_soak_resource_bounds_ignore_expected_run_root_growth():
         ({"project_stage_sessions": 2049}, {"active_process_markers": 0}, "project_stage_sessions"),
         ({"project_dynamic_groups": 2049}, {"active_process_markers": 0}, "project_dynamic_groups"),
         ({"project_review_failures": 2049}, {"active_process_markers": 0}, "project_review_failures"),
+        ({"project_transition_history": live.MAX_TRANSITION_HISTORY + 1}, {"active_process_markers": 0}, "project_transition_history"),
         ({"project_expanded_workflow_stages": 4097}, {"active_process_markers": 0}, "project_expanded_workflow_stages"),
         ({"project_debug_history_bytes": 129 * 1024 * 1024}, {"active_process_markers": 0}, "project_debug_history_bytes"),
     ],
