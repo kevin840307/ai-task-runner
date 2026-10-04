@@ -57,12 +57,14 @@ type CatalogOption = {
   default?: unknown;
   values?: string[];
   description?: string;
+  section?: ParameterSection;
 };
 
 type CatalogProfile = {
   title?: string;
   description?: string;
   defaults?: Record<string, unknown>;
+  test_examples?: Partial<Record<StageTestScenario, string>>;
 };
 
 type CatalogStageType = {
@@ -73,6 +75,7 @@ type CatalogStageType = {
   profiles?: Record<string, CatalogProfile>;
   result_kind?: string;
   dynamic_output?: boolean;
+  test_examples?: Partial<Record<StageTestScenario, string>>;
   options: CatalogOption[];
 };
 
@@ -251,55 +254,24 @@ type DesignerConfirmDialog = {
   danger?: boolean;
   action: () => void | Promise<void>;
 };
-const STAGE_TEST_PROMPTS: Record<string, Record<StageTestScenario, string>> = {
-  plan: {
-    pass: "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Return valid structured output.",
-    fail: "Create a plan that intentionally leaves one acceptance criterion unresolved, so downstream review can identify a concrete missing item. Return valid structured output.",
-    error: "Technical ERROR is injected by the Stage Test harness; the model is not asked to fail.",
-  },
-  "base:execute": {
-    pass: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
-    fail: "Do not satisfy the isolated task acceptance criterion. Explain what remains incomplete without pretending it is finished.",
-    error: "Technical ERROR is injected by the Stage Test harness before the real Execute-profile AI Stage runs.",
-  },
-  "base:review": {
-    pass: "Treat the isolated task evidence as complete and return the normal Review PASS contract with no missing items.",
-    fail: "Treat one concrete acceptance criterion as unsatisfied and return the normal Review FAIL contract with one actionable missing item.",
-    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Review-profile AI Stage.",
-  },
-  ai_validator: {
-    pass: "Validate the isolated evidence as complete and return the normal validator PASS contract.",
-    fail: "Validate the isolated evidence as incomplete and return the normal validator FAIL contract with one concrete missing item.",
-    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real validator.",
-  },
-  handoff: {
-    pass: "Choose one valid allowed target for this isolated test and return a valid handoff decision.",
-    fail: "Return a valid handoff decision that explains why no preferred route is suitable, while still respecting the allowed-target contract.",
-    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Handoff Stage.",
-  },
-  base: {
-    pass: "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
-    fail: "Reply that the isolated test condition is not satisfied and give one concrete reason.",
-    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real AI Stage.",
-  },
-};
-
-function stageTestPrompt(stage: Stage | null, scenario: StageTestScenario = "pass"): string {
+function stageTestPrompt(
+  stage: Stage | null,
+  catalog: Catalog,
+  scenario: StageTestScenario = "pass",
+): string {
   if (!stage) return "";
-  const key = stage.type === "base" && stage.profile
-    ? `base:${String(stage.profile)}`
-    : stage.type;
-  return STAGE_TEST_PROMPTS[key]?.[scenario]
-    || STAGE_TEST_PROMPTS.base[scenario];
+  const stageType = catalog.stage_types?.[stage.type];
+  const profile = stage.type === "base" && stage.profile
+    ? stageType?.profiles?.[String(stage.profile)]
+    : undefined;
+  return String(
+    profile?.test_examples?.[scenario]
+    || stageType?.test_examples?.[scenario]
+    || ""
+  );
 }
 
-
-const PARAMETER_SECTIONS: { id: ParameterSection; fields: string[] }[] = [
-  { id: "content", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
-  { id: "execution", fields: ["backend", "model", "run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
-  { id: "result", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries"] },
-  { id: "advanced", fields: ["ai_validator_yolo"] },
-];
+const PARAMETER_SECTION_ORDER: ParameterSection[] = ["content", "execution", "result", "advanced"];
 
 const START = "__start__";
 const END = "__end__";
@@ -1152,11 +1124,9 @@ function App() {
     if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
     return true;
   });
-  const parameterGroups = PARAMETER_SECTIONS.map((section) => ({
-    ...section,
-    options: parameterOptions.filter((option) => section.id === "advanced"
-      ? !PARAMETER_SECTIONS.slice(0, -1).some((group) => group.fields.includes(option.name))
-      : section.fields.includes(option.name)),
+  const parameterGroups = PARAMETER_SECTION_ORDER.map((id) => ({
+    id,
+    options: parameterOptions.filter((option) => (option.section || "advanced") === id),
   })).filter((section) => section.options.length);
   const visibleParameters = parameterOptions.length > 8
     ? (parameterGroups.find((section) => section.id === parameterSection) || parameterGroups[0])?.options || []
@@ -2426,16 +2396,16 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       <div className="test-scenario-tabs" role="group" aria-label="Stage test prompt scenario">
                         {(["pass", "fail", "error"] as StageTestScenario[]).map((scenario) => <button type="button" key={scenario}
                           className={testScenario === scenario ? `active scenario-${scenario}` : `scenario-${scenario}`}
-                          onClick={() => { setTestScenario(scenario); setTestInput(stageTestPrompt(draft, scenario)); }}>
+                          onClick={() => { setTestScenario(scenario); setTestInput(stageTestPrompt(draft, catalog, scenario)); }}>
                           {{ pass: tx("test_pass"), fail: tx("test_fail"), error: tx("test_error") }[scenario]}
                         </button>)}
                       </div>
                       <div className="test-input-actions">
-                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft, testScenario))}>{tx("fill_test")}</button>
+                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft, catalog, testScenario))}>{tx("fill_test")}</button>
                         {testInput && <button type="button" onClick={() => setTestInput("")}>{tx("clear")}</button>}
                       </div>
                       <textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5}
-                        placeholder={stageTestPrompt(draft, testScenario) || tx("test_input_placeholder")} />
+                        placeholder={stageTestPrompt(draft, catalog, testScenario) || tx("test_input_placeholder")} />
                       <small>{tx("test_input_help")}</small>
                     </label>
                   : <div className="ping-prompt"><strong>{tx("fixed_prompt")}</strong><code>{AGENT_PING_PROMPT}</code><small>{tx("ping_help")}</small></div>}
