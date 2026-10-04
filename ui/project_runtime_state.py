@@ -45,11 +45,11 @@ class ProjectRuntimeMixin:
     def _project_display_path(path: str | Path) -> str:
         return str(Path(path).expanduser().resolve())
 
-    def projects_payload(self) -> dict:
+    def projects_payload(self, exclude_runtime_path: str = "") -> dict:
         # Runtime status is live process/state data. Do not cache it using only
         # projects.json mtime: that can replay a pre-run/pre-stop status on the
         # next sidebar poll and make rows visibly oscillate.
-        projects = self.projects()
+        projects = self.projects(exclude_runtime_path=exclude_runtime_path)
         running = sum(1 for item in projects if item.get("runtime_status") == "running")
         return {
             "projects": projects,
@@ -68,15 +68,17 @@ class ProjectRuntimeMixin:
             return 10000
         return 8000
 
-    def projects(self) -> list[dict]:
+    def projects(self, *, exclude_runtime_path: str = "") -> list[dict]:
         try:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rows = []
         project_rows = rows if isinstance(rows, list) else []
-        # Take the Windows process snapshot only when at least one tracked
-        # Project has runtime process evidence. Idle-only lists avoid tasklist.
-        alive_pids = self._process_snapshot() if self._projects_need_process_snapshot(project_rows) else None
+        exclude_key = self._project_path_key(exclude_runtime_path) if exclude_runtime_path else ""
+        # Take the Windows process snapshot only when at least one non-excluded
+        # Project has runtime process evidence. The active Project is already
+        # covered by /api/project/runtime and should not trigger a duplicate tasklist scan.
+        alive_pids = self._process_snapshot() if self._projects_need_process_snapshot(project_rows, exclude_key) else None
         result: list[dict] = []
         seen: set[str] = set()
         for item in project_rows:
@@ -91,7 +93,11 @@ class ProjectRuntimeMixin:
                 continue
             seen.add(key)
             project_path = Path(path)
-            summary = self._project_runtime_summary(project_path, alive_pids)
+            summary = (
+                {"status": "idle", "stage": "", "completed_count": 0, "total": 0}
+                if exclude_key and key == exclude_key
+                else self._project_runtime_summary(project_path, alive_pids)
+            )
             result.append({
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
@@ -103,12 +109,14 @@ class ProjectRuntimeMixin:
             })
         return result
 
-    def _projects_need_process_snapshot(self, rows: list[dict]) -> bool:
+    def _projects_need_process_snapshot(self, rows: list[dict], exclude_key: str = "") -> bool:
         for item in rows:
             if not isinstance(item, dict):
                 continue
             path = str(item.get("path", "")).strip()
             if not path:
+                continue
+            if exclude_key and self._project_path_key(path) == exclude_key:
                 continue
             project = Path(path)
             runtime = self.runtime_dir(project)
