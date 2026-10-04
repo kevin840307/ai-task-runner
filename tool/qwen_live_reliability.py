@@ -3342,6 +3342,58 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     )
 
 
+def require_resource_bounds(result: SoakResult) -> None:
+    """Fail soak on clearly unbounded per-run state/process growth.
+
+    run_root_bytes is intentionally excluded: the harness retains a new Project
+    directory per soak iteration, so total run-root size is expected to grow.
+    These are conservative safety rails, not product-size limits.
+    """
+    start = result.resource_start or {}
+    maximum = result.resource_max or {}
+    end = result.resource_end or {}
+    failures: list[str] = []
+
+    if int(end.get("active_process_markers", 0)) != 0:
+        failures.append(
+            f"active process markers remain: {end.get('active_process_markers')}"
+        )
+
+    thread_start = int(start.get("threads", 0))
+    thread_end = int(end.get("threads", 0))
+    if thread_start and thread_end > thread_start + 16:
+        failures.append(f"thread count grew {thread_start} -> {thread_end}")
+
+    handle_start = int(start.get("handles", -1))
+    handle_end = int(end.get("handles", -1))
+    if handle_start >= 0 and handle_end >= 0 and handle_end > handle_start + 128:
+        failures.append(f"Windows handle count grew {handle_start} -> {handle_end}")
+
+    rss_start = int(start.get("rss_bytes", 0))
+    rss_end = int(end.get("rss_bytes", 0))
+    if rss_start and rss_end > rss_start + 512 * 1024 * 1024:
+        failures.append(
+            f"harness RSS grew by {(rss_end - rss_start) / (1024 * 1024):.1f} MiB"
+        )
+
+    ceilings = {
+        "project_state_json_bytes": 8 * 1024 * 1024,
+        "project_stage_sessions": 2048,
+        "project_dynamic_groups": 2048,
+        "project_dynamic_task_groups": 2048,
+        "project_review_failures": 2048,
+        "project_expanded_workflow_stages": 4096,
+        "project_debug_history_bytes": 128 * 1024 * 1024,
+    }
+    for key, ceiling in ceilings.items():
+        value = int(maximum.get(key, 0))
+        if value > ceiling:
+            failures.append(f"{key} exceeded safety rail: {value} > {ceiling}")
+
+    if failures:
+        raise RuntimeError("soak resource bounds failed: " + "; ".join(failures))
+
+
 def require_dense_coverage(result: SoakResult) -> None:
     missing = [
         name for name, count in (
@@ -3751,6 +3803,8 @@ def main() -> int:
         soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
         if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
             raise RuntimeError("soak ended before the requested wall-clock duration")
+        if args.hours:
+            require_resource_bounds(soak_result)
         if args.high_density and args.hours:
             require_dense_coverage(soak_result)
         if args.require_transient and not transient_observed:
