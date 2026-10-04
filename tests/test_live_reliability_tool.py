@@ -2415,3 +2415,22 @@ def test_review_failure_routing_fixture_is_contract_focused(tmp_path: Path):
         assert ctx.state.completed is True
     finally:
         _close(ctx)
+
+
+
+def test_proxy_recovery_evidence_survives_final_poll_gap():
+    control = type("ProxyState", (), {})()
+    control.failures = 2
+    control.successes = 4
+    control.fail = False
+    control.disconnect = False
+
+    assert live._proxy_recovery_observed("session-A", control, 3) is True
+    assert live._proxy_recovery_observed("", control, 3) is False
+
+    control.successes = 3
+    assert live._proxy_recovery_observed("session-A", control, 3) is False
+
+    control.successes = 4
+    control.disconnect = True
+    assert live._proxy_recovery_observed("session-A", control, 3) is False
