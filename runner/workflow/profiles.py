@@ -12,6 +12,11 @@ AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
         "defaults": {
             "prompt": "common/generic.md",
         },
+        "test_examples": {
+            "pass": "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
+            "fail": "Reply that the isolated test condition is not satisfied and give one concrete reason.",
+            "error": "Technical ERROR is injected by the Stage Test harness; retry then executes the real AI Stage.",
+        },
     },
     "execute": {
         "title": "Execute",
@@ -24,6 +29,11 @@ AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
             "actor": "executor",
             "allow_project_read": True,
             "track_changes": True,
+        },
+        "test_examples": {
+            "pass": "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
+            "fail": "Do not satisfy the isolated task acceptance criterion. Explain what remains incomplete without pretending it is finished.",
+            "error": "Technical ERROR is injected by the Stage Test harness before the real Execute-profile AI Stage runs.",
         },
     },
     "review": {
@@ -38,6 +48,11 @@ AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
             "readonly_safety": "observe",
             "error_policy": {"retries": 2},
             "max_failures": 3,
+        },
+        "test_examples": {
+            "pass": "Treat the isolated task evidence as complete and return the normal Review PASS contract with no missing items.",
+            "fail": "Treat one concrete acceptance criterion as unsatisfied and return the normal Review FAIL contract with one actionable missing item.",
+            "error": "Technical ERROR is injected by the Stage Test harness; retry then executes the real Review-profile AI Stage.",
         },
     },
 }
