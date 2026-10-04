@@ -19,13 +19,15 @@ jobs:
           ref: minimal-closed-loop-runtime
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: npm
           cache-dependency-path: ui/studio-src/package-lock.json
       - name: Build Studio
         working-directory: ui/studio-src
         run: |
           npm ci
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
           npm run build
       - name: Commit generated bundle
         shell: bash
