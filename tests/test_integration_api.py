@@ -998,5 +998,6 @@ def test_production_runner_validation_fail_route_loops_back_and_completes(tmp_pa
     state = json.loads((tmp_path / ".ai-task-runner" / "state.json").read_text(encoding="utf-8"))
     assert state["completed"] is True
     assert state["cycle"] == 2
-    assert state["transition_previous"]["stage"] == "validate_file"
-    assert state["transition_previous"]["status"] == "pass"
+    assert state["transition_previous"] == {}
+    assert state["transition_history"][-1]["stage"] == "validate_file"
+    assert state["transition_history"][-1]["status"] == "pass"
