@@ -279,7 +279,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 "  review:\n"
                 "    type: base\n"
                 "    profile: review\n"
-                "    prompt: used_prompt.md\n"
+                "    prompt: common/used_prompt.md\n"
                 "flow: [review]\n"
             ),
             used_file["hash"],
