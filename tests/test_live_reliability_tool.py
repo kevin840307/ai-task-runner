@@ -952,7 +952,6 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
         assert workflow.read_text(encoding="utf-8") == live.REVIEW_ROUTING_WORKFLOW
         assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_SEED
         assert (project / "review_gate.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_GATE
-        assert (project / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
         history.mkdir(parents=True)
@@ -970,8 +969,10 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
                 "session_mode": "resume",
             },
             {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
-            {"type": "runner.stage", "action": "start", "stage": "review_verify"},
-            {"type": "runner.stage", "action": "finish", "stage": "review_verify", "result": "pass"},
+            {"type": "runner.stage", "action": "start", "stage": "review"},
+            {"type": "runner.stage", "action": "finish", "stage": "review", "result": "pass"},
+            {"type": "runner.stage", "action": "start", "stage": "validate_file"},
+            {"type": "runner.stage", "action": "finish", "stage": "validate_file", "result": "pass"},
         ]
         (work / "log.txt").write_text(
             "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
@@ -997,7 +998,6 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
 
 def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert "deterministically seeds review.txt with only READY" in live.REVIEW_ROUTING_PROMPT
-    assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
     assert "do not inspect files, do not use" in live.REVIEW_ROUTING_EXECUTION_PROMPT
     assert 'type: command' in live.REVIEW_ROUTING_WORKFLOW
     assert 'command: "{python} seed_review.py"' in live.REVIEW_ROUTING_WORKFLOW
@@ -1015,15 +1015,14 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
     workflow = load_workflow(workflow_path)
 
     assert [node["name"] for node in workflow] == [
-        "execute", "seed", "review", "review_verify", "validate_file"
+        "execute", "seed", "review", "validate_file"
     ]
     assert workflow[0]["type"] == "base"
     assert workflow[0]["profile"] == "execute"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["routes"] == {"fail": "execute"}
-    assert workflow[4]["routes"] == {"fail": "execute"}
-    assert workflow[3]["type"] == "base"
-    assert workflow[3]["profile"] == "review"
+    assert workflow[3]["routes"] == {"fail": "execute"}
+    assert workflow[3]["type"] == "command"
     assert all(
         key not in node
         for node in workflow
