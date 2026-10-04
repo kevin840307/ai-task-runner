@@ -445,18 +445,6 @@ class WorkflowStudioMixin:
         self._validate_workflow_before_write(path, candidate)
         return {"ok": True, "fields": parsed}
 
-    def _stage_editor_fields(self) -> set[str]:
-        """Fields exposed by the Runner-owned Stage/editor catalog."""
-        catalog = self.workflow_catalog()
-        allowed = {"type"}
-        allowed.update(str(key) for key in (catalog.get("node_options") or {}))
-        for stage in (catalog.get("stage_types") or {}).values():
-            for option in stage.get("options") or []:
-                name = str(option.get("name") or "").strip()
-                if name:
-                    allowed.add(name)
-        return allowed
-
     def studio_path_test(
         self,
         file_id: str,
