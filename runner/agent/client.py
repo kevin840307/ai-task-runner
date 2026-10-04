@@ -413,12 +413,18 @@ def create_ai_client(
         args = configure_backend_args(
             backend_name,
             mode,
-            config.agent_args,
+            [],
             allow_project_read=allow_project_read,
             sandbox=getattr(config, "sandbox", False),
         )
-    if str(model_override or "").strip():
-        args = configure_model_args(backend_name, args, str(model_override).strip())
+    inherited_model = (
+        model_from_args(config.backend, config.agent_args)
+        if backend_name != config.backend
+        else ""
+    )
+    effective_model = str(model_override or inherited_model).strip()
+    if effective_model:
+        args = configure_model_args(backend_name, args, effective_model)
     client = constructor(
         backend=backend_name,
         command=config.command if backend_name == config.backend else None,
