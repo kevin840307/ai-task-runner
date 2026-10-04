@@ -752,6 +752,9 @@ flow:
                     f"**/index.html?view=workflow&source=prompt&studio={quote(prompt['id'])}*"
                 )
                 page.locator("#studioPromptTextarea").wait_for(state="visible")
+                page.wait_for_function(
+                    "() => document.querySelector('#studioPromptTextarea')?.value?.trim().length > 0"
+                )
                 assert page.locator("#studioPromptTextarea").input_value().strip()
                 assert page.locator("#studioFileName").inner_text() == prompt["name"]
                 browser.close()
