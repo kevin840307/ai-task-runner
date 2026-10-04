@@ -267,7 +267,7 @@ flow:
             port = sock.getsockname()[1]
         server = UIServer(ROOT, "127.0.0.1", port)
         state = server.RequestHandlerClass.state
-        state.backend_catalog = lambda project=None: {
+        state.backend_catalog = lambda project=None, include_models=False: {
             "default": "qwen",
             "backends": ["qwen", "opencode"],
             "models": {
