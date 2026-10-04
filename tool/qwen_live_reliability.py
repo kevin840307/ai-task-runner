@@ -3804,17 +3804,26 @@ def _tree_bytes(root: Path) -> int:
     return total
 
 
+def _active_process_marker_count(root: Path) -> int:
+    return sum(
+        1 for path in root.rglob("active-process.txt") if path.is_file()
+    )
+
+
 def resource_snapshot(
     root: Path,
     *,
     include_run_root_bytes: bool = False,
+    include_active_process_markers: bool = False,
 ) -> dict[str, int]:
     result = {
         "rss_bytes": _rss_bytes(),
         "threads": threading.active_count(),
         "handles": _handle_count(),
-        "active_process_markers": sum(
-            1 for path in root.rglob("active-process.txt") if path.is_file()
+        "active_process_markers": (
+            _active_process_marker_count(root)
+            if include_active_process_markers
+            else 0
         ),
         "project_state_json_bytes": 0,
         "project_stage_sessions": 0,
@@ -3907,7 +3916,11 @@ def _record_resource_snapshot(
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
-    baseline = resource_snapshot(root, include_run_root_bytes=True)
+    baseline = resource_snapshot(
+        root,
+        include_run_root_bytes=True,
+        include_active_process_markers=True,
+    )
     maximum = dict(baseline)
     _record_resource_snapshot(root, 0, baseline)
     result = SoakResult(resource_start=baseline, resource_max=maximum)
@@ -3974,14 +3987,21 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             mixed_validations=mixed_validations,
             sandbox_runs=result.sandbox_runs + int(sandboxed),
         )
-        sample = resource_snapshot(root)
+        sample = resource_snapshot(
+            project,
+            include_active_process_markers=True,
+        )
         sample.update(project_state_metrics(project))
         maximum = _resource_maximum(maximum, sample)
         _record_resource_snapshot(root, run_number, sample)
         result = replace(result, resource_max=maximum, resource_end=sample)
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    final_sample = resource_snapshot(root, include_run_root_bytes=True)
+    final_sample = resource_snapshot(
+        root,
+        include_run_root_bytes=True,
+        include_active_process_markers=True,
+    )
     maximum = _resource_maximum(maximum, final_sample)
     _record_resource_snapshot(root, result.completed, final_sample)
     return replace(
