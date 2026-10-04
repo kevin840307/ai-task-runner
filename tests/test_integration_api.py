@@ -925,3 +925,28 @@ def test_cli_and_api_expose_current_cycle_limit_contract():
     assert request.skip_on_max_cycles is True
     assert config.max_cycles == 9
     assert config.skip_on_max_cycles is True
+
+
+
+def test_api_level_retry_event_is_persisted_to_bounded_log(tmp_path):
+    import runner.api as api_module
+
+    request = RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    )
+
+    api_module._report_retry(request, None, "temporary outage")
+
+    log_path = tmp_path / ".ai-task-runner" / "log.txt"
+    events = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert events[-1]["type"] == "runner.retry"
+    assert events[-1]["action"] == "retry"
+    assert events[-1]["layer"] == "runner_api"
+    assert events[-1]["message"] == "temporary outage"
