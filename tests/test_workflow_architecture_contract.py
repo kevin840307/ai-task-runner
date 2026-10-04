@@ -88,3 +88,14 @@ def test_studio_canvas_nodes_are_topology_first_not_retry_policy_cards():
     assert "ERR×{errorRetries}" not in editor
     assert "FAIL×{reviewMaxFailures}" not in editor
     assert "Mock ERROR" in editor
+
+
+def test_studio_execution_target_policy_is_catalog_driven():
+    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    assert "constraints?.execution_target" in editor
+    start = editor.index("function editDraftOption")
+    end = editor.index("async function testStage", start)
+    logic = editor[start:end]
+    assert 'value === "main"' not in logic
+    assert 'option.name === "backend"' not in logic
+    assert 'option.name === "model"' not in logic
