@@ -183,6 +183,10 @@ class AIClient:
     def name(self) -> str:
         return self.backend
 
+    @property
+    def model(self) -> str:
+        return model_from_args(self.backend, self.extra_args)
+
     def set_extra_args(self, extra_args: Sequence[str]) -> None:
         values = list(extra_args)
         self.extra_args = values
@@ -223,6 +227,7 @@ class AIClient:
                 "debug_dir": str(self.debug_dir) if self.debug_dir else "",
                 "call_id": value,
                 "backend": self.backend,
+                "model": self.model,
                 "cwd": str(self.root),
                 "session": session_id,
                 "text": text,
