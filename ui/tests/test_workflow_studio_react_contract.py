@@ -479,6 +479,18 @@ def test_ai_stage_profile_first_create_and_quick_shortcuts():
     assert 'title="Add Stage (/)"' in text
 
 
+def test_stage_form_sections_and_test_examples_are_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "STAGE_TEST_PROMPTS" not in text
+    assert "PARAMETER_SECTIONS" not in text
+    assert "PARAMETER_SECTION_ORDER" in text
+    assert "option.section || \"advanced\"" in text
+    assert "profile?.test_examples?.[scenario]" in text
+    assert "stageType?.test_examples?.[scenario]" in text
+    assert "stageTestPrompt(draft, catalog, scenario)" in text
+
+
 def test_stage_palette_and_generic_field_use_catalog_metadata():
     text = SOURCE.read_text(encoding="utf-8")
 
