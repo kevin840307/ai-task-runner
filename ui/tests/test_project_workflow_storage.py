@@ -223,3 +223,56 @@ def test_workflow_save_allows_schema_valid_non_closing_route(tmp_path: Path) -> 
     assert "pass: stop" in saved["content"]
     reread = state.studio_read(created["item"]["id"], project)
     assert "pass: stop" in reread["content"]
+
+
+
+def test_studio_path_test_reuses_workflow_dryrun_from_stage(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    (tmp_path / "tool/workflow_dryrun.py").write_text(
+        "import json, sys\n"
+        "stage = sys.argv[sys.argv.index('--from-stage') + 1]\n"
+        "print(json.dumps({\n"
+        "  'valid': True, 'completed': True, 'from_stage': stage, 'cycle': 1, 'stage': 'completed',\n"
+        "  'transitions': [{'number': 1, 'stage': stage, 'label': None, 'status': 'pass'}],\n"
+        "  'error': None\n"
+        "}))\n",
+        encoding="utf-8",
+    )
+    created = state.studio_workflow_create("path_test", "project", project)
+    current = state.studio_read(created["item"]["id"], project)
+    state.studio_save(
+        created["item"]["id"],
+        (
+            "stages:\n"
+            "  first:\n"
+            "    type: base\n"
+            "    profile: generic\n"
+            "  second:\n"
+            "    type: base\n"
+            "    profile: generic\n"
+            "flow: [first, second]\n"
+        ),
+        current["hash"],
+        project,
+    )
+
+    result = state.studio_path_test(created["item"]["id"], "second", project)
+
+    assert result["ok"] is True
+    assert result["from_stage"] == "second"
+    assert result["completed"] is True
+    assert result["transitions"] == [
+        {"number": 1, "stage": "second", "label": None, "status": "pass"}
+    ]
+
+
+def test_studio_path_test_rejects_unknown_stage_before_subprocess(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    created = state.studio_workflow_create("path_unknown", "project", project)
+
+    try:
+        state.studio_path_test(created["item"]["id"], "missing", project)
+    except ValueError as exc:
+        assert str(exc) == "Stage not found: missing"
+    else:
+        raise AssertionError("unknown Stage path test must fail")
