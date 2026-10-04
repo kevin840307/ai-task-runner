@@ -268,6 +268,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed long raw-disconnect live recovery final-poll race.
+    - Runner completed cleanly, but api_recovery_probe only updated its recovered flag while the
+      child process was still alive. A final successful upstream request could finish the run
+      between two 100ms polling iterations, leaving recovered=False even though proxy counters
+      and durable state proved success.
+    - Proxy recovery evidence is now one shared helper used both during polling and once more
+      after process exit. Failure diagnostics include session/failure/success counters.
+    - Added deterministic coverage for the final-poll gap; Runner retry/session semantics were
+      intentionally unchanged.
+
 [x] Simplified review_failure_routing live probe to the routing contract it owns.
     - Removed redundant Qwen review_verify from this probe.
     - The probe now proves deterministic Review FAIL -> Execute shared-feedback -> repair -> Review PASS -> validator PASS.
