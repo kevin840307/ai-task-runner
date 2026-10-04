@@ -258,11 +258,11 @@ type DesignerConfirmDialog = {
 };
 function stageTestPrompt(
   stage: Stage | null,
-  catalog: Catalog,
+  catalog: Catalog | null,
   scenario: StageTestScenario = "pass",
 ): string {
   if (!stage) return "";
-  const stageType = catalog.stage_types?.[stage.type];
+  const stageType = catalog?.stage_types?.[stage.type];
   const profile = stage.type === "base" && stage.profile
     ? stageType?.profiles?.[String(stage.profile)]
     : undefined;
