@@ -129,6 +129,50 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "agent",
     *QWEN_COMPUTER_USE_TOOLS,
 )
+def _read_qwen_settings(path: Path) -> dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    # Qwen settings are JSON-with-comments. Strip comments without touching strings.
+    out: list[str] = []
+    i = 0
+    quoted = False
+    escaped = False
+    while i < len(raw):
+        ch = raw[i]
+        if quoted:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                quoted = False
+            i += 1
+            continue
+        if ch == '"':
+            quoted = True
+            out.append(ch)
+            i += 1
+            continue
+        if raw.startswith("//", i):
+            end = raw.find("\n", i)
+            i = len(raw) if end < 0 else end
+            continue
+        if raw.startswith("/*", i):
+            end = raw.find("*/", i + 2)
+            i = len(raw) if end < 0 else end + 2
+            continue
+        out.append(ch)
+        i += 1
+    try:
+        value = json.loads("".join(out))
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 QWEN_RUNTIME_EXCLUDED_TOOLS = (
     "todo_write",
     "skill",
@@ -241,6 +285,29 @@ class QwenBackend(BaseBackend):
     default_command = DEFAULT_QWEN_COMMAND
     sandbox_flags = ("-s", "--sandbox")
     supports_sandbox = True
+
+    @classmethod
+    def available_models(cls, root: Path) -> list[str]:
+        values: set[str] = set()
+        qwen_home = Path(os.environ.get("QWEN_HOME") or (Path.home() / ".qwen")).expanduser()
+        for path in (qwen_home / "settings.json", root / ".qwen" / "settings.json"):
+            settings = _read_qwen_settings(path)
+            model = settings.get("model")
+            if isinstance(model, dict) and isinstance(model.get("name"), str):
+                values.add(model["name"].strip())
+            providers = settings.get("modelProviders")
+            if isinstance(providers, dict):
+                for items in providers.values():
+                    if not isinstance(items, list):
+                        continue
+                    for item in items:
+                        if isinstance(item, dict) and isinstance(item.get("id"), str):
+                            values.add(item["id"].strip())
+        for key in ("QWEN_MODEL", "OPENAI_MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL", "GOOGLE_MODEL"):
+            value = str(os.environ.get(key) or "").strip()
+            if value:
+                values.add(value)
+        return sorted(value for value in values if value)
 
     @classmethod
     def configure_args(
