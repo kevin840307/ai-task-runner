@@ -50,10 +50,15 @@ def _launch_browser(playwright):
 
 
 def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
+    fit = page.locator(".react-flow__controls-fitview")
+    if fit.count():
+        fit.click()
+        page.wait_for_timeout(80)
     source = page.locator(source_selector)
     target = page.locator(target_selector)
     source.scroll_into_view_if_needed()
     target.scroll_into_view_if_needed()
+    assert source.is_visible() and target.is_visible()
     start = source.bounding_box()
     end = target.bounding_box()
     assert start and end
