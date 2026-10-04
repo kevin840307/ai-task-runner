@@ -453,10 +453,11 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
 
 [x] Reviewed structured-output repair ownership against DevFollow.
     - structured_call repairs only parser/schema-invalid model output after a successful model response.
-    - ask()/retry ask/fresh ask errors escape immediately to StageExecutor; this layer does not own backend/API retry.
-    - The bounded fresh structured ask is protocol repair for malformed structured output, not a second technical recovery loop.
-    - Dedicated regression tests lock parser-repair vs transport-error ownership.
-    - Keep the shared implementation; do not duplicate structured repair in individual Stage types.
+    - Removed unused structured_fresh_retries / fresh_ask / fresh_retries dead contract.
+    - BaseStage no longer clears or rotates sessions for structured-output repair.
+    - Exhausted structured repair raises StructuredOutputError; StageExecutor remains the only technical retry/Fresh Session owner.
+    - Backend/API errors raised by ask still escape unchanged to StageExecutor.
+    - Architecture regression forbids structured repair from regaining Fresh Session ownership.
 
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
