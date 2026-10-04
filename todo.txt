@@ -201,6 +201,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Dry Run now covers Plan backend/model propagation through the real PlanStage.finish() + FlowEngine dynamic expansion path; no second dry-run runtime was added.
     - Catalog combination coverage locks backend/model/session_policy onto every AI-backed Stage (base/plan/handoff/ai_validator) and keeps Command free of AI-only fields.
     - README documents YAML/UI behavior, target-backend default-model isolation, session-policy constraints, Plan child inheritance, and effective Stage Test evidence.
+    - CI review removed one remaining legacy Studio editor field (structured_fresh_retries); stale tests were updated to current immediate canonical view-switch/localized draft behavior instead of restoring removed UI contracts.
     - Deterministic coverage verifies inherited Plan child backend/model, no redundant inheritance when unset, OpenCode model override, plugin/future-backend custom model syntax, YAML/catalog/UI parity, session ownership and Resume/dynamic-child behavior.
     - Real-Qwen Stage Probe coverage is wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
     - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
