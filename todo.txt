@@ -619,6 +619,10 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Partial-run summaries record the selected starting probe and do not claim skipped probes passed.
     - qwen_live_reliability_24h.bat and qwen_live_reliability_0_5h.bat forward extra arguments through %*.
     - Deterministic coverage protects numeric/name parsing, skip ordering, list-only behavior and batch passthrough.
+    - Generic fast re-run entry point: run_qwen_live_reliability_fail_start.bat.
+      It defaults to the currently reproduced real-session-expiry failure and forwards %*, so a later
+      failure can override with --start-probe <name> without creating another one-off batch file.
+    - Removed the old run_qwen_live_reliability_from_api_disconnect.bat one-off launcher.
     - Example for the current Review routing area:
       tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
 
