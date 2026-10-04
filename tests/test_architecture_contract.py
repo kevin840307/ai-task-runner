@@ -82,6 +82,21 @@ def test_removed_structured_fresh_retry_contract_stays_absent():
     assert "structured_fresh_retries" not in studio_source
 
 
+def test_stage_backend_model_selection_stays_backend_registry_driven():
+    base_stage = (STAGES / "base_stage.py").read_text(encoding="utf-8")
+    registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
+    studio = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+
+    assert "backend_names()" in base_stage
+    assert 'item.name == "backend"' in registry
+    assert "backend_names()" in registry
+    for source in (base_stage, studio):
+        assert 'backend == "qwen"' not in source
+        assert 'backend == "opencode"' not in source
+        assert '["qwen", "opencode"]' not in source
+        assert "['qwen', 'opencode']" not in source
+
+
 def test_flow_and_executor_responsibility_boundaries_stay_separate():
     flow_source = (ROOT / "runner" / "workflow" / "flow_engine.py").read_text(encoding="utf-8")
     executor_source = (EXECUTION / "stage_executor.py").read_text(encoding="utf-8")
