@@ -21,10 +21,10 @@ examples\11_regression_workflow_demo\run_example.bat --backend qwen
 The suite is intentionally small and diagnostic:
 
 1. `01_basic_command_validator` — baseline Python hard validation.
-2. `02_repair_cycle` — starter bug retained by folder name only; it exercises Validator FAIL → route back to an earlier execution stage.
+2. `02_validator_reroute_cycle` — starter bug exercising Validator FAIL → explicit semantic reroute to an earlier execution Stage.
 3. `03_ai_validator_voting` — AI-only final validation with 3 independent fresh-session votes.
 4. `04_mixed_validation` — Python hard gate plus AI semantic majority vote.
-5. `05_ai_quality_repair` — hard behavior checks plus an AI genericity/quality gate; the folder name is historical and does not represent a Repair Stage.
+5. `05_ai_quality_gate` — hard behavior checks plus an independent AI genericity/quality gate.
 6. `06_yaml_driven_tool` — a small application that consumes YAML; the outer `examples.yaml` simultaneously exercises Runner YAML batch mode.
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 8. `08_config_driven_data_pipeline` — mixed-validation data pipeline with black-box behavioral checks.
@@ -47,9 +47,9 @@ Validation-mode workflow example: `validation_modes.yaml` shows the automatic bu
 
 Use the current semantic Stage types instead of older low-level fields such as `run_state`, `actor`, `mode`, `result_handler`, or `retry_attr` unless a real override is required.
 
-- `workflow_multi_prompt.yaml`: reuses `type: task` and `type: review` with different prompts.
-- `custom_workflow_latest.yaml`: latest generic custom Workflow. A a `command` Stage produces `Task[]`, the task-scoped SOP executes/reviews them, and a final `command` Stage runs without requiring Plan or a Validator.
+- `workflow_multi_prompt.yaml`: reuses `type: base` with `profile: execute` / `profile: review` and different prompts.
+- `custom_workflow_latest.yaml`: latest generic custom Workflow. A `command` Stage returns `tasks` plus producer-defined child Stages, then a final `command` Stage runs after those children complete.
 - `custom_task_producer.py`: Task JSON producer used by the custom Workflow.
-- `../runner/workflow/custom/common/ralphy_ai_validate.yaml`: two-stage Fresh Ralphy Task + mandatory AI Validator workflow.
+- `../runner/assets/workflows/ralphy_ai_validate.yaml`: bundled Ralphy workflow with dynamic Plan children and mandatory Final AI validation.
 
 For the full contract and more examples, see `docs/user/CUSTOM_WORKFLOW.md`.
