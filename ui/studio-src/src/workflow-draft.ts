@@ -30,6 +30,7 @@ export type DraftConnection = {
   source?: string | null;
   target?: string | null;
   sourceHandle?: string | null;
+  targetHandle?: string | null;
 };
 
 export const START = "__start__";
