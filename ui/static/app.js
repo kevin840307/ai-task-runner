@@ -767,7 +767,7 @@ function formatElapsed(seconds) {
 }
 function runtimeElapsedSeconds() {
   if (!state.runtimeStartedAt) return 0;
-  const end = state.runtime?.running ? Date.now() : (state.runtimeStoppedAt || Date.now());
+  const end = state.runtime?.actions?.stop ? Date.now() : (state.runtimeStoppedAt || Date.now());
   return Math.max(0, end / 1000 - state.runtimeStartedAt);
 }
 function updateRuntimeElapsed() {
@@ -776,7 +776,7 @@ function updateRuntimeElapsed() {
   const live = $("messages")?.querySelector(".cli-runtime-elapsed");
   setTextIfChanged(live, state.runtimeStartedAt ? text : "00:00:00");
   const indicator = $("messages")?.querySelector(".runtime-live-indicator");
-  if (indicator) indicator.textContent = state.runtime?.running ? "Running" : runtimeStatusLabel(state.runtime);
+  if (indicator) indicator.textContent = state.runtime?.actions?.stop ? "Running" : runtimeStatusLabel(state.runtime);
 }
 function updateRuntimeFreshness() {
   const text = formatFreshness(state.runtimeLastChangedAt);
@@ -787,7 +787,7 @@ function updateRuntimeFreshness() {
   const live = $("messages")?.querySelector(".live-updated");
   setTextIfChanged(live, `Last update ${text}`);
   if (live) live.title = exact ? "Last update: " + exact : "";
-  const stale = Boolean(state.runtime?.running && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000);
+  const stale = Boolean(state.runtime?.actions?.stop && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000);
   last?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
@@ -2080,8 +2080,8 @@ $("runtimeTraceClose").onclick = () => setRuntimeTraceOpen(false);
 $("runHistoryButton").onclick = () => setRunHistoryOpen(!state.runHistoryOpen);
 $("runHistoryClose").onclick = () => setRunHistoryOpen(false);
 $("clearHistoryButton").onclick = async () => {
-  if (!state.project || state.runtime?.running) return;
-  const resetStopped = Boolean(state.runtime?.resumable);
+  if (!state.project || state.runtime?.actions?.stop) return;
+  const resetStopped = Boolean(state.runtime?.actions?.reset && state.runtime?.actions?.resume);
   const message = resetStopped
     ? "Delete this Project's saved chat history and discard the stopped/resumable task so a new task can be entered?"
     : t("history.confirm_message", "Delete this Project's saved chat history?");
