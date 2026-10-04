@@ -888,7 +888,6 @@ function App() {
   const [nodes, setNodes] = useState<Node<StudioNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selected, setSelected] = useState<string>("");
-  const [draft, setDraft] = useState<Stage | null>(null);
   const [dirtyGraph, setDirtyGraph] = useState(false);
   const [recoveryDraft, setRecoveryDraft] = useState<WorkflowLocalDraft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1105,11 +1104,10 @@ function App() {
     });
   }, [editorDirty, visual, yamlContent, editorView]);
 
-  useEffect(() => {
-    if (!visual || !selected) { setDraft(null); return; }
-    const s = stageByName(visual, selected);
-    setDraft(s ? structuredClone(s) : null);
-  }, [selected, visual]);
+  const draft = useMemo(
+    () => (visual && selected ? stageByName(visual, selected) || null : null),
+    [visual, selected],
+  );
 
   useEffect(() => {
     setInspectorTab("form");
@@ -1214,7 +1212,6 @@ function App() {
     setNodes(graph.nodes);
     setEdges(graph.edges);
     setSelected("");
-    setDraft(null);
     setEditorOpen(false);
     setContextMenu(null);
     setEdgeContextMenu(null);
@@ -1245,7 +1242,6 @@ function App() {
   }
 
   function editDraft(next: Stage) {
-    setDraft(next);
     if (visual) {
       rememberUndoSnapshot(visual);
       const updated = { ...visual, stages: visual.stages.map((stage) => stage.name === next.name ? next : stage) };
