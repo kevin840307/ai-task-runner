@@ -293,6 +293,7 @@ class SoakResult:
     completed: int = 0
     mixed_validations: int = 0
     transient_recoveries: int = 0
+    transient_status_counts: dict[int, int] = field(default_factory=dict)
     timeout_probes: int = 0
     yaml_runs: int = 0
     sandbox_runs: int = 0
@@ -3905,9 +3906,12 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 f"soak-api-{status_code}-{run_number:04d}",
                 status_code=status_code,
             )
+            status_counts = dict(result.transient_status_counts)
+            status_counts[status_code] = status_counts.get(status_code, 0) + 1
             result = replace(
                 result,
                 transient_recoveries=result.transient_recoveries + 1,
+                transient_status_counts=status_counts,
             )
 
         if every_nth(settings.soak_yaml_every, run_number):
@@ -4589,6 +4593,10 @@ def main() -> int:
         "soak_mixed_validation_runs": soak_result.mixed_validations,
         "soak_transient_api_every": settings.soak_transient_api_every,
         "soak_transient_recovery_runs": soak_result.transient_recoveries,
+        "soak_transient_status_counts": {
+            str(code): int(soak_result.transient_status_counts.get(code, 0))
+            for code in API_RECOVERY_STATUS_CODES
+        },
         "soak_timeout_every": settings.soak_timeout_every,
         "soak_timeout_probe_runs": soak_result.timeout_probes,
         "soak_yaml_every": settings.soak_yaml_every,
