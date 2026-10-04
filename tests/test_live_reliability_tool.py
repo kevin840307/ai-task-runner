@@ -2534,12 +2534,25 @@ def test_long_http_recovery_probe_reuses_one_path_for_all_statuses(
     monkeypatch: pytest.MonkeyPatch,
 ):
     calls = []
+    observed = []
 
     def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
         calls.append((name, outage_seconds, disconnect, status_code))
+        (root / name).mkdir()
         return True
 
+    def fake_backoff(project):
+        observed.append(project.name)
+        return {
+            "count": 5,
+            "min_wait_seconds": 2.0,
+            "max_wait_seconds": float(live.LIVE_RETRY_MAX_DELAY_SECONDS),
+            "configured_max_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
+            "cap_reached": True,
+        }
+
     monkeypatch.setattr(live, "api_recovery_probe", fake_probe)
+    monkeypatch.setattr(live, "recovery_backoff_observation", fake_backoff)
 
     statuses = live.long_http_recovery_probe(settings(tmp_path), tmp_path, 45.0)
 
@@ -2549,6 +2562,36 @@ def test_long_http_recovery_probe_reuses_one_path_for_all_statuses(
         ("api-long-http-502-probe", 45.0, False, 502),
         ("api-long-http-503-probe", 45.0, False, 503),
     ]
+    assert observed == [
+        "api-long-http-429-probe",
+        "api-long-http-502-probe",
+        "api-long-http-503-probe",
+    ]
+
+
+def test_long_http_recovery_probe_fails_if_max_backoff_cap_was_not_observed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
+        (root / name).mkdir()
+        return True
+
+    monkeypatch.setattr(live, "api_recovery_probe", fake_probe)
+    monkeypatch.setattr(
+        live,
+        "recovery_backoff_observation",
+        lambda project: {
+            "count": 4,
+            "min_wait_seconds": 2.0,
+            "max_wait_seconds": 16.0,
+            "configured_max_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
+            "cap_reached": False,
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="did not reach configured Runner backoff cap"):
+        live.long_http_recovery_probe(settings(tmp_path), tmp_path, 45.0)
 
 
 def test_soak_result_tracks_bounded_transient_status_counts():
