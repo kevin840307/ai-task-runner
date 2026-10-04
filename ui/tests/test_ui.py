@@ -981,7 +981,8 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(prompt["item"]["group"], "Project")
 
 
-    def test_graph_save_rejects_removed_session_key_field(self) -> None:
+
+    def test_graph_save_propagates_canonical_validation_failure_without_writing(self) -> None:
         item = next(
             row for row in self.state.studio_files(self.project)["workflows"]
             if row["path"] == str(self.workflow.resolve())
@@ -994,23 +995,21 @@ class UIStateTests(unittest.TestCase):
             else stage
             for stage in visual["stages"]
         ]
-        draft = {
-            "stages": stages,
-            "flow": list(visual["flow"]),
-            "routes": {},
-        }
+        draft = {"stages": stages, "flow": list(visual["flow"]), "routes": {}}
 
-        with self.assertRaisesRegex(ValueError, "session_key|unknown options"):
-            self.state.studio_graph_save(
-                item["id"], draft, visual["hash"], self.project
-            )
+        with patch.object(
+            self.state,
+            "_validate_workflow_before_write",
+            side_effect=ValueError("production schema rejected session_key"),
+        ) as validate:
+            with self.assertRaisesRegex(ValueError, "session_key"):
+                self.state.studio_graph_save(
+                    item["id"], draft, visual["hash"], self.project
+                )
 
+        validate.assert_called_once()
         self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
 
-if __name__ == "__main__":
-    unittest.main()
-
-class HTTPServerSmokeTests(unittest.TestCase):
     def test_server_serves_projects_api_and_static_index(self) -> None:
         import threading
         import urllib.request
@@ -1423,7 +1422,8 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         self.assertIn("project.root", saved["content"])
 
-    def test_stage_node_owns_label_and_result_edges_and_rejects_removed_scope(self) -> None:
+
+    def test_stage_node_owns_label_and_result_edges_and_delegates_removed_fields(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
         result = self.state.studio_stage_save(
@@ -1444,14 +1444,20 @@ class WorkflowStudioTests(unittest.TestCase):
 
         opened = self.state.studio_read(item["id"], self.project)
         for removed in ({"scope": "task"}, {"retry": -1}):
-            with self.assertRaisesRegex(ValueError, "unknown options|scope|retry"):
-                self.state.studio_stage_save(
-                    item["id"],
-                    "review",
-                    removed,
-                    opened["hash"],
-                    self.project,
-                )
+            with patch.object(
+                self.state,
+                "_validate_workflow_before_write",
+                side_effect=ValueError("production schema rejected removed field"),
+            ) as validate:
+                with self.assertRaisesRegex(ValueError, "removed field"):
+                    self.state.studio_stage_save(
+                        item["id"],
+                        "review",
+                        removed,
+                        opened["hash"],
+                        self.project,
+                    )
+                validate.assert_called_once()
 
     def test_stage_source_round_trip_uses_shared_yaml_validation(self) -> None:
         item = self._workflow_item()
@@ -1496,29 +1502,43 @@ class WorkflowStudioTests(unittest.TestCase):
                 item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nunknown_field: true\n"
             )
 
-    def test_stage_editor_rejects_max_failures_outside_review(self) -> None:
-        item = self._workflow_item()
-        opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "max_failures is only valid for AI Stage Review profile"):
-            self.state.studio_stage_save(
-                item["id"],
-                "work",
-                {"max_failures": 3},
-                opened["hash"],
-                self.project,
-            )
 
-    def test_stage_editor_rejects_non_positive_review_max_failures(self) -> None:
+    def test_stage_editor_propagates_canonical_validation_for_invalid_profile_fields(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "max_failures must be a positive integer"):
-            self.state.studio_stage_save(
-                item["id"],
-                "review",
-                {"max_failures": 0},
-                opened["hash"],
-                self.project,
-            )
+        with patch.object(
+            self.state,
+            "_validate_workflow_before_write",
+            side_effect=ValueError("production schema rejected max_failures"),
+        ) as validate:
+            with self.assertRaisesRegex(ValueError, "max_failures"):
+                self.state.studio_stage_save(
+                    item["id"],
+                    "work",
+                    {"max_failures": 3},
+                    opened["hash"],
+                    self.project,
+                )
+        validate.assert_called_once()
+
+
+    def test_stage_editor_propagates_canonical_validation_for_invalid_review_limit(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        with patch.object(
+            self.state,
+            "_validate_workflow_before_write",
+            side_effect=ValueError("production schema rejected max_failures"),
+        ) as validate:
+            with self.assertRaisesRegex(ValueError, "max_failures"):
+                self.state.studio_stage_save(
+                    item["id"],
+                    "review",
+                    {"max_failures": 0},
+                    opened["hash"],
+                    self.project,
+                )
+        validate.assert_called_once()
 
     def test_visual_designer_is_one_stage_per_node_with_string_flow(self) -> None:
         visual = self.state.studio_visual(self._workflow_item()["id"], self.project)
