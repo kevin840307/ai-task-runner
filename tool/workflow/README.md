@@ -36,7 +36,7 @@ flow:
 
 The old `type: task`, `type: review`, and `scope` contracts are removed.
 
-Only `routes.pass` and `routes.fail` are semantic graph edges. Technical exceptions/timeouts/API failures are owned by `StageExecutor` in `runner/workflow/stage_executor.py` and use `error_policy.retries` or the global `stage_retries`.
+Only `routes.pass` and `routes.fail` are semantic graph edges. Technical exceptions/timeouts/API failures are owned by `StageExecutor` in `runner/workflow/execution/stage_executor.py` and use `error_policy.retries` or the global `stage_retries`.
 
 ## Dynamic child Workflows
 
