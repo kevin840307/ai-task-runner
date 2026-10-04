@@ -2720,25 +2720,23 @@ def test_long_http_recovery_probe_proves_runner_cap_then_reuses_one_qwen_path_fo
     ]
 
 
-def test_long_http_recovery_probe_fails_if_max_backoff_cap_was_not_observed(
+def test_long_http_recovery_probe_fails_if_runner_backoff_cap_proof_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
-        (root / name).mkdir()
-        return True
-
-    monkeypatch.setattr(live, "api_recovery_probe", fake_probe)
     monkeypatch.setattr(
         live,
-        "recovery_backoff_observation",
-        lambda project: {
-            "count": 4,
-            "min_wait_seconds": 2.0,
-            "max_wait_seconds": 16.0,
-            "configured_max_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
-            "cap_reached": False,
-        },
+        "runner_backoff_cap_preflight",
+        lambda root: (_ for _ in ()).throw(
+            RuntimeError("long transient outage did not reach configured Runner backoff cap")
+        ),
+    )
+    monkeypatch.setattr(
+        live,
+        "api_recovery_probe",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("real-Qwen long outage probes must not start after backoff proof fails")
+        ),
     )
 
     with pytest.raises(RuntimeError, match="did not reach configured Runner backoff cap"):
