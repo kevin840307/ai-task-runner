@@ -2286,10 +2286,9 @@ def test_api_recovery_probe_disables_backend_internal_retry():
 
 def test_api_recovery_probe_collects_structured_recovery_evidence_without_requiring_it():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    assert "recovery_event_seen = False" in source
     assert 'event.get("type") == "runner.recovery"' in source
     assert 'event.get("retry_mode")' in source
-    assert "(*jsonl_events(log), *runner_events(project))" in source
+    assert "all_events = [*console_events, *events]" in source
     assert "Real Qwen may absorb/retry transport failures below StageExecutor" in source
     assert "API outage recovered, but no structured runner.recovery/retry event" not in source
 
@@ -2297,7 +2296,9 @@ def test_api_recovery_probe_collects_structured_recovery_evidence_without_requir
 
 def test_api_recovery_probe_uses_probe_owned_json_event_stream():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    assert "(*jsonl_events(log), *runner_events(project))" in source
+    assert "console_events = jsonl_events(log)" in source
+    assert "events = runner_events(project)" in source
+    assert "all_events = [*console_events, *events]" in source
     assert "runner.recovery/retry" in source
 
 
@@ -2306,7 +2307,7 @@ def test_api_recovery_probe_records_optional_structured_recovery_evidence():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert 'event.get("type") == "runner.recovery"' in source
     assert 'event.get("action") == "retry"' in source
-    assert "final scan after process exit" in source
+    assert "validated after process exit" in source
     assert "Real Qwen may absorb/retry transport failures below StageExecutor" in source
 
 
@@ -2314,8 +2315,9 @@ def test_api_recovery_probe_records_optional_structured_recovery_evidence():
 def test_api_recovery_probe_final_scan_prevents_fast_recovery_race():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "console_events = jsonl_events(log)" in source
-    assert "recovery_event_seen = recovery_event_seen or any(" in source
-    assert "for event in (*console_events, *events)" in source
+    assert "events = runner_events(project)" in source
+    assert "all_events = [*console_events, *events]" in source
+    assert "recovery_event_seen" not in source
 
 
 
