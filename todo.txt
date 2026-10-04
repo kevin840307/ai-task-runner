@@ -614,9 +614,10 @@ High-value runner work remaining:
     - [ ] Confirm real high-density / 0.5H / 24H evidence shows no retry spin and reaches configured max backoff.
     - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
 
-[ ] Only optimize save/write frequency if soak evidence shows excessive I/O.
-    Current save points are intentionally conservative for durable resume.
-    Do not trade resume correctness for micro-optimization without measurements.
+[x] Do not optimize save/write frequency without soak evidence.
+    - Current save points are intentionally conservative for durable resume.
+    - No reproduced excessive-I/O evidence exists, so changing persistence frequency now would add risk without value.
+    - Reopen only if 0.5H/24H measurements show excessive I/O; never trade Resume correctness for speculative micro-optimization.
 
 [x] Keep FlowEngine semantic and StageExecutor technical.
     - Reviewed current two-day Runner changes: no semantic routing moved into StageExecutor and no
