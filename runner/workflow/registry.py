@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
+from ..agent import backend_names
 from ..errors import RunnerError
 from .profiles import AI_STAGE_PROFILES, apply_ai_profile_defaults, profile_names
 from .stages.ai_validator_stage import AIValidatorStage
@@ -141,6 +142,9 @@ def _field_info(item: Any) -> dict[str, Any]:
     elif item.name == "mode":
         result["type"] = "enum"
         result["values"] = ["readonly", "write"]
+    elif item.name == "backend":
+        result["type"] = "enum"
+        result["values"] = ["", *backend_names()]
     elif "bool" in raw_type and "none" in raw_type:
         result["type"] = "optional_boolean"
     if item.name == "parser":
