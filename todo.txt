@@ -267,6 +267,17 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed Stage-local backend/model override being erased at runtime.
+    - Root cause: BaseStage correctly created a Stage-local AI client with backend/model override,
+      but _run_once() then called global configure_ai_client() for every client. That rebuilt
+      extra_args from run-level config and stripped the Stage model/backend arguments.
+    - Only the primary Runner client now uses global configure_ai_client(). Stage-local clients
+      preserve adapter-built args and update runtime mode/read/sandbox state without rebuilding
+      provider arguments.
+    - Stage-local create_ai_client() now receives allow_project_read at construction time.
+    - Added deterministic regression that fails if Stage-local execution is ever reconfigured
+      from global backend args. FlowEngine/StageExecutor remain unchanged.
+
 [x] Removed O(N²)-style soak harness run-root scanning from every iteration.
     - resource_snapshot no longer recursively scans the accumulated run root on each soak run.
     - Total run-root bytes are sampled only at baseline/final; per-run checks still track RSS,
