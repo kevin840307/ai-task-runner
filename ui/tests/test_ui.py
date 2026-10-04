@@ -491,7 +491,10 @@ class UIStateTests(unittest.TestCase):
 
         self.assertEqual(info["cycle"], 3)
         self.assertEqual(info["workflow_position"], 4)
-        self.assertEqual(info["last_transition"], {"stage": "execute", "status": "pass"})
+        self.assertEqual(
+            info["last_transition"],
+            {"stage": "execute", "status": "pass", "target": "", "kind": ""},
+        )
 
 
     def test_project_runtime_summary_distinguishes_recovering_and_attention(self) -> None:
