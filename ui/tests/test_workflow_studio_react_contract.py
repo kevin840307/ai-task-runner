@@ -804,6 +804,13 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'option.name === "model" ? tx("stage_model_help")' in text
     assert 'stage_backend_help:' in text
     assert 'stage_model_help:' in text
+    assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in text
+    assert 'className="stage-form-section stage-execution-target"' in text
+    assert 'effective_backend?: string;' in text
+    assert 'effective_model?: string;' in text
+    assert 'testMode === "stage" ? "Fallback Backend" : "Backend"' in text
+    assert 'testResult.effective_backend' in text
+    assert 'testResult.effective_model' in text
     assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
     assert 'option.name === "session_policy"' in text
     assert 'option.name === "backend" || option.name === "model"' in text
