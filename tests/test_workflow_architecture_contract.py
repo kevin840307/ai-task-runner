@@ -99,3 +99,27 @@ def test_studio_execution_target_policy_is_catalog_driven():
     assert 'value === "main"' not in logic
     assert 'option.name === "backend"' not in logic
     assert 'option.name === "model"' not in logic
+
+
+def test_studio_visual_is_the_single_stage_draft_source():
+    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    assert "const [draft, setDraft]" not in editor
+    assert "setDraft(" not in editor
+    assert "const draft = useMemo(" in editor
+    assert "stageByName(visual, selected)" in editor
+
+
+def test_studio_graph_mutations_are_pure_draft_operations():
+    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    for helper in (
+        "addStageToVisual",
+        "cloneStageWithoutConnections",
+        "stageReferenceSources",
+        "removeStageFromVisual",
+        "disconnectResultEdges",
+        "applyConnectionToVisual",
+    ):
+        assert f"function {helper}" in editor
+    assert "syncGraphProjection" in editor
+    assert "setNodes(g.nodes);" not in editor
+    assert "setEdges(g.edges);" not in editor
