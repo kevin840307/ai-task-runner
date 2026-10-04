@@ -289,3 +289,10 @@ def test_review_stage_probe_source_populates_concrete_review_evidence():
     assert 'deliverable=input_text if is_review else ""' in source
     assert 'last_output=input_text if is_review else ""' in source
     assert "The supplied deliverable is non-empty and matches the supplied executor evidence." in source
+
+
+
+def test_agent_ping_payload_exposes_effective_backend_model():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "stage_probe.py").read_text(encoding="utf-8")
+    assert '"backend": runner.context.ai_client.backend' in source
+    assert '"model": runner.context.ai_client.model' in source
