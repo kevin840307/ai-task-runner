@@ -3859,6 +3859,26 @@ def project_state_metrics(project: Path) -> dict[str, int]:
     }
 
 
+def assert_completed_project_state_clean(project: Path) -> None:
+    """Fail fast if completed runs retain active-only technical state."""
+    state = read_state(project)
+    if state.get("completed") is not True:
+        raise RuntimeError(f"project did not complete before cleanup check: {project}")
+    stale = {
+        name: len(value)
+        for name in (
+            "stage_sessions",
+            "review_failures",
+            "dynamic_groups",
+            "dynamic_task_groups",
+        )
+        if isinstance((value := state.get(name)), dict) and value
+    }
+    if stale:
+        detail = ", ".join(f"{name}={count}" for name, count in sorted(stale.items()))
+        raise RuntimeError(f"completed project retained stale technical state: {detail}")
+
+
 def _resource_maximum(
     current: dict[str, int],
     sample: dict[str, int],
@@ -3938,6 +3958,7 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 settings.run_timeout,
             )
         assert_completed(project, code)
+        assert_completed_project_state_clean(project)
         mixed_validations = result.mixed_validations
         if mixed:
             mixed_validations += 1
