@@ -6,7 +6,7 @@ from dataclasses import MISSING, fields
 from typing import Any
 
 from ..errors import RunnerError
-from .profiles import profile_names
+from .profiles import profile_names, stage_profile_semantics
 from .registry import STAGE_REGISTRY
 from .stages.base_stage import BaseStage
 
@@ -90,7 +90,7 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
 
     max_failures = values.get("max_failures")
     if max_failures is not None:
-        is_review = stage_type == "base" and values.get("profile") == "review"
+        is_review = stage_profile_semantics(values) == "review"
         if not is_review:
             raise RunnerError(
                 f"workflow stage {name} max_failures is only valid for Review semantics"
