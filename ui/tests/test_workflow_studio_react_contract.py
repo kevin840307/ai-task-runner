@@ -43,7 +43,8 @@ def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection
     assert '"agent_ping"' in text
     assert "Real Stage" in text
     assert "Agent Ping" in text
-    assert 'api<BackendCatalog>("/api/backends")' in text
+    assert 'api<BackendCatalog>(query().project' in text
+    assert '"/api/backends?project=' in text
     assert "probe_mode: testMode" in text
     assert "backend: testBackend" in text
     assert "AGENT_PING_PROMPT" in text
@@ -819,6 +820,7 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'option.name === "session_policy"' in text
     assert 'next.backend = backend' in text
     assert 'delete next.model' in text
+    assert 'if (model && next.session_policy === "main")' in text
     assert "structured_fresh_retries" not in state
 
 
