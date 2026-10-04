@@ -359,7 +359,7 @@ tool\qwen_live_reliability_0_5h.bat
 tool\qwen_live_reliability_24h.bat
 ```
 
-The 24H gate covers the production CLI/runtime path, including Same Session/Fresh Session behavior, transient API failures, YAML List, sandbox checks and long-running process/state behavior.
+The 24H gate covers the production CLI/runtime path, including bounded Same Session -> Fresh Session recovery, short and long HTTP 429/502/503 outages, raw disconnects, YAML List, sandbox checks and long-running process/state behavior. High-density soak rotates transient HTTP status classes and records per-status recovery counts plus bounded backoff observations in the live summary.
 
 A 24H PASS is an engineering confidence signal, not a mathematical reliability guarantee.
 
