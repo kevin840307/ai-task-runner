@@ -2224,8 +2224,23 @@ def _assert_real_session_expiry_evidence(
         )
     ]
     if not reset_indexes:
+        related = [
+            {
+                "type": event.get("type"),
+                "session": event.get("session"),
+                "session_mode": event.get("session_mode"),
+                "error": str(event.get("error") or "")[-1000:],
+            }
+            for event in events
+            if event.get("type") in {"model.prompt", "model.result"}
+            and (
+                str(event.get("session") or "") == injected_session
+                or str(event.get("previous_session") or "") == injected_session
+            )
+        ]
         raise RuntimeError(
-            "real Qwen invalid-session resume produced no reset_session evidence"
+            "real Qwen invalid-session resume produced no reset_session evidence; "
+            f"related_model_events={related[-6:]}"
         )
 
     reset_index = reset_indexes[-1]
