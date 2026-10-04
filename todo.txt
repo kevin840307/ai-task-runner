@@ -208,7 +208,8 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Committed ui/static/workflow-studio-app bundle is still stale until the final generated bundle is rebuilt from the stabilized Studio source.
     - Real-Qwen Stage Probe already discovers the active model and verifies production model events report the selected Stage backend/model.
     - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
-    - Keep this unchecked until latest deterministic CI + Browser + generated Studio bundle + enabled real-backend evidence are all green.
+    - Exact source HEAD cb7a13322ce173f868b9010976529ba45a3cc6bf passed Ubuntu deterministic tests, Windows deterministic tests, and Chromium Browser E2E; Studio source build also succeeded and failed only the committed generated-bundle equality check.
+    - Keep this unchecked until generated Studio bundle + enabled real-backend evidence are green on the final exact HEAD.
     - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
