@@ -69,6 +69,12 @@ type CatalogProfile = {
   test_examples?: Partial<Record<StageTestScenario, string>>;
 };
 
+type CatalogExecutionTargetConstraint = {
+  paired_fields?: string[];
+  session_policy_field?: string;
+  incompatible_session_policies?: string[];
+};
+
 type CatalogStageType = {
   type: string;
   title?: string;
@@ -78,6 +84,7 @@ type CatalogStageType = {
   result_kind?: string;
   dynamic_output?: boolean;
   test_examples?: Partial<Record<StageTestScenario, string>>;
+  constraints?: { execution_target?: CatalogExecutionTargetConstraint };
   options: CatalogOption[];
 };
 
@@ -407,6 +414,37 @@ function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
     if (typeof profilePrompt === "string" && profilePrompt.trim()) return profilePrompt.trim();
   }
   return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
+}
+
+function executionTargetConstraint(catalog: Catalog | null, stage: Stage | null): CatalogExecutionTargetConstraint | null {
+  if (!stage) return null;
+  return catalog?.stage_types?.[stage.type]?.constraints?.execution_target || null;
+}
+
+function executionTargetOverrideActive(stage: Stage, constraint: CatalogExecutionTargetConstraint | null): boolean {
+  return (constraint?.paired_fields || []).some((field) => String(stage[field] || "").trim());
+}
+
+function applyExecutionTargetConstraint(
+  stage: Stage,
+  constraint: CatalogExecutionTargetConstraint | null,
+  field: string,
+  value: unknown,
+): { stage: Stage; blocked: boolean; sessionReset: boolean } {
+  if (!constraint) return { stage: { ...stage, [field]: value }, blocked: false, sessionReset: false };
+  const pair = constraint.paired_fields || [];
+  const sessionField = String(constraint.session_policy_field || "");
+  const incompatible = new Set((constraint.incompatible_session_policies || []).map(String));
+  const currentSession = sessionField ? String(stage[sessionField] || "") : "";
+  if (field === sessionField && incompatible.has(String(value)) && executionTargetOverrideActive(stage, constraint)) {
+    return { stage, blocked: true, sessionReset: false };
+  }
+  const next = { ...stage, [field]: value };
+  if (pair.includes(field) && String(value || "").trim() && sessionField && incompatible.has(currentSession)) {
+    delete next[sessionField];
+    return { stage: next, blocked: false, sessionReset: true };
+  }
+  return { stage: next, blocked: false, sessionReset: false };
 }
 
 function nextStageKey(visual: Visual, type: string): string {
@@ -1088,17 +1126,23 @@ function App() {
     if (!draft || !catalog) return [];
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
-  const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name));
-  const backendOption = executionTargetOptions.find((o) => o.name === "backend");
-  const sessionPolicyOption = executionTargetOptions.find((o) => o.name === "session_policy");
-  const stageBackend = String(draft?.backend || "").trim();
-  const savedStageModel = String(draft?.model || "").trim();
+  const executionConstraint = executionTargetConstraint(catalog, draft);
+  const executionPair = executionConstraint?.paired_fields || [];
+  const backendField = executionPair[0] || "";
+  const modelField = executionPair[1] || "";
+  const sessionPolicyField = String(executionConstraint?.session_policy_field || "");
+  const executionTargetNames = new Set([...executionPair, ...(sessionPolicyField ? [sessionPolicyField] : [])]);
+  const executionTargetOptions = options.filter((o) => executionTargetNames.has(o.name));
+  const backendOption = executionTargetOptions.find((o) => o.name === backendField);
+  const sessionPolicyOption = executionTargetOptions.find((o) => o.name === sessionPolicyField);
+  const stageBackend = backendField ? String(draft?.[backendField] || "").trim() : "";
+  const savedStageModel = modelField ? String(draft?.[modelField] || "").trim() : "";
   const stageModels = stageBackend
     ? Array.from(new Set([...(backendCatalog.models?.[stageBackend] || []), ...(savedStageModel ? [savedStageModel] : [])]))
     : [];
   const parameterOptions = options.filter((o) => {
     if (o.visible === false) return false;
-    if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
+    if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"].includes(o.name) || executionTargetNames.has(o.name)) return false;
     return true;
   }).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   const parameterGroups = PARAMETER_SECTION_ORDER.map((id) => ({
@@ -1224,24 +1268,18 @@ function App() {
 
   function editDraftOption(option: CatalogOption, value: unknown) {
     if (!draft) return;
-    if (
-      option.name === "session_policy"
-      && value === "main"
-      && (String(draft.backend || "").trim() || String(draft.model || "").trim())
-    ) {
+    const constrained = applyExecutionTargetConstraint(
+      draft,
+      executionTargetConstraint(catalog, draft),
+      option.name,
+      value,
+    );
+    if (constrained.blocked) {
       setMessage(tx("stage_session_main_conflict"));
       return;
     }
-    const next = { ...draft, [option.name]: value };
-    if (
-      (option.name === "backend" || option.name === "model")
-      && String(value || "").trim()
-      && draft.session_policy === "main"
-    ) {
-      delete next.session_policy;
-      setMessage(tx("stage_session_default"));
-    }
-    editDraft(next);
+    if (constrained.sessionReset) setMessage(tx("stage_session_default"));
+    editDraft(constrained.stage);
   }
 
   async function testStage() {
@@ -2146,17 +2184,18 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 </section>
                 {executionTargetOptions.length > 0 && <section className="stage-form-section stage-execution-target">
                   <div className="stage-form-section-head"><strong>{tx("section_execution")}</strong><small>Backend / Model / Session</small></div>
-                  {backendOption && <label>
-                    <span>backend</span>
+                  {backendOption && backendField && modelField && <label>
+                    <span>{backendField}</span>
                     <select value={stageBackend} onChange={(event) => {
                       const backend = event.target.value;
-                      const next = { ...draft };
+                      let next = { ...draft };
                       if (!backend) {
-                        delete next.backend;
-                        delete next.model;
+                        executionPair.forEach((field) => { delete next[field]; });
                       } else {
-                        next.backend = backend;
-                        if (!(backendCatalog.models?.[backend] || []).includes(String(next.model || ""))) delete next.model;
+                        const constrained = applyExecutionTargetConstraint(next, executionConstraint, backendField, backend);
+                        next = constrained.stage;
+                        if (!(backendCatalog.models?.[backend] || []).includes(String(next[modelField] || ""))) delete next[modelField];
+                        if (constrained.sessionReset) setMessage(tx("stage_session_default"));
                       }
                       editDraft(next);
                     }}>
@@ -2165,19 +2204,15 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     </select>
                     <small className="effective-value">{tx("stage_backend_help")}</small>
                   </label>}
-                  {backendOption && <label>
-                    <span>model</span>
+                  {backendOption && backendField && modelField && <label>
+                    <span>{modelField}</span>
                     <select
-                      value={String(draft.model || "")}
+                      value={String(draft[modelField] || "")}
                       disabled={!stageBackend || stageModels.length === 0}
                       onChange={(event) => {
-                        const model = event.target.value;
-                        const next = { ...draft, model };
-                        if (model && next.session_policy === "main") {
-                          delete next.session_policy;
-                          setMessage(tx("stage_session_default"));
-                        }
-                        editDraft(next);
+                        const constrained = applyExecutionTargetConstraint(draft, executionConstraint, modelField, event.target.value);
+                        if (constrained.sessionReset) setMessage(tx("stage_session_default"));
+                        editDraft(constrained.stage);
                       }}
                     >
                       <option value="">{stageBackend ? (stageModels.length ? "Select model" : "No models available") : "Select backend first"}</option>
