@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+from fake_agent_io import prompt_stage, read_prompt
+
+args = sys.argv[1:]
+root = Path.cwd()
+state_dir = Path(os.environ["BACKOFF_TEST_STATE_DIR"])
+state_dir.mkdir(parents=True, exist_ok=True)
+is_qwen, prompt = read_prompt(args)
+stage = prompt_stage(prompt)
+session = "backoff-session"
+
+
+def count(name: str) -> int:
+    path = state_dir / f"{name}.count"
+    value = int(path.read_text() or "0") if path.exists() else 0
+    path.write_text(str(value + 1))
+    return value + 1
+
+
+if stage in {"plan_finalize", "plan_refine"}:
+    answer = {
+        "tasks": [{
+            "title": "Create marker",
+            "description": "Create done.txt",
+            "deliverable": "done.txt exists",
+            "acceptance_criteria": ["done.txt exists"],
+        }]
+    }
+elif stage == "plan_judge":
+    answer = {"accepted": True, "issues": []}
+elif stage == "execute":
+    attempt = count("execute")
+    if attempt == 1:
+        if is_qwen:
+            print(json.dumps({
+                "type": "system",
+                "subtype": "session_start",
+                "session_id": session,
+            }))
+        print("HTTP 503 Service Unavailable", file=sys.stderr)
+        raise SystemExit(7)
+    (root / "done.txt").write_text("done", encoding="utf-8")
+    answer = "created done.txt"
+elif stage == "review":
+    answer = {
+        "completed": (root / "done.txt").exists(),
+        "reason": "checked",
+        "missing_items": [],
+    }
+elif stage == "validator":
+    session = "backoff-validator-session"
+    answer = {
+        "passed": (root / "done.txt").exists(),
+        "reason": "checked",
+        "missing_items": [],
+    }
+else:
+    raise SystemExit(2)
+
+text = json.dumps(answer) if isinstance(answer, dict) else answer
+if is_qwen:
+    print(json.dumps([
+        {"type": "system", "subtype": "session_start", "session_id": session},
+        {"type": "result", "subtype": "success", "session_id": session, "result": text},
+    ]))
+else:
+    print(json.dumps({"type": "step_start", "sessionID": session, "part": {"type": "step-start"}}))
+    print(json.dumps({"type": "text", "sessionID": session, "part": {"type": "text", "text": text}}))
+    print(json.dumps({"type": "step_finish", "sessionID": session, "part": {"type": "step-finish", "tokens": {"input": 1, "output": 1, "reasoning": 0, "cache": {"read": 0, "write": 0}}}}))
