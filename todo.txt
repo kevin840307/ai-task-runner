@@ -591,8 +591,21 @@ High-value runner work remaining:
     - Soak now fails on leftover active process markers, large harness thread/handle/RSS leakage,
       catastrophic per-project state/session/dynamic/review growth, oversized expanded workflows,
       or excessive per-project debug history.
+    - Completed-run technical state is now cleaned centrally by finish_run(): stage_sessions,
+      review_failures, dynamic_groups and dynamic_task_groups are cleared only after all tasks are
+      completed; semantic transition history and expanded workflow remain available for debugging.
+    - Soak now fail-fast checks every completed Project for retained stale technical maps instead of
+      waiting for an end-of-run state-size symptom.
+    - append_bounded_log now enforces max_bytes even when one single model/error diagnostic write is
+      larger than the whole budget; UTF-8 oversized-write and rotate-previous regressions are covered.
+    - Per-iteration soak sampling no longer recursively scans the entire accumulated run-root for
+      active-process markers. Each iteration checks only its current Project; full run-root orphan
+      marker and byte scans remain baseline/final checks, avoiding O(N^2)-style harness slowdown.
+    - Dynamic Plan -> child Execute/Review Dry Run completion also asserts all active-only maps are
+      empty, so cleanup is covered through the real FlowEngine expansion path, not only a synthetic state.
     - run_root_bytes is intentionally observation-only because each soak iteration retains a new Project.
-    - Deterministic safety-rail coverage added; still requires real high-density + 24H evidence before marking complete.
+    - Deterministic safety-rail coverage is green on Ubuntu/Windows; still requires real high-density
+      + 24H evidence before marking this parent item complete.
     - No unbounded state.json growth.
     - No unbounded warning/debug/history growth.
     - No repeated stale dynamic/session entries after completion/resume.
@@ -645,13 +658,16 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on exact HEAD 5c3ed3b2d0ea278e46103c0d3fd76da0c08b3856.
-    - [x] Windows Python full suite green on the same exact HEAD.
-    - [x] Playwright/Chromium Browser E2E green on the same exact HEAD.
+    - [x] Ubuntu Python full suite green on exact code HEAD ef87ae509c885606861dc874f149848e912ba793.
+    - [x] Windows Python full suite green on the same exact code HEAD.
+    - [x] Playwright/Chromium Browser E2E green on the same exact code HEAD.
     - [x] Studio source build succeeds.
     - [x] Committed ui/static/workflow-studio-app bundle verify is green on the same runtime/UI HEAD.
-    - [x] Generated bundle was produced by the same npm ci + Rollup-native dependency + npm run build path as CI; the one-time sync workflow was removed after use.
-    - GitHub Actions run 37191503175 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
+    - [x] Generated bundle is verified by the same npm ci + build path as CI.
+    - GitHub Actions run 37193041863 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
+    - The only failure found during this hardening pass was a brittle source-string test that expected
+      the literal text ctx.state.ai_session_id = ""; production behavior was correct. It was replaced
+      with a behavioral finish_run contract test covering primary session + stale technical-map cleanup.
     - This todo-only evidence update follows that green code HEAD and does not alter runtime/UI behavior.
 
 [ ] Real-Qwen 0.5H gate green:
