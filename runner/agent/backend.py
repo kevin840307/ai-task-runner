@@ -204,6 +204,17 @@ class BaseBackend(ABC):
         return list(extra_args)
 
     @classmethod
+    def model_from_args(cls, extra_args: Sequence[str]) -> str:
+        values = list(extra_args)
+        for index, value in enumerate(values):
+            text = str(value)
+            if text == "--model" and index + 1 < len(values):
+                return str(values[index + 1]).strip()
+            if text.startswith("--model="):
+                return text.split("=", 1)[1].strip()
+        return ""
+
+    @classmethod
     def configure_model_args(
         cls,
         extra_args: Sequence[str],
@@ -434,6 +445,13 @@ def configure_model_args(
     return _backend_type(name).configure_model_args(extra_args, model)
 
 
+def model_from_args(
+    name: str,
+    extra_args: Sequence[str],
+) -> str:
+    return _backend_type(name).model_from_args(extra_args)
+
+
 def configure_sandbox_args(
     name: str,
     extra_args: Sequence[str],
@@ -480,6 +498,7 @@ __all__ = [
     "configure_sandbox_args",
     "create_backend",
     "default_command",
+    "model_from_args",
     "register_backend",
     "sandbox_supported",
     "split_command",
