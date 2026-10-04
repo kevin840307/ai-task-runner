@@ -282,3 +282,19 @@ class StaticContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_main_ui_consumes_canonical_runtime_status_actions_and_dedupes_polling():
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "static" / "app.js").read_text(encoding="utf-8")
+    server = (root / "server.py").read_text(encoding="utf-8")
+
+    overlay = app.split("function applySelectedRuntimeToProjectList", 1)[1].split("async function refreshProjectStatuses", 1)[0]
+    assert 'current.runtime_status = String(runtime.status || "idle")' in overlay
+    assert "runtime.last_error ? \"recovering\"" not in overlay
+    assert 'runtime.actions && typeof runtime.actions === "object"' in app
+    assert 'actions.run === false' in app
+    assert '?exclude_runtime=' in app
+    assert 'query.get("exclude_runtime", [""])[0]' in server
+    assert 'if (state.view === "workflow" || state.view === "prompt") work.push(refreshStudioGuard())' in app
+    assert 'if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;' in app
