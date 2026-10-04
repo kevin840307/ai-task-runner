@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import http.client
 import json
+import os
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
