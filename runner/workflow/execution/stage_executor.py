@@ -136,7 +136,14 @@ class StageExecutor:
                 continue
 
             if is_transient_error(error):
-                retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
+                failures_in_session += 1
+                if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
+                    self._fresh_session(stage, ctx)
+                    failures_in_session = 0
+                    retry_mode = "recover"
+                    service_delay = base_retry_delay
+                else:
+                    retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
                 self._announce_recovery(
                     stage, retry_mode, retries_used, service_delay, previous_error
                 )
