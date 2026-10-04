@@ -989,6 +989,30 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(workflow["item"]["group"], "Project")
         self.assertEqual(prompt["item"]["group"], "Project")
 
+
+    def test_graph_save_rejects_removed_session_key_field(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        before = self.workflow.read_text(encoding="utf-8")
+        stages = [
+            {**stage, "session_key": "removed-contract"}
+            if stage["name"] == "work"
+            else stage
+            for stage in visual["stages"]
+        ]
+        draft = {
+            "stages": stages,
+            "flow": list(visual["flow"]),
+            "routes": {"review": {"fail": "work"}},
+        }
+
+        with self.assertRaisesRegex(ValueError, "Unsupported Stage field: session_key"):
+            self.state.studio_graph_save(
+                item["id"], draft, visual["hash"], self.project
+            )
+
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1273,89 +1297,6 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(stage["error_policy"], {"retries": 2})
         self.assertEqual(stage["max_failures"], 3)
 
-    def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        work = {**visual["stages"][0], "session_policy": "role"}
-        review = {**visual["stages"][1], "session_policy": "fresh"}
-        draft = {
-            "stages": [work, review],
-            "flow": ["work", "review"],
-            "routes": {"review": {"fail": "work"}},
-        }
-
-        saved = self.state.studio_graph_save(
-            item["id"], draft, visual["hash"], self.project
-        )
-        data = __import__("yaml").safe_load(saved["file"]["content"])
-        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
-        self.assertEqual(data["stages"]["review"]["session_policy"], "fresh")
-
-        bad = self.state.studio_visual(item["id"], self.project)
-        bad_work = {
-            **bad["stages"][0],
-            "session_policy": "role",
-            "session_key": "conflict",
-        }
-        bad_draft = {
-            "stages": [bad_work, bad["stages"][1]],
-            "flow": ["work", "review"],
-            "routes": {"review": {"fail": "work"}},
-        }
-        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
-            self.state.studio_graph_save(
-                item["id"], bad_draft, bad["hash"], self.project
-            )
-
-    def test_graph_save_round_trips_explicit_session_policy(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        stages = [
-            {**stage, "session_policy": "role"} if stage["name"] == "work" else stage
-            for stage in visual["stages"]
-        ]
-        draft = {
-            "stages": stages,
-            "flow": visual["flow"],
-            "routes": visual.get("routes", {}),
-        }
-
-        self.state.studio_graph_save(
-            item["id"], draft, visual["hash"], self.project
-        )
-
-        data = __import__("yaml").safe_load(
-            self.workflow.read_text(encoding="utf-8")
-        )
-        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
-
-    def test_graph_save_rejects_conflicting_session_policy_and_key(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        before = self.workflow.read_text(encoding="utf-8")
-        stages = [
-            {
-                **stage,
-                "session_policy": "role",
-                "session_key": "legacy-shared",
-            }
-            if stage["name"] == "work"
-            else stage
-            for stage in visual["stages"]
-        ]
-        draft = {
-            "stages": stages,
-            "flow": visual["flow"],
-            "routes": visual.get("routes", {}),
-        }
-
-        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
-            self.state.studio_graph_save(
-                item["id"], draft, visual["hash"], self.project
-            )
-
-        self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
-
     def test_graph_draft_validates_before_one_atomic_yaml_write(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
@@ -1379,41 +1320,6 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertNotIn("review", data["stages"])
         self.assertEqual(saved["visual"]["hash"], self.state.studio_visual(item["id"], self.project)["hash"])
 
-    def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        work = {**visual["stages"][0], "session_policy": "role"}
-        review = visual["stages"][1]
-        draft = {
-            "stages": [work, review],
-            "flow": list(visual["flow"]),
-            "routes": {"review": {"fail": "work"}},
-        }
-
-        saved = self.state.studio_graph_save(
-            item["id"], draft, visual["hash"], self.project
-        )
-        data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
-        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
-        self.assertNotIn("session_key", data["stages"]["work"])
-
-        conflict_visual = saved["visual"]
-        conflict_work = {
-            **conflict_visual["stages"][0],
-            "session_policy": "role",
-            "session_key": "stale-key",
-        }
-        conflict = {
-            "stages": [conflict_work, conflict_visual["stages"][1]],
-            "flow": list(conflict_visual["flow"]),
-            "routes": {"review": {"fail": "work"}},
-        }
-        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
-            self.state.studio_graph_save(
-                item["id"], conflict, conflict_visual["hash"], self.project
-            )
-
-
     def test_graph_save_round_trips_explicit_role_session_policy(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
@@ -1431,27 +1337,6 @@ class WorkflowStudioTests(unittest.TestCase):
 
         data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
         self.assertEqual(data["stages"]["work"]["session_policy"], "role")
-
-
-    def test_graph_save_rejects_conflicting_session_policy_and_session_key(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        draft = {
-            "stages": [
-                {
-                    **visual["stages"][0],
-                    "session_policy": "role",
-                    "session_key": "legacy-key",
-                },
-                visual["stages"][1],
-            ],
-            "flow": visual["flow"],
-        }
-
-        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
-            self.state.studio_graph_save(
-                item["id"], draft, visual["hash"], self.project
-            )
 
 
     def test_graph_save_remains_editable_while_active_run_uses_frozen_snapshot(self) -> None:
@@ -1489,92 +1374,6 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertTrue(guard["editable"])
         self.assertEqual(guard["active_projects"][0]["name"], "Running Project")
         self.assertIn("frozen Workflow/Prompt snapshots", guard["reason"])
-
-
-    def test_studio_session_policy_round_trip_and_conflict_rejection(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        draft = {
-            "stages": [
-                {
-                    "name": "worker",
-                    "type": "base",
-                    "prompt": "common/execution.md",
-                    "session_policy": "role",
-                }
-            ],
-            "flow": ["worker"],
-            "routes": {},
-        }
-
-        saved = self.state.studio_graph_save(
-            item["id"], draft, visual["hash"], self.project
-        )
-        data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
-        self.assertEqual(data["stages"]["worker"]["session_policy"], "role")
-        self.assertEqual(saved["visual"]["stages"][0]["session_policy"], "role")
-
-        current = self.state.studio_visual(item["id"], self.project)
-        conflicting = {
-            "stages": [
-                {
-                    "name": "worker",
-                    "type": "base",
-                    "prompt": "common/execution.md",
-                    "session_policy": "role",
-                    "session_key": "legacy-conflict",
-                }
-            ],
-            "flow": ["worker"],
-            "routes": {},
-        }
-        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
-            self.state.studio_graph_save(
-                item["id"], conflicting, current["hash"], self.project
-            )
-
-
-    def test_graph_save_round_trips_explicit_session_policy(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        stages = [dict(stage) for stage in visual["stages"]]
-        for stage in stages:
-            if stage["name"] == "work":
-                stage["session_policy"] = "role"
-                stage.pop("session_key", None)
-        draft = {
-            "stages": stages,
-            "flow": list(visual["flow"]),
-            "routes": {"review": {"fail": "work"}},
-        }
-
-        saved = self.state.studio_graph_save(
-            item["id"], draft, visual["hash"], self.project
-        )
-
-        data = __import__("yaml").safe_load(saved["file"]["content"])
-        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
-
-    def test_graph_save_rejects_conflicting_session_policy_and_key(self) -> None:
-        item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        stages = [dict(stage) for stage in visual["stages"]]
-        for stage in stages:
-            if stage["name"] == "work":
-                stage["session_policy"] = "role"
-                stage["session_key"] = "legacy-conflict"
-        draft = {
-            "stages": stages,
-            "flow": list(visual["flow"]),
-            "routes": {"review": {"fail": "work"}},
-        }
-
-        with self.assertRaisesRegex(
-            ValueError, "session_key is only valid with session_policy: auto"
-        ):
-            self.state.studio_graph_save(
-                item["id"], draft, visual["hash"], self.project
-            )
 
 
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
