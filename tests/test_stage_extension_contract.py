@@ -285,3 +285,16 @@ def test_stage_catalog_backend_and_model_are_registry_driven(monkeypatch):
     assert "opencode" in options["backend"]["values"]
     assert "plugin-backend" in options["backend"]["values"]
     assert options["model"]["type"] == "str"
+
+
+def test_all_ai_backed_stage_catalogs_expose_backend_model_but_command_does_not():
+    catalog = stage_catalog()
+
+    for stage_type in ("base", "plan", "handoff", "ai_validator"):
+        names = {item["name"] for item in catalog[stage_type]["options"]}
+        assert {"backend", "model", "session_policy"} <= names
+
+    command_names = {item["name"] for item in catalog["command"]["options"]}
+    assert "backend" not in command_names
+    assert "model" not in command_names
+    assert "session_policy" not in command_names
