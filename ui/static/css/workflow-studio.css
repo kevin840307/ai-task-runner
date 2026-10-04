@@ -1105,8 +1105,12 @@
 .prompt-used-by-list {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 6px;
   min-width: 0;
+  max-height: 92px;
+  overflow: auto;
+  padding-right: 2px;
 }
 .prompt-used-by-chip {
   max-width: 100%;
