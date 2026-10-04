@@ -175,7 +175,9 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     stage_added: "Stage 已加入草稿；儲存 Workflow 後才會寫入 YAML。", stage_copied: "已複製 Stage 設定；貼上時不會複製結果連線。",
     stage_pasted: "Stage 已貼上；結果連線未複製。", stage_duplicated: "Stage 已複製；結果連線不會一起複製。", stage_removed: "Stage 已從草稿移除。",
     layout_reset_done: "已重設畫布位置；Workflow 執行順序沒有變動。", reset_layout_title: "只重設畫布位置，不變更 YAML",
-    fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）"
+    fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）",
+    draft_recovery_title: "本機草稿", draft_recovery_saved: "儲存於", draft_recovery_unchanged: "尚未寫入 Workflow",
+    restore_draft: "還原", discard_draft: "捨棄"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
@@ -216,7 +218,9 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     stage_added: "Stage added to draft; YAML changes only after you Save.", stage_copied: "Stage settings copied; result connections are not copied.",
     stage_pasted: "Stage pasted; result connections were not copied.", stage_duplicated: "Stage duplicated; result connections were not copied.", stage_removed: "Stage removed from draft.",
     layout_reset_done: "Canvas layout reset; Workflow execution order is unchanged.", reset_layout_title: "Reset canvas positions only; do not change YAML",
-    fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)"
+    fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)",
+    draft_recovery_title: "Local draft", draft_recovery_saved: "Saved", draft_recovery_unchanged: "Workflow unchanged",
+    restore_draft: "Restore", discard_draft: "Discard"
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -1850,12 +1854,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
 
       {recoveryDraft && <section className="workflow-draft-recovery" aria-label="Unsaved Workflow draft recovery">
         <div>
-          <strong>Unsaved local draft found</strong>
-          <small>Saved {new Date(recoveryDraft.savedAt || Date.now()).toLocaleString()} · canonical Workflow is unchanged.</small>
+          <strong>{tx("draft_recovery_title")}</strong>
+          <small>{tx("draft_recovery_saved")} {new Date(recoveryDraft.savedAt || Date.now()).toLocaleString()} · {tx("draft_recovery_unchanged")}</small>
         </div>
         <div className="workflow-draft-recovery-actions">
-          <button type="button" onClick={discardWorkflowDraft}>Discard Draft</button>
-          <button type="button" className="primary" onClick={restoreWorkflowDraft}>Restore Draft</button>
+          <button type="button" onClick={discardWorkflowDraft}>{tx("discard_draft")}</button>
+          <button type="button" className="primary" onClick={restoreWorkflowDraft}>{tx("restore_draft")}</button>
         </div>
       </section>}
 
