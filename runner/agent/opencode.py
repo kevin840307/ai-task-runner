@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
+from ..runtime.process_runner import run_process
 from ..workspace import ensure_instruction_file, update_goal_reference
 from .backend import BackendError, BackendMode, BackendResult, BaseBackend
 
@@ -19,6 +20,20 @@ class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = DEFAULT_OPENCODE_COMMAND
     supports_sandbox = True
+
+    @classmethod
+    def available_models(cls, root: Path) -> list[str]:
+        try:
+            result = run_process([cls.default_command, "models"], root, 15)
+        except Exception:
+            return []
+        if result.return_code or result.timed_out:
+            return []
+        return sorted({
+            line.strip()
+            for line in result.output.splitlines()
+            if line.strip() and not line.lstrip().startswith(("#", "["))
+        })
 
     @classmethod
     def configure_args(
