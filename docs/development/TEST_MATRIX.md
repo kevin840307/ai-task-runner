@@ -64,6 +64,17 @@ Before soak, the tool performs deterministic preflight and then exercises real-Q
 - timeout/recovery budget;
 - final AI voting.
 
+For fast iteration after a reproduced failure, list stable probe indices/names and restart from that point instead of rerunning every earlier probe:
+
+```powershell
+tool\qwen_live_reliability_24h.bat --list-probes
+tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
+# Numeric 1-based indices are also accepted, for example:
+tool\qwen_live_reliability_24h.bat --start-probe 25
+```
+
+`--start-probe` skips only earlier probes; later probes and the requested soak still run. Partial-run summaries record the chosen start probe and do not claim skipped probes passed.
+
 Having the probe in the script is not the same as having passed it. Record the emitted run directory/summary before claiming live reliability.
 
 ## 24H acceptance
