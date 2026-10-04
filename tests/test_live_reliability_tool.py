@@ -2550,6 +2550,26 @@ def test_api_rotation_contract_keeps_healthy_same_session_without_rotation():
     live._assert_controlled_api_session_rotation("session-A", False, [])
 
 
+def test_api_rotation_contract_accepts_durable_fresh_when_polling_misses_rotation():
+    live._assert_controlled_api_session_rotation(
+        "session-A",
+        False,
+        [
+            {
+                "type": "runner.recovery",
+                "action": "retry",
+                "retry": 2,
+                "retry_mode": "recover",
+            },
+            {
+                "type": "runner.session",
+                "action": "fresh",
+                "previous_session": "session-A",
+            },
+        ],
+    )
+
+
 def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
     live._assert_controlled_api_session_rotation(
         "session-A",

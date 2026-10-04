@@ -381,11 +381,30 @@ LIVE REGRESSION NOTES
       first transient failure retries the current session, the next failure rotates only that
       Stage to a Fresh Session, resets the per-session counter, and continues recovery.
     - This remains technical reliability inside StageExecutor; FlowEngine semantic routing is unchanged.
-    - Short 429/502/503 live outages must still complete in the original session.
-    - The 3-minute raw-disconnect probe now accepts session replacement only when a controlled
-      runner.session/fresh event and runner.recovery retry_mode=recover evidence prove the Runner
-      performed the bounded rotation. An unexplained backend/session swap still fails.
+    - 429/502/503/raw-disconnect outages prefer Same Session, but may legitimately consume the
+      shared per-session failure budget and rotate only that Stage to Fresh Session.
+    - Every outage probe accepts rotation only when matching runner.session/fresh(previous_session)
+      plus runner.recovery retry_mode=recover evidence proves Runner-owned bounded recovery.
+      An unexplained backend/session swap still fails closed.
     - Added deterministic StageExecutor regression proving retry -> recover + Fresh Session rotation.
+
+[x] Fixed short API outage live false failure after bounded transient-session rotation.
+    - Reproduced failure: api_recovery_probe rejected a successful 5s outage because StageExecutor
+      legitimately reached DEFAULT_PER_SESSION_ATTEMPTS=2 and rotated the Stage session to Fresh.
+    - Root cause was stale live-harness policy, not Runner: DevFollow requires per-session failures
+      to be bounded, including transient 429/502/503/raw-disconnect recovery.
+    - Short and long outages now share one controlled rotation contract: Same Session is preferred;
+      Fresh is accepted only with runner.session/fresh(previous_session=<pre-outage session>) and
+      runner.recovery retry_mode=recover evidence. Silent/backend-owned swaps still fail closed.
+    - Removed the racy polling-time assertion; polling only records a possible rotation and the final
+      decision uses durable console + production events after process exit.
+    - Removed dead recovery_event_seen state left from the older mandatory-event contract.
+    - Deterministic regressions cover same-session recovery, bounded Fresh rotation, missing fresh
+      evidence, missing recover evidence, wrong previous_session, and the real polling-miss case.
+    - Exact code HEAD 699348a8f19dd9c53050f282322938f4171d52c8 passed Ubuntu full Python,
+      Windows full Python and Chromium Browser E2E; Studio source build passed and only the known
+      committed generated-bundle equality check remained red.
+    - Runner/FlowEngine semantics were intentionally unchanged.
 
 [x] Fixed timeout/recovery-budget live probe before the next 24H run.
     - Root cause: timeout_probe configured stage_retries=1 while DEFAULT_PER_SESSION_ATTEMPTS=2,
@@ -454,8 +473,9 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - This protects the StageExecutor event path independently from real Qwen transport behavior.
 
 [x] Real-Qwen 429/502/503/raw-disconnect probes own end-to-end outage resilience.
-    - They require the proxy outage to actually occur, the run to recover, the healthy session
-      identity to remain stable, no RESET_SESSION verdict, final completion and final last_error cleanup.
+    - They require the proxy outage to actually occur, the run to recover, session continuity to be
+      either unchanged or a Runner-owned bounded Fresh rotation, no RESET_SESSION verdict,
+      final completion and final last_error cleanup.
     - A structured Runner recovery event is useful extra evidence when the failure escapes Qwen,
       but it is not mandatory because Qwen CLI / transport may absorb and retry below StageExecutor.
     - This prevents false failures where the outage genuinely recovers before Runner retry is needed.
