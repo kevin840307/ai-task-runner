@@ -3359,12 +3359,15 @@ def _tree_bytes(root: Path) -> int:
     return total
 
 
-def resource_snapshot(root: Path) -> dict[str, int]:
-    return {
+def resource_snapshot(
+    root: Path,
+    *,
+    include_run_root_bytes: bool = False,
+) -> dict[str, int]:
+    result = {
         "rss_bytes": _rss_bytes(),
         "threads": threading.active_count(),
         "handles": _handle_count(),
-        "run_root_bytes": _tree_bytes(root),
         "active_process_markers": sum(
             1 for path in root.rglob("active-process.txt") if path.is_file()
         ),
@@ -3376,6 +3379,9 @@ def resource_snapshot(root: Path) -> dict[str, int]:
         "project_expanded_workflow_stages": 0,
         "project_debug_history_bytes": 0,
     }
+    if include_run_root_bytes:
+        result["run_root_bytes"] = _tree_bytes(root)
+    return result
 
 
 def project_state_metrics(project: Path) -> dict[str, int]:
@@ -3430,7 +3436,7 @@ def _record_resource_snapshot(
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
-    baseline = resource_snapshot(root)
+    baseline = resource_snapshot(root, include_run_root_bytes=True)
     maximum = dict(baseline)
     _record_resource_snapshot(root, 0, baseline)
     result = SoakResult(resource_start=baseline, resource_max=maximum)
@@ -3491,7 +3497,7 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
         result = replace(result, resource_max=maximum, resource_end=sample)
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    final_sample = resource_snapshot(root)
+    final_sample = resource_snapshot(root, include_run_root_bytes=True)
     maximum = _resource_maximum(maximum, final_sample)
     _record_resource_snapshot(root, result.completed, final_sample)
     return replace(
