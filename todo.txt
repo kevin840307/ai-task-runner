@@ -357,6 +357,13 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Simplified live reliability restart/output UX to stable numeric probe indices.
+    - --start-probe now accepts only the 1-based PROBE_ORDER index; --list-probes remains the name/index lookup.
+    - Every top-level successful probe prints [index/total] PASS <probe-name> · <detail>, so the next restart
+      coordinate is visible directly in the console without translating a probe name.
+    - START_PROBE is always printed, including the default index 01.
+    - run_qwen_live_reliability_fail_start.bat now defaults to --start-probe 30 (api-502).
+
 [x] Fixed API outage Fresh Session evidence race in the real-Qwen live harness.
     - The 100ms durable-state poll can observe a stale pre-outage session while Qwen/StageExecutor crosses
       a fast retry/rotation boundary, so requiring runner.session.previous_session to match only that sampled
@@ -630,8 +637,8 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - qwen_live_reliability_24h.bat and qwen_live_reliability_0_5h.bat forward extra arguments through %*.
     - Deterministic coverage protects numeric/name parsing, skip ordering, list-only behavior and batch passthrough.
     - Generic fast re-run entry point: run_qwen_live_reliability_fail_start.bat.
-      It defaults to the currently reproduced api-502 failure and forwards %*, so a later
-      failure can override with --start-probe <name> without creating another one-off batch file.
+      It defaults to the currently reproduced api-502 failure (index 30) and forwards %*, so a later
+      failure can override with --start-probe <index> without creating another one-off batch file.
     - Removed the old run_qwen_live_reliability_from_api_disconnect.bat one-off launcher.
     - Example for the current Review routing area:
       tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
