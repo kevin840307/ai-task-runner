@@ -36,7 +36,7 @@ flow:
 
 舊的 `type: task`、`type: review`、`scope` 已移除。
 
-Graph edge 只有 `routes.pass` / `routes.fail`。技術 exception、timeout、API/backend error 由 `runner/workflow/stage_executor.py` 的 StageExecutor 負責，使用 `error_policy.retries` 或全域 `stage_retries`。
+Graph edge 只有 `routes.pass` / `routes.fail`。技術 exception、timeout、API/backend error 由 `runner/workflow/execution/stage_executor.py` 的 StageExecutor 負責，使用 `error_policy.retries` 或全域 `stage_retries`。
 
 ## Dynamic child Workflow
 
