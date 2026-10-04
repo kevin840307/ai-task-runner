@@ -32,7 +32,8 @@ def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flo
     assert "if (!nextFlow.includes(connection.source))" in text
     assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in text
     assert 'if (status === "pass" || status === "handoff")' in text
-    assert "A FAIL branch must not rewrite the source Stage's PASS connection." in text
+    assert 'if (status === "pass" && target === nextName) delete routes.pass' in text
+    assert 'else routes[status] = target' in text
     assert "const index = nextFlow.indexOf(stage.name)" in text
 
 
@@ -628,7 +629,7 @@ def test_designer_modals_share_escape_and_close_accessibility_contract():
     assert 'if (editorOpen) setEditorOpen(false)' in text
     assert 'else if (confirmDialog) setConfirmDialog(null)' in text
     assert 'else if (pendingCreate) { setPendingCreate(null); setPendingEdgeCreate(null); }' in text
-    assert 'else if (addStageOpen) setAddStageOpen(false)' in text
+    assert 'else if (addStageOpen) closeAddStageCommand()' in text
     assert 'aria-label={tx("close")} title={tx("close")}' in text
 
 
