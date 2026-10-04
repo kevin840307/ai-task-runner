@@ -8,7 +8,12 @@ from typing import Any, get_args, get_origin
 
 from ..agent import backend_names
 from ..errors import RunnerError
-from .profiles import AI_STAGE_PROFILES, apply_ai_profile_defaults, profile_names
+from .profiles import (
+    AI_STAGE_PROFILES,
+    apply_ai_profile_defaults,
+    profile_names,
+    stage_profile_semantics,
+)
 from .stages.ai_validator_stage import AIValidatorStage
 from .stages.handoff_stage import HandoffStage
 from .stages.plan_stage import PlanStage
@@ -111,12 +116,11 @@ def stage_result_kind(definition: dict[str, Any]) -> str:
     produces = str(definition.get("produces", "") or "")
     if produces:
         return produces
-    if definition.get("type", "base") == "base":
-        profile = str(definition.get("profile", "generic") or "generic")
-        if profile == "execute":
-            return "task"
-        if profile == "review":
-            return "review"
+    semantics = stage_profile_semantics(definition)
+    if semantics == "execute":
+        return "task"
+    if semantics == "review":
+        return "review"
     declared = str(definition.get("result_kind", "") or "")
     if declared:
         return declared
