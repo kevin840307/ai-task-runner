@@ -4342,6 +4342,12 @@ def main() -> int:
             f"{suffix} preflight",
             flush=True,
         )
+        if not opencode_tested and isinstance(opencode_stage, dict):
+            print(
+                "SKIP OpenCode Stage backend/model probe: "
+                f"{opencode_stage.get('reason') or 'unavailable'}",
+                flush=True,
+            )
     if probe_enabled("workflow-dryrun", start_probe):
         dryrun_results = workflow_dryrun_preflight()
         print(
