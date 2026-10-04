@@ -606,6 +606,10 @@ High-value runner work remaining:
     - [x] No deterministic busy loop; unlimited retry always has a positive safety floor.
     - [x] Same Session remains bounded before Fresh Session rotation.
     - [x] Live harness now records bounded StageExecutor backoff evidence in summary.json (count/min/max/configured cap/cap_reached) and fails closed if observed runner.recovery wait_seconds is non-positive or exceeds the configured cap; deterministic tests cover normal stats and invalid waits.
+    - [x] Long HTTP live coverage now reuses the same api_recovery_probe for 429/502/503 with a 45s default outage window, long enough to exercise repeated retry/Fresh rotation and reach the configured backoff cap path without adding a second recovery engine.
+    - [x] High-density soak transient probes rotate 429 -> 502 -> 503 through one shared status-code tuple instead of repeatedly testing only 502.
+    - [x] Soak summary records bounded per-status recovery counts for 429/502/503, so 0.5H/24H evidence can prove actual coverage rather than only a total transient count.
+    - [x] 0.5H and 24H batch files already run the full probe order plus --high-density, so the new long HTTP probe and soak rotation are wired into both gates.
     - [ ] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
     - [ ] Confirm real high-density / 0.5H / 24H evidence shows no retry spin and reaches configured max backoff.
     - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
@@ -636,13 +640,13 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on exact HEAD 7c06dcd2870c42dce1d9457b4e00b5bb961f2342.
+    - [x] Ubuntu Python full suite green on exact HEAD 5c3ed3b2d0ea278e46103c0d3fd76da0c08b3856.
     - [x] Windows Python full suite green on the same exact HEAD.
     - [x] Playwright/Chromium Browser E2E green on the same exact HEAD.
     - [x] Studio source build succeeds.
     - [x] Committed ui/static/workflow-studio-app bundle verify is green on the same runtime/UI HEAD.
     - [x] Generated bundle was produced by the same npm ci + Rollup-native dependency + npm run build path as CI; the one-time sync workflow was removed after use.
-    - GitHub Actions run 37190959948 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
+    - GitHub Actions run 37191503175 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
     - This todo-only evidence update follows that green code HEAD and does not alter runtime/UI behavior.
 
 [ ] Real-Qwen 0.5H gate green:
@@ -655,7 +659,7 @@ RELEASE GATES
     - Validator FAIL routing/closure
     - Dynamic Handoff
     - main / role / fresh sessions
-    - HTTP 429 / 502 / 503
+    - HTTP 429 / 502 / 503 short + long outage windows
     - raw disconnect
     - expired Session -> Fresh Session
     - process restart / detached UI resume
