@@ -725,8 +725,8 @@ def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
     assert "function applyConnectionToVisual(visual: Visual, connection: Connection): Visual" in text
     assert "const connectionStartRef = useRef" in text
     assert "const [pendingEdgeCreate, setPendingEdgeCreate]" in text
-    assert "const connectStart = useCallback" in text
-    assert "const connectEnd = useCallback" in text
+    assert "const connectStart: OnConnectStart = useCallback" in text
+    assert "const connectEnd: OnConnectEnd = useCallback" in text
     assert "if (!start || state.isValid || start.source === END) return" in text
     assert 'target?.closest(".react-flow__handle, .react-flow__node")' in text
     assert "setPendingEdgeCreate({ ...start, position })" in text
