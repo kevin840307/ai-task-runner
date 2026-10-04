@@ -828,8 +828,8 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'testResult.effective_model' in text
     assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
     assert "applyExecutionTargetConstraint" in text
-    assert 'option.name === "backend"' not in text
-    assert 'option.name === "model"' not in text
+    assert 'executionTargetNames.has(o.name)' in text
+    assert 'const executionPair = executionConstraint?.paired_fields || []' in text
     assert "structured_fresh_retries" not in state
 
 def test_stage_backend_model_fields_are_catalog_driven():
