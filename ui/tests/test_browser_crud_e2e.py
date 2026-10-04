@@ -438,6 +438,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 "() => Array.from({length: localStorage.length}, (_, i) => localStorage.key(i)).some(key => key?.startsWith('ai-task-runner:prompt-draft:v1:'))"
             )
             page.reload(wait_until="domcontentloaded")
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.click("#promptNav")
             page.wait_for_function("document.querySelector('#promptView') && !document.querySelector('#promptView').hidden")
