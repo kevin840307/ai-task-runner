@@ -71,3 +71,20 @@ def test_schema_uses_canonical_profile_registry_instead_of_redeclaring_profile_n
     assert "profile_names()" in schema
     assert '{"generic", "execute", "review"}' not in schema
     assert "{None, \"generic\", \"execute\", \"review\"}" not in schema
+
+
+def test_studio_stage_metadata_and_palette_stay_catalog_driven_and_small():
+    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    assert "const STAGE_META" not in editor
+    assert 'types: ["plan", "base"]' not in editor
+    assert "PalettePrefs" not in editor
+    assert "readPalettePrefs" not in editor
+    assert "toggleFavoriteStage" not in editor
+    assert "catalogStageMeta(catalog, type)" in editor
+
+
+def test_studio_canvas_nodes_are_topology_first_not_retry_policy_cards():
+    editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    assert "ERR×{errorRetries}" not in editor
+    assert "FAIL×{reviewMaxFailures}" not in editor
+    assert "Mock ERROR" in editor
