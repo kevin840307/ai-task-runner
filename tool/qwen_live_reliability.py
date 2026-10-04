@@ -762,6 +762,8 @@ def run_command(
                 raise RuntimeError(f"runner exceeded harness timeout: {timeout:g}s")
             time.sleep(0.2)
         process.wait(timeout=10)
+        if observe:
+            observe()
         return process.returncode or 0
     finally:
         if process.poll() is None:
