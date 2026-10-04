@@ -3049,6 +3049,7 @@ def api_recovery_probe(
         successes_before_outage = 0
         recovered = False
         recovery_event_seen = False
+        session_rotated = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
@@ -3085,7 +3086,10 @@ def api_recovery_probe(
                     and current_session
                     and current_session != session_id
                 ):
-                    raise RuntimeError("API recovery replaced the healthy session")
+                    if disconnect:
+                        session_rotated = True
+                    else:
+                        raise RuntimeError("API recovery replaced the healthy session")
                 time.sleep(0.1)
         finally:
             proxy.fail = False
@@ -3104,12 +3108,31 @@ def api_recovery_probe(
             _structured_recovery_event(event)
             for event in (*console_events, *events)
         )
-        evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in events)
-        if (
-            not session_id or not recovered
-            or "verdict=RESET_SESSION" in evidence
-        ):
-            raise RuntimeError("API outage did not recover in the same session")
+        all_events = [*console_events, *events]
+        evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in all_events)
+        if not session_id or not recovered or "verdict=RESET_SESSION" in evidence:
+            raise RuntimeError("API outage did not recover cleanly")
+
+        fresh_events = [
+            event for event in all_events
+            if event.get("type") == "runner.session" and event.get("action") == "fresh"
+        ]
+        if disconnect:
+            if session_rotated and not fresh_events:
+                raise RuntimeError(
+                    "long API disconnect replaced the session without controlled Runner fresh-session evidence"
+                )
+            recovery_modes = [
+                str(event.get("retry_mode") or "")
+                for event in all_events
+                if _structured_recovery_event(event)
+            ]
+            if fresh_events and "recover" not in recovery_modes:
+                raise RuntimeError(
+                    "long API disconnect rotated Fresh Session without runner.recovery mode=recover evidence"
+                )
+        elif session_rotated or fresh_events:
+            raise RuntimeError("short API outage unexpectedly rotated the healthy session")
         # Real Qwen may absorb/retry transport failures below StageExecutor even
         # with SDK retry knobs minimized. This probe owns end-to-end outage
         # resilience and same-session continuity, not the exact recovery layer.
@@ -3824,7 +3847,7 @@ def main() -> int:
             disconnect=True,
         )
         print(
-            f"PASS API disconnect/{args.long_api_outage_seconds:g}s same-session recovery probe",
+            f"PASS API disconnect/{args.long_api_outage_seconds:g}s bounded-session recovery probe",
             flush=True,
         )
         multi_todo_resume_probe(settings, run_root)
