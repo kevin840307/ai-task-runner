@@ -867,11 +867,77 @@ class UIStateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "already has an active runtime"):
                 self.state.launch(self.project, "second", mode="run")
 
-    def test_stop_writes_only_stop_request(self) -> None:
-        self.state.stop(self.project)
+    def test_stop_writes_only_stop_request_for_active_runtime(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"actions": {"stop": True}}):
+            result = self.state.stop(self.project)
         path = self.project / ".ai-task-runner" / "stop.request"
+        self.assertEqual(result, {"ok": True, "requested": True})
         self.assertEqual(path.read_text(encoding="utf-8"), "stop\n")
 
+    def test_stop_is_idempotent_for_idle_or_stale_ui_action(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"actions": {"stop": False}}):
+            first = self.state.stop(self.project)
+            second = self.state.stop(self.project)
+        self.assertEqual(first, {"ok": True, "requested": False})
+        self.assertEqual(second, {"ok": True, "requested": False})
+        self.assertFalse((self.project / ".ai-task-runner" / "stop.request").exists())
+
+
+    def test_read_runtime_exposes_canonical_view_actions_and_frozen_snapshot(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True)
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-view",
+            "goal": "task",
+            "completed": False,
+            "stage": "execute",
+            "cycle": 2,
+            "last_error": "HTTP 503",
+        })
+        request = runtime / "ui" / "requests" / "r1"
+        request.mkdir(parents=True)
+        self.write_json(request / "request.json", {
+            "backend": "qwen",
+            "model": "frozen-model",
+            "workflow": str(self.workflow),
+            "readonly_safety": "observe",
+        })
+        self.write_json(runtime / "console-view.json", {
+            "run_id": "run-view",
+            "lines": [],
+            "status": "Recovering",
+            "detail": "retry",
+            "recovery": {
+                "retry_mode": "recover",
+                "retry": 2,
+                "wait_seconds": 4,
+                "error": "HTTP 503",
+            },
+            "effective_backend": "qwen",
+            "effective_model": "stage-model",
+        })
+        with patch.object(self.state, "_pid_alive", return_value=True):
+            self.write_json(runtime / "runner-process.json", {"supervisor_pid": 123, "started_at": 10})
+            payload = self.state.read_runtime(self.project)
+
+        self.assertEqual(payload["status"], "recovering")
+        self.assertTrue(payload["actions"]["stop"])
+        self.assertFalse(payload["actions"]["run"])
+        self.assertEqual(payload["recovery"]["retry"], 2)
+        self.assertEqual(payload["run_snapshot"]["model"], "frozen-model")
+        self.assertEqual(payload["run_snapshot"]["effective_model"], "stage-model")
+
+    def test_resume_guard_rejects_stale_double_action_before_launch(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"actions": {"resume": False}}), patch.object(self.state, "launch") as launch:
+            with self.assertRaisesRegex(ValueError, "does not have a stopped run"):
+                self.state.resume(self.project)
+        launch.assert_not_called()
+
+    def test_rerun_guard_rejects_active_or_noncompleted_action(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"running": True, "actions": {"rerun": False}}), patch.object(self.state, "launch") as launch:
+            with self.assertRaisesRegex(ValueError, "already has an active runtime"):
+                self.state.rerun_last(self.project)
+        launch.assert_not_called()
 
     def test_global_workflows_are_visible_and_editable(self) -> None:
         assets = self.root / "runner" / "assets" / "workflows"
