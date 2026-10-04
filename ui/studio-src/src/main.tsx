@@ -1259,6 +1259,28 @@ function App() {
     setPathTestError("");
   }
 
+  function editDraftOption(option: CatalogOption, value: unknown) {
+    if (!draft) return;
+    if (
+      option.name === "session_policy"
+      && value === "main"
+      && (String(draft.backend || "").trim() || String(draft.model || "").trim())
+    ) {
+      setMessage("Stage backend/model override cannot use session_policy: main.");
+      return;
+    }
+    const next = { ...draft, [option.name]: value };
+    if (
+      (option.name === "backend" || option.name === "model")
+      && String(value || "").trim()
+      && draft.session_policy === "main"
+    ) {
+      next.session_policy = "auto";
+      setMessage("Session policy changed to auto because this Stage overrides backend/model.");
+    }
+    editDraft(next);
+  }
+
   async function testStage() {
     if (!visual || !draft || testing || busy) return;
     const testId = globalThis.crypto?.randomUUID?.() || `stage-test-${Date.now()}`;
@@ -2242,7 +2264,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         ),
                       }}
                       value={draft[option.name]}
-                      onChange={(value) => editDraft({ ...draft, [option.name]: value })}
+                      onChange={(value) => editDraftOption(option, value)}
                     />
                   ))}
                 </section>
