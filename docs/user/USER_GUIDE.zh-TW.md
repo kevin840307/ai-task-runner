@@ -81,7 +81,7 @@ Coordinator 每次只選一個 target。各 specialist 仍是普通 Stage，通�
 - `role`：每個 Stage name 一個 durable 可重用 Session，可跨 process resume。
 - `main`：使用 Runner 主 Session。
 - `fresh`：每次 invocation 都重新開始 Session。
-- `auto`：built-in/internal 預設；只有 `auto` 可搭配 `session_key`。
+- `auto`：built-in/default Stage 行為。
 
 Role Session 若連續技術失敗，StageExecutor 只替該 role 切到新 Session，其他 role 不受影響。
 
@@ -142,7 +142,7 @@ Committed progress 儲存在 `.ai-task-runner` runtime state。Resume 會還原 
 
 Studio 直接編輯相同 YAML。Full Designer 支援 PASS/FAIL/Handoff edge、Stage parameter、Dynamic targets 排版與單積木 Test。
 
-ERROR 不是 edge。Session policy 使用 `auto/main/role/fresh`，Studio 會防止與 `session_key` 衝突。
+ERROR 不是 edge。Session policy 使用 `auto/main/role/fresh`；Backend/Model/Session constraint 由 Stage Catalog 投影，Runtime 仍會再次驗證。
 
 ## Deterministic / Live 測試
 
