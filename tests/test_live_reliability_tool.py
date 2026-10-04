@@ -347,7 +347,7 @@ def test_live_source_revision_records_head_and_tracked_dirty_state(monkeypatch):
     assert revision == "a" * 40
     assert dirty is True
     assert calls[0][-2:] == ["rev-parse", "HEAD"]
-    assert calls[1][-3:] == ["--porcelain", "--untracked-files=no"][-3:]
+    assert calls[1][-2:] == ["--porcelain", "--untracked-files=no"]
 
 
 def test_live_probe_prompts_vary_from_the_first_line(tmp_path: Path):
