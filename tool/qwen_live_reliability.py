@@ -528,6 +528,27 @@ def _discover_openai_model(port: int) -> str:
     raise RuntimeError("model discovery returned no usable model id")
 
 
+def relative_existing_path(child: Path, root: Path) -> str:
+    """Return child relative to root using filesystem identity for alias-safe paths."""
+    child = Path(child)
+    root = Path(root)
+    try:
+        return child.relative_to(root).as_posix()
+    except ValueError:
+        pass
+
+    if not child.exists() or not root.exists():
+        raise ValueError(f"{child} is not under {root}")
+
+    for ancestor in (child, *child.parents):
+        try:
+            if os.path.samefile(ancestor, root):
+                return child.relative_to(ancestor).as_posix()
+        except OSError:
+            continue
+    raise ValueError(f"{child} is not under {root}")
+
+
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
     """Exercise isolated Agent Ping and AI Review profile against the real backend."""
     tool = ROOT / "tool" / "stage_probe.py"
@@ -624,7 +645,7 @@ flow:
 
         work_dir = Path(str(stage.get("work_dir") or ""))
         try:
-            relative_work = work_dir.relative_to(root).as_posix()
+            relative_work = relative_existing_path(work_dir, root)
         except ValueError as error:
             raise RuntimeError(f"Stage Probe returned invalid work_dir: {work_dir}") from error
         model_events = [
