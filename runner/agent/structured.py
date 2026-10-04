@@ -96,26 +96,21 @@ def require_text_list(value: Any, field: str, *, allow_empty: bool = True) -> li
 def structured_call(
     prompt: str, parser: Callable[[str], T], ask: Callable[[str], str], *,
     retries: int = 1, retry_prompt: Callable[[str], str] = structured_retry_prompt,
-    fresh_ask: Callable[[], str] | None = None, fresh_retries: int = 0,
 ) -> T:
+    """Repair only parser/schema-invalid model output in the current Stage session.
+
+    Transport/backend failures escape through ask and are owned by StageExecutor.
+    Session rotation must never happen here.
+    """
     raw = ask(prompt)
-    fresh_round = 0
-    while True:
-        for attempt in range(retries + 1):
-            try:
-                return parser(raw)
-            except RunnerError as error:
-                if attempt < retries:
-                    raw = ask(retry_prompt(str(error)))
-                    continue
-                if fresh_ask is None or fresh_round >= fresh_retries:
-                    exhausted = StructuredOutputError(str(error))
-                    if fresh_retries:
-                        exhausted.same_session_retry_limit = 0
-                    raise exhausted from error
-                fresh_round += 1
-                raw = fresh_ask()
-                break
+    for attempt in range(retries + 1):
+        try:
+            return parser(raw)
+        except RunnerError as error:
+            if attempt >= retries:
+                raise StructuredOutputError(str(error)) from error
+            raw = ask(retry_prompt(str(error)))
+    raise AssertionError("unreachable structured retry state")
 
 
 __all__ = [
