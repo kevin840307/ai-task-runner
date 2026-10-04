@@ -374,24 +374,7 @@ class WorkflowStudioMixin:
                     raise ValueError(f"Unsupported Stage field: {key}")
                 clean[key] = value
 
-            current_stage = stages.get(stage_name)
-            effective_fields = {
-                **(current_stage if isinstance(current_stage, dict) else {}),
-                **clean,
-            }
-            self._validate_stage_editor_fields(effective_fields)
-            self._validate_node_editor_fields(clean, data)
             updated = self._patch_stage_fields(content, stage_name, clean)
-
-            parsed = self._load_workflow_yaml(updated)
-            final_stage = (parsed.get("stages") or {}).get(stage_name, {})
-            if (
-                isinstance(final_stage, dict)
-                and final_stage.get("type") == "command"
-                and not final_stage.get("command")
-            ):
-                raise ValueError("Command Stage requires a command")
-
             validation = self._validate_workflow_before_write(path, updated)
             if validate_only:
                 return {
@@ -461,29 +444,16 @@ class WorkflowStudioMixin:
         if original_type and "type" not in parsed:
             parsed["type"] = original_type
 
-        self._validate_stage_editor_fields(parsed)
-        validation_data = dict(data) if isinstance(data, dict) else {}
-        validation_stages = dict(stages) if isinstance(stages, dict) else {}
-        validation_stages[stage_name] = {**current, **parsed}
-        validation_data["stages"] = validation_stages
-        self._validate_node_editor_fields(parsed, validation_data)
+        candidate = path.read_text(encoding="utf-8")
+        candidate = self._patch_stage_fields(candidate, stage_name, parsed)
+        self._validate_workflow_before_write(path, candidate)
         return {"ok": True, "fields": parsed}
 
     def _stage_editor_fields(self) -> set[str]:
-        """Fields that the Studio may change in a Stage definition."""
-        allowed = {
-            "type", "profile", "status", "label", "routes", "error_policy", "max_failures", "validator",
-            "prompt", "instructions", "detail", "run_state", "mode", "actor",
-            "allow_project_read", "parser", "structured_retries",
-            "runs", "required_passes",
-            "readonly_safety", "track_changes", "tolerate_restored_changes",
-            "timeout", "session_policy", "produces", "min_tasks",
-            "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
-        }
-        try:
-            catalog = self.workflow_catalog()
-        except ValueError:
-            catalog = {}
+        """Fields exposed by the Runner-owned Stage/editor catalog."""
+        catalog = self.workflow_catalog()
+        allowed = {"type"}
+        allowed.update(str(key) for key in (catalog.get("node_options") or {}))
         for stage in (catalog.get("stage_types") or {}).values():
             for option in stage.get("options") or []:
                 name = str(option.get("name") or "").strip()
@@ -813,117 +783,6 @@ class WorkflowStudioMixin:
             column = int(getattr(mark, "column", 0)) + 1 if mark is not None else 0
             message = getattr(exc, "problem", None) or str(exc).splitlines()[0]
             return {"ok": False, "summary": str(message), "line": line, "column": column}
-
-    def _validate_stage_editor_fields(self, fields: dict) -> None:
-        stage_type = fields.get("type")
-        if stage_type is not None:
-            if stage_type not in self._supported_stage_types():
-                raise ValueError("Unsupported Stage type")
-        profile = fields.get("profile")
-        if profile is not None:
-            if stage_type not in (None, "base"):
-                raise ValueError("Stage profile is valid only for AI Stage")
-            profiles = set(
-                (((self.workflow_catalog().get("stage_types") or {}).get("base") or {}).get("profiles") or {})
-            )
-            if profile not in profiles:
-                available = ", ".join(sorted(profiles)) or "<none>"
-                raise ValueError(f"Stage profile must be one of: {available}")
-        mode = fields.get("mode")
-        if mode not in (None, "", "readonly", "write"):
-            raise ValueError("Stage mode must be readonly or write")
-        parser = fields.get("parser")
-        if parser not in (None, "", "review", "validation"):
-            raise ValueError("Stage parser must be review or validation")
-        produces = fields.get("produces")
-        if produces not in (None, "", "tasks", "stages"):
-            raise ValueError("Stage produces must be tasks or stages when specified")
-        backend = str(fields.get("backend") or "").strip()
-        if backend:
-            options = (
-                ((self.workflow_catalog().get("stage_types") or {}).get("base") or {}).get("options")
-                or []
-            )
-            backend_option = next(
-                (item for item in options if str(item.get("name") or "") == "backend"),
-                {},
-            )
-            known_backends = {
-                str(value) for value in (backend_option.get("values") or []) if str(value)
-            }
-            if not known_backends:
-                known_backends = set(self.backend_catalog().get("backends") or [])
-            if backend not in known_backends:
-                raise ValueError(f"Stage backend is unsupported: {backend}")
-        model = str(fields.get("model") or "").strip()
-        if bool(backend) != bool(model):
-            raise ValueError("Stage backend and model must be configured together")
-        if len(model) > 200 or any(ord(ch) < 32 for ch in model):
-            raise ValueError("Stage model is invalid")
-        if backend and model and fields.get("session_policy") == "main":
-            raise ValueError("Stage backend/model override cannot use session_policy: main")
-
-        session_policy = fields.get("session_policy", "auto")
-        if session_policy not in {"auto", "main", "role", "fresh"}:
-            raise ValueError("Stage session_policy must be auto, main, role, or fresh")
-        max_failures = fields.get("max_failures")
-        if max_failures is not None:
-            is_review = stage_type == "base" and fields.get("profile") == "review"
-            if not is_review:
-                raise ValueError("Stage max_failures is only valid for AI Stage Review profile")
-            if (
-                not isinstance(max_failures, int)
-                or isinstance(max_failures, bool)
-                or max_failures <= 0
-            ):
-                raise ValueError("Stage max_failures must be a positive integer")
-        policy = fields.get("error_policy")
-        if policy is not None:
-            if not isinstance(policy, dict) or set(policy) != {"retries"}:
-                raise ValueError("Stage error_policy requires only retries")
-            retries = policy["retries"]
-            if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
-                raise ValueError("Stage error_policy.retries must be -1 or non-negative")
-        for key in ("structured_retries", "runs", "required_passes", "min_tasks"):
-            value = fields.get(key)
-            if value is None:
-                continue
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise ValueError(f"Stage {key} must be an integer")
-            minimum = 1 if key in {"runs", "min_tasks"} else 0
-            if value < minimum:
-                raise ValueError(f"Stage {key} must be >= {minimum}")
-        timeout = fields.get("timeout")
-        if timeout is not None and (not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout < 0):
-            raise ValueError("Stage timeout must be a non-negative number")
-
-    @staticmethod
-    def _validate_node_editor_fields(updates: dict, workflow: dict) -> None:
-        label = updates.get("label")
-        if label is not None and (not isinstance(label, str) or not label.strip()):
-            raise ValueError("Stage label must be a non-empty string")
-        routes = updates.get("routes")
-        if routes is None:
-            return
-        if not isinstance(routes, dict) or not routes:
-            raise ValueError("Stage routes must be a non-empty object")
-        unknown = sorted(str(key) for key in routes if key not in {"pass", "fail"})
-        if unknown:
-            raise ValueError(
-                "Stage routes supports only pass/fail; unknown: "
-                + ", ".join(unknown)
-            )
-
-        stages = workflow.get("stages") if isinstance(workflow, dict) else {}
-        targets = set(stages) if isinstance(stages, dict) else set()
-        targets.update({"next", "done", "stop"})
-        for status, target in routes.items():
-            if not isinstance(target, str) or not target.strip():
-                raise ValueError(f"Stage routes.{status} must be a non-empty target")
-            if target not in targets:
-                raise ValueError(
-                    f"Stage routes.{status} references unknown Stage: {target}"
-                )
 
     def _require_hash(self, content: str, expected_hash: str) -> None:
         if expected_hash and expected_hash != self._hash_text(content):
@@ -1514,7 +1373,6 @@ class WorkflowStudioMixin:
                     for key in config:
                         if key not in allowed and (not isinstance(original, dict) or config[key] != original.get(key)):
                             raise ValueError(f"Unsupported Stage field: {key}")
-                    self._validate_stage_editor_fields(config)
                     desired[name] = config
                 if not desired:
                     raise ValueError("Workflow must contain at least one Stage")
@@ -1574,9 +1432,7 @@ class WorkflowStudioMixin:
                         if value != previous:
                             changes[key] = None if key in {"status", "prompt", "label"} and value == "" else value
                     if changes:
-                        self._validate_stage_editor_fields(config)
-                        self._validate_node_editor_fields(changes, {"stages": desired})
-                        updated = self._patch_stage_fields(updated, name, changes)
+                            updated = self._patch_stage_fields(updated, name, changes)
             updated = self._replace_flow_block(updated, flow)
             # Patch every Stage so deleting an Edge removes the YAML route too.
             for stage_name in (desired if desired is not None else stages):
