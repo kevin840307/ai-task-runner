@@ -35,7 +35,9 @@ elif stage == "plan_judge":
     answer = {"accepted": True, "issues": []}
 elif stage == "execute":
     attempt = count("execute")
-    if attempt == 1:
+    failure_limit = max(1, int(os.environ.get("BACKOFF_TEST_FAILURES", "1")))
+    session = f"backoff-session-{attempt}"
+    if attempt <= failure_limit:
         if is_qwen:
             print(json.dumps({
                 "type": "system",
