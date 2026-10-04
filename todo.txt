@@ -197,6 +197,8 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Current source/browser build exposes the fields, but the committed ui/static/workflow-studio-app bundle is still stale; packaged/local UI may not show them until the generated bundle is rebuilt and committed.
     - Do not mark this item complete until the committed bundle and real backend evidence both match current source.
     - Built-in Plan-generated Execute/Review child Stages now inherit the Plan Stage backend/model override while keeping their own default session policy; generic producer-defined children remain explicit and are not globally rewritten.
+    - Cross-backend model leakage is removed: switching Stage backend with model unset uses the target backend default; same-backend runs keep their configured global model, and an explicit Stage model still overrides through the adapter.
+    - Dry Run now covers Plan backend/model propagation through the real PlanStage.finish() + FlowEngine dynamic expansion path; no second dry-run runtime was added.
     - Deterministic coverage verifies inherited Plan child backend/model, no redundant inheritance when unset, OpenCode model override, plugin/future-backend custom model syntax, YAML/catalog/UI parity, session ownership and Resume/dynamic-child behavior.
     - Real-Qwen Stage Probe coverage is wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
     - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
