@@ -12,6 +12,8 @@ import json
 import os
 import re
 import subprocess
+import signal
+import threading
 import sys
 import tempfile
 import uuid
@@ -563,6 +565,70 @@ class WorkflowStudioMixin:
         }
 
 
+    def _stage_test_runtime(self):
+        lock = getattr(self, "_studio_stage_test_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._studio_stage_test_lock = lock
+            self._studio_stage_test_processes = {}
+            self._studio_stage_test_cancelled = set()
+        return lock, self._studio_stage_test_processes, self._studio_stage_test_cancelled
+
+    @staticmethod
+    def _terminate_stage_test_process(process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        pid = int(getattr(process, "pid", 0) or 0)
+        if os.name == "nt" and pid > 0:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            return
+        try:
+            if pid > 0:
+                os.killpg(pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except OSError:
+            try:
+                process.terminate()
+            except OSError:
+                return
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                if pid > 0:
+                    os.killpg(pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except OSError:
+                pass
+
+    def studio_stage_test_cancel(self, test_id: str) -> dict:
+        key = str(test_id or "").strip()
+        if not key:
+            raise ValueError("Stage test id is required")
+        lock, processes, cancelled = self._stage_test_runtime()
+        with lock:
+            process = processes.get(key)
+            if process is None:
+                cancelled.add(key)
+                return {"ok": True, "cancelled": True, "pending": True}
+        self._terminate_stage_test_process(process)
+        return {"ok": True, "cancelled": True, "pending": False}
+
     def studio_stage_test(
         self,
         file_id: str,
@@ -574,6 +640,7 @@ class WorkflowStudioMixin:
         probe_mode: str = "stage",
         test_scenario: str = "pass",
         graph: dict | None = None,
+        test_id: str = "",
     ) -> dict:
         """Execute one Stage in a disposable Project, including unsaved graph drafts."""
         path, kind, _scope_name = self._resolve_studio_file(file_id, project)
@@ -616,26 +683,57 @@ class WorkflowStudioMixin:
             ]
             if str(backend or "").strip():
                 command += ["--backend", str(backend).strip()]
+            payload_text = json.dumps(
+                {
+                    "input": input_text,
+                    "workflow": data,
+                    "probe_mode": str(probe_mode or "stage"),
+                    "test_scenario": str(test_scenario or "pass"),
+                },
+                ensure_ascii=False,
+            )
+            key = str(test_id or "").strip() or uuid.uuid4().hex
+            lock, processes, cancelled = self._stage_test_runtime()
+            popen_kwargs = {
+                "cwd": str(self.repo_root),
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": True,
+            }
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            else:
+                popen_kwargs["start_new_session"] = True
             try:
-                completed = subprocess.run(
-                    command,
-                    cwd=str(self.repo_root),
-                    capture_output=True,
-                    text=True,
-                    input=json.dumps(
-                        {
-                            "input": input_text,
-                            "workflow": data,
-                            "probe_mode": str(probe_mode or "stage"),
-                            "test_scenario": str(test_scenario or "pass"),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    timeout=900,
-                    check=False,
-                )
-            except (OSError, subprocess.TimeoutExpired) as exc:
+                process = subprocess.Popen(command, **popen_kwargs)
+            except OSError as exc:
                 raise ValueError(f"Stage test failed: {exc}") from exc
+
+            cancel_immediately = False
+            with lock:
+                processes[key] = process
+                if key in cancelled:
+                    cancelled.discard(key)
+                    cancel_immediately = True
+            if cancel_immediately:
+                self._terminate_stage_test_process(process)
+
+            try:
+                stdout, stderr = process.communicate(payload_text, timeout=900)
+            except subprocess.TimeoutExpired as exc:
+                self._terminate_stage_test_process(process)
+                raise ValueError("Stage test timed out after 900 seconds") from exc
+            finally:
+                with lock:
+                    processes.pop(key, None)
+                    cancelled.discard(key)
+
+            if process.returncode is not None and process.returncode < 0:
+                return {"ok": False, "cancelled": True, "test_id": key}
+            if cancel_immediately:
+                return {"ok": False, "cancelled": True, "test_id": key}
+            completed = subprocess.CompletedProcess(command, process.returncode or 0, stdout, stderr)
 
             raw = (completed.stdout or "").strip().splitlines()
             payload = {}
