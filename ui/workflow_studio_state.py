@@ -477,7 +477,7 @@ class WorkflowStudioMixin:
             "allow_project_read", "parser", "structured_retries",
             "runs", "required_passes",
             "readonly_safety", "track_changes", "tolerate_restored_changes",
-            "timeout", "session_key", "session_policy", "produces", "min_tasks",
+            "timeout", "session_policy", "produces", "min_tasks",
             "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
         }
         try:
@@ -866,10 +866,6 @@ class WorkflowStudioMixin:
         session_policy = fields.get("session_policy", "auto")
         if session_policy not in {"auto", "main", "role", "fresh"}:
             raise ValueError("Stage session_policy must be auto, main, role, or fresh")
-        if session_policy != "auto" and fields.get("session_key"):
-            raise ValueError(
-                "Stage session_key is only valid with session_policy: auto"
-            )
         max_failures = fields.get("max_failures")
         if max_failures is not None:
             is_review = stage_type == "base" and fields.get("profile") == "review"
