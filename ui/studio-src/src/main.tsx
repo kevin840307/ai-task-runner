@@ -2031,7 +2031,13 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           <button type="button" onClick={() => { openStageEditor(contextMenu.stage); setContextMenu(null); }}>⚙ {tx("stage_settings")}</button>
           <button type="button" disabled={dirtyGraph || busy || pathTesting}
             title={dirtyGraph ? "Save Workflow before testing path" : "Dry-run this saved path to END"}
-            onClick={() => { const stage = contextMenu.stage; setContextMenu(null); void testPathFromStage(stage); }}>▶ Test path to END</button>
+            onClick={() => {
+              const stage = contextMenu.stage;
+              setContextMenu(null);
+              openStageEditor(stage);
+              setInspectorTab("test");
+              void testPathFromStage(stage);
+            }}>▶ Test path to END</button>
           <button type="button" onClick={() => { copyStageByName(contextMenu.stage); setContextMenu(null); }}>⧉ {tx("copy")} <kbd>Ctrl+C</kbd></button>
           <button type="button" disabled={!copiedStage} onClick={() => { pasteStage(); setContextMenu(null); }}>▣ {tx("paste")} <kbd>Ctrl+V</kbd></button>
           <button type="button" onClick={() => { void duplicateStage(contextMenu.stage); setContextMenu(null); }}>⊕ {tx("duplicate")}</button>
