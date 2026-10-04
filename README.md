@@ -97,31 +97,32 @@ stages:
 
 ### Stage backend and model override
 
-Every AI-backed Stage (`base`, `plan`, `handoff`, `ai_validator`) may select its own backend and model. `command` remains deterministic and has no AI backend fields.
+Every AI-backed Stage (`base`, `plan`, `handoff`, `ai_validator`) may opt into a Stage-local backend/model pair. `command` remains deterministic and has no AI backend fields.
 
 ```yaml
 stages:
-  planning:
-    type: plan
-    backend: opencode
-    model: provider/model-x
-
   final_review:
     type: base
     profile: review
     backend: qwen
+    model: qwen3-coder-plus
 ```
 
-The fields are optional:
+The override is atomic and local:
 
-- no Stage `backend` -> use the run-level backend
-- same backend + no Stage `model` -> keep the run-level backend/model configuration
-- different Stage backend + no Stage `model` -> use that target backend's own default model
-- explicit Stage `model` -> the selected backend adapter owns how that model argument is encoded
+- `backend` and `model` must either both be absent or both be set
+- when both are absent, the Stage uses the normal run-level backend/model
+- when both are set, only that Stage uses the selected backend/model
+- the override is not inherited by Plan-generated or producer-defined child Stages
+- it does not modify the global/run-level model
+- a Stage backend/model pair cannot use `session_policy: main`
 
-A Stage backend/model override cannot use `session_policy: main`; with the default `auto` policy it gets its own durable Stage session so Resume does not mix provider/model session identities. Built-in Plan-generated Execute/Review children inherit the Plan Stage backend/model override while keeping their own session-policy defaults.
+Workflow Studio exposes Backend and Model in the Stage **Execution** section. Model is a dropdown only: its values come from the selected Backend adapter. Qwen reads selectable ids from its configured `modelProviders` / model settings; OpenCode uses its own `opencode models` command. The Studio does not hardcode provider model names.
 
-Workflow Studio exposes these fields in the Stage **Execution** section. Real Stage Test reports the effective backend/model actually used, while its Backend selector is only the fallback when the Stage has no override.
+The selected model is passed to the chosen adapter for that Stage only. Qwen and OpenCode both encode it as their CLI `--model <id>` argument through the shared adapter contract; future backends may override `configure_model_args()` without adding Core/UI provider branches.
+
+Real Stage Test reports the effective backend/model actually used, while its Backend selector remains only the fallback when the Stage has no local pair.
+
 
 ### Dynamic child Workflows
 
