@@ -638,12 +638,9 @@ function renderCliRuntimeFrame() {
   setTextIfChanged(output, cliRuntimeText(runtime));
 }
 function runtimeStatusLabel(runtime) {
-  if (runtime?.running && runtime?.last_error) return "Recovering";
-  if (runtime?.running) return "Running";
-  if (runtime?.resumable && (runtime?.stale || runtime?.last_error)) return "Needs Attention";
-  if (runtime?.resumable) return "Stopped";
-  if (runtime?.completed) return "Completed";
-  return "Idle";
+  return String(runtime?.view?.label || runtime?.status || "Idle")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (value) => value.toUpperCase());
 }
 function runtimeScriptLabel(runtime) {
   const index = Number(runtime?.script_index || 0), total = Number(runtime?.script_total || 0);
@@ -679,9 +676,55 @@ function renderLiveRuntimeHeader(runtime) {
   setTextIfChanged(card.querySelector(".live-title"), runtimeStatusLabel(runtime));
   setTextIfChanged(card.querySelector(".live-progress"), runtimeProgressLabel(runtime)); updateRuntimeFreshness();
 }
+function renderRuntimeGuidance(runtime) {
+  const root = $("runtimeGuidance");
+  if (!root) return;
+  const status = String(runtime?.status || "");
+  const reason = String(runtime?.attention_reason || runtime?.view?.reason || "").trim();
+  const recovery = runtime?.recovery && typeof runtime.recovery === "object" ? runtime.recovery : {};
+  const show = Boolean(reason && ["recovering", "needs_attention", "stopped"].includes(status));
+  root.hidden = !show;
+  root.classList.toggle("recovering", status === "recovering");
+  root.classList.toggle("needs-attention", status === "needs_attention");
+  if (!show) return;
+  setTextIfChanged($("runtimeGuidanceTitle"), runtimeStatusLabel(runtime));
+  setTextIfChanged($("runtimeGuidanceReason"), reason);
+  const recommended = Array.isArray(runtime?.recommended_actions) ? runtime.recommended_actions : [];
+  const retry = status === "recovering" && recovery.retry
+    ? [recovery.mode || "retry", "#" + recovery.retry, recovery.wait_seconds ? recovery.wait_seconds + "s" : ""].filter(Boolean).join(" · ")
+    : "";
+  setTextIfChanged($("runtimeGuidanceActions"), retry || (recommended.length ? "Recommended: " + recommended.join(" / ") : ""));
+}
+function renderActiveRunDetails(runtime) {
+  const root = $("activeRunDetails");
+  if (!root) return;
+  const snap = runtime?.run_snapshot && typeof runtime.run_snapshot === "object" ? runtime.run_snapshot : {};
+  const visible = Boolean(snap.run_id || snap.workflow || snap.backend || snap.model);
+  root.hidden = !visible;
+  if (!visible) return;
+  const name = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return "—";
+    return text.replaceAll("\\", "/").split("/").pop() || text;
+  };
+  setTextIfChanged($("activeRunWorkflow"), name(snap.workflow));
+  setTextIfChanged($("activeRunBackendModel"), [snap.backend, snap.model].filter(Boolean).join(" / ") || "—");
+  setTextIfChanged($("activeRunEffectiveModel"), [snap.effective_backend, snap.effective_model].filter(Boolean).join(" / ") || "—");
+  setTextIfChanged($("activeRunReadonly"), String(snap.readonly_safety || "—"));
+  setTextIfChanged($("activeRunId"), String(snap.run_id || "—"));
+}
 function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
-  return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.cycle || 1, runtime.workflow_position || 0, runtime.last_transition || {}, runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
+  return JSON.stringify([
+    runtime.status || "", runtime.actions || {}, runtime.recovery || {},
+    runtime.attention_reason || "", runtime.recommended_actions || [],
+    runtime.run_snapshot || {}, runtime.run_id || "", runtime.cli_status || "",
+    runtime.stage || "", runtime.cycle || 1, runtime.workflow_position || 0,
+    runtime.last_transition || {}, runtime.completed_count || 0, runtime.total || 0,
+    runtime.task || "", runtime.cli_detail || "", runtime.console_snapshot_exists || false,
+    runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0,
+    runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""
+  ]);
 }
 async function refreshRuntime({ projectPath = state.project?.path || "", force = false } = {}) {
   if (!projectPath) return;
@@ -739,7 +782,11 @@ function updateRuntimeFreshness() {
   last?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
-function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable || state.studioCatalogLoading); }
+function runConfigurationLocked() {
+  const actions = state.runtime?.actions;
+  const runtimeBlocksNew = Boolean(actions && actions.run === false);
+  return Boolean(state.runLaunching || runtimeBlocksNew || state.studioCatalogLoading);
+}
 function renderRunConfigurationLock() {
   const locked = runConfigurationLocked();
   const reason = locked ? "Current task configuration is locked until Reset or completion." : "";
@@ -754,72 +801,88 @@ function renderRunConfigurationLock() {
 
 function renderRuntime(runtime) {
   const startedAt = Number(runtime.started_at || 0);
-  if (!runtime.running && !runtime.has_state && !runtime.resumable && !runtime.completed) {
+  const actions = runtime.actions && typeof runtime.actions === "object" ? runtime.actions : {};
+  const status = String(runtime.status || "idle");
+  const isRunning = Boolean(actions.stop);
+  const isResumable = Boolean(actions.resume);
+  if (status === "idle" && !runtime.has_state) {
     state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0;
-  } else if (runtime.running && startedAt) {
+  } else if (isRunning && startedAt) {
     if (state.runtimeStartedAt !== startedAt) { state.runtimeStartedAt = startedAt; state.runtimeStoppedAt = 0; }
-  } else if (!runtime.running && state.runtimeStartedAt && !state.runtimeStoppedAt) {
+  } else if (!isRunning && state.runtimeStartedAt && !state.runtimeStoppedAt) {
     state.runtimeStoppedAt = Date.now();
   }
   updateRuntimeFreshness();
-  const badge = $("statusBadge"); badge.className = "runtime-badge"; const label = runtimeStatusLabel(runtime);
-  if (runtime.running && runtime.last_error) badge.classList.add("recovering");
-  else if (runtime.running) badge.classList.add("running");
-  else if (runtime.resumable && (runtime.stale || runtime.last_error)) badge.classList.add("needs-attention");
-  else if (runtime.resumable) badge.classList.add("failed");
-  else if (runtime.completed) badge.classList.add("completed");
+  const badge = $("statusBadge");
+  badge.className = "runtime-badge";
+  const label = runtimeStatusLabel(runtime);
+  if (status === "recovering") badge.classList.add("recovering");
+  else if (status === "running") badge.classList.add("running");
+  else if (status === "needs_attention") badge.classList.add("needs-attention");
+  else if (status === "stopped") badge.classList.add("failed");
+  else if (status === "completed") badge.classList.add("completed");
+
   const baseStage = String(runtime.cli_status || runtime.stage || "").trim();
   const scriptStage = runtimeScriptLabel(runtime);
-  const runtimeStage = scriptStage ? `${scriptStage}${baseStage ? ` · ${baseStage}` : ""}` : baseStage;
+  const runtimeStage = scriptStage ? scriptStage + (baseStage ? " · " + baseStage : "") : baseStage;
   const runtimeProgress = runtimeProgressLabel(runtime);
-  const badgeDetail = runtime.running && (runtimeStage || runtimeProgress) ? ` · ${runtimeStage || "Working"}${runtimeProgress ? ` · ${runtimeProgress}` : ""}` : "";
-  setTextIfChanged(badge, `${label}${badgeDetail}`); setTextIfChanged($("currentStage"), runtimeStage || label); setTextIfChanged($("progressText"), runtimeProgress || "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
+  const badgeDetail = isRunning && (runtimeStage || runtimeProgress)
+    ? " · " + (runtimeStage || "Working") + (runtimeProgress ? " · " + runtimeProgress : "")
+    : "";
+  setTextIfChanged(badge, label + badgeDetail);
+  setTextIfChanged($("currentStage"), runtimeStage || label);
+  setTextIfChanged($("progressText"), runtimeProgress || "—");
+  setTextIfChanged($("currentTask"), runtime.task || runtime.attention_reason || runtime.cli_detail || "Waiting");
+
   const headline = $("runtimeHeadline");
   if (headline) {
     const transition = runtime.last_transition && typeof runtime.last_transition === "object" ? runtime.last_transition : {};
-    const transitionText = transition.stage && transition.status ? `${transition.stage} ${String(transition.status).toUpperCase()}` : "";
+    const transitionText = transition.stage && transition.status ? transition.stage + " " + String(transition.status).toUpperCase() : "";
     const parts = [
       runtimeStage || label,
-      Number(runtime.cycle || 0) > 1 ? `Cycle ${runtime.cycle}` : "",
+      Number(runtime.cycle || 0) > 1 ? "Cycle " + runtime.cycle : "",
       runtimeProgress,
-      transitionText ? `Last · ${transitionText}` : "",
+      transitionText ? "Last · " + transitionText : "",
     ].filter(Boolean);
     headline.textContent = parts.join(" · ");
     headline.hidden = parts.length === 0;
   }
+
   renderRuntimeInput(runtime);
   renderRuntimeTrace(runtime);
-  $("clearHistoryButton").disabled = Boolean(runtime.running); $("clearHistoryButton").title = runtime.running ? "Stop the active task before clearing this chat history" : "Clear chat history";
-  $("sendButton").hidden = runtime.running || runtime.resumable;
-  $("stopButton").hidden = !runtime.running;
-  $("resumeButton").hidden = runtime.running || !runtime.resumable;
-  $("resetButton").hidden = runtime.running || !runtime.resumable;
-  $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
-  const blockNew = runtime.running || runtime.resumable || state.runLaunching || state.studioCatalogLoading;
-  const blockTyping = runtime.running || runtime.resumable || state.runLaunching;
+  renderRuntimeGuidance(runtime);
+  renderActiveRunDetails(runtime);
+
+  $("clearHistoryButton").disabled = isRunning;
+  $("clearHistoryButton").title = isRunning ? "Stop the active task before clearing this chat history" : "Clear chat history";
+  $("sendButton").hidden = actions.run === false;
+  $("stopButton").hidden = !actions.stop;
+  $("resumeButton").hidden = !actions.resume;
+  $("resetButton").hidden = !actions.reset;
+  $("rerunButton").hidden = !actions.rerun;
+
+  const blockNew = actions.run === false || state.runLaunching || state.studioCatalogLoading;
+  const blockTyping = actions.run === false || state.runLaunching;
   $("sendButton").disabled = blockNew;
-  $("sendButton").title = runtime.running
-    ? "A task is already running."
-    : runtime.resumable ? "Continue or Reset the stopped task before starting another."
-      : state.runLaunching ? "Task launch is already in progress."
-        : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
+  $("sendButton").title = actions.run === false
+    ? (isRunning ? "A task is already running." : "Continue or Reset the stopped task before starting another.")
+    : state.runLaunching ? "Task launch is already in progress."
+      : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
   $("messageInput").disabled = blockTyping;
   renderRunConfigurationLock();
   $("messageInput").placeholder = "描述要完成的功能或修復內容...";
-  if (runtime.running || runtime.resumable) {
+
+  if (isRunning || isResumable) {
     const card = ensureLiveCard({ forceVisibleOnCreate: true });
-    card.classList.toggle("running", Boolean(runtime.running));
+    card.classList.toggle("running", isRunning);
     renderLiveRuntimeHeader(runtime);
     renderCliRuntimeFrame();
     followHistoryToBottom();
   } else removeLiveCard();
+
   const current = state.projects.find((p) => sameProjectPath(p.path, state.project?.path));
   if (current) {
-    const nextStatus = runtime.running
-      ? (runtime.last_error ? "recovering" : "running")
-      : runtime.completed ? "completed"
-        : runtime.resumable ? ((runtime.stale || runtime.last_error) ? "needs_attention" : "stopped")
-          : "idle";
+    const nextStatus = status;
     const nextStage = String(runtime.cli_status || runtime.stage || "");
     const nextCompleted = Number(runtime.completed_count || 0);
     const nextTotal = Number(runtime.total || 0);
@@ -833,7 +896,8 @@ function renderRuntime(runtime) {
     current.runtime_total = nextTotal;
     if (changed) renderProjects();
   }
-  if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) {
+
+  if (status === "completed" && runtime.run_id && runtime.run_id !== state.lastRunId) {
     state.lastRunId = runtime.run_id;
     state.historyPinnedToBottom = true;
     refreshMessages({ forceFollow: true });
