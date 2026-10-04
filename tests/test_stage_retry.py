@@ -177,8 +177,10 @@ def test_transient_service_errors_stay_in_same_session_and_backoff_in_seconds(
     result = StageExecutor(Hooks()).run(stage, ctx)
 
     assert result.status == "pass"
-    assert stage.calls == ["session-A"] * 4
-    assert sleeps == [1, 2, 4]
+    assert stage.calls == ["session-A", "session-A", "", ""]
+    # Transient backoff grows within a session and resets after the bounded
+    # per-session cap rotates this Stage to a Fresh Session.
+    assert sleeps == [1, 1, 2]
 
 
 def test_error_after_project_change_rotates_session_and_recovers(tmp_path):
