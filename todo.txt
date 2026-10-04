@@ -194,11 +194,6 @@ P1 - UI / UX USEFUL AFTER P0
     - Uses a 20px grid and never writes YAML or changes Workflow semantics.
     - React contract and Browser E2E verify toggle state and persistence.
 
-[ ] Better Workflow recent / favorites
-    - Workflow search is already implemented.
-    - Stage Palette already has Favorites + Recent and persists them locally.
-    - Add Workflow-level recent/favorites only if real workflow count makes navigation materially slower; do not add state just to match other tools.
-
 P2 - DEFER / LOW CURRENT VALUE
 -------------------------------
 Do not spend release time on these unless a real use case appears:
@@ -209,6 +204,7 @@ Do not spend release time on these unless a real use case appears:
 - Undo history panel
 - large version-history browser
 - minimap decoration
+- Workflow-level recent / favorites unless Workflow count materially slows navigation
 - heavy animation
 - mobile Workflow Designer
 - multi-user collaboration
