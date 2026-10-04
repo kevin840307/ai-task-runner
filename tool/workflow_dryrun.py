@@ -517,11 +517,18 @@ def run_dryrun(
     max_steps: int,
     *,
     max_cycles: int = -1,
+    from_stage: str | None = None,
     json_output: bool = False,
 ) -> int:
     workflow = load_workflow(path)
     scenario = load_scenario(scenario_path)
-    ctx, executor, error = _execute(workflow, scenario, max_steps, max_cycles=max_cycles)
+    ctx, executor, error = _execute(
+        workflow,
+        scenario,
+        max_steps,
+        max_cycles=max_cycles,
+        from_stage=from_stage,
+    )
     try:
         completed = bool(ctx.state.completed) and not error
         if json_output:
@@ -529,6 +536,7 @@ def run_dryrun(
                 "valid": True,
                 "completed": completed,
                 "workflow": str(path),
+                "from_stage": from_stage,
                 "executions": executor.calls,
                 "error": error or None,
                 "cycle": ctx.state.cycle,
@@ -576,6 +584,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--scenario", type=Path)
     value.add_argument("--max-steps", type=int, default=100)
     value.add_argument("--max-cycles", type=int, default=-1)
+    value.add_argument("--from-stage")
     value.add_argument("--matrix", action="store_true")
     value.add_argument("--json", action="store_true")
     return value
@@ -588,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         workflow = args.workflow.resolve()
         if args.matrix:
-            if args.scenario:
+            if args.scenario or args.from_stage:
                 return 2
             return run_matrix(workflow, args.max_steps, json_output=args.json)
         return run_dryrun(
@@ -596,6 +605,7 @@ def main(argv: list[str] | None = None) -> int:
             args.scenario.resolve() if args.scenario else None,
             args.max_steps,
             max_cycles=args.max_cycles,
+            from_stage=args.from_stage,
             json_output=args.json,
         )
     except Exception as exc:
