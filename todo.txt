@@ -577,6 +577,7 @@ High-value runner work remaining:
       on-disk evidence and completes without blind same-session replay.
     - [x] No deterministic busy loop; unlimited retry always has a positive safety floor.
     - [x] Same Session remains bounded before Fresh Session rotation.
+    - [x] Live harness now records bounded StageExecutor backoff evidence in summary.json (count/min/max/configured cap/cap_reached) and fails closed if observed runner.recovery wait_seconds is non-positive or exceeds the configured cap; deterministic tests cover normal stats and invalid waits.
     - [ ] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
     - [ ] Confirm real high-density / 0.5H / 24H evidence shows no retry spin and reaches configured max backoff.
     - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
@@ -607,7 +608,7 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on code HEAD 60a0301966d1915479572b1e9fbcaff35fdc517e.
+    - [x] Ubuntu Python full suite green on code HEAD cb7a13322ce173f868b9010976529ba45a3cc6bf.
     - [x] Windows Python full suite green on the same code HEAD.
     - [x] Playwright/Chromium Browser E2E green on the same code HEAD.
     - [x] Studio source build succeeds.
