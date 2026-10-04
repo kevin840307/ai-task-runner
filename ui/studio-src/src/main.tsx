@@ -31,6 +31,9 @@ type Stage = Record<string, unknown> & {
   error_policy?: { retries: number };
   max_failures?: number;
   targets?: string[];
+  backend?: string;
+  model?: string;
+  session_policy?: string;
 };
 
 type Visual = {
