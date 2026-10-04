@@ -21,7 +21,7 @@ def test_structured_call_reuses_same_ask_for_correction():
     assert len(prompts) == 2
 
 
-def test_structured_fresh_recovery_is_bounded_inside_one_stage_call():
+def test_structured_output_repair_is_bounded_inside_one_stage_session():
     calls = []
 
     def ask(prompt):
@@ -32,13 +32,8 @@ def test_structured_fresh_recovery_is_bounded_inside_one_stage_call():
         raise RunnerError("bad json")
 
     with pytest.raises(StructuredOutputError):
-        structured_call(
-            "start",
-            parse,
-            ask,
-            retries=2,
-            fresh_ask=lambda: ask("fresh"),
-            fresh_retries=1,
-        )
+        structured_call("start", parse, ask, retries=2)
 
-    assert len(calls) == 6
+    # Structured repair owns parser/schema correction only. Session rotation is
+    # deliberately left to StageExecutor after this bounded attempt escapes.
+    assert len(calls) == 3
