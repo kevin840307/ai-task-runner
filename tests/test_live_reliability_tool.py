@@ -2532,6 +2532,18 @@ def test_review_failure_routing_freeze_preserves_validator_fail_route(tmp_path: 
 
 
 
+def test_api_recovery_polling_records_rotation_without_racy_semantic_failure():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tool"
+        / "qwen_live_reliability.py"
+    ).read_text(encoding="utf-8")
+
+    assert "API recovery replaced the healthy session" not in source
+    assert "session_rotated = True" in source
+    assert "validate it once against durable Runner" in source
+
+
 def test_api_rotation_contract_keeps_healthy_same_session_without_rotation():
     live._assert_controlled_api_session_rotation("session-A", False, [])
 
