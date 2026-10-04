@@ -291,6 +291,19 @@ LIVE REGRESSION NOTES
     - Shared transition-history/model-name bounds were moved to runner.config.defaults to remove cross-layer magic numbers.
     - No removed routes.error/repair/restart_at/repeat/task-scope compatibility contract was reintroduced.
 
+[x] Fixed API raw-disconnect live probe injection race at the actual request boundary.
+    - Repeated Windows evidence showed failures=3 with successes_before=5 and successes_after=5:
+      the harness armed the outage as soon as durable ai_session_id appeared, which can be after
+      the only required model call has already completed. The run could therefore finish correctly
+      without any post-outage upstream success, making recovered=False a harness false failure.
+    - Raw disconnect now uses a deterministic live-only fixture:
+      main-session warmup -> arm marker/gate -> required Execute AI call -> file validator.
+    - The harness injects disconnect only after the arm marker exists and the warmup session is durable,
+      so completion necessarily requires another real upstream request after the outage clears.
+    - Runner retry/backoff/session semantics are unchanged; this is intentionally a harness-only fix.
+    - Added deterministic regressions for fixture topology, main-session reuse, arm marker placement,
+      and the requirement that disconnect injection waits for the marker.
+
 [x] Fixed long raw-disconnect live recovery final-poll race.
     - Runner completed cleanly, but api_recovery_probe only updated its recovered flag while the
       child process was still alive. A final successful upstream request could finish the run
