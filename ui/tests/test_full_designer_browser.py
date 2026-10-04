@@ -325,7 +325,9 @@ flow:
                 # fail closed until a model from that backend is selected.
                 page.locator(".modal-close-button").click()
                 page.locator(".studio-header button.primary").click()
-                page.get_by_text("backend and model must be configured together", exact=False).wait_for(state="visible")
+                page.locator(".studio-header .message").filter(
+                    has_text="backend and model must be configured together"
+                ).wait_for(state="visible")
                 assert workflow.read_text(encoding="utf-8") == before_partial_override
 
                 page.locator('.react-flow__node[data-id="worker"]').dblclick()
