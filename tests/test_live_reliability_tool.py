@@ -329,6 +329,27 @@ def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
     assert args.single_process_yaml_items == 0
 
 
+def test_live_source_revision_records_head_and_tracked_dirty_state(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(live.shutil, "which", lambda command: "/usr/bin/git")
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[-2:] == ["rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(command, 0, stdout="a" * 40 + "\n")
+        return subprocess.CompletedProcess(command, 0, stdout=" M runner/api.py\n")
+
+    monkeypatch.setattr(live.subprocess, "run", fake_run)
+
+    revision, dirty = live.source_revision(Path("/repo"))
+
+    assert revision == "a" * 40
+    assert dirty is True
+    assert calls[0][-2:] == ["rev-parse", "HEAD"]
+    assert calls[1][-3:] == ["--porcelain", "--untracked-files=no"][-3:]
+
+
 def test_live_probe_prompts_vary_from_the_first_line(tmp_path: Path):
     first = live.create_project(tmp_path, "case-001")
     second = live.create_project(tmp_path, "case-002")
