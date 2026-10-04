@@ -405,6 +405,67 @@ flow:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_saved_stage_model_remains_dropdown_selectable_when_discovery_is_empty() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-saved-model-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "saved-model.yaml"
+        workflow.write_text(
+            """stages:
+  worker:
+    type: base
+    profile: generic
+    backend: opencode
+    model: provider/model-x
+flow:
+  - worker
+""",
+            encoding="utf-8",
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        state = server.RequestHandlerClass.state
+        state.backend_catalog = lambda project=None, include_models=False: {
+            "default": "qwen",
+            "backends": ["qwen", "opencode"],
+            "models": {"qwen": [], "opencode": []},
+        }
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "saved-model.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                modal = page.locator(".stage-editor-modal")
+                modal.wait_for(state="visible")
+                model_select = modal.locator("label").filter(
+                    has=page.locator("span", has_text="model")
+                ).first.locator("select")
+                assert model_select.is_enabled()
+                assert model_select.input_value() == "provider/model-x"
+                assert "provider/model-x" in model_select.locator("option").all_text_contents()
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 def test_workflow_yaml_switch_immediately_refreshes_designer_and_rejects_invalid_yaml() -> None:
     with tempfile.TemporaryDirectory(prefix="ai-runner-yaml-switch-e2e-") as td:
         project = Path(td)
