@@ -6,6 +6,7 @@ from dataclasses import MISSING, fields
 from typing import Any
 
 from ..errors import RunnerError
+from .profiles import profile_names
 from .registry import STAGE_REGISTRY
 from .stages.base_stage import BaseStage
 
@@ -42,9 +43,10 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} profile is only valid for type: base"
         )
-    if stage_type == "base" and profile not in {None, "generic", "execute", "review"}:
+    valid_profiles = profile_names()
+    if stage_type == "base" and profile is not None and profile not in valid_profiles:
         raise RunnerError(
-            f"workflow stage {name} profile must be generic, execute, or review"
+            f"workflow stage {name} profile must be one of: {', '.join(valid_profiles)}"
         )
 
     stage_class = STAGE_REGISTRY[stage_type]
