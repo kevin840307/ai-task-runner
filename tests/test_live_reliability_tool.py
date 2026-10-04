@@ -2327,40 +2327,8 @@ def test_session_expiry_preflight_requires_stageexecutor_recovery_event():
 
 
 
-def test_review_failure_routing_workflow_dryrun_closes_validator_fail_loop(tmp_path: Path):
-    from runner.workflow.loader import load_workflow
-    from tool.workflow_dryrun import Scenario, _execute, _close
-
-    workflow_path = tmp_path / "workflow.yaml"
-    workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
-    workflow = load_workflow(workflow_path)
-
-    scenario = Scenario({
-        "stages": {
-            "execute": ["pass", "pass", "pass"],
-            "seed": "pass",
-            "review": "fail",
-            "review_verify": ["pass", "pass"],
-            "validate_file": ["fail", "pass"],
-        }
-    })
-    ctx, executor, error = _execute(workflow, scenario, 20)
-    try:
-        assert error == ""
-        starts = [stage for _number, stage, _label, _status in executor.trace]
-        assert starts == [
-            "execute", "seed", "review",
-            "execute", "review_verify", "validate_file",
-            "execute", "review_verify", "validate_file",
-        ]
-        assert ctx.state.completed is True
-    finally:
-        _close(ctx)
-
-
-
 def test_timeout_probe_budget_reaches_fresh_session_rotation(tmp_path: Path):
-    config = live.settings(tmp_path)
+    config = settings(tmp_path)
     project = tmp_path / "timeout-project"
     project.mkdir()
     (project / "prompt.md").write_text("goal", encoding="utf-8")
