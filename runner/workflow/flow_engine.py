@@ -11,6 +11,7 @@ from ..errors import ConfigurationError
 from ..runtime.run_state import MAX_TRANSITION_HISTORY
 from ..utils import bounded_text
 from .dynamic_expansion import activate_dynamic_task, dynamic_done_target, expand_stage_result
+from .profiles import stage_profile_semantics
 from .results import finish_run, finish_task
 from .registry import create_stage
 from .execution import StageExecutor
@@ -18,10 +19,7 @@ from .stages import StageContext, StageResult
 
 
 def _is_review_definition(definition: dict[str, Any]) -> bool:
-    return (
-        definition.get("type", "base") == "base"
-        and definition.get("profile") == "review"
-    )
+    return stage_profile_semantics(definition) == "review"
 
 
 class FlowEngine:
