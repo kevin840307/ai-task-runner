@@ -297,8 +297,16 @@ flow:
                 model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
                 backend_select = backend_field.locator("select")
                 model_input = model_field.locator("input")
+                session_field = modal.locator("label").filter(has=page.locator("span", has_text="session_policy")).first
+                session_select = session_field.locator("select")
                 assert "opencode" in backend_select.locator("option").all_text_contents()
+
+                # A Stage-local backend/model cannot share the global main session.
+                # Selecting an override from main drops the explicit session override
+                # and inherits the default auto policy rather than writing redundant YAML.
+                session_select.select_option("main")
                 backend_select.select_option("opencode")
+                assert session_select.input_value() == ""
                 model_input.fill("provider/model-x")
                 page.locator(".modal-close-button").click()
                 _save_editor(page)
@@ -306,6 +314,7 @@ flow:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["worker"]["backend"] == "opencode"
                 assert saved["stages"]["worker"]["model"] == "provider/model-x"
+                assert "session_policy" not in saved["stages"]["worker"]
 
                 # Manual YAML edits must immediately flow back into Designer Form.
                 page.get_by_role("tab", name="YAML").click()
