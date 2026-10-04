@@ -181,11 +181,11 @@ P1 - UI / UX USEFUL AFTER P0
     - Workflow browser E2E and Prompt browser/static coverage verify restoration while canonical files remain unchanged before Save.
     - Draft recovery never auto-writes canonical YAML or bypasses Save validation.
 
-[ ] Run from here / Test path
+[x] Run from here / Test path
     - Dry-run/mock path first; do not introduce a second runtime.
     - Reuse production loader + FlowEngine.
 
-[ ] Edge -> empty canvas -> Add Stage
+[x] Edge -> empty canvas -> Add Stage
     - Create and connect in one interaction.
 
 [x] Canvas smart guides / optional snap
@@ -194,8 +194,10 @@ P1 - UI / UX USEFUL AFTER P0
     - Uses a 20px grid and never writes YAML or changes Workflow semantics.
     - React contract and Browser E2E verify toggle state and persistence.
 
-[ ] Better Workflow search / recent / favorites
-    - Only if real workflow count makes navigation slower.
+[ ] Better Workflow recent / favorites
+    - Workflow search is already implemented.
+    - Stage Palette already has Favorites + Recent and persists them locally.
+    - Add Workflow-level recent/favorites only if real workflow count makes navigation materially slower; do not add state just to match other tools.
 
 P2 - DEFER / LOW CURRENT VALUE
 -------------------------------
@@ -479,3 +481,12 @@ CURRENT TODO IMPLEMENTATION IN PROGRESS
 - Edge -> empty canvas -> Add Stage: implemented with React Flow onConnectStart/onConnectEnd, reusing the same applyConnectionToVisual routing mutation. Source/Browser contracts added; awaiting same-HEAD CI before marking complete.
 - Run from here / Test path: workflow_dryrun.py now supports --from-stage and Studio exposes saved-Workflow path testing without mutating canonical YAML or production state. Backend/React/Browser regressions added; awaiting same-HEAD CI before marking complete.
 - Soak resource bounds: deterministic safety rails are implemented; real high-density/24H evidence remains required.
+
+
+P1 IMPLEMENTATION EVIDENCE
+--------------------------
+[x] Edge-to-empty Browser E2E:
+    drag PASS handle to empty canvas -> choose Stage type -> create Stage -> Save -> canonical YAML -> production workflow_dryrun PASS.
+[x] Test-path Browser E2E:
+    start from selected Stage -> /api/studio/path/test -> saved canonical Workflow + workflow_dryrun/FlowEngine;
+    prior Stages are not executed and no second runtime is introduced.
