@@ -10,8 +10,8 @@ from ...agent import backend_names, configure_ai_client, create_ai_client, sandb
 from ...config.defaults import MAX_MODEL_NAME_CHARS
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
-from ..profiles import profile_defaults, profile_names
-from ..contracts import MODE_READONLY, MODE_WRITE, StageContext, StageMode, StageResult
+from ..profiles import profile_names
+from ..contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
@@ -96,36 +96,12 @@ class BaseStage:
             raise ConfigurationError(
                 f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
             )
-        defaults = profile_defaults(profile)
-        if profile == "generic":
-            spec = replace(
-                spec,
-                prompt=spec.prompt or str(defaults.get("prompt", "")),
-            )
-        elif profile == "execute":
-            spec = replace(
-                spec,
-                status=spec.status if spec.status != "AI Stage" else str(defaults.get("status", "AI Stage")),
-                prompt=spec.prompt or str(defaults.get("prompt", "")),
-                run_state=spec.run_state or str(defaults.get("run_state", "")),
-                mode=MODE_WRITE,
-                actor="executor" if spec.actor == "ai" else spec.actor,
-                allow_project_read=True,
-                track_changes=True if not spec.track_changes else spec.track_changes,
-            )
+        if profile == "execute":
             self.result_kind = "task"
         elif profile == "review":
             from ..results import PARSERS
-            spec = replace(
-                spec,
-                status=spec.status if spec.status != "AI Stage" else str(defaults.get("status", "AI Stage")),
-                prompt=spec.prompt or str(defaults.get("prompt", "")),
-                run_state=spec.run_state or str(defaults.get("run_state", "")),
-                mode=MODE_READONLY,
-                allow_project_read=True,
-                readonly_safety=spec.readonly_safety or "observe",
-                parser=spec.parser or PARSERS["review"],
-            )
+            if spec.parser is None:
+                spec = replace(spec, parser=PARSERS["review"])
             self.result_kind = "review"
             self.backend_mode = "review"
             self.timeout_config_attr = "planning_timeout"
