@@ -405,3 +405,73 @@ def test_long_transient_window_remains_bounded_and_recovers(monkeypatch):
         if event["type"] == "runner.session" and event["action"] == "fresh"
     ]
     assert len(fresh) == 3
+
+
+
+def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path, monkeypatch):
+    class PartialWrite(Stage):
+        track_changes = True
+
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+            self.seen = []
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return "session-before-partial-write"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            target = ctx.root / "result.txt"
+            self.seen.append(target.read_text(encoding="utf-8") if target.exists() else "")
+            if self.calls == 1:
+                target.write_text("PARTIAL_VALID_WORK\n", encoding="utf-8")
+                raise RunnerError("transport failed after write")
+            assert target.read_text(encoding="utf-8") == "PARTIAL_VALID_WORK\n"
+            target.write_text("PARTIAL_VALID_WORK\nRECOVERED\n", encoding="utf-8")
+            return StageResult(self.name, "pass")
+
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = PartialWrite()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 2
+    assert stage.resets == 1
+    assert stage.seen == ["", "PARTIAL_VALID_WORK\n"]
+    assert (tmp_path / "result.txt").read_text(encoding="utf-8") == (
+        "PARTIAL_VALID_WORK\nRECOVERED\n"
+    )
+    assert sleeps == [1.0]
+    assert ctx.state.last_error == ""
+
+    recovery = next(
+        event for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    )
+    assert recovery["retry_mode"] == "recover"
+    assert "transport failed after write" in recovery["error"]
+    assert any(
+        event["type"] == "runner.session"
+        and event["action"] == "fresh"
+        and event["previous_session"] == "session-before-partial-write"
+        for event in records
+    )
