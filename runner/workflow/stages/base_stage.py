@@ -62,18 +62,32 @@ class BaseStage:
     client_cache_key = ""
     result_flag = ""
 
+    @staticmethod
+    def validate_execution_target(
+        name: str,
+        backend: str = "",
+        model: str = "",
+        session_policy: SessionPolicy = "auto",
+    ) -> None:
+        backend = str(backend or "").strip()
+        model = str(model or "").strip()
+        if backend and backend not in backend_names():
+            raise ConfigurationError(f"AI Stage {name} backend is unsupported: {backend}")
+        if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
+            raise ConfigurationError(f"AI Stage {name} model is invalid")
+        if (backend or model) and session_policy == "main":
+            raise ConfigurationError(
+                f"AI Stage {name} cannot combine backend/model override with session_policy=main"
+            )
+
     def __init__(self, spec: BaseStageSpec) -> None:
         profile = str(spec.profile or "generic")
-        backend = str(spec.backend or "").strip()
-        model = str(spec.model or "").strip()
-        if backend and backend not in backend_names():
-            raise ConfigurationError(f"AI Stage {spec.name} backend is unsupported: {backend}")
-        if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
-            raise ConfigurationError(f"AI Stage {spec.name} model is invalid")
-        if (backend or model) and spec.session_policy == "main":
-            raise ConfigurationError(
-                f"AI Stage {spec.name} cannot combine backend/model override with session_policy=main"
-            )
+        self.validate_execution_target(
+            spec.name,
+            spec.backend,
+            spec.model,
+            spec.session_policy,
+        )
         if profile not in profile_names():
             raise ConfigurationError(
                 f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
