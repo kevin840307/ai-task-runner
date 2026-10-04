@@ -1567,9 +1567,25 @@ function updateDirtyState() {
   $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile;
 }
 function renderStudioGuard() {
-  const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner"); badge.className = "runtime-badge";
-  if (guard.editable) { badge.textContent = "Editable"; badge.classList.add("completed"); banner.hidden = true; }
-  else { badge.textContent = "Read only"; badge.classList.add("interrupted"); const names = (guard.active_projects || []).map((p) => `${p.name}${p.pid ? ` (PID ${p.pid})` : ""}`).join(", "); banner.textContent = `Workflow editing locked while runtime is active: ${names || "active project"}`; banner.hidden = false; }
+  const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner");
+  const active = guard.active_projects || [];
+  badge.className = "runtime-badge";
+  if (active.length) {
+    badge.textContent = "Next run";
+    badge.classList.add("running");
+    const names = active.map((p) => `${p.name}${p.pid ? ` (PID ${p.pid})` : ""}`).join(", ");
+    banner.textContent = `Active Run uses a frozen Workflow/Prompt snapshot. Edits here apply only to the next Run · ${names || "active project"}`;
+    banner.hidden = false;
+  } else if (guard.editable) {
+    badge.textContent = "Editable";
+    badge.classList.add("completed");
+    banner.hidden = true;
+  } else {
+    badge.textContent = "Read only";
+    badge.classList.add("interrupted");
+    banner.textContent = guard.reason || "Workflow editing is unavailable.";
+    banner.hidden = false;
+  }
   updateDirtyState(); applyStudioGuardToDialogs();
 }
 function applyStudioGuardToDialogs() {
