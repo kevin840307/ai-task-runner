@@ -4538,11 +4538,10 @@ def main() -> int:
         f"DIRTY={source_dirty if source_dirty is not None else '<unknown>'}",
         flush=True,
     )
-    if start_probe:
-        print(
-            f"START_PROBE={start_probe + 1:02d} {PROBE_ORDER[start_probe]}",
-            flush=True,
-        )
+    print(
+        f"START_PROBE={start_probe + 1:02d} {PROBE_ORDER[start_probe]}",
+        flush=True,
+    )
 
     stage_probe_live: dict[str, object] = {}
     dryrun_results: list[dict[str, object]] = []
