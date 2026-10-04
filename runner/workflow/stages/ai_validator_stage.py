@@ -16,7 +16,6 @@ class AIValidatorStageSpec(BaseStageSpec):
     prompt: str = "common/ai_validator.md"
     ai_validator_yolo: bool | None = None
     structured_retries: int = 2
-    structured_fresh_retries: int = 1
     session_policy: SessionPolicy = "fresh"
 
 
