@@ -1486,6 +1486,7 @@ stages:
   worker:
     type: base
     backend: opencode
+    model: provider/model-a
     session_policy: main
 flow:
   - worker
