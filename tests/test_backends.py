@@ -786,6 +786,39 @@ def test_ai_client_backend_override_uses_target_default_command_and_model(tmp_pa
 
 
 
+def test_ai_client_backend_override_without_model_uses_target_backend_default(tmp_path):
+    from runner.config.runtime import RuntimeConfig
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.session_id = kwargs.get("session_id", "")
+
+        def set_runtime(self, *args, **kwargs):
+            pass
+
+    config = RuntimeConfig(
+        backend="qwen",
+        command="custom-qwen-command",
+        agent_args=["--model", "qwen-only-model"],
+    )
+
+    create_ai_client(
+        config,
+        tmp_path,
+        backend_override="opencode",
+        constructor=FakeClient,
+    )
+
+    assert captured["backend"] == "opencode"
+    assert captured["command"] is None
+    assert "--model" not in captured["extra_args"]
+    assert not any(str(value).startswith("--model=") for value in captured["extra_args"])
+    assert "--auto" in captured["extra_args"]
+
+
 def test_ai_client_reports_effective_model_from_backend_adapter(tmp_path, monkeypatch):
     class FakeBackend:
         name = "qwen"
