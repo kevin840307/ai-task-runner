@@ -508,3 +508,11 @@ BROWSER E2E CONTRACT NOTES
     - Prompts and Workflows share the same asset workspace (#workflowView); tests no longer wait for removed #promptView.
     - Stage Editor tabs expose data-inspector-tab so browser tests are locale-independent and do not depend on English labels.
     - This is test-contract hardening only; production navigation semantics were not changed.
+
+
+RESOURCE BOUND EVIDENCE
+-----------------------
+[x] Bounded debug-history retention is now deterministic:
+    HistoryObserver trims to <=100 model call pairs and <=50 MiB; tests cover both count and byte budget.
+[x] Soak resource sampling records start/max/end and merges each iteration's project state metrics.
+[x] Dynamic child replacement cleanup has deterministic regression for durable and process-local session state.
