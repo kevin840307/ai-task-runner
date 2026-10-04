@@ -403,7 +403,7 @@ flow: [only]
     assert "unknown --from-stage: missing" in result.stderr
 
 
-def test_dryrun_plan_children_preserve_stage_backend_model_override(tmp_path: Path):
+def test_dryrun_plan_children_do_not_inherit_stage_backend_model_override(tmp_path: Path):
     from runner.workflow.loader import load_workflow
     from tool.workflow_dryrun import Scenario, _close, _execute
 
@@ -434,7 +434,7 @@ flow:
             if item.get("_dynamic_parent") == "planning"
         ]
         assert children
-        assert all(item.get("backend") == "opencode" for item in children)
-        assert all(item.get("model") == "provider/model-x" for item in children)
+        assert all("backend" not in item for item in children)
+        assert all("model" not in item for item in children)
     finally:
         _close(ctx)
