@@ -244,6 +244,32 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed Review failure-routing live fixture stopping at validate_file FAIL.
+    - Root cause: Review FAIL and Qwen Review FAIL both had routes.fail -> execute, but the final
+      validate_file Stage had no fail route. Under the current runtime contract FAIL correctly
+      defaults to stop, so FlowEngine stopped at validator_failed exactly as designed.
+    - The live fixture now declares validate_file.routes.fail -> execute so the probe actually tests
+      the closure it claims to test.
+    - Added production-loader + dry-run coverage for:
+      Review FAIL -> Execute -> Review PASS -> Validator FAIL -> Execute -> Review PASS -> Validator PASS.
+    - Runner was intentionally not changed; validation FAIL remains semantic routing owned by FlowEngine,
+      and no hidden/default validator rollback behavior was introduced.
+
+RUNNER PRINCIPLE REVIEW (2026-10-04)
+------------------------------------
+[x] StageExecutor changes remain technical only:
+    retry/backoff, same/fresh session recovery, partial-write recovery, structured runner.recovery evidence.
+    No PASS/FAIL/HANDOFF routing was added there.
+[x] FlowEngine remains semantic only:
+    PASS/FAIL/HANDOFF target resolution, max_cycles, review fail-soft/max_failures and dynamic child continuation.
+[x] Dynamic re-expansion cleanup remains bounded:
+    obsolete dynamic child stage_sessions/review_failures and process-local stage_session caches are purged.
+[x] Session policies remain isolated:
+    main uses primary Runner session, role uses durable per-Stage session, fresh never persists role session.
+[x] Removed public contracts remain absent from current runtime path:
+    no scope/task_step/public task/review Stage types/routes.error/execution_mode/max_attempts repair compatibility.
+[x] No runner semantic behavior was loosened merely to satisfy a live probe; fixture bugs are fixed in fixtures/tests.
+
 [x] Recovery observability is split by layer instead of forcing one mechanism.
     - StageExecutor owns technical Stage retry/backoff/session recovery and emits
       runner.recovery/retry with stage, retry_mode, retry number, wait_seconds and error.
