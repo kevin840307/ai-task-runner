@@ -259,6 +259,13 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("hash", "")),
                     project,
                 ))
+            if parsed.path == "/api/studio/path/test":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_path_test(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    project,
+                ))
             if parsed.path == "/api/studio/stage/test":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_test(
