@@ -177,7 +177,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）",
     draft_recovery_title: "本機草稿", draft_recovery_saved: "儲存於", draft_recovery_unchanged: "尚未寫入 Workflow",
     restore_draft: "還原", discard_draft: "捨棄",
-    stage_backend: "Backend", stage_model: "Model", stage_backend_help: "留空沿用全域 Backend；選項來自 backend registry。", stage_model_help: "留空沿用該 Backend / 全域模型設定。"
+    stage_backend_help: "留空沿用全域 Backend；選項來自 backend registry。", stage_model_help: "留空沿用該 Backend / 全域模型設定。",
+    stage_session_main_conflict: "Stage 覆寫 Backend / Model 時不能使用 main session。", stage_session_auto: "此 Stage 覆寫 Backend / Model，Session policy 已切換為 auto。"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
@@ -220,7 +221,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)",
     draft_recovery_title: "Local draft", draft_recovery_saved: "Saved", draft_recovery_unchanged: "Workflow unchanged",
     restore_draft: "Restore", discard_draft: "Discard",
-    stage_backend: "Backend", stage_model: "Model", stage_backend_help: "Leave blank to inherit the global backend; choices come from the backend registry.", stage_model_help: "Leave blank to inherit the backend/global model configuration."
+    stage_backend_help: "Leave blank to inherit the global backend; choices come from the backend registry.", stage_model_help: "Leave blank to inherit the backend/global model configuration.",
+    stage_session_main_conflict: "A Stage backend/model override cannot use the main session.", stage_session_auto: "Session policy changed to auto because this Stage overrides backend/model."
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -1264,7 +1266,7 @@ function App() {
       && value === "main"
       && (String(draft.backend || "").trim() || String(draft.model || "").trim())
     ) {
-      setMessage("Stage backend/model override cannot use session_policy: main.");
+      setMessage(tx("stage_session_main_conflict"));
       return;
     }
     const next = { ...draft, [option.name]: value };
@@ -1274,7 +1276,7 @@ function App() {
       && draft.session_policy === "main"
     ) {
       next.session_policy = "auto";
-      setMessage("Session policy changed to auto because this Stage overrides backend/model.");
+      setMessage(tx("stage_session_auto"));
     }
     editDraft(next);
   }
