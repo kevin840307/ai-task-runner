@@ -433,10 +433,6 @@ class WorkflowStudioMixin:
         if "routes" in parsed or "targets" in parsed:
             raise ValueError("Stage routing is managed by the Routing tab and cannot be changed in Stage YAML")
 
-        allowed = self._stage_editor_fields()
-        for key in parsed:
-            if key not in allowed:
-                raise ValueError(f"Unsupported Stage field: {key}")
         original_type = str(current.get("type") or "")
         parsed_type = str(parsed.get("type") or original_type)
         if original_type and parsed_type != original_type:
