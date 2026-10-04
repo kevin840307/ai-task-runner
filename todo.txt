@@ -169,28 +169,27 @@ P0 - UI / UX HIGH VALUE
 
 P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
 -----------------------------------------------
-[ ] Bound Prompt "Used By" height
+[x] Bound Prompt "Used By" height
     - Used By must not steal most of the Available Params / Prompt editor height when references are numerous.
     - Use a bounded/max-height scroll or collapsed summary with count; preserve access to all references.
     - Keep the same backend usage scanner; UI-only presentation change.
 
-[ ] Add Stop to Stage Test
+[x] Add Stop to Stage Test
     - A running Real Stage test must expose Stop/Cancel.
     - Stop must terminate the actual disposable Stage-test process, not merely hide the dialog/result.
     - Reuse existing process ownership/control patterns; no second execution engine.
     - Cover backend cancellation lifecycle, cleanup/orphan behavior and browser UX.
 
-[ ] Separate Run Real Stage / Test path to END actions visually
+[x] Separate Run Real Stage / Test path to END actions visually
     - Add clear spacing/grouping so the two execution actions do not visually merge.
     - Keep one primary action hierarchy and preserve supported desktop viewport checks.
 
 [ ] Stage-level Backend + Model selection
-    - Support optional per-Stage backend/model override through the Stage contract/catalog/schema/runtime, not UI hardcode.
-    - Defaults inherit the run-level backend/model.
-    - StageExecutor remains technical-only; backend/model selection belongs to AI Stage execution/configuration.
-    - Must work consistently in YAML, Designer Form/YAML, Stage Test, runtime Resume, dynamic children and plugins where applicable.
-    - Add deterministic contract/parity tests and real-backend live coverage before marking complete.
-    - Do not introduce provider-specific fields into FlowEngine or a parallel execution path.
+    - Implementation complete across Stage contract/catalog/schema/runtime/Designer/Stage Test/Resume/dynamic children.
+    - Deterministic coverage verifies adapter-owned model override, session ownership, YAML/catalog/UI parity and Resume/dynamic-child behavior.
+    - Real-Qwen Stage Probe coverage is now wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
+    - Keep this unchecked until the new real-Qwen live preflight passes on Windows.
+    - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
 P1 - UI / UX USEFUL AFTER P0
