@@ -13,6 +13,8 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
   type Connection,
+  type OnConnectStart,
+  type OnConnectEnd,
   type Edge,
   type Node,
   type NodeProps,
@@ -1542,7 +1544,7 @@ function App() {
     await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim(), createAIProfile);
   }
 
-  const connectStart = useCallback((_event: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null; handleType: "source" | "target" | null }) => {
+  const connectStart: OnConnectStart = useCallback((_event, params) => {
     if (params.handleType !== "source" || !params.nodeId) {
       connectionStartRef.current = null;
       return;
@@ -1553,7 +1555,7 @@ function App() {
     };
   }, []);
 
-  const connectEnd = useCallback((event: MouseEvent | TouchEvent, state: { isValid: boolean }) => {
+  const connectEnd: OnConnectEnd = useCallback((event, state) => {
     const start = connectionStartRef.current;
     connectionStartRef.current = null;
     if (!start || state.isValid || start.source === END) return;
