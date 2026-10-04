@@ -357,6 +357,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed API outage Fresh Session evidence race in the real-Qwen live harness.
+    - The 100ms durable-state poll can observe a stale pre-outage session while Qwen/StageExecutor crosses
+      a fast retry/rotation boundary, so requiring runner.session.previous_session to match only that sampled
+      state value produced a false failure even when controlled Fresh Session evidence existed.
+    - The gate remains fail-closed: exact sampled-session matches pass; otherwise runner.session.previous_session
+      must be independently proven by model.prompt/model.result session_mode=resume evidence from the same run,
+      and runner.recovery retry_mode=recover is still mandatory.
+    - Added positive lagged-poll coverage plus a negative unproven-session regression.
+    - Updated run_qwen_live_reliability_fail_start.bat to resume at api-502, the current failed probe.
+
 [x] Fixed real-Qwen expired-session classification for current Qwen output.
     - Real Windows probe completed the resume path but failed its evidence assertion because Qwen reports
       a missing durable chat as "No saved session found"; the generic SESSION_INVALID_MARKERS did not include
@@ -620,7 +630,7 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - qwen_live_reliability_24h.bat and qwen_live_reliability_0_5h.bat forward extra arguments through %*.
     - Deterministic coverage protects numeric/name parsing, skip ordering, list-only behavior and batch passthrough.
     - Generic fast re-run entry point: run_qwen_live_reliability_fail_start.bat.
-      It defaults to the currently reproduced real-session-expiry failure and forwards %*, so a later
+      It defaults to the currently reproduced api-502 failure and forwards %*, so a later
       failure can override with --start-probe <name> without creating another one-off batch file.
     - Removed the old run_qwen_live_reliability_from_api_disconnect.bat one-off launcher.
     - Example for the current Review routing area:
