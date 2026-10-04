@@ -16,6 +16,10 @@ from ..contracts import MODE_READONLY, StageContext, StageMode, StageResult
 AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
 
+EXECUTION_TARGET_FIELDS = ("backend", "model")
+EXECUTION_TARGET_SESSION_FIELD = "session_policy"
+EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES = frozenset({"main"})
+
 
 ResultParser = Callable[[str, StageContext], Any]
 @dataclass(frozen=True)
@@ -50,6 +54,15 @@ class BaseStage:
     ui_title = "AI Stage"
     ui_description = "General AI Stage; choose Generic, Execute, or Review behavior profile."
     ui_category = "build"
+    ui_constraints = {
+        "execution_target": {
+            "paired_fields": list(EXECUTION_TARGET_FIELDS),
+            "session_policy_field": EXECUTION_TARGET_SESSION_FIELD,
+            "incompatible_session_policies": sorted(
+                EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES
+            ),
+        }
+    }
     """Perform one or more AI interactions and return only resulting facts."""
 
     result_kind = "generic"
@@ -79,9 +92,14 @@ class BaseStage:
             raise ConfigurationError(f"AI Stage {name} backend is unsupported: {backend}")
         if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
             raise ConfigurationError(f"AI Stage {name} model is invalid")
-        if backend and model and session_policy == "main":
+        if (
+            backend
+            and model
+            and session_policy in EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES
+        ):
             raise ConfigurationError(
-                f"AI Stage {name} cannot combine backend/model override with session_policy=main"
+                f"AI Stage {name} cannot combine backend/model override "
+                f"with session_policy={session_policy}"
             )
 
     def __init__(self, spec: BaseStageSpec) -> None:
