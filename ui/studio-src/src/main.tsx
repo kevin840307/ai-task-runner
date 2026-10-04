@@ -107,6 +107,7 @@ type StudioNodeData = {
   label: string;
   subtitle?: string;
   stage?: Stage;
+  stageTypeTitle?: string;
   dynamicOutput?: string;
 };
 
@@ -160,7 +161,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     testing: "測試中…", stop_test: "停止測試", test_stopped: "測試已停止", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
     favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
-    copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
+    copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS 範例", test_fail: "FAIL 範例", test_error: "Mock ERROR",
     group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具",
     disconnected: "未連線", fail_soft_next: "下次 Pass",
     undo_none: "沒有可復原的 Workflow 修改。", undo_done: "已復原上一個 Workflow 草稿修改。",
@@ -177,7 +178,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     retry_exhaust_skip: "重試耗盡 → 下一個積木（Skip Review）", semantic_fail_limit: "Semantic FAIL 上限（max_failures）", unlimited: "不限制",
     semantic_fail_help: "允許連續 FAIL 此次數；下一次進入 Review 直接 PASS，不呼叫 Agent。PASS 或放行後 counter 清 0。",
     outgoing: "從這個積木出去", end_stop: "END（停止）", end_done: "END（完成）", next_default: "下一個積木（預設）", stop_default: "停止（預設）",
-    test_help: "測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 使用目前草稿設定；為避免測試掛死，local -1 在測試中最多 retry 2 次。正式 Runtime 全域設定不受影響。",
+    test_help: "先選測試模式，再選 Real Stage 的輸入範例；Mock ERROR 只驗證 technical retry 路徑，不要求模型故意失敗。測試不會沿 Workflow 繼續執行，正式 Runtime 設定不受影響。",
     test_input_placeholder: "輸入這個積木要接收的內容", test_input_help: "依 Stage 類型提供最小合法測試內容；只作用於 isolated Stage Test，不會修改 Workflow Prompt。",
     fixed_prompt: "固定 Prompt", ping_help: "不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。",
     mode_label: "模式", next_label: "下一個", retry_label: "測試 Retry", retry_exhausted_skip: "Retry 用盡 → Skip",
@@ -204,7 +205,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     testing: "Testing…", stop_test: "Stop Test", test_stopped: "Test stopped", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
     favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
-    copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
+    copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS example", test_fail: "FAIL example", test_error: "Mock ERROR",
     group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools",
     disconnected: "Disconnected", fail_soft_next: "Next entry passes",
     undo_none: "No Workflow change to undo.", undo_done: "Undid the previous Workflow draft change.",
@@ -221,7 +222,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     retry_exhaust_skip: "Retries exhausted → next Stage (Skip Review)", semantic_fail_limit: "Semantic FAIL limit (max_failures)", unlimited: "Unlimited",
     semantic_fail_help: "Allow this many consecutive FAIL verdicts; the next entry passes without calling the Agent. PASS or bypass resets the counter.",
     outgoing: "Outgoing", end_stop: "END (stop)", end_done: "END (complete)", next_default: "Next Stage (default)", stop_default: "Stop (default)",
-    test_help: "Test only the current Stage/agent; it does not continue through the Workflow. Real Stage uses the current draft. For safety, local -1 is capped at 2 retries in Stage Test. Production global settings are unchanged.",
+    test_help: "Choose the test mode first, then an input example for Real Stage. Mock ERROR validates the technical retry path without asking the model to fail. The test never continues through the Workflow and does not change production Runtime settings.",
     test_input_placeholder: "Enter input for this Stage", test_input_help: "Uses minimal valid input for the Stage type. This isolated Stage Test does not modify the Workflow Prompt.",
     fixed_prompt: "Fixed Prompt", ping_help: "Uses no tools, does not read or modify the project, and only verifies agent transport.",
     mode_label: "Mode", next_label: "Next", retry_label: "Test Retry", retry_exhausted_skip: "Retries exhausted → Skip",
@@ -334,22 +335,16 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const s = data.stage!;
   const title = String(s.label || s.name);
   const dynamicRouter = s.type === "handoff";
-  const errorRetries = s.error_policy?.retries;
-  const reviewSemantic = s.type === "base" && s.profile === "review";
-  const reviewErrorSkip = reviewSemantic && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
-  const reviewMaxFailures = reviewSemantic && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type} ${s.type === "base" ? `profile-${String(s.profile || "generic")}` : ""}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
-        <span className="stage-type">{s.type === "base" && s.profile ? `AI · ${String(s.profile)}` : (STAGE_META[s.type]?.title || String(s.type || "Stage"))}</span>
+        <span className="stage-type">{data.stageTypeTitle || String(s.type || "Stage")}</span>
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-stage-meta">
         {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">{designerText("disconnected")}</span>}
-        {reviewErrorSkip && <span>ERR×{errorRetries} → Skip</span>}
-        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → {designerText("fail_soft_next")}</span>}
         {dynamicRouter && <span>{(s.targets || []).length} targets</span>}
         {data.dynamicOutput && <span className="dynamic-chip">Dynamic · {data.dynamicOutput}</span>}
       </div>
@@ -376,50 +371,22 @@ function stageByName(visual: Visual, name: string) {
   return visual.stages.find((s) => s.name === name);
 }
 
-const STAGE_META: Record<string, { title: string; description: string }> = {
-  plan: { title: "Plan", description: "Plan work and expand a dynamic child Workflow at runtime" },
-  ai_validator: { title: "AI Validator", description: "Independent AI validation with optional voting" },
-  handoff: { title: "Handoff", description: "Dynamically choose the next allowed Stage" },
-  command: { title: "Command", description: "Run an external command or validator" },
-  base: { title: "AI Stage", description: "General AI Stage" },
-};
-
 const PALETTE_SECTIONS = [
-  { id: "build", types: ["plan", "base"], icon: "✦" },
-  { id: "validate", types: ["ai_validator"], icon: "✓" },
-  { id: "handoff", types: ["handoff"], icon: "↔" },
-  { id: "tools", types: ["command"], icon: "›" },
+  { id: "build", icon: "✦" },
+  { id: "validate", icon: "✓" },
+  { id: "handoff", icon: "↔" },
+  { id: "tools", icon: "›" },
 ];
 function catalogStageMeta(catalog: Catalog | null, type: string) {
   const catalogMeta = catalog?.stage_types?.[type];
-  const fallback = STAGE_META[type];
   return {
-    title: String(catalogMeta?.title || fallback?.title || type),
-    description: String(catalogMeta?.description || fallback?.description || ""),
-    category: String(catalogMeta?.category || (PALETTE_SECTIONS.find((section) => section.types.includes(type))?.id ?? "extensions")),
+    title: String(catalogMeta?.title || type),
+    description: String(catalogMeta?.description || ""),
+    category: String(catalogMeta?.category || "extensions"),
   };
 }
 
-const PALETTE_PREF_KEY = "workflow-designer.palette:v1";
 const SNAP_PREF_KEY = "workflow-designer.snap:v1";
-type PalettePrefs = { favorites: string[]; recent: string[]; collapsed: string[] };
-
-function readPalettePrefs(): PalettePrefs {
-  try {
-    const raw = JSON.parse(localStorage.getItem(PALETTE_PREF_KEY) || "{}");
-    return {
-      favorites: Array.isArray(raw.favorites) ? raw.favorites.filter((v: unknown) => typeof v === "string") : [],
-      recent: Array.isArray(raw.recent) ? raw.recent.filter((v: unknown) => typeof v === "string").slice(0, 5) : [],
-      collapsed: Array.isArray(raw.collapsed) ? raw.collapsed.filter((v: unknown) => typeof v === "string") : [],
-    };
-  } catch {
-    return { favorites: [], recent: [], collapsed: [] };
-  }
-}
-
-function writePalettePrefs(prefs: PalettePrefs): void {
-  try { localStorage.setItem(PALETTE_PREF_KEY, JSON.stringify(prefs)); } catch { /* local-only convenience */ }
-}
 function readSnapPreference(): boolean {
   try { return localStorage.getItem(SNAP_PREF_KEY) === "1"; } catch { return false; }
 }
@@ -619,6 +586,14 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         label: String(s.label || s.name),
         subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
+        stageTypeTitle: (() => {
+          const stageMeta = catalog?.stage_types?.[s.type];
+          const profile = s.type === "base" ? String(s.profile || "") : "";
+          const profileTitle = profile ? stageMeta?.profiles?.[profile]?.title : "";
+          return profileTitle
+            ? `${String(stageMeta?.title || s.type)} · ${String(profileTitle)}`
+            : String(stageMeta?.title || s.type || "Stage");
+        })(),
         dynamicOutput: (() => {
           const kind = String(s.produces || catalog?.stage_types?.[s.type]?.result_kind || "");
           return kind === "tasks" || kind === "stages" ? kind : "";
@@ -903,7 +878,6 @@ function App() {
   const [pathTestError, setPathTestError] = useState("");
   const [pathTesting, setPathTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
   const [snapEnabled, setSnapEnabled] = useState(readSnapPreference());
   const [addStageOpen, setAddStageOpen] = useState(false);
   const [pendingEdgeCreate, setPendingEdgeCreate] = useState<PendingEdgeCreate | null>(null);
@@ -1569,38 +1543,7 @@ function App() {
     setMessage(`${tx("stage_added")} · ${name}`);
   }
 
-  function rememberPaletteStage(stageType: string) {
-    setPalettePrefs((current) => {
-      const next = { ...current, recent: [stageType, ...current.recent.filter((item) => item !== stageType)].slice(0, 5) };
-      writePalettePrefs(next);
-      return next;
-    });
-  }
-
-  function toggleFavoriteStage(stageType: string) {
-    setPalettePrefs((current) => {
-      const favorites = current.favorites.includes(stageType)
-        ? current.favorites.filter((item) => item !== stageType)
-        : [stageType, ...current.favorites];
-      const next = { ...current, favorites };
-      writePalettePrefs(next);
-      return next;
-    });
-  }
-
-  function togglePaletteSection(sectionId: string) {
-    setPalettePrefs((current) => {
-      const collapsed = current.collapsed.includes(sectionId)
-        ? current.collapsed.filter((item) => item !== sectionId)
-        : [...current.collapsed, sectionId];
-      const next = { ...current, collapsed };
-      writePalettePrefs(next);
-      return next;
-    });
-  }
-
   async function addStage(stageType = "base", position?: { x: number; y: number }) {
-    rememberPaletteStage(stageType);
     const hasPrompt = Boolean(
       catalog?.stage_types?.[stageType]?.options?.some((option) => option.name === "prompt")
     );
@@ -1911,24 +1854,17 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           {(() => {
             const q = paletteQuery.trim().toLowerCase();
             const allTypes = Object.keys(catalog?.stage_types || {});
-            const knownTypes = new Set(allTypes.filter((type) => catalogStageMeta(catalog, type).category !== "extensions"));
             const matches = (type: string) => {
               if (!q) return true;
               const meta = catalogStageMeta(catalog, type);
-              return [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
+              return [type, meta.title, meta.description].some((value) => String(value || "").toLowerCase().includes(q));
             };
             const item = (type: string, icon = "◇") => {
               const meta = catalogStageMeta(catalog, type);
-              const favorite = palettePrefs.favorites.includes(type);
               return <div key={type} className="palette-item" draggable={!busy} title={meta.description}
                 onDragStart={(event) => dragStage(event, type)}>
                 <span className={`palette-icon type-${type}`} aria-hidden="true">{icon}</span>
                 <span className="palette-copy"><strong>{meta.title}</strong></span>
-                <button type="button" className={`palette-favorite ${favorite ? "active" : ""}`} disabled={busy}
-                  aria-label={favorite ? `Unfavorite ${meta.title}` : `Favorite ${meta.title}`}
-                  title={favorite ? "Remove favorite" : "Favorite"}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => { event.stopPropagation(); toggleFavoriteStage(type); }}>{favorite ? "★" : "☆"}</button>
                 <button type="button" className="palette-quick-add" disabled={busy}
                   aria-label={`Add ${meta.title}`} title={`Add ${meta.title}`}
                   onMouseDown={(event) => event.stopPropagation()}
@@ -1936,32 +1872,26 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>;
             };
             const groups: { id: string; title: string; icon: string; types: string[] }[] = [];
-            const favoriteTypes = palettePrefs.favorites.filter((type) => allTypes.includes(type) && matches(type));
-            if (favoriteTypes.length) groups.push({ id: "favorites", title: tx("favorites"), icon: "★", types: favoriteTypes });
-            const recentTypes = palettePrefs.recent.filter((type) => allTypes.includes(type) && !favoriteTypes.includes(type) && matches(type));
-            if (recentTypes.length) groups.push({ id: "recent", title: tx("recent"), icon: "↺", types: recentTypes });
             PALETTE_SECTIONS.forEach((section) => {
               const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === section.id && matches(type));
               if (types.length) groups.push({ id: section.id, title: tx(`group_${section.id}`), icon: section.icon, types });
             });
-            const customCategories = Array.from(new Set(allTypes.map((type) => catalogStageMeta(catalog, type).category)
-              .filter((category) => category && category !== "extensions" && !PALETTE_SECTIONS.some((section) => section.id === category))));
+            const customCategories = Array.from(new Set(
+              allTypes.map((type) => catalogStageMeta(catalog, type).category)
+                .filter((category) => category && category !== "extensions" && !PALETTE_SECTIONS.some((section) => section.id === category))
+            ));
             customCategories.forEach((category) => {
               const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === category && matches(type));
               if (types.length) groups.push({ id: `plugin:${category}`, title: category, icon: "◇", types });
             });
-            const extensionTypes = allTypes.filter((type) => !knownTypes.has(type) && matches(type));
+            const extensionTypes = allTypes.filter((type) => catalogStageMeta(catalog, type).category === "extensions" && matches(type));
             if (extensionTypes.length) groups.push({ id: "extensions", title: tx("extensions"), icon: "◇", types: extensionTypes });
-            return groups.map((group) => {
-              const collapsed = !q && palettePrefs.collapsed.includes(group.id);
-              return <div className="palette-section" key={group.id}>
-                <button type="button" className="palette-section-head" onClick={() => togglePaletteSection(group.id)}
-                  aria-expanded={!collapsed}>
-                  <span><i className={`palette-chevron ${collapsed ? "collapsed" : "expanded"}`} aria-hidden="true" />{group.title}</span><small>{group.types.length}</small>
-                </button>
-                {!collapsed && <div className="palette-list">{group.types.map((type) => item(type, group.icon))}</div>}
-              </div>;
-            });
+            return groups.map((group) => <div className="palette-section" key={group.id}>
+              <div className="palette-section-head static">
+                <span>{group.title}</span><small>{group.types.length}</small>
+              </div>
+              <div className="palette-list">{group.types.map((type) => item(type, group.icon))}</div>
+            </div>);
           })()}
           <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ / = quick add · Enter = edit · Ctrl+Z/Y = undo/redo</small></div>
         </aside>
