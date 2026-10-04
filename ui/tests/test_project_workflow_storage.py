@@ -29,7 +29,7 @@ def _state(tmp_path: Path) -> tuple[UIState, Path]:
         encoding="utf-8",
     )
     (tmp_path / "tool/workflow_catalog.py").write_text(
-        "import json; print(json.dumps({'stage_types': {'base': {'profiles': {'generic': {'defaults': {'prompt': 'common/generic.md'}}, 'execute': {'defaults': {'prompt': 'common/execution.md'}}, 'review': {'defaults': {'prompt': 'common/review.md'}}}, 'options': []}}, 'node_options': {}}))\n",
+        "import json; print(json.dumps({'stage_types': {'base': {'profiles': {'generic': {'defaults': {'prompt': 'common/generic.md'}}, 'execute': {'defaults': {'prompt': 'common/execution.md'}}, 'review': {'defaults': {'prompt': 'common/review.md'}}}, 'options': [{'name':'backend','type':'enum','values':['qwen'],'default':''},{'name':'model','type':'str','default':''},{'name':'session_policy','type':'enum','values':['auto','main','role','fresh'],'default':'auto'}]}}, 'node_options': {}}))\n",
         encoding="utf-8",
     )
     project = tmp_path / "project"
