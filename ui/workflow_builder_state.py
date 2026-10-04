@@ -335,9 +335,8 @@ class WorkflowBuilderMixin:
 
     def studio_generate_save(self, project: Path | None, job_id: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
         with self._builder_lock, self._edit_lock:
-            # Publishing mutates a real Workflow/Prompt asset, so keep the existing
-            # global edit guard here even though draft generation itself is independent.
-            self._require_editable()
+            # Active runs already use frozen Workflow/Prompt snapshots.
+            # Publishing this asset therefore affects only future runs.
             job_root = self._builder_job_root(job_id)
             status = self._read_json(job_root / "status.json") or {}
             if status.get("state") != "ready":
