@@ -81,6 +81,9 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "test_examples": deepcopy(
                 getattr(stage_class, "ui_test_examples", None) or DEFAULT_TEST_EXAMPLES
             ),
+            "constraints": deepcopy(
+                getattr(stage_class, "ui_constraints", None) or {}
+            ),
             "options": [
                 _field_info(item, order=index)
                 for index, item in enumerate(fields(stage_class.spec_class))
