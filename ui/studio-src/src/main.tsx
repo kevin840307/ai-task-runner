@@ -2357,7 +2357,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {pathTestError && <p className="test-error" role="alert">{pathTestError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{String(draft.backend || testBackend)}</strong></span>{draft.model && <span>Model：<strong>{String(draft.model)}</strong></span>}
                     {testMode === "stage" && <span>{tx("next_label")}：<strong>{testResult.next}</strong></span>}
                     {testMode === "stage" && testResult.test_retry_policy && <span>{tx("retry_label")}：<strong>{testResult.test_retry_policy}</strong></span>}
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">{tx("retry_exhausted_skip")}</span>}</div>
