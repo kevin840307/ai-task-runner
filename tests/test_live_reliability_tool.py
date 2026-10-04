@@ -2441,11 +2441,50 @@ def test_dynamic_session_main_gate_forces_two_main_role_visits(tmp_path: Path):
 
 
 
-def test_dynamic_session_probe_accepts_completed_primary_session_cleanup():
-    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    assert 'len(main_results) < 2 or len(set(main_results[-2:])) != 1' in source
-    assert 'completed Dynamic Handoff run unexpectedly retained the primary Runner session' in source
-    assert 'state.get("ai_session_id")' in source
+def test_dynamic_session_probe_accepts_completed_session_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    evidence = {
+        "main_role": ["main-session", "main-session"],
+        "stable_role": ["role-session", "role-session"],
+        "fresh_role": ["fresh-session"],
+    }
+    monkeypatch.setattr(
+        live,
+        "stage_result_sessions",
+        lambda project, stage: evidence[stage],
+    )
+
+    live._assert_dynamic_session_policy_evidence(
+        tmp_path,
+        {"ai_session_id": "", "stage_sessions": {}},
+    )
+
+
+def test_dynamic_session_probe_rejects_completed_stale_session_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    evidence = {
+        "main_role": ["main-session", "main-session"],
+        "stable_role": ["role-session", "role-session"],
+        "fresh_role": ["fresh-session"],
+    }
+    monkeypatch.setattr(
+        live,
+        "stage_result_sessions",
+        lambda project, stage: evidence[stage],
+    )
+
+    with pytest.raises(RuntimeError, match="retained active-only session state"):
+        live._assert_dynamic_session_policy_evidence(
+            tmp_path,
+            {
+                "ai_session_id": "",
+                "stage_sessions": {"stable_role": "role-session"},
+            },
+        )
 
 
 def test_finish_run_clears_primary_session_by_contract(tmp_path: Path):
