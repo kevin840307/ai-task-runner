@@ -2377,3 +2377,25 @@ def test_timeout_probe_budget_reaches_fresh_session_rotation(tmp_path: Path):
     assert DEFAULT_PER_SESSION_ATTEMPTS == 2
     # initial attempt + retry #1 reaches the per-session cap; retry #2 is
     # therefore the Fresh Session attempt that timeout_probe expects to observe.
+
+
+
+def test_review_failure_routing_freeze_preserves_validator_fail_route(tmp_path: Path):
+    from runner.resources import freeze_workflow
+    from runner.workflow.loader import load_workflow
+
+    project = tmp_path / "project"
+    project.mkdir()
+    workflow_file = project / "workflow.yaml"
+    workflow_file.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
+
+    loaded = load_workflow(workflow_file)
+    frozen = freeze_workflow(loaded, project, ".ai-task-runner")
+    by_name = {item["name"]: item for item in frozen}
+
+    assert by_name["validate_file"]["routes"] == {"fail": "execute"}
+    snapshot = json.loads(
+        (project / ".ai-task-runner" / "workflow.snapshot.json").read_text(encoding="utf-8")
+    )
+    snapshot_by_name = {item["name"]: item for item in snapshot}
+    assert snapshot_by_name["validate_file"]["routes"] == {"fail": "execute"}
