@@ -763,10 +763,10 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     [draft_key, local_draft],
                 )
                 page.reload()
-                page.get_by_text("Unsaved local draft found").wait_for(state="visible")
+                page.get_by_text("本機草稿").wait_for(state="visible")
                 recovery_box = page.locator(".workflow-draft-recovery").bounding_box()
                 assert recovery_box and recovery_box["height"] <= 48
-                page.get_by_role("button", name="Restore Draft").click()
+                page.get_by_role("button", name="還原").click()
                 page.locator('.react-flow__node[data-id="execute"]').get_by_text("Recovered Local Draft").wait_for(state="visible")
                 assert page.locator(".unsaved-badge").is_visible()
                 assert workflow.read_text(encoding="utf-8") == canonical_before_recovery
