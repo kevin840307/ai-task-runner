@@ -2532,15 +2532,64 @@ def test_review_failure_routing_freeze_preserves_validator_fail_route(tmp_path: 
 
 
 
+def test_api_rotation_contract_keeps_healthy_same_session_without_rotation():
+    live._assert_controlled_api_session_rotation("session-A", False, [])
+
+
+def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
+    live._assert_controlled_api_session_rotation(
+        "session-A",
+        True,
+        [
+            {
+                "type": "runner.recovery",
+                "action": "retry",
+                "retry_mode": "recover",
+            },
+            {
+                "type": "runner.session",
+                "action": "fresh",
+                "previous_session": "session-A",
+            },
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("events", "message"),
+    [
+        (
+            [{"type": "runner.recovery", "action": "retry", "retry_mode": "recover"}],
+            "without controlled Runner fresh-session evidence",
+        ),
+        (
+            [{"type": "runner.session", "action": "fresh", "previous_session": "session-A"}],
+            "without runner.recovery mode=recover evidence",
+        ),
+        (
+            [
+                {"type": "runner.recovery", "action": "retry", "retry_mode": "recover"},
+                {"type": "runner.session", "action": "fresh", "previous_session": "other"},
+            ],
+            "without matching previous_session evidence",
+        ),
+    ],
+)
+def test_api_rotation_contract_rejects_uncontrolled_session_replacement(events, message):
+    with pytest.raises(RuntimeError, match=message):
+        live._assert_controlled_api_session_rotation("session-A", True, events)
+
+
 def test_long_disconnect_probe_allows_only_controlled_fresh_rotation():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
 
     assert "if disconnect:" in source
     assert "session_rotated = True" in source
-    assert "long API disconnect replaced the session without controlled Runner fresh-session evidence" in source
+    assert "_assert_controlled_api_session_rotation" in source
+    assert "API outage replaced the session without controlled Runner fresh-session evidence" in source
     assert "runner.session" in source
     assert "mode=recover evidence" in source
-    assert "short API outage unexpectedly rotated the healthy session" in source
+    assert "short API outage unexpectedly rotated the healthy session" not in source
     assert "bounded-session recovery probe" in source
 
 
