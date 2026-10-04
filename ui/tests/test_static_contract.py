@@ -106,8 +106,9 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("/api/environment/check", self.js)
 
     def test_clear_history_is_disabled_while_selected_project_runs(self):
-        self.assertIn('$("clearHistoryButton").disabled = Boolean(runtime.running)', self.js)
-        self.assertIn('if (!state.project || state.runtime?.running) return;', self.js)
+        self.assertIn('$("clearHistoryButton").disabled = isRunning', self.js)
+        self.assertIn('const isRunning = Boolean(actions.stop)', self.js)
+        self.assertIn('if (!state.project || state.runtime?.actions?.stop) return;', self.js)
 
     def test_chat_history_and_floating_composer_layout_contract(self):
         css = "".join(self.runner_css.split())
@@ -162,10 +163,9 @@ class StaticContractTests(unittest.TestCase):
 
 
     def test_runtime_status_vocabulary_distinguishes_recovery_and_attention(self):
-        self.assertIn('return "Recovering"', self.app_js)
-        self.assertIn('return "Needs Attention"', self.app_js)
-        self.assertIn('recovering: "Recovering"', self.app_js)
-        self.assertIn('needs_attention: "Needs Attention"', self.app_js)
+        self.assertIn('runtime?.view?.label || runtime?.status || "Idle"', self.app_js)
+        self.assertIn('status === "recovering"', self.app_js)
+        self.assertIn('status === "needs_attention"', self.app_js)
         self.assertNotIn('return "Interrupted"', self.app_js)
 
 
