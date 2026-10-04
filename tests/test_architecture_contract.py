@@ -116,3 +116,9 @@ def test_flow_and_executor_responsibility_boundaries_stay_separate():
         "max_cycles",
     ):
         assert token not in executor_source
+
+
+def test_stage_backend_override_does_not_inherit_other_backend_model():
+    client = (ROOT / "runner" / "agent" / "client.py").read_text(encoding="utf-8")
+    assert "inherited_model" not in client
+    assert 'effective_model = str(model_override or "").strip()' in client
