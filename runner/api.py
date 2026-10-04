@@ -456,7 +456,11 @@ def _report_retry(
     callback: EventHandler | None,
     message: str,
 ) -> None:
-    event = retry_event(message)
+    event = retry_event(message, layer="runner_api")
+    append_bounded_log(
+        Path(request.project_root, request.work_dir, "log.txt").resolve(),
+        json.dumps(event, ensure_ascii=False) + "\n",
+    )
     if callback is not None:
         try:
             callback(event)
