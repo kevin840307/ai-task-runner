@@ -177,7 +177,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     layout_reset_done: "已重設畫布位置；Workflow 執行順序沒有變動。", reset_layout_title: "只重設畫布位置，不變更 YAML",
     fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）",
     draft_recovery_title: "本機草稿", draft_recovery_saved: "儲存於", draft_recovery_unchanged: "尚未寫入 Workflow",
-    restore_draft: "還原", discard_draft: "捨棄"
+    restore_draft: "還原", discard_draft: "捨棄",
+    stage_backend: "Backend", stage_model: "Model", stage_backend_help: "留空沿用全域 Backend；選項來自 backend registry。", stage_model_help: "留空沿用該 Backend / 全域模型設定。"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
@@ -220,7 +221,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     layout_reset_done: "Canvas layout reset; Workflow execution order is unchanged.", reset_layout_title: "Reset canvas positions only; do not change YAML",
     fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)",
     draft_recovery_title: "Local draft", draft_recovery_saved: "Saved", draft_recovery_unchanged: "Workflow unchanged",
-    restore_draft: "Restore", discard_draft: "Discard"
+    restore_draft: "Restore", discard_draft: "Discard",
+    stage_backend: "Backend", stage_model: "Model", stage_backend_help: "Leave blank to inherit the global backend; choices come from the backend registry.", stage_model_help: "Leave blank to inherit the backend/global model configuration."
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -2231,7 +2233,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   ) : (
                     <Field
                       key={option.name}
-                      option={option}
+                      option={{
+                        ...option,
+                        description: option.description || (
+                          option.name === "backend" ? tx("stage_backend_help")
+                          : option.name === "model" ? tx("stage_model_help")
+                          : undefined
+                        ),
+                      }}
                       value={draft[option.name]}
                       onChange={(value) => editDraft({ ...draft, [option.name]: value })}
                     />
