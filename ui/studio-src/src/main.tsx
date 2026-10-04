@@ -81,6 +81,7 @@ type Catalog = {
 type BackendCatalog = {
   default: string;
   backends: string[];
+  models: Record<string, string[]>;
 };
 
 type StudioFile = {
@@ -179,8 +180,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）",
     draft_recovery_title: "本機草稿", draft_recovery_saved: "儲存於", draft_recovery_unchanged: "尚未寫入 Workflow",
     restore_draft: "還原", discard_draft: "捨棄",
-    stage_backend_help: "留空沿用全域 Backend；選項來自 backend registry。", stage_model_help: "留空沿用該 Backend / 全域模型設定。",
-    stage_session_main_conflict: "Stage 覆寫 Backend / Model 時不能使用 main session。", stage_session_auto: "此 Stage 覆寫 Backend / Model，Session policy 已恢復為該 Stage 預設值。"
+    stage_backend_help: "Stage-level Backend 與 Model 必須一起設定；只作用於目前 Stage。", stage_model_help: "只能從所選 Backend 的可用模型清單選擇；只作用於目前 Stage。",
+    stage_session_main_conflict: "Stage 覆寫 Backend / Model 時不能使用 main session。", stage_session_default: "此 Stage 覆寫 Backend / Model，Session policy 已恢復為該 Stage 預設值。"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
@@ -223,8 +224,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)",
     draft_recovery_title: "Local draft", draft_recovery_saved: "Saved", draft_recovery_unchanged: "Workflow unchanged",
     restore_draft: "Restore", discard_draft: "Discard",
-    stage_backend_help: "Leave blank to inherit the global backend; choices come from the backend registry.", stage_model_help: "Leave blank to inherit the backend/global model configuration.",
-    stage_session_main_conflict: "A Stage backend/model override cannot use the main session.", stage_session_auto: "Session policy restored to this Stage default because it overrides backend/model."
+    stage_backend_help: "Stage backend and model must be configured together and apply only to this Stage.", stage_model_help: "Choose only from models exposed by the selected backend; the choice applies only to this Stage.",
+    stage_session_main_conflict: "A Stage backend/model override cannot use the main session.", stage_session_default: "Session policy restored to this Stage default because it overrides backend/model."
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -893,7 +894,7 @@ function App() {
   const [yamlOriginal, setYamlOriginal] = useState("");
   const [yamlError, setYamlError] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [backendCatalog, setBackendCatalog] = useState<BackendCatalog>({ default: "", backends: [] });
+  const [backendCatalog, setBackendCatalog] = useState<BackendCatalog>({ default: "", backends: [], models: {} });
   const [nodes, setNodes] = useState<Node<StudioNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selected, setSelected] = useState<string>("");
@@ -994,7 +995,9 @@ function App() {
         api<StudioFile>(endpoint("/api/studio/file")),
         api<Catalog>("/api/workflow/catalog"),
         api<{ prompts?: StudioFile[] }>(filesUrl),
-        api<BackendCatalog>("/api/backends"),
+        api<BackendCatalog>(query().project
+          ? `/api/backends?project=${encodeURIComponent(query().project)}`
+          : "/api/backends"),
       ]);
       const canonicalYaml = String(file.content || "");
       const localDraft = readWorkflowDraft(v.id);
@@ -1135,6 +1138,10 @@ function App() {
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
   const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name));
+  const backendOption = executionTargetOptions.find((o) => o.name === "backend");
+  const sessionPolicyOption = executionTargetOptions.find((o) => o.name === "session_policy");
+  const stageBackend = String(draft?.backend || "").trim();
+  const stageModels = stageBackend ? (backendCatalog.models?.[stageBackend] || []) : [];
   const parameterOptions = options.filter((o) => {
     if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
     return true;
@@ -1279,7 +1286,7 @@ function App() {
       && draft.session_policy === "main"
     ) {
       delete next.session_policy;
-      setMessage(tx("stage_session_auto"));
+      setMessage(tx("stage_session_default"));
     }
     editDraft(next);
   }
@@ -2230,21 +2237,46 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 </section>
                 {executionTargetOptions.length > 0 && <section className="stage-form-section stage-execution-target">
                   <div className="stage-form-section-head"><strong>{tx("section_execution")}</strong><small>Backend / Model / Session</small></div>
-                  {executionTargetOptions.map((option) => (
-                    <Field
-                      key={option.name}
-                      option={{
-                        ...option,
-                        description: option.description || (
-                          option.name === "backend" ? tx("stage_backend_help")
-                          : option.name === "model" ? tx("stage_model_help")
-                          : undefined
-                        ),
-                      }}
-                      value={draft[option.name]}
-                      onChange={(value) => editDraftOption(option, value)}
-                    />
-                  ))}
+                  {backendOption && <label>
+                    <span>backend</span>
+                    <select value={stageBackend} onChange={(event) => {
+                      const backend = event.target.value;
+                      const next = { ...draft };
+                      if (!backend) {
+                        delete next.backend;
+                        delete next.model;
+                      } else {
+                        next.backend = backend;
+                        if (!(backendCatalog.models?.[backend] || []).includes(String(next.model || ""))) delete next.model;
+                      }
+                      if (next.session_policy === "main" && backend) {
+                        delete next.session_policy;
+                        setMessage(tx("stage_session_default"));
+                      }
+                      editDraft(next);
+                    }}>
+                      <option value="">Use global backend/model</option>
+                      {(backendOption.values || backendCatalog.backends).map((value) => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                    <small className="effective-value">{tx("stage_backend_help")}</small>
+                  </label>}
+                  {backendOption && <label>
+                    <span>model</span>
+                    <select
+                      value={String(draft.model || "")}
+                      disabled={!stageBackend || stageModels.length === 0}
+                      onChange={(event) => editDraft({ ...draft, model: event.target.value })}
+                    >
+                      <option value="">{stageBackend ? (stageModels.length ? "Select model" : "No models available") : "Select backend first"}</option>
+                      {stageModels.map((value) => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                    <small className="effective-value">{tx("stage_model_help")}</small>
+                  </label>}
+                  {sessionPolicyOption && <Field
+                    option={sessionPolicyOption}
+                    value={draft.session_policy}
+                    onChange={(value) => editDraftOption(sessionPolicyOption, value)}
+                  />}
                 </section>}
                 <section className="stage-form-section">
                   <div className="stage-form-section-head"><strong>{tx("parameters")}</strong><small>{parameterOptions.length} fields</small></div>
