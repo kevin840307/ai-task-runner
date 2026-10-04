@@ -818,6 +818,7 @@ flow:
 
                 page.locator('.react-flow__node[data-id="ai_stage"]').wait_for(state="attached")
                 page.locator('.react-flow__edge[data-id="after:pass:ai_stage"]').wait_for(state="attached")
+                page.locator(".modal-close-button").click()
                 _save_editor(page)
 
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
@@ -837,6 +838,20 @@ flow:
                 payload = json.loads(dryrun.stdout)
                 assert [item["stage"] for item in payload["transitions"]] == ["after", "ai_stage"]
                 assert payload["completed"] is True
+
+                # Run-from-here / path test reuses saved canonical Workflow +
+                # workflow_dryrun/FlowEngine and must not execute the prior Stage.
+                page.locator('.react-flow__node[data-id="ai_stage"]').dblclick()
+                page.get_by_role("tab", name="Test").click()
+                path_button = page.get_by_role("button", name="Test path to END")
+                assert path_button.is_enabled()
+                path_button.click()
+                page.locator(".path-test-result").wait_for(state="visible")
+                assert page.locator(".path-test-result", has_text="CLOSED").count() == 1
+                path_text = page.locator(".path-test-result pre").inner_text()
+                assert "ai_stage" in path_text
+                assert "after" not in path_text
+
                 assert not errors
                 browser.close()
         finally:
