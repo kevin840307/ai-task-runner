@@ -64,3 +64,10 @@ def test_structured_output_repair_cannot_rotate_sessions():
     assert "_structured_fresh_ask" not in base_stage
     assert "structured_retries" in base_stage
     assert "StageExecutor" in structured
+
+
+def test_schema_uses_canonical_profile_registry_instead_of_redeclaring_profile_names():
+    schema = (ROOT / "runner" / "workflow" / "schema.py").read_text(encoding="utf-8")
+    assert "profile_names()" in schema
+    assert '{"generic", "execute", "review"}' not in schema
+    assert "{None, \"generic\", \"execute\", \"review\"}" not in schema
