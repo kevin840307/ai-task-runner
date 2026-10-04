@@ -313,9 +313,10 @@ flow:
                 # and inherits the default auto policy rather than writing redundant YAML.
                 session_select.select_option("main")
                 backend_select.select_option("opencode")
-                assert session_select.input_value() == ""
+                assert session_select.input_value() == "main"
                 assert model_select.is_enabled()
                 model_select.select_option("provider/model-x")
+                assert session_select.input_value() == ""
                 page.locator(".modal-close-button").click()
                 _save_editor(page)
 
