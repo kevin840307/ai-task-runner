@@ -849,7 +849,19 @@ class WorkflowStudioMixin:
             raise ValueError("Stage produces must be tasks or stages when specified")
         backend = str(fields.get("backend") or "").strip()
         if backend:
-            known_backends = set(self.backend_catalog().get("backends") or [])
+            options = (
+                ((self.workflow_catalog().get("stage_types") or {}).get("base") or {}).get("options")
+                or []
+            )
+            backend_option = next(
+                (item for item in options if str(item.get("name") or "") == "backend"),
+                {},
+            )
+            known_backends = {
+                str(value) for value in (backend_option.get("values") or []) if str(value)
+            }
+            if not known_backends:
+                known_backends = set(self.backend_catalog().get("backends") or [])
             if backend not in known_backends:
                 raise ValueError(f"Stage backend is unsupported: {backend}")
         model = str(fields.get("model") or "").strip()
