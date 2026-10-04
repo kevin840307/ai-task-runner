@@ -2399,3 +2399,16 @@ def test_review_failure_routing_freeze_preserves_validator_fail_route(tmp_path: 
     )
     snapshot_by_name = {item["name"]: item for item in snapshot}
     assert snapshot_by_name["validate_file"]["routes"] == {"fail": "execute"}
+
+
+
+def test_long_disconnect_probe_allows_only_controlled_fresh_rotation():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+
+    assert "if disconnect:" in source
+    assert "session_rotated = True" in source
+    assert "long API disconnect replaced the session without controlled Runner fresh-session evidence" in source
+    assert "runner.session" in source
+    assert "mode=recover evidence" in source
+    assert "short API outage unexpectedly rotated the healthy session" in source
+    assert "bounded-session recovery probe" in source
