@@ -199,12 +199,19 @@ class BaseStage:
     def _run_once(self, ctx: StageContext, previous: StageResult | None, client) -> StageResult:
         spec = self.spec
         backend_mode = self._backend_mode(ctx)
-        configure_ai_client(
-            client,
-            ctx.config,
-            backend_mode,
-            allow_project_read=spec.allow_project_read,
-        )
+        if client is ctx.ai_client:
+            configure_ai_client(
+                client,
+                ctx.config,
+                backend_mode,
+                allow_project_read=spec.allow_project_read,
+            )
+        else:
+            client.set_runtime(
+                backend_mode,
+                allow_project_read=spec.allow_project_read,
+                sandbox=getattr(ctx.config, "sandbox", False),
+            )
         try:
             prompt = self._prompt(ctx, previous, client)
 
@@ -320,6 +327,7 @@ class BaseStage:
                     ctx.work / "debug",
                     mode=self._backend_mode(ctx),
                     timeout=self._timeout(ctx),
+                    allow_project_read=self.spec.allow_project_read,
                     backend_override=backend_override,
                     model_override=str(self.spec.model or "").strip(),
                     session_id=(
