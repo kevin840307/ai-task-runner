@@ -799,13 +799,17 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 
 RELEASE GATES
 -------------
-[ ] Current HEAD deterministic CI green:
-    - Historical baseline: exact code HEAD 2ed930807ab73ebcb18ac84e2ca2b7804d8120b1 passed
-      Ubuntu Python, Windows Python, Playwright/Chromium Browser E2E, Studio build and committed-bundle verify
-      in GitHub Actions run 37193711193.
-    - Current code HEAD is 685253c670243b748a1dff2b029a6f806f05dc75 after long-failure live-harness hardening.
-    - GitHub Actions run 37200002683 is pending; do not reuse the historical green result as current-HEAD evidence.
-    - Re-check all four jobs and replace this block with the exact green HEAD/run before marking complete.
+[x] Current deterministic CI green:
+    - Exact HEAD 5cea32157b873cb91c416f59984a0bda5c7fd20e passed all required deterministic gates
+      in GitHub Actions run 37200043096.
+    - Ubuntu Python: PASS.
+    - Windows Python: PASS.
+    - Playwright/Chromium Browser E2E: PASS.
+    - Studio build + committed-bundle verification: PASS.
+    - Commit 5cea32157b873cb91c416f59984a0bda5c7fd20e differs from implementation HEAD
+      685253c670243b748a1dff2b029a6f806f05dc75 only by todo.txt evidence maintenance, so no runtime/UI/test code
+      changed between the implementation HEAD and this exact green evidence HEAD.
+    - If any runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
