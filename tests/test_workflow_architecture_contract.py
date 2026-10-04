@@ -111,6 +111,7 @@ def test_studio_visual_is_the_single_stage_draft_source():
 
 def test_studio_graph_mutations_are_pure_draft_operations():
     editor = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
     for helper in (
         "addStageToVisual",
         "cloneStageWithoutConnections",
@@ -119,7 +120,11 @@ def test_studio_graph_mutations_are_pure_draft_operations():
         "disconnectResultEdges",
         "applyConnectionToVisual",
     ):
-        assert f"function {helper}" in editor
+        assert f"function {helper}" in draft
+        assert f"function {helper}" not in editor
+    assert 'from "./workflow-draft"' in editor
+    assert "from \"react\"" not in draft
+    assert "@xyflow/react" not in draft
     assert "syncGraphProjection" in editor
     assert "setNodes(g.nodes);" not in editor
     assert "setEdges(g.edges);" not in editor
@@ -133,3 +138,17 @@ def test_studio_backend_reuses_catalog_and_production_loader_schema():
     assert 'catalog.get("node_options")' in studio
     assert "_validate_workflow_before_write(path, updated)" in studio
     assert "_validate_workflow_before_write(path, candidate)" in studio
+
+
+def test_studio_source_split_stops_at_real_responsibility_boundary():
+    source = ROOT / "ui" / "studio-src" / "src"
+    draft = (source / "workflow-draft.ts").read_text(encoding="utf-8")
+    editor = (source / "main.tsx").read_text(encoding="utf-8")
+    assert "export type Stage" in draft
+    assert "export type Visual" in draft
+    assert 'export const START = "__start__"' in draft
+    assert 'export const END = "__end__"' in draft
+    assert "useState" not in draft
+    assert "useEffect" not in draft
+    assert "fetch(" not in draft
+    assert "function Designer" in editor or "function App" in editor
