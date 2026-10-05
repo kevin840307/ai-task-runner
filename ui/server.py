@@ -134,7 +134,11 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/projects/pick":
                 return self._pick_folder()
             if parsed.path == "/api/files/pick":
-                return self._pick_file(str(body.get("kind", "file")))
+                return self._pick_file(
+                    str(body.get("kind", "file")),
+                    project=str(body.get("project", "")),
+                    current=str(body.get("current", "")),
+                )
             if parsed.path == "/api/project/message":
                 project = self._project(body)
                 text = str(body.get("message", "")).strip()
@@ -325,23 +329,47 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"cancelled": True})
         return self._json({"cancelled": False, "path": str(Path(path).expanduser().resolve())})
 
-    def _pick_file(self, kind: str = "file") -> None:
+    def _pick_file(
+        self,
+        kind: str = "file",
+        *,
+        project: str = "",
+        current: str = "",
+    ) -> None:
         try:
             import tkinter as tk
             from tkinter import filedialog
+
+            initialdir = ""
+            current_path = Path(str(current or "")).expanduser()
+            if current_path.is_file():
+                initialdir = str(current_path.resolve().parent)
+            else:
+                project_path = Path(str(project or "")).expanduser()
+                if project_path.is_dir():
+                    project_path = project_path.resolve()
+                    prompt_root = project_path / ".ai-task-runner" / "assets" / "prompts"
+                    initialdir = str(
+                        prompt_root if kind == "markdown" and prompt_root.is_dir()
+                        else project_path
+                    )
+
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
             if kind == "python":
                 filetypes = [("Python validation", "*.py"), ("All files", "*.*")]
-                title = "Choose Python validation"
+                title = "Choose File Validator"
             elif kind == "markdown":
                 filetypes = [("Markdown prompt", "*.md"), ("Text prompt", "*.txt"), ("All files", "*.*")]
-                title = "Choose AI validation prompt"
+                title = "Choose AI Validator Prompt"
             else:
                 filetypes = [("All files", "*.*")]
                 title = "Choose file"
-            path = filedialog.askopenfilename(title=title, filetypes=filetypes)
+            options = {"title": title, "filetypes": filetypes}
+            if initialdir:
+                options["initialdir"] = initialdir
+            path = filedialog.askopenfilename(**options)
             root.destroy()
         except Exception as exc:
             raise ValueError(f"File picker unavailable: {exc}") from exc
