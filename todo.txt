@@ -717,6 +717,39 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Architecture regression forbids structured repair from regaining Fresh Session ownership.
 
 High-value runner work remaining:
+[ ] Finish mixed File Validator + AI Validator Prompt Run options layout.
+    - Current behavior after the first fix: both resources stack vertically and each resource card has independent two-row height.
+    - Remaining reproduced Browser E2E failure at 720x720:
+      validatorPicker x=235 while optionsPanel x=245, so the resource card still protrudes about 10px left of the Run options panel.
+    - Do not paper over this by weakening the bounding-box assertion.
+    - Find and remove the real layout/cascade owner causing the fixed left offset; keep the two cards vertically stacked.
+    - Acceptance:
+      * no overlap between File Validator and AI Validator Prompt,
+      * both cards fully inside the Run options panel,
+      * no horizontal viewport overflow,
+      * readable kind/name/Choose/clear controls,
+      * mixed layout verified at narrow desktop resolution by real Chromium bounding boxes.
+    - Keep this scoped to Chat Run options; do not add a new picker framework.
+
+[ ] Re-establish exact-HEAD deterministic CI after the mixed picker fix.
+    - Current source HEAD has changed after the previously green implementation HEAD, so the old exact-HEAD CI evidence is stale.
+    - Latest run 37324770650 status at review time:
+      * Studio build: PASS.
+      * Ubuntu Python: PASS.
+      * Browser E2E: FAIL only at mixed Run options bounding-box containment.
+      * Windows Python was still running when this TODO entry was written.
+    - After the layout fix, require a new exact-HEAD green run for Windows Python, Ubuntu Python,
+      Chromium Browser E2E and Studio build/bundle verification before updating the deterministic release gate.
+
+[ ] Re-run real-Qwen API disconnect probe from probe 34 after deterministic gates are green.
+    - The live harness now uses API_RECOVERY_VALIDATOR for API recovery probes only.
+    - It accepts only exact expected bytes, expected + LF, or expected + CRLF and reports actual bytes/length for any other mismatch.
+    - The strict general validator remains byte-exact, so global file-contract coverage was not relaxed.
+    - run_qwen_live_reliability_fail_start.bat defaults to probe 34 so the failed api-disconnect area can be resumed directly.
+    - Acceptance: api-disconnect passes with bounded Same/Fresh session recovery evidence and validate_file PASS;
+      any other content mismatch must remain a real failure.
+
+
 [x] Improved Chat validation resource picker UX for file / AI / mixed workflows.
     - File Validator and AI Validator Prompt share one context-aware browse flow and compact resource-row presentation.
     - Single-resource workflows remain compact; mixed workflows stack the two resource rows vertically instead of forcing
