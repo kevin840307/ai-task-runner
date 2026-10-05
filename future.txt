@@ -225,9 +225,9 @@ B. New Task from Chat - right-side sheet
 |      |                      |                                      |                       |
 | Chat | * Backend discussion | AI: I would check ...                | Fix backend loading   |
 | Lib  |   UI redesign        |                                      |                       |
-| Set  |                      |                                      | Workspace             |
-|      |                      |                                      | (*) Main              |
-|      |                      |                                      | ( ) Worktree [later]  |
+| Set  |                      |                                      | Execution path        |
+|      |                      |                                      | Main                  |
+|      |                      |                                      | Available             |
 |      |                      |                                      |                       |
 |      |                      |                                      | Workflow              |
 |      |                      |                                      | ralphy_ai_validate v  |
@@ -428,8 +428,9 @@ PHASE 2 - Task creation from Chat
     - Keep Chat visible while creating the Task.
     - Minimum fields:
       task title / goal,
-      workspace,
+      current execution path/status (Main in the initial release),
       Workflow.
+    - Do not render a workspace chooser until there is more than one supported workspace choice.
     - Advanced backend/model/etc. stays collapsed unless needed.
     - Prompt selection should normally come from Workflow/Stage configuration, not become another
       permanent top-level Task field.
@@ -487,7 +488,7 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - AI execution output,
     - review/validator results,
     - tests/results,
-    - existing allowed actions such as Stop / Resume / Rerun when valid,
+    - existing/defined allowed actions such as Stop / Continue / Resume / Rerun when valid,
     - composer for additional instructions to that Task.
 
 [ ] All Task actions must use the existing canonical runtime projection / allowed_actions.
