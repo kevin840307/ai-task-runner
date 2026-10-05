@@ -3440,3 +3440,85 @@ def test_batch_gates_forward_live_probe_selector_arguments():
     for name in ("qwen_live_reliability_24h.bat", "qwen_live_reliability_0_5h.bat"):
         text = (root / "tool" / name).read_text(encoding="utf-8")
         assert "%*" in text
+
+
+@pytest.mark.parametrize("suffix", ["", "\n", "\r\n"])
+def test_api_recovery_validator_accepts_only_line_ending_variants(
+    tmp_path: Path,
+    suffix: str,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "health.txt").write_text(live.EXPECTED + suffix, encoding="utf-8")
+    validator = project / "validation.py"
+    validator.write_text(live.API_RECOVERY_VALIDATOR, encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--project-root",
+            str(project),
+            "--state-file",
+            str(project / "state.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "VALIDATION_PASSED" in completed.stdout
+
+
+def test_api_recovery_validator_rejects_other_content_with_diagnostics(
+    tmp_path: Path,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "health.txt").write_text(live.EXPECTED + " WRONG", encoding="utf-8")
+    validator = project / "validation.py"
+    validator.write_text(live.API_RECOVERY_VALIDATOR, encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--project-root",
+            str(project),
+            "--state-file",
+            str(project / "state.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "actual=" in completed.stdout
+    assert "chars=" in completed.stdout
+
+
+def test_strict_live_validator_still_rejects_trailing_newline(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "health.txt").write_text(live.EXPECTED + "\n", encoding="utf-8")
+    validator = project / "validation.py"
+    validator.write_text(live.VALIDATOR, encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--project-root",
+            str(project),
+            "--state-file",
+            str(project / "state.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "content mismatch" in completed.stdout
