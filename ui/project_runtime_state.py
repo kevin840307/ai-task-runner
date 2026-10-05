@@ -643,7 +643,8 @@ class ProjectRuntimeMixin:
             if kind in {"thinking", "reasoning", "reasoning_content"}:
                 return
             if kind in {"tool_use", "tool", "tool_call", "tool-call"}:
-                tool_label(value)
+                part = value.get("part")
+                tool_label(part if isinstance(part, dict) else value)
                 return
             if kind == "text":
                 part = value.get("part")
