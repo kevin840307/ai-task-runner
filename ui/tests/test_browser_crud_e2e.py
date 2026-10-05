@@ -699,6 +699,14 @@ def test_task_validation_options_follow_workflow_capabilities() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         state = _write_fixture_repo(Path(td))
+        state.workflow_catalog = lambda: {
+            "stage_types": {
+                "base": {"profiles": {}, "options": []},
+                "command": {"options": []},
+                "ai_validator": {"options": []},
+            },
+            "node_options": {},
+        }
 
         file_workflow = state.studio_workflow_create("file_task", "global", None)
         file_doc = state.studio_read(file_workflow["item"]["id"], None)
