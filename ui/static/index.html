@@ -116,17 +116,6 @@
           <button id="runtimeGuidanceTrace" class="action-button" type="button" hidden>View Trace</button>
         </div>
       </section>
-      <details id="activeRunDetails" class="active-run-details" hidden>
-        <summary>Active Run details</summary>
-        <div class="active-run-grid">
-          <span>Workflow</span><strong id="activeRunWorkflow">—</strong>
-          <span>Backend / Model</span><strong id="activeRunBackendModel">—</strong>
-          <span>Stage backend / model</span><strong id="activeRunEffectiveModel">—</strong>
-          <span>Readonly</span><strong id="activeRunReadonly">—</strong>
-          <span>Started</span><strong id="activeRunStarted">—</strong>
-          <span>Run ID</span><strong id="activeRunId">—</strong>
-        </div>
-      </details>
       <section id="emptyState" class="empty-state">
         <div class="empty-state-mark">A</div>
         <h2 data-i18n="empty.open_project">開啟專案以開始</h2>
@@ -148,16 +137,16 @@
                 <div id="backendDropdownMenu" class="workflow-dropdown-menu backend-dropdown-menu" role="listbox" hidden></div>
               </div>
             </div>
-            <div id="validationPickers" class="composer-validation-row options-validation-row" hidden>
-              <div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>
-                <span class="resource-kind">Python 驗證</span>
+            <div id="validationPickers" class="composer-validation-row options-validation-row">
+              <div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker">
+                <span class="resource-kind">驗證 File</span>
                 <input id="validator" autocomplete="off" readonly title="" aria-label="Python validator path" />
                 <span id="validatorResourceName" class="resource-name">未選擇</span>
                 <button id="browseValidatorButton" class="resource-action" type="button">選擇</button>
                 <button id="clearValidatorButton" class="resource-clear" type="button" aria-label="清除 Python validator" title="清除" hidden>×</button>
               </div>
-              <div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>
-                <span class="resource-kind">AI 驗證</span>
+              <div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker">
+                <span class="resource-kind">驗證 Prompt</span>
                 <input id="aiValidatorPrompt" autocomplete="off" readonly title="" aria-label="AI validator prompt path" />
                 <span id="aiValidatorPromptResourceName" class="resource-name">預設 Prompt</span>
                 <button id="browseAiValidatorPromptButton" class="resource-action" type="button">+ Prompt</button>
