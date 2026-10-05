@@ -802,6 +802,8 @@ High-value runner work remaining:
       marker and byte scans remain baseline/final checks, avoiding O(N^2)-style harness slowdown.
     - Dynamic Plan -> child Execute/Review Dry Run completion also asserts all active-only maps are
       empty, so cleanup is covered through the real FlowEngine expansion path, not only a synthetic state.
+    - Deterministic ceiling coverage now explicitly includes dynamic_task_groups in addition to
+      state size, stage_sessions, dynamic_groups, review_failures, transition history, expanded Workflow and debug history.
     - run_root_bytes is intentionally observation-only because each soak iteration retains a new Project.
     - Deterministic safety-rail coverage is green on Ubuntu/Windows; still requires real high-density
       + 24H evidence before marking this parent item complete.
@@ -826,6 +828,10 @@ High-value runner work remaining:
       now exercises the real 2s -> 4s -> 8s -> 16s -> 30s sleep/backoff path to the configured cap, then the same
       api_recovery_probe runs real-Qwen 429/502/503 long outages without adding a second recovery engine.
     - [x] High-density soak transient probes rotate 429 -> 502 -> 503 through one shared status-code tuple instead of repeatedly testing only 502.
+    - [x] High-density acceptance now fails closed unless each of 429, 502 and 503 was actually observed at least once;
+      a single generic transient recovery can no longer satisfy the dense gate.
+    - [x] High-density default transient cadence is every 2 soak runs, so 429/502/503 are covered by run 6.
+      This keeps transient coverage inside the existing dense minimum window; Final AI every 8 remains the slowest default coverage cadence.
     - [x] Soak summary records bounded per-status recovery counts for 429/502/503, so 0.5H/24H evidence can prove actual coverage rather than only a total transient count.
     - [x] 0.5H and 24H batch files already run the full probe order plus --high-density, so the new long HTTP probe and soak rotation are wired into both gates.
     - [x] Long-failure acceptance is fail-closed at the correct layer: the controlled production-CLI probe must
@@ -1209,14 +1215,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed all required deterministic gates
-      in GitHub Actions run 37328277877.
+    - Exact implementation HEAD e76cb10776de3015f992998d3416b1b275fd6cde passed all required deterministic gates
+      in GitHub Actions run 37387744410.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - The 720x720 mixed File Validator + AI Validator Prompt regression is covered by real Chromium bounding boxes
-      plus panel internal overflow/scroll assertions.
+    - This exact-HEAD evidence includes the 720x720 mixed validator regression plus the stricter high-density
+      429/502/503 per-status acceptance, run-6 transient cadence coverage and dynamic_task_groups resource ceiling regression.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
