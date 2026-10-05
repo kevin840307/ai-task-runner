@@ -1093,6 +1093,7 @@ function renderValidationCapability() {
     const control = $(id);
     if (!control) continue;
     control.disabled = locked || !supported;
+    control.setAttribute("aria-disabled", String(locked || !supported));
     control.title = locked ? lockReason : (!supported ? unsupportedReason : "");
   }
 }
