@@ -940,37 +940,56 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
   width: 100%;
   min-width: 0;
   max-width: none;
-  min-height: 56px;
+  min-height: 72px;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-rows: minmax(16px, auto) minmax(26px, auto);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(18px, auto) minmax(32px, auto);
   grid-template-areas:
-    "kind kind clear"
-    "name choose choose";
+    "kind clear"
+    "name choose";
   align-items: center;
-  row-gap: 4px;
-  column-gap: 8px;
+  row-gap: 6px;
+  column-gap: 10px;
   border-radius: 10px;
-  padding: 7px 8px 7px 10px;
+  padding: 9px 10px 9px 12px;
   overflow: hidden;
+}
+/* The readonly input stores the canonical asset path; the visible value is
+   resource-name. Keep it out of Grid auto-placement so mixed validators cannot
+   overlap or create an implicit third cell. */
+.options-validation-row .composer-resource-picker > input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  pointer-events: none;
 }
 .options-validation-row .composer-resource-picker .resource-kind {
   grid-area: kind;
   min-width: 0;
-  line-height: 16px;
+  line-height: 18px;
+  align-self: end;
 }
 .options-validation-row .composer-resource-picker .resource-name {
   grid-area: name;
   min-width: 0;
   max-width: none;
-  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 22px;
   align-self: center;
 }
 .options-validation-row .composer-resource-picker .resource-action {
   grid-area: choose;
-  min-height: 26px;
-  line-height: 26px;
+  min-width: 70px;
+  min-height: 32px;
+  line-height: 30px;
   align-self: center;
 }
 .options-validation-row .composer-resource-picker .resource-clear {
