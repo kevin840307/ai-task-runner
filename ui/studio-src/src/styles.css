@@ -25,6 +25,19 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .studio-header .message { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-header .unsaved-badge { color: #a16207; background: #fef9c3; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .studio-header .saved-badge { color: #15803d; background: #e9f8ed; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.studio-header .snap-toggle {
+  min-width: 108px;
+  padding: 7px 10px;
+  color: #64748b;
+  background: #f8fafc;
+  white-space: nowrap;
+}
+.studio-header .snap-toggle.active {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px rgba(37,99,235,.08);
+}
 .studio-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 220px minmax(0,1fr); }
 .workflow-yaml-view { flex: 1 1 auto; min-height: 0; }
 .workflow-draft-recovery,
