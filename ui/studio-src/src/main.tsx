@@ -151,6 +151,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
   "zh-TW": {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "未儲存草稿", saved: "已儲存", designer_view: "Designer", yaml_view: "YAML",
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
+    snap_grid: "網格吸附", snap_on: "開", snap_off: "關", snap_enabled: "網格吸附已開啟：拖曳積木會對齊 20px 格線。", snap_disabled: "網格吸附已關閉：積木可自由拖曳。",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
     stage_settings: "Stage 設定", form: "Form", basic: "基本", parameters: "參數", yaml_stage: "YAML", routing: "連線", test: "測試", apply_yaml: "套用 YAML",
@@ -194,6 +195,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
+    snap_grid: "Grid snap", snap_on: "On", snap_off: "Off", snap_enabled: "Grid snap is on: dragged nodes align to the 20px grid.", snap_disabled: "Grid snap is off: nodes can move freely.",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
     stage_settings: "Stage Settings", form: "Form", basic: "Basic", parameters: "Parameters", yaml_stage: "YAML", routing: "Routing", test: "Test", apply_yaml: "Apply YAML",
@@ -1739,8 +1741,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         <div>
           {message && <span className="message">{message}</span>}
           <span className={editorDirty ? "unsaved-badge" : "saved-badge"}>{editorDirty ? tx("unsaved") : tx("saved")}</span>
-          {editorView === "designer" && <button type="button" aria-pressed={snapEnabled} title="Snap nodes to a 20px grid"
-            onClick={() => { const next = !snapEnabled; setSnapEnabled(next); writeSnapPreference(next); }}>Snap</button>}
+          {editorView === "designer" && <button type="button" className={`snap-toggle ${snapEnabled ? "active" : ""}`}
+            aria-pressed={snapEnabled} title={snapEnabled ? tx("snap_enabled") : tx("snap_disabled")}
+            onClick={() => {
+              const next = !snapEnabled;
+              setSnapEnabled(next);
+              writeSnapPreference(next);
+              setMessage(next ? tx("snap_enabled") : tx("snap_disabled"));
+            }}>{tx("snap_grid")} · {snapEnabled ? tx("snap_on") : tx("snap_off")}</button>}
           {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title={tx("reset_layout_title")}>{tx("reset")}</button>}
           <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}
@@ -1890,7 +1898,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={22} size={1} />
+            <Background gap={20} size={1} />
             <MiniMap pannable zoomable />
             <Controls />
           </ReactFlow>
