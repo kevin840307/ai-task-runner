@@ -310,8 +310,6 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(self.state.read_runtime(project))
         if path == "/api/project/messages":
             return self._json({"messages": self.state.messages(project)})
-        if path == "/api/project/runs":
-            return self._json({"runs": self.state.run_history(project)})
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def _pick_folder(self) -> None:
