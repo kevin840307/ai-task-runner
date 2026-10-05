@@ -1311,6 +1311,75 @@ flow:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_mock_technical_error_uses_stage_probe_with_error_scenario() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-mock-error-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "mock-error.yaml"
+        workflow.write_text(
+            "stages:\n  worker:\n    type: base\n    profile: generic\nflow:\n  - worker\n",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        state = server.RequestHandlerClass.state
+        captured: dict[str, str] = {}
+
+        def fake_stage_test(*args, probe_mode="", test_scenario="", **kwargs):
+            captured["probe_mode"] = probe_mode
+            captured["test_scenario"] = test_scenario
+            return {
+                "ok": True,
+                "stage": "worker",
+                "status": "pass",
+                "output": "mock error recovered",
+                "data": {},
+                "changed_files": [],
+                "next": "END",
+                "route": "next",
+                "kind": "base",
+                "mock_error_injected": True,
+            }
+
+        state.studio_stage_test = fake_stage_test
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "mock-error.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                page.locator('[data-inspector-tab="test"]').click()
+                page.get_by_role("tab", name="Mock Technical Error").click()
+                page.locator(".test-action-row > button.primary").click()
+                page.locator(".test-result").wait_for(state="visible")
+
+                assert captured == {
+                    "probe_mode": "stage",
+                    "test_scenario": "error_mock",
+                }
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 def test_full_designer_stage_test_stop_and_action_spacing() -> None:
     with tempfile.TemporaryDirectory(prefix="ai-runner-stage-stop-e2e-") as td:
         project = Path(td)
