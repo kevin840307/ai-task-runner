@@ -73,6 +73,187 @@ Global
 
 Do not place Library beside Chat / Tasks in a way that implies Library belongs to the current Chat.
 
+
+Illustrative UI sketches (NOT a fixed UI contract)
+--------------------------------------------------
+These wireframes are only a direction sketch for scope, navigation and interaction.
+They are NOT a pixel-perfect/UI-layout contract. If implementation, usability testing or a better
+interaction model suggests a cleaner presentation, the layout may change. Preserve the product/scope
+rules above unless a later explicit design decision replaces them.
+
+A. Global shell - Chats mode
+
++------+----------------------+--------------------------------------------------------------+
+| APP  | CONTEXT SIDEBAR      | MAIN                                                         |
+|      |                      |                                                              |
+| Chat | Chats                | Backend investigation                                        |
+| Lib  | Search...            | C:\repo\ai-task-runner                                      |
+| Set  |                      |                                                              |
+|      | * Backend discussion | [ Chat ]  [ Tasks 3 ]                       [ + New Task ]    |
+|      |   ai-task-runner     | --------                                                     |
+|      |                      |                                                              |
+|      |   UI redesign        | You                                                          |
+|      |   ai-task-runner     | Why is backend discovery blocking startup?                   |
+|      |                      |                                                              |
+|      |   Game client        | AI                                                           |
+|      |   game-client        | I would check ...                                            |
+|      |                      |                                                              |
+|      | + New Chat           |                                             [ Create Task ]  |
+|      |                      |                                                              |
+|      |                      |--------------------------------------------------------------|
+|      |                      | Ask about this codebase...                            Send   |
++------+----------------------+--------------------------------------------------------------+
+
+Notes:
+- APP rail is global scope: Chats / Library / Settings.
+- Context sidebar changes with the selected global domain.
+- Chat + Tasks are views of the selected Chat only.
+- Library is deliberately NOT shown as a Chat-level tab.
+
+B. New Task from Chat - right-side sheet
+
++------+----------------------+--------------------------------------+-----------------------+
+| APP  | Chats                | Chat remains visible                 | New Task              |
+|      |                      |                                      |                       |
+| Chat | * Backend discussion | AI: I would check ...                | Fix backend loading   |
+| Lib  |   UI redesign        |                                      |                       |
+| Set  |                      |                                      | Workspace             |
+|      |                      |                                      | (*) Main              |
+|      |                      |                                      | ( ) Worktree [later]  |
+|      |                      |                                      |                       |
+|      |                      |                                      | Workflow              |
+|      |                      |                                      | ralphy_ai_validate v  |
+|      |                      |                                      |                       |
+|      |                      |                                      | Advanced >            |
+|      |                      |                                      |                       |
+|      |                      |                                      | Cancel      Run Task  |
++------+----------------------+--------------------------------------+-----------------------+
+
+Notes:
+- Keep the originating Chat visible while defining the Task.
+- Initial implementation should support Main first.
+- Worktree options may appear only after FINAL PHASE is implemented; do not fake unsupported choices.
+- Task creation should stay short; advanced backend/model options remain collapsed.
+
+C. Tasks view for the selected Chat
+
++------+----------------------+--------------------------------------------------------------+
+| APP  | Chats                | Backend investigation                                        |
+|      |                      | C:\repo\ai-task-runner                                      |
+| Chat | * Backend discussion |                                                              |
+| Lib  |   UI redesign        | [ Chat ]  [ Tasks 3 ]                       [ + New Task ]    |
+| Set  |                      |           --------                                           |
+|      |                      |                                                              |
+|      |                      | [ All 8 ] [ Active 2 ] [ Attention 1 ] [ Completed 5 ]     |
+|      |                      |                                                              |
+|      |                      | +----------------------+  +----------------------+          |
+|      |                      | | * Backend loading    |  | ! Mock Error Test    |          |
+|      |                      | | Running              |  | Needs Attention      |          |
+|      |                      | | Review               |  | Execute              |          |
+|      |                      | | main                 |  | main                 |          |
+|      |                      | | ralphy_ai_validate   |  | ralphy_ai_validate   |          |
+|      |                      | | 18m / active now     |  | retry exhausted      |          |
+|      |                      | +----------------------+  +----------------------+          |
+|      |                      |                                                              |
+|      |                      | +----------------------+                                      |
+|      |                      | | OK Studio loading    |                                      |
+|      |                      | | Completed            |                                      |
+|      |                      | | Final Review PASS    |                                      |
+|      |                      | | main / 22m           |                                      |
+|      |                      | +----------------------+                                      |
++------+----------------------+--------------------------------------------------------------+
+
+Notes:
+- Cards are status summaries, not mini dashboards.
+- Entire card is clickable.
+- Completed cards remain available.
+- Current Stage / attention reason comes from the canonical runtime projection, not UI inference.
+- After worktree support exists, "main" may become "wt/<task>" on isolated Tasks.
+
+D. Task Detail - reuse the existing/pre-redesign execution Chat
+
++------+----------------------+--------------------------------------------------------------+
+| APP  | Chats                | < Tasks                                                      |
+|      |                      |                                                              |
+| Chat | * Backend discussion | Fix Backend Loading                           [ Stop ] [ ... ] |
+| Lib  |   UI redesign        | Running / main / ralphy_ai_validate / Review / 18m          |
+| Set  |                      |--------------------------------------------------------------|
+|      |                      |                                                              |
+|      |                      | User Task                                                    |
+|      |                      | Fix backend model loading, test it, then review.            |
+|      |                      |                                                              |
+|      |                      | AI                                                           |
+|      |                      | Inspecting OpenCode model discovery...                       |
+|      |                      |                                                              |
+|      |                      | AI                                                           |
+|      |                      | Updated runner/agent/opencode.py                             |
+|      |                      |                                                              |
+|      |                      | Tests                                                        |
+|      |                      | 1083 passed                                                  |
+|      |                      |                                                              |
+|      |                      | Review                                                       |
+|      |                      | FAIL - fallback can still block startup                      |
+|      |                      |                                                              |
+|      |                      | AI                                                           |
+|      |                      | Applying correction...                                      |
+|      |                      |--------------------------------------------------------------|
+|      |                      | Add instruction to this Task...                       Send  |
++------+----------------------+--------------------------------------------------------------+
+
+Notes:
+- This is intentionally close to the old execution-oriented Chat UI.
+- Do not rebuild Task Detail as a heavy dashboard unless a proven need appears.
+- Stop / Resume / Rerun visibility comes from canonical allowed_actions.
+- Runtime diagnostics can stay behind a details/runtime surface instead of dominating the main view.
+
+E. Global Library mode
+
++------+----------------------+--------------------------------------------------------------+
+| APP  | CONTEXT SIDEBAR      | MAIN                                                         |
+|      |                      |                                                              |
+| Chat | Library              | Workflows                                      + New Workflow|
+| Lib  | * Workflows          |                                                              |
+| Set  |   Prompts            | Search...                                                    |
+|      |                      |                                                              |
+|      |                      | Name                   Used          Updated                  |
+|      |                      | * ralphy_ai_validate   18 Tasks      Today                    |
+|      |                      |   file_validate         3 Tasks      Yesterday                |
+|      |                      |   ai_only               7 Tasks      Oct 3                    |
+|      |                      |                                                              |
+|      |                      | Select Workflow -> existing Full Designer                    |
++------+----------------------+--------------------------------------------------------------+
+
+Prompts uses the same global Library shell but opens the existing Prompt Editor/Test surface.
+
+F. Final-phase worktree direction (illustrative only)
+
+One Chat / root path:
+  Chat A - C:\repo\ai-task-runner
+     |
+     +-- Task A -> MAIN
+     +-- Task B -> worktree/task-b
+     +-- Task C -> worktree/task-c
+
+Concurrency rule:
+  MAIN                    -> at most one active writer Task
+  worktree/task-b         -> at most one active writer Task
+  worktree/task-c         -> at most one active writer Task
+
+Completion rule:
+  Task B -> Execute -> Validate -> Completed
+                                  |
+                                  +-- NO automatic merge
+
+Typical integration flow:
+  Task completed
+      -> return to normal Chat
+      -> ask AI to inspect Task/worktree result
+      -> user decides merge/rebase/cherry-pick/manual integration
+      -> Chat/AI assists separately
+
+The Task runtime must not acquire merge ownership or merge-related recovery state.
+
+
 PHASE 1 - Normal Chat workspace
 -------------------------------
 [ ] Convert the current primary Chat surface into a normal project-aware AI Chat.
