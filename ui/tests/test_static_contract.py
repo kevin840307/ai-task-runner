@@ -333,3 +333,21 @@ def test_task_validation_resources_are_workflow_declared_and_not_global():
     assert 'aiPromptPicker.hidden = !workflow?.has_ai_validator' in app
     assert 'validator: workflow?.requires_python_validator ? $("validator").value.trim() : ""' in app
     assert 'ai_validator_prompt_file: workflow?.has_ai_validator ? $("aiValidatorPrompt").value.trim() : ""' in app
+
+
+def test_chat_validator_resource_pickers_share_context_aware_browse_flow():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+
+    assert "async function browseValidationResource" in app
+    assert 'project: state.project?.path || ""' in app
+    assert 'current: $(inputId)?.value?.trim() || ""' in app
+    assert 'kind: "python"' in app
+    assert 'kind: "markdown"' in app
+    assert "File Validator" in html
+    assert "AI Validator Prompt" in html
+    assert html.count(">Choose</button>") >= 2
+    assert 'project=str(body.get("project", ""))' in server
+    assert 'current=str(body.get("current", ""))' in server
+    assert 'options["initialdir"] = initialdir' in server
