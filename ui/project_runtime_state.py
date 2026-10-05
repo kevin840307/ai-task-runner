@@ -688,7 +688,8 @@ class ProjectRuntimeMixin:
         runtime, display_runtime, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         request = self._latest_run_request(project)
-        stream = self._display_stream(self._read_text(display_runtime / "stream.log", limit=12000))
+        raw_stream = self._read_text(display_runtime / "stream.log", limit=12000)
+        stream = self._display_stream(raw_stream)
         supervisor_pid = self._marker_pid(marker.get("supervisor_pid"))
         supervisor_running = bool(supervisor_pid and self._pid_alive(supervisor_pid))
         if supervisor_running:
@@ -775,7 +776,7 @@ class ProjectRuntimeMixin:
             "input_prompt": str(state.get("goal") or script_view.get("prompt_preview") or ""),
             "last_error": state.get("last_error") or "",
             "stream": stream,
-            "activity_summary": self._activity_summary(stream),
+            "activity_summary": self._activity_summary(raw_stream),
             "cli_lines": [str(line) for line in console.get("lines", [])],
             "cli_tasks": console.get("tasks", []) if isinstance(console.get("tasks"), list) else [],
             "cli_status": str(console.get("status") or ""),
