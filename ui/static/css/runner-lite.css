@@ -757,11 +757,17 @@ html[data-motion="reduced"] .project-row.runtime-running .project-mark::after { 
 }
 @media (max-width: 720px) {
   #composePanel .composer-left {
-    overflow-x: auto;
-    overflow-y: visible;
+    flex-wrap: wrap;
+    overflow: visible;
   }
   #composePanel .composer-workflow-picker {
-    max-width: min(260px, 62vw);
+    flex: 1 1 200px;
+    width: min(260px, 100%);
+    max-width: calc(100% - 78px);
+    overflow: hidden !important;
+  }
+  #composePanel .options-button {
+    flex: 0 0 auto;
   }
 }
 
