@@ -695,7 +695,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
-def test_task_validation_options_stay_visible_and_follow_workflow_capabilities() -> None:
+def test_task_validation_options_follow_workflow_capabilities() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         state = _write_fixture_repo(Path(td))
@@ -730,6 +730,26 @@ def test_task_validation_options_stay_visible_and_follow_workflow_capabilities()
             None,
         )
 
+        mixed_workflow = state.studio_workflow_create("mixed_task", "global", None)
+        mixed_doc = state.studio_read(mixed_workflow["item"]["id"], None)
+        state.studio_save(
+            mixed_workflow["item"]["id"],
+            (
+                "stages:\n"
+                "  validate_file:\n"
+                "    type: command\n"
+                "    command: \"{python} {validator}\"\n"
+                "  validate_ai:\n"
+                "    type: ai_validator\n"
+                "    validator: ai\n"
+                "flow: [validate_file, validate_ai]\n"
+            ),
+            mixed_doc["hash"],
+            None,
+        )
+
+        plain_workflow = state.studio_workflow_create("plain_task", "global", None)
+
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
@@ -760,22 +780,28 @@ def test_task_validation_options_stay_visible_and_follow_workflow_capabilities()
             _boot_main_ui(page)
 
             page.locator("#optionsButton").click()
-            assert page.locator("#validationPickers").is_visible()
-            assert page.locator("#validatorPicker").is_visible()
-            assert page.locator("#aiValidatorPromptPicker").is_visible()
             assert page.locator("#activeRunDetails").count() == 0
+
+            page.locator("#workflowSelect").select_option(value=plain_workflow["item"]["path"])
+            page.wait_for_timeout(50)
+            assert not page.locator("#validationPickers").is_visible()
 
             page.locator("#workflowSelect").select_option(value=file_workflow["item"]["path"])
             page.wait_for_timeout(50)
-            assert page.locator("#browseValidatorButton").is_enabled()
-            assert page.locator("#browseAiValidatorPromptButton").is_disabled()
-            assert "此 Workflow 未使用" in page.locator("#aiValidatorPromptResourceName").inner_text()
+            assert page.locator("#validationPickers").is_visible()
+            assert page.locator("#validatorPicker").is_visible()
+            assert not page.locator("#aiValidatorPromptPicker").is_visible()
 
             page.locator("#workflowSelect").select_option(value=ai_workflow["item"]["path"])
             page.wait_for_timeout(50)
-            assert page.locator("#browseValidatorButton").is_disabled()
-            assert page.locator("#browseAiValidatorPromptButton").is_enabled()
-            assert "此 Workflow 未使用" in page.locator("#validatorResourceName").inner_text()
+            assert page.locator("#validationPickers").is_visible()
+            assert not page.locator("#validatorPicker").is_visible()
+            assert page.locator("#aiValidatorPromptPicker").is_visible()
+
+            page.locator("#workflowSelect").select_option(value=mixed_workflow["item"]["path"])
+            page.wait_for_timeout(50)
+            assert page.locator("#validationPickers").is_visible()
+            assert page.locator("#validatorPicker").is_visible()
+            assert page.locator("#aiValidatorPromptPicker").is_visible()
             assert not errors
             browser.close()
-
