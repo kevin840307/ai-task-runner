@@ -1243,7 +1243,8 @@ function App() {
         method: "POST",
         body: JSON.stringify({
           id: visual.id, project: query().project, stage: draft.name, input: testInput,
-          backend: testBackend, probe_mode: testMode,
+          backend: testBackend,
+          probe_mode: testMode === "agent_ping" ? "agent_ping" : "stage",
           test_scenario: testMode === "mock_error" ? "error_mock" : testMode === "stage" ? testScenario : "pass",
           graph: graphDraft(visual), test_id: testId,
         }),
