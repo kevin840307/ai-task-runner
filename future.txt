@@ -1,0 +1,275 @@
+AI Task Runner - Future Product / UI Direction
+==============================================
+
+Purpose
+-------
+This file records future product/UI direction only.
+It must not replace current release gates in todo.txt or architecture contracts in UI.txt / DevFollow.txt.
+
+Core principles
+---------------
+- Keep Runner Core authoritative. UI must not create another runtime state machine, retry engine,
+  recovery engine, Workflow representation, or canonical run history.
+- Chat / Task / Library are product/UI concepts around the existing Runner.
+- Prefer the smallest implementation that can close the loop and remain reliable for 24H unattended runs.
+- Reuse existing runtime projection / allowed_actions / RunState / FlowEngine / StageExecutor.
+- Keep completed execution inspectable; do not delete useful history merely because a run finished.
+- Avoid auto-merge behavior. A Task executes work; it does not own integration/merge.
+
+Target product model
+--------------------
+A Chat is a normal AI conversation bound to one project/root path.
+
+Chat
+├─ root path
+├─ normal conversation
+└─ Tasks created from this Chat
+   ├─ Task A
+   ├─ Task B
+   └─ Task C
+
+A Task is an execution instance:
+- created from the current Chat or manually from the Tasks page,
+- owns task goal + workflow/run metadata,
+- uses the existing Runner runtime,
+- can be opened to inspect detailed execution,
+- remains visible after Completed / Stopped / Needs Attention,
+- does NOT merge its result back to another branch/workspace.
+
+Workflows and Prompts are shared Library assets.
+They are not children of the selected Chat and must not visually look Chat-scoped.
+
+Target navigation / information architecture
+--------------------------------------------
+Use three visual levels instead of mixing scopes:
+
+1. Global navigation rail
+   - Chats
+   - Library
+   - Settings
+
+2. Context sidebar
+   - Chats mode: Chat list
+   - Library mode: Workflows / Prompts
+   - Settings mode: settings sections
+
+3. Main content
+   - selected Chat / Tasks
+   - selected Task detail
+   - Workflow list / Full Designer
+   - Prompt list / Prompt Editor
+
+The important scope rule is:
+
+Global
+├─ Chats
+│  └─ selected Chat
+│     ├─ Chat
+│     └─ Tasks
+├─ Library
+│  ├─ Workflows
+│  └─ Prompts
+└─ Settings
+
+Do not place Library beside Chat / Tasks in a way that implies Library belongs to the current Chat.
+
+PHASE 1 - Normal Chat workspace
+-------------------------------
+[ ] Convert the current primary Chat surface into a normal project-aware AI Chat.
+    - A Chat is bound to one root path.
+    - Chat itself does not select a Workflow.
+    - Chat itself does not render Stage / retry / validator / runtime state as its main purpose.
+    - Keep the familiar current Chat interaction where possible instead of replacing it with a dashboard.
+    - The Chat can discuss/analyse the bound codebase normally.
+
+[ ] Treat root path as part of Chat identity.
+    - Do not silently change a Chat from path A to path B after it already owns Tasks/history.
+    - Prefer "start a new Chat with another path" over mutating an established Chat's root.
+    - Path can be shown compactly in the header with copy/open affordances.
+
+[ ] Keep Chat UI metadata outside Runner Core.
+    - Conversation / Message / Chat metadata stays UI-owned.
+    - Do not write Chat messages into RunState or make Chat history part of retry/resume/routing state.
+
+PHASE 2 - Task creation from Chat
+---------------------------------
+[ ] Add New Task entry points.
+    - Chat header: + New Task.
+    - Optional message-level "Create Task" to create a Task from a useful conversation point.
+    - Tasks page: + New Task.
+
+[ ] Use a lightweight right-side Task creation sheet.
+    - Keep Chat visible while creating the Task.
+    - Minimum fields:
+      task title / goal,
+      workspace,
+      Workflow.
+    - Advanced backend/model/etc. stays collapsed unless needed.
+    - Prompt selection should normally come from Workflow/Stage configuration, not become another
+      permanent top-level Task field.
+
+[ ] Freeze the Task's initial execution inputs at creation/start.
+    - source_chat_id / source_message references are metadata only.
+    - freeze root-path / goal / resolved Workflow and Prompt inputs needed for reproducible execution.
+    - Later Chat conversation or Library edits must not silently mutate an already-running Task.
+    - Reuse existing durable snapshot behavior where possible; do not create a second snapshot system.
+
+PHASE 3 - Tasks page scoped to the current Chat
+-----------------------------------------------
+[ ] Add a Tasks view next to Chat for the selected Chat.
+    - Main Chat-level tabs should stay simple:
+      Chat | Tasks
+    - Tasks here means only Tasks created under the selected Chat.
+
+[ ] Use status-oriented Task cards (Azure/cloud-resource style, not a Kanban workflow engine).
+    - Card should stay compact and show only useful summary:
+      title,
+      status,
+      current Stage / attention reason,
+      workspace,
+      Workflow,
+      elapsed / last activity.
+    - Entire card is clickable.
+    - Runtime internals such as PID/session IDs/debug trace remain inside Task detail.
+
+[ ] Provide lightweight filters without creating a separate analytics dashboard.
+    - All
+    - Active
+    - Needs Attention
+    - Completed
+    - Completed Tasks remain visible and reopenable.
+
+[ ] Surface cross-Chat attention without inventing a global Task management product.
+    - Chat rows may show small Running / Needs Attention badges.
+    - Goal: user can notice a 24H Task that needs attention even while viewing another Chat.
+    - Keep the authoritative status from the existing runtime projection.
+
+PHASE 4 - Task Detail reuses the pre-redesign execution Chat
+------------------------------------------------------------
+[ ] Reframe the current/pre-redesign runtime Chat as Task Detail.
+    - Clicking a Task opens its execution detail.
+    - Preserve the useful existing execution conversation/log presentation instead of rebuilding
+      everything as a dashboard.
+
+[ ] Task Detail should show:
+    - task title / status,
+    - workspace,
+    - Workflow,
+    - current Stage / cycle / progress when useful,
+    - runtime/recovery messages,
+    - AI execution output,
+    - review/validator results,
+    - tests/results,
+    - existing allowed actions such as Stop / Resume / Rerun when valid,
+    - composer for additional instructions to that Task.
+
+[ ] All Task actions must use the existing canonical runtime projection / allowed_actions.
+    - Browser disabled state is UX only.
+    - Backend guards remain authoritative.
+    - No Task-specific second control state machine.
+
+[ ] Task completion/history is independent from workspace cleanup.
+    - Completed Task remains inspectable even if its execution workspace is later cleaned.
+    - Task history must not disappear merely because a future worktree is removed.
+
+PHASE 5 - Global Library
+------------------------
+[ ] Move shared reusable assets into a global Library domain.
+    - Library is not owned by the selected Chat.
+    - Context sidebar:
+      Workflows
+      Prompts
+
+[ ] Workflows page
+    - Prefer compact searchable list/table for assets rather than large Task-style cards.
+    - Open a Workflow into the existing Full Designer.
+    - Keep YAML canonical.
+    - New Task selects a Workflow from this shared Library.
+
+[ ] Prompts page
+    - Prefer compact searchable list/table.
+    - Open a Prompt into the existing Prompt Editor/Test UI.
+    - Prompts remain reusable assets referenced by Workflow/Stage configuration.
+
+[ ] Reuse common page patterns without forcing identical presentation.
+    - Tasks are status-heavy -> cards are appropriate.
+    - Workflows / Prompts are asset-heavy -> compact list/search is more appropriate.
+
+PHASE 6 - Polish after the basic model is stable
+------------------------------------------------
+[ ] Improve navigation ergonomics.
+    - Global rail + contextual sidebar + main content.
+    - Preserve context when switching Chat <-> Tasks.
+    - Clear breadcrumbs/back navigation for Task Detail / Workflow Designer / Prompt Editor.
+    - Avoid unnecessary modal stacks.
+
+[ ] Improve low-resolution/responsive behavior.
+    - Context sidebar can collapse.
+    - Task cards gracefully reduce columns.
+    - Task Detail composer remains usable and attached to the detail surface.
+    - No horizontal overflow for long Chat/Task/Workflow/Prompt names.
+
+[ ] Preserve fast first paint.
+    - Shared backend/model discovery must not block Chat/Tasks/Library initial rendering.
+    - Load expensive optional discovery asynchronously.
+
+FINAL PHASE - Worktree support / parallel Task isolation
+--------------------------------------------------------
+Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + Library are stable.
+
+[ ] Add Task workspace selection:
+    - Main
+    - New Worktree
+    - Existing Worktree only if a real use case still justifies it.
+
+[ ] Keep Main Task support permanently.
+    - Worktree is an isolation option, not a replacement for Main.
+    - Before worktree support exists, multiple Task records may exist but only one active writer
+      on the same Main/root workspace should be allowed at a time.
+
+[ ] Worktree concurrency rule:
+    - one writer per Main/worktree by default,
+    - separate worktrees allow independent Task writers,
+    - read-only parallelism can remain a later opt-in if proven necessary.
+    - Do not build a generic parallel/DAG scheduler just for worktrees.
+
+[ ] Worktree lifecycle:
+    - create/attach workspace for Task,
+    - execute Task in that workspace,
+    - retain enough identity/status for inspection,
+    - cleanup is a separate explicit operation,
+    - deleting a worktree must not delete Task history.
+
+[ ] Task must NOT merge.
+    - Task responsibility ends at doing/verifying its assigned work.
+    - No automatic merge, rebase, cherry-pick, conflict resolution, or "merge completed" runtime state.
+    - Integration remains a separate user decision.
+    - Normal Chat can be used after Task completion to ask AI to inspect results and perform/help with
+      the desired merge/integration flow.
+    - This keeps Task execution reliable and prevents merge complexity from contaminating the 24H runtime.
+
+[ ] Main busy UX after worktree support:
+    - New Task sheet shows Main Available / Busy.
+    - If Main already has an active writer Task, Main is disabled for another writer and the UI points
+      to the owning Task.
+    - Recommend New Worktree for parallel modification work, but do not force it for simple Main Tasks.
+
+Non-goals
+---------
+- Do not turn Tasks into a second Workflow engine.
+- Do not build a separate global Task scheduler/dashboard unless a proven requirement appears.
+- Do not make Chat runtime state authoritative.
+- Do not let Library scope depend on whichever Chat is currently selected.
+- Do not auto-merge completed Tasks.
+- Do not implement worktree support early just because the UI can display it.
+- Do not reintroduce removed legacy Workflow contracts while implementing this redesign.
+
+Recommended implementation order
+--------------------------------
+1. Normal Chat + immutable root-path identity.
+2. New Task creation on Main using the existing Runner.
+3. Current-Chat Tasks card page.
+4. Task Detail = existing execution Chat/runtime view.
+5. Global Library navigation for Workflows + Prompts.
+6. Navigation/responsive/performance polish.
+7. Worktree support and parallel isolated Tasks LAST.
