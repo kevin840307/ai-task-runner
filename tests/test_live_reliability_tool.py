@@ -29,7 +29,7 @@ def settings(tmp_path: Path) -> live.Settings:
         pause=0,
         api_port=8080,
         soak_final_ai_every=8,
-        soak_transient_api_every=4,
+        soak_transient_api_every=2,
         soak_timeout_every=6,
         soak_yaml_every=7,
         soak_sandbox_every=7,
@@ -937,6 +937,15 @@ def test_example_smoke_probe_uses_case_name_for_copy(
         ("qwen_live_reliability_24h.bat", "24", "8"),
     ],
 )
+def test_high_density_defaults_cover_all_transient_http_classes_by_run_six():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "args.soak_transient_api_every = 2" in source
+    assert [
+        live._soak_transient_status_code(run_number, 2)
+        for run_number in (2, 4, 6)
+    ] == list(live.API_RECOVERY_STATUS_CODES)
+
+
 def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml_items: str):
     text = (ROOT / "tool" / name).read_text(encoding="utf-8")
     assert f"--hours {hours}" in text
@@ -2770,8 +2779,8 @@ def test_soak_result_tracks_bounded_transient_status_counts():
 
 def test_soak_transient_status_rotation_covers_all_http_classes():
     assert [
-        live._soak_transient_status_code(run_number, 4)
-        for run_number in (4, 8, 12, 16, 20, 24)
+        live._soak_transient_status_code(run_number, 2)
+        for run_number in (2, 4, 6, 8, 10, 12)
     ] == [429, 502, 503, 429, 502, 503]
 
 
