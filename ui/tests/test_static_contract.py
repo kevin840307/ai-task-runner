@@ -326,8 +326,8 @@ def test_task_validation_resources_are_workflow_declared_and_not_global():
     assert '<div id="validationPickers" class="composer-validation-row options-validation-row" hidden>' in index
     assert '<div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>' in index
     assert '<div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>' in index
-    assert "驗證 File" in index
-    assert "驗證 Prompt" in index
+    assert "File Validator" in index
+    assert "AI Validator Prompt" in index
     assert 'validationPickers.hidden = !(workflow?.requires_python_validator || workflow?.has_ai_validator)' in app
     assert 'validatorPicker.hidden = !workflow?.requires_python_validator' in app
     assert 'aiPromptPicker.hidden = !workflow?.has_ai_validator' in app
