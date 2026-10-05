@@ -896,38 +896,49 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
 }
 .options-validation-row .composer-resource-picker {
   width: 100%;
   min-width: 0;
   max-width: none;
+  min-height: 56px;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(16px, auto) minmax(26px, auto);
   grid-template-areas:
     "kind kind clear"
     "name choose choose";
   align-items: center;
-  row-gap: 2px;
-  column-gap: 6px;
+  row-gap: 4px;
+  column-gap: 8px;
   border-radius: 10px;
-  padding: 6px 7px 6px 9px;
+  padding: 7px 8px 7px 10px;
+  overflow: hidden;
 }
 .options-validation-row .composer-resource-picker .resource-kind {
   grid-area: kind;
   min-width: 0;
+  line-height: 16px;
 }
 .options-validation-row .composer-resource-picker .resource-name {
   grid-area: name;
   min-width: 0;
   max-width: none;
+  line-height: 20px;
+  align-self: center;
 }
 .options-validation-row .composer-resource-picker .resource-action {
   grid-area: choose;
+  min-height: 26px;
+  line-height: 26px;
+  align-self: center;
 }
 .options-validation-row .composer-resource-picker .resource-clear {
   grid-area: clear;
   justify-self: end;
+  align-self: center;
 }
 @media (max-width: 900px) {
   .options-validation-row .composer-resource-picker { max-width: none; }
