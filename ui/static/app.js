@@ -20,7 +20,7 @@ function rememberProjectPreference(key, value) { const prefs = currentProjectPre
 function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
-  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true, runHistoryOpen: false, runtimeTraceOpen: false,
+  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
   backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
@@ -424,8 +424,6 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
-  setRunHistoryOpen(false);
-  setRuntimeTraceOpen(false);
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
@@ -453,8 +451,6 @@ async function selectProject(project) {
     state.validatorWorkflowPath = "";
     state.aiValidatorPromptWorkflowPath = "";
   }
-  setRunHistoryOpen(false);
-  setRuntimeTraceOpen(false);
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
   if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
@@ -465,134 +461,6 @@ async function selectProject(project) {
     refreshStudioFiles({ force: true, projectPath: project.path });
   } catch (error) { showActionError(error.message, "Project loading failed"); }
   finally { setViewLoading("chatView", false); state.projectSwitching = false; renderProjects(); }
-}
-
-function formatRunDuration(seconds) {
-  const total = Math.max(0, Math.floor(Number(seconds) || 0));
-  if (total < 60) return `${total}s`;
-  const minutes = Math.floor(total / 60);
-  if (minutes < 60) return `${minutes}m ${total % 60}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
-}
-function runHistoryStatusLabel(status) {
-  return ({
-    running: "Running",
-    recovering: "Recovering",
-    completed: "Completed",
-    stopped: "Stopped",
-    needs_attention: "Needs Attention",
-  })[status] || String(status || "Unknown");
-}
-async function refreshRunHistory({ projectPath = state.project?.path || "" } = {}) {
-  const root = $("runHistoryList");
-  if (!root || !projectPath) return;
-  try {
-    const data = await api(`/api/project/runs?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
-    if (!sameProjectPath(state.project?.path, projectPath)) return;
-    root.innerHTML = "";
-    const runs = Array.isArray(data.runs) ? data.runs : [];
-    if (!runs.length) {
-      const empty = document.createElement("div");
-      empty.className = "run-history-empty";
-      empty.textContent = "No runs yet.";
-      root.appendChild(empty);
-      return;
-    }
-    for (const run of runs) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = `run-history-row status-${run.status || "unknown"}`;
-      row.dataset.runId = String(run.run_id || "");
-
-      const copy = document.createElement("span");
-      copy.className = "run-history-copy";
-      const prompt = document.createElement("strong");
-      prompt.textContent = String(run.prompt || "Run");
-      prompt.title = String(run.prompt || "Run");
-      const meta = document.createElement("small");
-      const updated = Number(run.updated_at || 0) * 1000;
-      meta.textContent = [
-        runHistoryStatusLabel(run.status),
-        formatRunDuration(run.duration),
-        updated ? formatFreshness(updated) : "",
-      ].filter(Boolean).join(" · ");
-      if (updated) meta.title = `Updated: ${new Date(updated).toLocaleString()}`;
-      copy.append(prompt, meta);
-
-      const badge = document.createElement("span");
-      badge.className = "run-history-status";
-      badge.textContent = runHistoryStatusLabel(run.status);
-      row.append(copy, badge);
-      row.onclick = () => {
-        const runId = String(run.run_id || "");
-        const target = [...document.querySelectorAll("#messages .message[data-run-id]")]
-          .find((node) => node.dataset.runId === runId);
-        if (!target) return;
-        target.scrollIntoView({ block: "center", behavior: "smooth" });
-        target.classList.add("run-history-focus");
-        setTimeout(() => target.classList.remove("run-history-focus"), 1200);
-      };
-      root.appendChild(row);
-    }
-  } catch (error) {
-    root.innerHTML = "";
-    const failed = document.createElement("div");
-    failed.className = "run-history-empty error";
-    failed.textContent = errorSummary(error.message, "Unable to load run history");
-    root.appendChild(failed);
-  }
-}
-function setRunHistoryOpen(open) {
-  state.runHistoryOpen = Boolean(open && state.project);
-  if (state.runHistoryOpen) setRuntimeTraceOpen(false);
-  const panel = $("runHistoryPanel");
-  const button = $("runHistoryButton");
-  if (panel) panel.hidden = !state.runHistoryOpen;
-  if (button) button.setAttribute("aria-expanded", String(state.runHistoryOpen));
-  if (state.runHistoryOpen) void refreshRunHistory();
-}
-function renderRuntimeTrace(runtime = state.runtime) {
-  const button = $("runtimeTraceButton");
-  const root = $("runtimeTraceList");
-  if (!button || !root) return;
-  const items = Array.isArray(runtime?.recent_transitions) ? runtime.recent_transitions : [];
-  button.hidden = items.length === 0;
-  if (!items.length) {
-    root.innerHTML = "";
-    setRuntimeTraceOpen(false);
-    return;
-  }
-  root.innerHTML = "";
-  for (const item of [...items].reverse()) {
-    const row = document.createElement("div");
-    row.className = `runtime-trace-row status-${item.status || "unknown"}`;
-    const route = document.createElement("strong");
-    route.textContent = `${item.stage || "stage"} ${String(item.status || "").toUpperCase()} → ${item.target || "stop"}`;
-    route.title = route.textContent;
-    const meta = document.createElement("small");
-    const timestamp = Number(item.timestamp || 0) * 1000;
-    meta.textContent = [
-      Number(item.cycle || 0) > 0 ? `Cycle ${item.cycle}` : "",
-      item.kind ? String(item.kind) : "",
-      timestamp ? formatFreshness(timestamp) : "",
-    ].filter(Boolean).join(" · ");
-    if (timestamp) meta.title = new Date(timestamp).toLocaleString();
-    row.append(route, meta);
-    root.appendChild(row);
-  }
-}
-function setRuntimeTraceOpen(open) {
-  state.runtimeTraceOpen = Boolean(open && state.project);
-  if (state.runtimeTraceOpen && state.runHistoryOpen) {
-    state.runHistoryOpen = false;
-    if ($("runHistoryPanel")) $("runHistoryPanel").hidden = true;
-    $("runHistoryButton")?.setAttribute("aria-expanded", "false");
-  }
-  const panel = $("runtimeTracePanel");
-  const button = $("runtimeTraceButton");
-  if (panel) panel.hidden = !state.runtimeTraceOpen;
-  if (button) button.setAttribute("aria-expanded", String(state.runtimeTraceOpen));
 }
 
 async function refreshMessages({ forceFollow = false, projectPath = state.project?.path || "" } = {}) {
@@ -615,7 +483,7 @@ function ensureLiveCard({ forceVisibleOnCreate = false } = {}) {
   const root = $("messages");
   let card = root.querySelector(".live-activity"); if (card) return card;
   card = document.createElement("article"); card.className = "live-activity cli-runtime-card";
-  card.innerHTML = `<div class="live-activity-head"><span class="live-dot" aria-hidden="true"></span><strong class="live-title">CLI Runtime</strong><small class="live-progress">same runtime state</small><small class="live-updated">Last update —</small></div><pre class="cli-runtime-output"></pre><div class="cli-runtime-footer"><span class="runtime-live-indicator">Running</span><span>Elapsed <strong class="cli-runtime-elapsed">00:00:00</strong></span></div>`;
+  card.innerHTML = `<div class="live-activity-head"><span class="live-dot" aria-hidden="true"></span><strong class="live-title">CLI Runtime</strong><small class="live-progress">same runtime state</small><small class="live-updated">Last update —</small></div><div class="runtime-activity" hidden><span class="runtime-activity-label">AI Activity</span><div class="runtime-activity-list"></div></div><pre class="cli-runtime-output"></pre><div class="cli-runtime-footer"><span class="runtime-live-indicator">Running</span><span>Elapsed <strong class="cli-runtime-elapsed">00:00:00</strong></span></div>`;
   root.appendChild(card);
   if (forceVisibleOnCreate) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
   return card;
@@ -633,6 +501,28 @@ function renderCliRuntimeFrame() {
   const runtime = state.runtime, output = $("messages")?.querySelector(".cli-runtime-output");
   if (!runtime || !output) return;
   setTextIfChanged(output, cliRuntimeText(runtime));
+}
+function renderRuntimeActivity(runtime) {
+  const card = $("messages")?.querySelector(".live-activity");
+  const root = card?.querySelector(".runtime-activity");
+  const list = card?.querySelector(".runtime-activity-list");
+  if (!root || !list) return;
+  const rows = Array.isArray(runtime?.activity_summary)
+    ? runtime.activity_summary.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  root.hidden = rows.length === 0;
+  if (!rows.length) { list.innerHTML = ""; delete list.dataset.signature; return; }
+  const signature = rows.join("\n");
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
+  list.innerHTML = "";
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "runtime-activity-item";
+    item.textContent = row;
+    item.title = row;
+    list.appendChild(item);
+  }
 }
 function runtimeStatusLabel(runtime) {
   return String(runtime?.view?.label || runtime?.status || "Idle")
@@ -692,14 +582,9 @@ function renderRuntimeGuidance(runtime) {
     : "";
   setTextIfChanged($("runtimeGuidanceActions"), retry || (recommended.length ? "Recommended: " + recommended.join(" / ") : ""));
   const workflowButton = $("runtimeGuidanceWorkflow");
-  const traceButton = $("runtimeGuidanceTrace");
   if (workflowButton) {
     workflowButton.hidden = !recommended.includes("open_workflow");
     workflowButton.onclick = () => $("workflowNav")?.click();
-  }
-  if (traceButton) {
-    traceButton.hidden = !recommended.includes("view_trace");
-    traceButton.onclick = () => $("runtimeTraceButton")?.click();
   }
 }
 function runtimeRenderSignature(runtime) {
@@ -711,7 +596,7 @@ function runtimeRenderSignature(runtime) {
     runtime.stage || "", runtime.cycle || 1, runtime.workflow_position || 0,
     runtime.last_transition || {}, runtime.completed_count || 0, runtime.total || 0,
     runtime.task || "", runtime.cli_detail || "", runtime.console_snapshot_exists || false,
-    runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0,
+    runtime.cli_lines || [], runtime.activity_summary || [], runtime.script_mode || false, runtime.script_index || 0,
     runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""
   ]);
 }
@@ -838,7 +723,6 @@ function renderRuntime(runtime) {
   }
 
   renderRuntimeInput(runtime);
-  renderRuntimeTrace(runtime);
   renderRuntimeGuidance(runtime);
 
   $("clearHistoryButton").disabled = isRunning;
@@ -864,6 +748,7 @@ function renderRuntime(runtime) {
     const card = ensureLiveCard({ forceVisibleOnCreate: true });
     card.classList.toggle("running", isRunning);
     renderLiveRuntimeHeader(runtime);
+    renderRuntimeActivity(runtime);
     renderCliRuntimeFrame();
     followHistoryToBottom();
   } else removeLiveCard();
@@ -889,7 +774,6 @@ function renderRuntime(runtime) {
     state.lastRunId = runtime.run_id;
     state.historyPinnedToBottom = true;
     refreshMessages({ forceFollow: true });
-    if (state.runHistoryOpen) void refreshRunHistory();
   }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
@@ -2115,10 +1999,6 @@ if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
-$("runtimeTraceButton").onclick = () => setRuntimeTraceOpen(!state.runtimeTraceOpen);
-$("runtimeTraceClose").onclick = () => setRuntimeTraceOpen(false);
-$("runHistoryButton").onclick = () => setRunHistoryOpen(!state.runHistoryOpen);
-$("runHistoryClose").onclick = () => setRunHistoryOpen(false);
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.actions?.stop) return;
   const resetStopped = Boolean(state.runtime?.actions?.reset && state.runtime?.actions?.resume);
@@ -2133,7 +2013,6 @@ $("clearHistoryButton").onclick = async () => {
     removeLiveCard();
     await refreshMessages({ forceFollow: true });
     await refreshRuntime({ force: true });
-    if (state.runHistoryOpen) await refreshRunHistory();
     showToast(resetStopped ? "Chat history and stopped task cleared" : t("history.cleared", "Chat history cleared"));
   } catch (error) { showActionError(error.message, "Clear history failed"); }
 };
