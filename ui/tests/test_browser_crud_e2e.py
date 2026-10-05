@@ -695,68 +695,57 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
-def test_task_validation_options_follow_workflow_capabilities() -> None:
+def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         state = _write_fixture_repo(Path(td))
         state.workflow_catalog = lambda: {
             "stage_types": {
                 "base": {"profiles": {}, "options": []},
+                "plan": {"options": []},
                 "command": {"options": []},
                 "ai_validator": {"options": []},
             },
             "node_options": {},
         }
 
-        file_workflow = state.studio_workflow_create("file_task", "global", None)
-        file_doc = state.studio_read(file_workflow["item"]["id"], None)
-        state.studio_save(
-            file_workflow["item"]["id"],
-            (
+        workflows = state.repo_root / "runner" / "assets" / "workflows"
+        fixtures = {
+            "ralphy_ai_validate.yaml": (
                 "stages:\n"
-                "  validate_file:\n"
-                "    type: command\n"
-                "    command: \"{python} {validator}\"\n"
-                "flow: [validate_file]\n"
+                "  ralphy:\n    type: base\n    profile: execute\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [ralphy, validate_ai]\n"
             ),
-            file_doc["hash"],
-            None,
-        )
-
-        ai_workflow = state.studio_workflow_create("ai_task", "global", None)
-        ai_doc = state.studio_read(ai_workflow["item"]["id"], None)
-        state.studio_save(
-            ai_workflow["item"]["id"],
-            (
+            "ai.yaml": (
                 "stages:\n"
-                "  validate_ai:\n"
-                "    type: ai_validator\n"
-                "    validator: ai\n"
-                "flow: [validate_ai]\n"
+                "  planning:\n    type: plan\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [planning, validate_ai]\n"
             ),
-            ai_doc["hash"],
-            None,
-        )
-
-        mixed_workflow = state.studio_workflow_create("mixed_task", "global", None)
-        mixed_doc = state.studio_read(mixed_workflow["item"]["id"], None)
-        state.studio_save(
-            mixed_workflow["item"]["id"],
-            (
+            "file.yaml": (
                 "stages:\n"
-                "  validate_file:\n"
-                "    type: command\n"
-                "    command: \"{python} {validator}\"\n"
-                "  validate_ai:\n"
-                "    type: ai_validator\n"
-                "    validator: ai\n"
-                "flow: [validate_file, validate_ai]\n"
+                "  planning:\n    type: plan\n"
+                "  validate_file:\n    type: command\n"
+                "    command: \"{python} {validator} --project-root {project_root}\"\n"
+                "flow: [planning, validate_file]\n"
             ),
-            mixed_doc["hash"],
-            None,
-        )
-
-        plain_workflow = state.studio_workflow_create("plain_task", "global", None)
+            "mixed.yaml": (
+                "stages:\n"
+                "  planning:\n    type: plan\n"
+                "  validate_file:\n    type: command\n"
+                "    command: \"{python} {validator} --project-root {project_root}\"\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [planning, validate_file, validate_ai]\n"
+            ),
+            "plain.yaml": (
+                "stages:\n"
+                "  planning:\n    type: plan\n"
+                "flow: [planning]\n"
+            ),
+        }
+        for name, content in fixtures.items():
+            (workflows / name).write_text(content, encoding="utf-8")
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
@@ -790,26 +779,33 @@ def test_task_validation_options_follow_workflow_capabilities() -> None:
             page.locator("#optionsButton").click()
             assert page.locator("#activeRunDetails").count() == 0
 
-            page.locator("#workflowSelect").select_option(value=plain_workflow["item"]["path"])
-            page.wait_for_timeout(50)
-            assert not page.locator("#validationPickers").is_visible()
-
-            page.locator("#workflowSelect").select_option(value=file_workflow["item"]["path"])
-            page.wait_for_timeout(50)
-            assert page.locator("#validationPickers").is_visible()
-            assert page.locator("#validatorPicker").is_visible()
-            assert not page.locator("#aiValidatorPromptPicker").is_visible()
-
-            page.locator("#workflowSelect").select_option(value=ai_workflow["item"]["path"])
-            page.wait_for_timeout(50)
+            # Default Chat workflow is ralphy_ai_validate: AI validator prompt must be visible.
+            page.wait_for_function("document.querySelector('#workflowSelectedLabel')?.textContent === 'ralphy_ai_validate.yaml'")
             assert page.locator("#validationPickers").is_visible()
             assert not page.locator("#validatorPicker").is_visible()
             assert page.locator("#aiValidatorPromptPicker").is_visible()
 
-            page.locator("#workflowSelect").select_option(value=mixed_workflow["item"]["path"])
-            page.wait_for_timeout(50)
+            def choose_workflow(name: str) -> None:
+                page.locator("#workflowDropdownButton").click()
+                page.locator("#workflowDropdownMenu .workflow-dropdown-option").filter(has_text=name).click()
+                page.wait_for_timeout(50)
+
+            choose_workflow("file.yaml")
+            assert page.locator("#validationPickers").is_visible()
+            assert page.locator("#validatorPicker").is_visible()
+            assert not page.locator("#aiValidatorPromptPicker").is_visible()
+
+            choose_workflow("ai.yaml")
+            assert page.locator("#validationPickers").is_visible()
+            assert not page.locator("#validatorPicker").is_visible()
+            assert page.locator("#aiValidatorPromptPicker").is_visible()
+
+            choose_workflow("mixed.yaml")
             assert page.locator("#validationPickers").is_visible()
             assert page.locator("#validatorPicker").is_visible()
             assert page.locator("#aiValidatorPromptPicker").is_visible()
+
+            choose_workflow("plain.yaml")
+            assert not page.locator("#validationPickers").is_visible()
             assert not errors
             browser.close()
