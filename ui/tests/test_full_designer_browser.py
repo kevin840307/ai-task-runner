@@ -120,6 +120,64 @@ def _save_editor(page) -> None:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_full_designer_does_not_wait_for_slow_backend_model_discovery() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-editor-backend-load-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "fast-shell.yaml"
+        workflow.write_text(
+            "stages:\n  execute:\n    type: base\n    profile: execute\nflow: [execute]\n",
+            encoding="utf-8",
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        backend_started = threading.Event()
+        backend_release = threading.Event()
+
+        def slow_backend_catalog(project=None, *, include_models=False):
+            backend_started.set()
+            backend_release.wait(timeout=5)
+            return {"default": "qwen", "backends": ["qwen", "opencode"], "models": {}}
+
+        server.state.backend_catalog = slow_backend_catalog
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1280, "height": 800})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                file_id = next(
+                    item["id"] for item in files["workflows"]
+                    if item["name"] == "fast-shell.yaml"
+                )
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(file_id)}&project={project_q}"
+                )
+                assert backend_started.wait(timeout=2)
+                page.locator('.react-flow__node[data-id="execute"]').wait_for(
+                    state="attached", timeout=2000
+                )
+                assert page.get_by_text("Loading Workflow Studio…").count() == 0
+                assert not backend_release.is_set()
+                backend_release.set()
+                browser.close()
+        finally:
+            backend_release.set()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 def test_full_designer_ai_profiles_routes_and_draft_do_not_write_yaml() -> None:
     with tempfile.TemporaryDirectory(prefix="ai-runner-editor-e2e-") as td:
         project = Path(td)
