@@ -227,7 +227,7 @@ flow:
                 page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 assert page.locator(".react-flow__node-scope").count() == 0
 
-                snap = page.get_by_role("button", name="Grid Snap")
+                snap = page.locator(".snap-toggle")
                 assert snap.get_attribute("aria-pressed") == "false"
                 snap.click()
                 assert snap.get_attribute("aria-pressed") == "true"
