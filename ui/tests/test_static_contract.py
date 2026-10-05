@@ -318,18 +318,18 @@ def test_runtime_attention_stays_actionable_without_permanent_active_run_details
     assert "runtime.run_snapshot || {}" in app
 
 
-def test_task_validation_resources_remain_visible_and_capability_guarded():
+def test_task_validation_resources_are_workflow_declared_and_not_global():
     root = Path(__file__).resolve().parents[1]
     index = (root / "static" / "index.html").read_text(encoding="utf-8")
     app = (root / "static" / "app.js").read_text(encoding="utf-8")
 
-    assert '<div id="validationPickers" class="composer-validation-row options-validation-row">' in index
-    assert '<div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker">' in index
-    assert '<div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker">' in index
+    assert '<div id="validationPickers" class="composer-validation-row options-validation-row" hidden>' in index
+    assert '<div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>' in index
+    assert '<div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>' in index
     assert "驗證 File" in index
     assert "驗證 Prompt" in index
-    assert "renderValidationCapability()" in app
-    assert "Selected Workflow does not use a File Validator." in app
-    assert "Selected Workflow does not use an AI Validator Prompt." in app
+    assert 'validationPickers.hidden = !(workflow?.requires_python_validator || workflow?.has_ai_validator)' in app
+    assert 'validatorPicker.hidden = !workflow?.requires_python_validator' in app
+    assert 'aiPromptPicker.hidden = !workflow?.has_ai_validator' in app
     assert 'validator: workflow?.requires_python_validator ? $("validator").value.trim() : ""' in app
     assert 'ai_validator_prompt_file: workflow?.has_ai_validator ? $("aiValidatorPrompt").value.trim() : ""' in app
