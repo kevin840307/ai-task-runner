@@ -779,14 +779,13 @@ function runConfigurationLocked() {
 function renderRunConfigurationLock() {
   const locked = runConfigurationLocked();
   const reason = locked ? "Current task configuration is locked until Reset or completion." : "";
-  for (const id of ["workflowDropdownButton", "backendDropdownButton"]) setControlLocked($(id), locked, reason);
+  for (const id of ["workflowDropdownButton", "backendDropdownButton", "browseValidatorButton", "clearValidatorButton", "browseAiValidatorPromptButton", "clearAiValidatorPromptButton"]) setControlLocked($(id), locked, reason);
   const select = $("workflowSelect"); if (select) select.disabled = locked;
   $("workflowPicker")?.classList.toggle("configuration-locked", locked);
   $("validatorPicker")?.classList.toggle("configuration-locked", locked);
   $("aiValidatorPromptPicker")?.classList.toggle("configuration-locked", locked);
   if ($("runConfigLockNote")) $("runConfigLockNote").hidden = !locked;
   if (locked) { closeWorkflowDropdown(); closeBackendDropdown(); }
-  renderValidationCapability();
 }
 
 function renderRuntime(runtime) {
@@ -1033,16 +1032,28 @@ function renderWorkflowPickerSelection() {
   const value = $("workflowSelect")?.value || "";
   document.querySelectorAll("#workflowDropdownMenu .workflow-dropdown-option").forEach((button, index) => { const active = $("workflowSelect")?.options[index]?.value === value; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
   const workflow = selectedWorkflowItem();
-  const input = $("validator"), aiPromptInput = $("aiValidatorPrompt");
+  const validationPickers = $("validationPickers"), validatorPicker = $("validatorPicker"), input = $("validator");
+  const aiPromptPicker = $("aiValidatorPromptPicker"), aiPromptInput = $("aiValidatorPrompt");
+  if (validationPickers) validationPickers.hidden = !(workflow?.requires_python_validator || workflow?.has_ai_validator);
+  if (validatorPicker) validatorPicker.hidden = !workflow?.requires_python_validator;
+  if (aiPromptPicker) aiPromptPicker.hidden = !workflow?.has_ai_validator;
   if (input && state.validatorWorkflowPath !== value) {
     const validators = currentProjectPreferences().validators || {};
     input.value = workflow?.requires_python_validator ? String(validators[value] || "") : "";
     state.validatorWorkflowPath = value;
   }
+  if (!workflow?.requires_python_validator && input) {
+    input.value = "";
+    state.validatorWorkflowPath = "";
+  }
   if (aiPromptInput && state.aiValidatorPromptWorkflowPath !== value) {
     const prompts = currentProjectPreferences().aiValidatorPrompts || {};
     aiPromptInput.value = workflow?.has_ai_validator ? String(prompts[value] || "") : "";
     state.aiValidatorPromptWorkflowPath = value;
+  }
+  if (!workflow?.has_ai_validator && aiPromptInput) {
+    aiPromptInput.value = "";
+    state.aiValidatorPromptWorkflowPath = "";
   }
   updateValidatorPicker();
   updateAiValidatorPromptPicker();
@@ -1055,47 +1066,11 @@ function resourceFileName(value, fallback) {
 }
 function updateValidatorPicker() {
   const input = $("validator"), clear = $("clearValidatorButton"), name = $("validatorResourceName"), picker = $("validatorPicker"); if (!input) return;
-  const supported = Boolean(selectedWorkflowItem()?.requires_python_validator);
-  const value = input.value.trim();
-  input.title = value;
-  if (clear) clear.hidden = !supported || !value;
-  if (name) name.textContent = supported ? resourceFileName(value, "未選擇") : "此 Workflow 未使用";
-  if (picker) {
-    picker.classList.toggle("has-resource", supported && !!value);
-    picker.classList.toggle("resource-unavailable", !supported);
-  }
+  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "未選擇"); if (picker) picker.classList.toggle("has-resource", !!value);
 }
 function updateAiValidatorPromptPicker() {
   const input = $("aiValidatorPrompt"), clear = $("clearAiValidatorPromptButton"), name = $("aiValidatorPromptResourceName"), picker = $("aiValidatorPromptPicker"); if (!input) return;
-  const supported = Boolean(selectedWorkflowItem()?.has_ai_validator);
-  const value = input.value.trim();
-  input.title = value;
-  if (clear) clear.hidden = !supported || !value;
-  if (name) name.textContent = supported ? resourceFileName(value, "預設 Prompt") : "此 Workflow 未使用";
-  if (picker) {
-    picker.classList.toggle("has-resource", supported && !!value);
-    picker.classList.toggle("resource-unavailable", !supported);
-  }
-}
-function renderValidationCapability() {
-  const workflow = selectedWorkflowItem();
-  const locked = runConfigurationLocked();
-  const fileSupported = Boolean(workflow?.requires_python_validator);
-  const promptSupported = Boolean(workflow?.has_ai_validator);
-  const lockReason = "Current task configuration is locked until Reset or completion.";
-  const capability = [
-    ["browseValidatorButton", fileSupported, "Selected Workflow does not use a File Validator."],
-    ["clearValidatorButton", fileSupported, "Selected Workflow does not use a File Validator."],
-    ["browseAiValidatorPromptButton", promptSupported, "Selected Workflow does not use an AI Validator Prompt."],
-    ["clearAiValidatorPromptButton", promptSupported, "Selected Workflow does not use an AI Validator Prompt."],
-  ];
-  for (const [id, supported, unsupportedReason] of capability) {
-    const control = $(id);
-    if (!control) continue;
-    control.disabled = locked || !supported;
-    control.setAttribute("aria-disabled", String(locked || !supported));
-    control.title = locked ? lockReason : (!supported ? unsupportedReason : "");
-  }
+  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "預設 Prompt"); if (picker) picker.classList.toggle("has-resource", !!value);
 }
 async function browseValidator() {
   const button = $("browseValidatorButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "…";
