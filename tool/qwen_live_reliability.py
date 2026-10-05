@@ -143,12 +143,16 @@ target = Path(a.project_root).resolve() / "health.txt"
 if not target.is_file():
     print("VALIDATION_FAILED: missing health.txt")
     raise SystemExit(1)
-actual = target.read_text(encoding="utf-8")
-allowed = ({EXPECTED!r}, {(EXPECTED + chr(10))!r}, {(EXPECTED + chr(13) + chr(10))!r})
+actual = target.read_bytes()
+allowed = (
+    {EXPECTED.encode("utf-8")!r},
+    {(EXPECTED + chr(10)).encode("utf-8")!r},
+    {(EXPECTED + chr(13) + chr(10)).encode("utf-8")!r},
+)
 if actual not in allowed:
     print(
         "VALIDATION_FAILED: health.txt content mismatch; "
-        + "actual=" + repr(actual) + ", chars=" + str(len(actual))
+        + "actual=" + repr(actual) + ", bytes=" + str(len(actual))
     )
     raise SystemExit(1)
 print("VALIDATION_PASSED")
