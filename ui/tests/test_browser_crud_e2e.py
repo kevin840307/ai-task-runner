@@ -788,6 +788,12 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             def choose_workflow(name: str) -> None:
                 page.locator("#workflowDropdownButton").click()
                 page.locator("#workflowDropdownMenu .workflow-dropdown-option").filter(has_text=name).click()
+                page.wait_for_function(
+                    "(name) => document.querySelector('#workflowSelectedLabel')?.textContent === name",
+                    arg=name,
+                )
+                if not page.locator("#optionsPanel").is_visible():
+                    page.locator("#optionsButton").click()
                 page.wait_for_timeout(50)
 
             choose_workflow("file.yaml")
