@@ -935,8 +935,9 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
   overscroll-behavior: contain;
 }
 .options-validation-row {
-  width: auto;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   margin: 0;
   box-sizing: border-box;
   display: grid;
@@ -946,10 +947,10 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
   gap: 8px;
 }
 .options-validation-row .composer-resource-picker {
-  width: auto;
+  width: 100%;
   height: auto;
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
   min-height: 72px;
   margin: 0;
   box-sizing: border-box;
