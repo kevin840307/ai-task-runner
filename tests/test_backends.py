@@ -235,12 +235,7 @@ def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     assert "--auto" in captured["command"]
 
 
-def test_opencode_models_include_project_config_when_cli_discovery_times_out(tmp_path, monkeypatch):
-    class TimedOut:
-        output = ""
-        return_code = 1
-        timed_out = True
-
+def test_opencode_models_include_project_config_without_cli_discovery(tmp_path, monkeypatch):
     (tmp_path / "opencode.json").write_text(
         json.dumps({
             "model": "lmstudio/default-model",
@@ -255,10 +250,10 @@ def test_opencode_models_include_project_config_when_cli_discovery_times_out(tmp
         }),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "runner.agent.opencode.run_process",
-        lambda command, root, timeout: TimedOut(),
-    )
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("configured OpenCode models must not wait for CLI discovery")
+
+    monkeypatch.setattr("runner.agent.opencode.run_process", fail_if_called)
 
     models = available_models("opencode", tmp_path)
 
