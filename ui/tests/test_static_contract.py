@@ -368,3 +368,7 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
     assert "position: absolute !important" in css
     assert "text-overflow: ellipsis" in css
     assert "min-width: 70px" in css
+    assert "max-width: calc(100% - 78px)" in css
+    assert "overflow: hidden !important" in css
+    assert "#composePanel .options-button" in css
+    assert "flex: 0 0 auto" in css
