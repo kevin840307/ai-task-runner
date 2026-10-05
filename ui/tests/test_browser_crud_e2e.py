@@ -796,10 +796,16 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             assert page.locator("#validationPickers").is_visible()
             assert page.locator("#validatorPicker").is_visible()
             assert page.locator("#aiValidatorPromptPicker").is_visible()
-            panel_box = page.locator("#optionsPanel").bounding_box()
+            panel = page.locator("#optionsPanel")
+            panel_box = panel.bounding_box()
             file_box = page.locator("#validatorPicker").bounding_box()
             ai_box = page.locator("#aiValidatorPromptPicker").bounding_box()
             assert panel_box and file_box and ai_box
+            panel_scroll = panel.evaluate(
+                "(node) => ({left: node.scrollLeft, width: node.clientWidth, scrollWidth: node.scrollWidth})"
+            )
+            assert panel_scroll["left"] == 0
+            assert panel_scroll["scrollWidth"] <= panel_scroll["width"] + 1
             assert file_box["height"] >= 72
             assert ai_box["height"] >= 72
             assert file_box["y"] + file_box["height"] + 6 <= ai_box["y"]
