@@ -930,13 +930,6 @@ def test_example_smoke_probe_uses_case_name_for_copy(
     assert project == tmp_path / "case-a"
 
 
-@pytest.mark.parametrize(
-    ("name", "hours", "yaml_items"),
-    [
-        ("qwen_live_reliability_0_5h.bat", "0.5", "4"),
-        ("qwen_live_reliability_24h.bat", "24", "8"),
-    ],
-)
 def test_high_density_defaults_cover_all_transient_http_classes_by_run_six():
     source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "args.soak_transient_api_every = 2" in source
@@ -946,6 +939,13 @@ def test_high_density_defaults_cover_all_transient_http_classes_by_run_six():
     ] == list(live.API_RECOVERY_STATUS_CODES)
 
 
+@pytest.mark.parametrize(
+    ("name", "hours", "yaml_items"),
+    [
+        ("qwen_live_reliability_0_5h.bat", "0.5", "4"),
+        ("qwen_live_reliability_24h.bat", "24", "8"),
+    ],
+)
 def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml_items: str):
     text = (ROOT / "tool" / name).read_text(encoding="utf-8")
     assert f"--hours {hours}" in text
