@@ -19,20 +19,28 @@ Core principles
 
 Migration / non-regression guardrails
 -------------------------------------
-This redesign is an outer product/UI reorganization. It must NOT break or unnecessarily rewrite
-the current Workflow Studio, Prompt Editor, Runner runtime, CLI, YAML contract, live/dry-run behavior,
-resume/recovery/session semantics, or existing API boundaries.
+This redesign is primarily an outer product/UI reorganization. Preserve current Workflow Studio,
+Prompt Editor, Runner runtime, CLI, YAML contract, live/dry-run behavior, resume/recovery/session
+semantics and existing API boundaries by default.
+
+Changes to existing behavior/architecture are allowed ONLY when they are genuinely necessary for
+the new product model or to fix a proven design/maintenance problem. Any such change must be:
+- explicitly justified by a concrete requirement,
+- the smallest practical change,
+- implemented at the correct/global ownership layer instead of as UI-specific hardcode,
+- compatible with existing behavior where reasonable,
+- covered by regression tests before old behavior/code is removed.
 
 Required migration rules:
-- Keep the existing Runner runtime authoritative and behavior-compatible.
-- Do not change FlowEngine / StageExecutor / RunState semantics merely to support the new Chat/Task shell.
-- Reuse current Workflow Studio / Full Designer rather than rebuilding it inside the new navigation.
-- Reuse current Prompt list/editor/test behavior rather than replacing Prompt semantics.
-- Keep canonical Workflow YAML and existing Prompt resources as the source of truth.
-- Existing Workflow / Prompt APIs should stay compatible unless a separately justified migration is required.
+- Keep the existing Runner runtime authoritative and behavior-compatible unless a necessary change is explicitly justified.
+- Do not change FlowEngine / StageExecutor / RunState semantics merely for UI convenience.
+- Reuse current Workflow Studio / Full Designer unless a necessary improvement requires changing it.
+- Reuse current Prompt list/editor/test behavior unless a necessary improvement requires changing it.
+- Keep canonical Workflow YAML and existing Prompt resources as the source of truth unless a separately approved contract change is required.
+- Existing Workflow / Prompt APIs should stay compatible unless a necessary, justified migration is required.
 - Chat / Task metadata is additive UI storage; it must not become a new canonical runtime or Workflow store.
-- Task Detail should adapt/reuse the current execution-oriented Chat UI instead of duplicating its runtime logic.
-- Preserve existing runtime projection / allowed_actions and backend action guards.
+- Task Detail should adapt/reuse the current execution-oriented Chat UI where practical instead of duplicating runtime logic.
+- Preserve existing runtime projection / allowed_actions and backend action guards unless a necessary global improvement replaces them.
 - Keep CLI / programmatic runner usage working even if the entire UI layer is removed.
 - Do not require Worktree support for the first UI migration; Main-only execution must remain fully usable.
 
