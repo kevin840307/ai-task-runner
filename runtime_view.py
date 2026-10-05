@@ -94,7 +94,7 @@ def build_runtime_view(evidence: Mapping[str, Any]) -> dict[str, Any]:
         if _text(transition_data.get("status")).lower() == "fail":
             stage = _text(transition_data.get("stage")) or "Stage"
             reason = f"{stage} returned FAIL and the Workflow did not continue."
-            recommended = ["open_workflow", "view_trace"]
+            recommended = ["open_workflow"]
             if actions["reset"]:
                 recommended.append("reset")
         else:
