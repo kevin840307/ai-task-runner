@@ -144,7 +144,7 @@ if not target.is_file():
     print("VALIDATION_FAILED: missing health.txt")
     raise SystemExit(1)
 actual = target.read_text(encoding="utf-8")
-allowed = ({EXPECTED!r}, {EXPECTED + "\n"!r}, {EXPECTED + "\r\n"!r})
+allowed = ({EXPECTED!r}, {(EXPECTED + chr(10))!r}, {(EXPECTED + chr(13) + chr(10))!r})
 if actual not in allowed:
     print(
         "VALIDATION_FAILED: health.txt content mismatch; "
