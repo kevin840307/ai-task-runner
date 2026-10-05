@@ -235,6 +235,38 @@ def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     assert "--auto" in captured["command"]
 
 
+def test_opencode_models_include_project_config_when_cli_discovery_times_out(tmp_path, monkeypatch):
+    class TimedOut:
+        output = ""
+        return_code = 1
+        timed_out = True
+
+    (tmp_path / "opencode.json").write_text(
+        json.dumps({
+            "model": "lmstudio/default-model",
+            "provider": {
+                "lmstudio": {
+                    "models": {
+                        "qwen3.5-9b": {},
+                        "qwen3.5-4b": {},
+                    }
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "runner.agent.opencode.run_process",
+        lambda command, root, timeout: TimedOut(),
+    )
+
+    models = available_models("opencode", tmp_path)
+
+    assert "lmstudio/default-model" in models
+    assert "lmstudio/qwen3.5-9b" in models
+    assert "lmstudio/qwen3.5-4b" in models
+
+
 def test_opencode_json_parser_uses_text_events_and_error_message(tmp_path):
     backend = OpenCodeBackend(sys.executable, tmp_path, [])
     raw = '\n'.join([
