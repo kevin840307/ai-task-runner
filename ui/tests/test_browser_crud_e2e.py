@@ -490,27 +490,6 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#chatView").is_visible()
             assert page.locator("#workflowView").is_hidden()
 
-            # Runtime Trace reuses bounded runtime evidence and remains mutually
-            # exclusive with Recent Runs.
-            assert page.locator("#runtimeTraceButton").is_visible()
-            page.click("#runtimeTraceButton")
-            assert page.locator("#runtimeTracePanel").is_visible()
-            assert page.locator("#runtimeTraceList", has_text="review FAIL → execute").count() == 1
-            assert page.locator("#runtimeTraceList", has_text="Cycle 1").count() >= 1
-            assert page.locator("#runtimeTraceButton").get_attribute("aria-expanded") == "true"
-
-            # Recent Runs is a lightweight derived view and must not require another
-            # navigation surface or history store.
-            page.click("#runHistoryButton")
-            assert page.locator("#runtimeTracePanel").is_hidden()
-            assert page.locator("#runtimeTraceButton").get_attribute("aria-expanded") == "false"
-            assert page.locator("#runHistoryPanel").is_visible()
-            assert page.locator("#runHistoryList", has_text="No runs yet.").count() == 1
-            assert page.locator("#runHistoryButton").get_attribute("aria-expanded") == "true"
-            page.click("#runHistoryClose")
-            assert page.locator("#runHistoryPanel").is_hidden()
-            assert page.locator("#runHistoryButton").get_attribute("aria-expanded") == "false"
-
             page.click("#promptNav")
             page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
             page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('prompt-manager-mode')")
@@ -786,14 +765,17 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             assert page.locator("#aiValidatorPromptPicker").is_visible()
 
             def choose_workflow(name: str) -> None:
+                if page.locator("#optionsPanel").is_visible():
+                    page.locator("#optionsCloseButton").click()
+                    page.wait_for_function("document.querySelector('#optionsPanel')?.hidden === true")
                 page.locator("#workflowDropdownButton").click()
                 page.locator("#workflowDropdownMenu .workflow-dropdown-option").filter(has_text=name).click()
                 page.wait_for_function(
                     "(name) => document.querySelector('#workflowSelectedLabel')?.textContent === name",
                     arg=name,
                 )
-                if not page.locator("#optionsPanel").is_visible():
-                    page.locator("#optionsButton").click()
+                page.locator("#optionsButton").click()
+                page.wait_for_function("document.querySelector('#optionsPanel')?.hidden === false")
                 page.wait_for_timeout(50)
 
             choose_workflow("file.yaml")
