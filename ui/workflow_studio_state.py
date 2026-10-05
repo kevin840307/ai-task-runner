@@ -937,15 +937,11 @@ class WorkflowStudioMixin:
             if not isinstance(cfg, dict):
                 continue
             stage_type = str(cfg.get("type") or "base")
-            if stage_type == "ai_validator":
+            if stage_type == "ai_validator" or str(cfg.get("validator") or "").strip().lower() == "ai":
                 result["has_ai_validator"] = True
             command = cfg.get("command")
             command_text = " ".join(command) if isinstance(command, list) else str(command or "")
-            if (
-                stage_type == "command"
-                and str(cfg.get("result_kind") or "") == "validation"
-                and "{validator}" in command_text
-            ):
+            if stage_type == "command" and "{validator}" in command_text:
                 result["requires_python_validator"] = True
         return result
 
