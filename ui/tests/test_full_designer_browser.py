@@ -142,7 +142,7 @@ def test_full_designer_does_not_wait_for_slow_backend_model_discovery() -> None:
             backend_release.wait(timeout=5)
             return {"default": "qwen", "backends": ["qwen", "opencode"], "models": {}}
 
-        server.state.backend_catalog = slow_backend_catalog
+        server.RequestHandlerClass.state.backend_catalog = slow_backend_catalog
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
