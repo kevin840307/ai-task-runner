@@ -79,6 +79,50 @@ class UIStateTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def test_builtin_validator_workflow_capabilities_are_discoverable(self) -> None:
+        workflows = self.root / "runner" / "assets" / "workflows"
+        fixtures = {
+            "ralphy_ai_validate.yaml": (
+                "stages:\n"
+                "  ralphy:\n    type: base\n    profile: execute\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [ralphy, validate_ai]\n"
+            ),
+            "ai.yaml": (
+                "stages:\n"
+                "  planning:\n    type: plan\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [planning, validate_ai]\n"
+            ),
+            "file.yaml": (
+                "stages:\n"
+                "  planning:\n    type: plan\n"
+                "  validate_file:\n    type: command\n"
+                "    command: \"{python} {validator} --project-root {project_root}\"\n"
+                "flow: [planning, validate_file]\n"
+            ),
+            "mixed.yaml": (
+                "stages:\n"
+                "  planning:\n    type: plan\n"
+                "  validate_file:\n    type: command\n"
+                "    command: \"{python} {validator} --project-root {project_root}\"\n"
+                "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+                "flow: [planning, validate_file, validate_ai]\n"
+            ),
+        }
+        for name, content in fixtures.items():
+            (workflows / name).write_text(content, encoding="utf-8")
+
+        by_name = {item["name"]: item for item in self.state.studio_files()["workflows"]}
+        self.assertTrue(by_name["ralphy_ai_validate.yaml"]["has_ai_validator"])
+        self.assertFalse(by_name["ralphy_ai_validate.yaml"]["requires_python_validator"])
+        self.assertTrue(by_name["ai.yaml"]["has_ai_validator"])
+        self.assertFalse(by_name["ai.yaml"]["requires_python_validator"])
+        self.assertFalse(by_name["file.yaml"]["has_ai_validator"])
+        self.assertTrue(by_name["file.yaml"]["requires_python_validator"])
+        self.assertTrue(by_name["mixed.yaml"]["has_ai_validator"])
+        self.assertTrue(by_name["mixed.yaml"]["requires_python_validator"])
+
     def test_stage_prompt_defaults_follow_runtime_catalog(self) -> None:
         original = self.state.workflow_catalog
         self.state.workflow_catalog = lambda: {
