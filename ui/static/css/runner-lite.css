@@ -881,10 +881,18 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
 .composer-validation-row .composer-validator-picker input {
   max-width: 112px;
 }
-/* Options validation resources are stacked intentionally.
+/* Options validation resources are stacked and internally two-row.
    Mixed File + AI validation must never compete for horizontal space. */
+.options-panel {
+  width: min(380px, calc(100vw - 28px));
+  max-width: 100%;
+  max-height: min(70dvh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .options-validation-row {
   width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
@@ -892,12 +900,34 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
 }
 .options-validation-row .composer-resource-picker {
   width: 100%;
+  min-width: 0;
   max-width: none;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "kind kind clear"
+    "name choose choose";
+  align-items: center;
+  row-gap: 2px;
+  column-gap: 6px;
+  border-radius: 10px;
+  padding: 6px 7px 6px 9px;
+}
+.options-validation-row .composer-resource-picker .resource-kind {
+  grid-area: kind;
+  min-width: 0;
 }
 .options-validation-row .composer-resource-picker .resource-name {
+  grid-area: name;
+  min-width: 0;
   max-width: none;
+}
+.options-validation-row .composer-resource-picker .resource-action {
+  grid-area: choose;
+}
+.options-validation-row .composer-resource-picker .resource-clear {
+  grid-area: clear;
+  justify-self: end;
 }
 @media (max-width: 900px) {
   .options-validation-row .composer-resource-picker { max-width: none; }
