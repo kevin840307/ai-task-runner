@@ -927,14 +927,14 @@ function App() {
       const filesUrl = query().project
         ? `/api/studio/files?project=${encodeURIComponent(query().project)}`
         : "/api/studio/files";
-      const [v, file, c, files, backends] = await Promise.all([
+      const backendUrl = query().project
+        ? `/api/backends?project=${encodeURIComponent(query().project)}&models=1`
+        : "/api/backends?models=1";
+      const [v, file, c, files] = await Promise.all([
         api<Visual>(endpoint("/api/studio/visual")),
         api<StudioFile>(endpoint("/api/studio/file")),
         api<Catalog>("/api/workflow/catalog"),
         api<{ prompts?: StudioFile[] }>(filesUrl),
-        api<BackendCatalog>(query().project
-          ? `/api/backends?project=${encodeURIComponent(query().project)}&models=1`
-          : "/api/backends?models=1"),
       ]);
       const canonicalYaml = String(file.content || "");
       const localDraft = readWorkflowDraft(v.id);
@@ -952,8 +952,6 @@ function App() {
       setYamlError("");
       setCatalog(c);
       setPrompts(files.prompts || []);
-      setBackendCatalog(backends);
-      setTestBackend((current) => current || backends.default || backends.backends?.[0] || "");
       layoutRef.current = readLayout(v.id);
       syncGraphProjection(v, c);
       setDirtyGraph(false);
@@ -961,6 +959,14 @@ function App() {
       redoStackRef.current = [];
       setEditorView("designer");
       setMessage("");
+      void api<BackendCatalog>(backendUrl)
+        .then((backends) => {
+          setBackendCatalog(backends);
+          setTestBackend((current) => current || backends.default || backends.backends?.[0] || "");
+        })
+        .catch(() => {
+          setBackendCatalog({ default: "", backends: [], models: {} });
+        });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
