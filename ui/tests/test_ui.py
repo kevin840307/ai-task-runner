@@ -314,43 +314,53 @@ class UIStateTests(unittest.TestCase):
         self.assertTrue(self.state.sync_completion(self.project))
         self.assertEqual(self.state.messages(self.project)[0]["content"], "Run completed.")
 
-    def test_run_history_derives_completed_runs_without_second_store(self) -> None:
-        self.state.append_message(self.project, "user", "first task")
-        messages_path = self.project / ".ai-task-runner" / "ui" / "messages.jsonl"
-        rows = [json.loads(line) for line in messages_path.read_text(encoding="utf-8").splitlines()]
-        rows[-1]["time"] = 100.0
-        messages_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-        self.state.append_message(self.project, "assistant", "done", run_id="run-1")
-        rows = [json.loads(line) for line in messages_path.read_text(encoding="utf-8").splitlines()]
-        rows[-1]["time"] = 112.0
-        messages_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
-        history = self.state.run_history(self.project)
+    def test_activity_summary_extracts_qwen_public_text_and_tools(self) -> None:
+        stream = "\n".join([
+            json.dumps({
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "private scratchpad"},
+                        {"type": "text", "text": "Inspecting file picker layout"},
+                        {
+                            "type": "tool_use",
+                            "name": "read_file",
+                            "input": {"file_path": "ui/static/index.html"},
+                        },
+                    ],
+                },
+            }),
+        ])
 
-        self.assertEqual(len(history), 1)
-        self.assertEqual(history[0]["run_id"], "run-1")
-        self.assertEqual(history[0]["status"], "completed")
-        self.assertEqual(history[0]["prompt"], "first task")
-        self.assertEqual(history[0]["duration"], 12.0)
+        rows = self.state._activity_summary(stream)
 
-    def test_run_history_adds_current_stopped_runtime_without_duplicate_store(self) -> None:
-        self.state.append_message(self.project, "user", "unfinished task")
-        runtime = self.project / ".ai-task-runner"
-        self.write_json(runtime / "state.json", {
-            "run_id": "run-current",
-            "goal": "unfinished task",
-            "completed": False,
-            "stage": "review",
-            "last_activity_at": 150.0,
-            "tasks": [],
-        })
+        self.assertIn("Inspecting file picker layout", rows)
+        self.assertIn("Using tool · read_file · ui/static/index.html", rows)
+        self.assertFalse(any("private scratchpad" in row for row in rows))
 
-        history = self.state.run_history(self.project)
 
-        self.assertEqual(history[0]["run_id"], "run-current")
-        self.assertEqual(history[0]["status"], "stopped")
-        self.assertEqual(history[0]["prompt"], "unfinished task")
+    def test_activity_summary_extracts_opencode_nested_text_and_tools(self) -> None:
+        stream = "\n".join([
+            json.dumps({
+                "type": "text",
+                "part": {"type": "text", "text": "Clarifying failure cause"},
+            }),
+            json.dumps({
+                "type": "tool",
+                "part": {
+                    "type": "tool",
+                    "name": "bash",
+                    "input": {"command": "pytest -q"},
+                },
+            }),
+        ])
 
+        rows = self.state._activity_summary(stream)
+
+        self.assertIn("Clarifying failure cause", rows)
+        self.assertIn("Using tool · bash · pytest -q", rows)
 
     def test_clear_chat_history_removes_conversation_and_does_not_resync_completed_result(self) -> None:
         runtime = self.project / ".ai-task-runner"
