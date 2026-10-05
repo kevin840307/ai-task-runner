@@ -818,8 +818,8 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             file_box = page.locator("#validatorPicker").bounding_box()
             ai_box = page.locator("#aiValidatorPromptPicker").bounding_box()
             assert panel_box and file_box and ai_box
-            assert file_box["height"] >= 56
-            assert ai_box["height"] >= 56
+            assert file_box["height"] >= 72
+            assert ai_box["height"] >= 72
             assert file_box["y"] + file_box["height"] + 6 <= ai_box["y"]
             assert file_box["x"] >= panel_box["x"] - 1
             assert ai_box["x"] >= panel_box["x"] - 1
@@ -837,7 +837,7 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
                 assert kind_box and name_box and choose_box
                 assert kind_box["y"] + kind_box["height"] <= name_box["y"] + 1
                 assert name_box["x"] + name_box["width"] <= choose_box["x"] + 1
-                assert choose_box["height"] >= 26
+                assert choose_box["height"] >= 32
 
             choose_workflow("plain.yaml")
             assert not page.locator("#validationPickers").is_visible()
