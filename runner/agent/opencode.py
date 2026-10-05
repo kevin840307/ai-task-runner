@@ -16,6 +16,68 @@ OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
 _PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
 
 
+def _read_opencode_config(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _configured_opencode_models(root: Path) -> set[str]:
+    paths: list[Path] = []
+    custom = str(os.environ.get("OPENCODE_CONFIG") or "").strip()
+    if custom:
+        paths.append(Path(custom).expanduser())
+    global_root = Path.home() / ".config" / "opencode"
+    paths.extend([global_root / "opencode.json", global_root / "opencode.jsonc"])
+    paths.extend([
+        root / "opencode.json",
+        root / "opencode.jsonc",
+        root / ".opencode" / "opencode.json",
+        root / ".opencode" / "opencode.jsonc",
+    ])
+
+    configs = [_read_opencode_config(path) for path in paths if path.is_file()]
+    inline = str(os.environ.get(OPENCODE_CONFIG_CONTENT) or "").strip()
+    if inline:
+        try:
+            value = json.loads(inline)
+        except json.JSONDecodeError:
+            value = {}
+        if isinstance(value, dict):
+            configs.append(value)
+
+    values: set[str] = set()
+    for config in configs:
+        for key in ("model", "small_model"):
+            value = config.get(key)
+            if isinstance(value, str) and value.strip():
+                values.add(value.strip())
+        providers = config.get("provider")
+        if not isinstance(providers, dict):
+            providers = config.get("providers")
+        if isinstance(providers, dict):
+            for provider_id, provider in providers.items():
+                if not isinstance(provider, dict):
+                    continue
+                models = provider.get("models")
+                if isinstance(models, dict):
+                    values.update(
+                        f"{provider_id}/{model_id}"
+                        for model_id in models
+                        if str(model_id).strip()
+                    )
+        agents = config.get("agent")
+        if isinstance(agents, dict):
+            for agent in agents.values():
+                if isinstance(agent, dict):
+                    value = agent.get("model")
+                    if isinstance(value, str) and value.strip():
+                        values.add(value.strip())
+    return values
+
+
 class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = DEFAULT_OPENCODE_COMMAND
@@ -23,17 +85,18 @@ class OpenCodeBackend(BaseBackend):
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
+        values = _configured_opencode_models(root)
         try:
-            result = run_process([cls.default_command, "models"], root, 15)
+            result = run_process([cls.default_command, "models"], root, 5)
         except Exception:
-            return []
-        if result.return_code or result.timed_out:
-            return []
-        return sorted({
-            line.strip()
-            for line in result.output.splitlines()
-            if line.strip() and not line.lstrip().startswith(("#", "["))
-        })
+            return sorted(values)
+        if not result.return_code and not result.timed_out:
+            values.update(
+                line.strip()
+                for line in result.output.splitlines()
+                if line.strip() and not line.lstrip().startswith(("#", "["))
+            )
+        return sorted(values)
 
     @classmethod
     def configure_args(
