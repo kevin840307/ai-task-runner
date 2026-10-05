@@ -1064,27 +1064,58 @@ function resourceFileName(value, fallback) {
   const text = String(value || "").trim(); if (!text) return fallback;
   return text.replaceAll("\\", "/").split("/").filter(Boolean).pop() || fallback;
 }
+function updateResourcePicker(inputId, clearId, nameId, pickerId, fallback) {
+  const input = $(inputId), clear = $(clearId), name = $(nameId), picker = $(pickerId); if (!input) return;
+  const value = input.value.trim(); input.title = value;
+  if (clear) clear.hidden = !value;
+  if (name) { name.textContent = resourceFileName(value, fallback); name.title = value || fallback; }
+  if (picker) picker.classList.toggle("has-resource", !!value);
+}
 function updateValidatorPicker() {
-  const input = $("validator"), clear = $("clearValidatorButton"), name = $("validatorResourceName"), picker = $("validatorPicker"); if (!input) return;
-  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "未選擇"); if (picker) picker.classList.toggle("has-resource", !!value);
+  updateResourcePicker("validator", "clearValidatorButton", "validatorResourceName", "validatorPicker", "Default");
 }
 function updateAiValidatorPromptPicker() {
-  const input = $("aiValidatorPrompt"), clear = $("clearAiValidatorPromptButton"), name = $("aiValidatorPromptResourceName"), picker = $("aiValidatorPromptPicker"); if (!input) return;
-  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "預設 Prompt"); if (picker) picker.classList.toggle("has-resource", !!value);
+  updateResourcePicker("aiValidatorPrompt", "clearAiValidatorPromptButton", "aiValidatorPromptResourceName", "aiValidatorPromptPicker", "Default");
 }
-async function browseValidator() {
-  const button = $("browseValidatorButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "…";
-  try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "python" }) }); if (!result.cancelled && result.path) { $("validator").value = result.path; rememberValidator($("workflowSelect")?.value || "", result.path); updateValidatorPicker(); showToast("Python validator selected"); } }
-  catch (error) { showToast(error.message, "error", 3200); }
-  finally { button.textContent = original; renderRunConfigurationLock(); }
+async function browseValidationResource({ buttonId, inputId, kind, remember, update, success, failure }) {
+  const button = $(buttonId); if (!button || runConfigurationLocked()) return;
+  const original = button.textContent; button.disabled = true; button.textContent = "…";
+  try {
+    const result = await api("/api/files/pick", {
+      method: "POST",
+      body: JSON.stringify({
+        kind,
+        project: state.project?.path || "",
+        current: $(inputId)?.value?.trim() || "",
+      }),
+    });
+    if (!result.cancelled && result.path) {
+      $(inputId).value = result.path;
+      remember($("workflowSelect")?.value || "", result.path);
+      update();
+      showToast(success);
+    }
+  } catch (error) {
+    showActionError(error.message, failure);
+  } finally {
+    button.disabled = false; button.textContent = original; renderRunConfigurationLock();
+  }
+}
+function browseValidator() {
+  return browseValidationResource({
+    buttonId: "browseValidatorButton", inputId: "validator", kind: "python",
+    remember: rememberValidator, update: updateValidatorPicker,
+    success: "File validator selected", failure: "File validator selection failed",
+  });
 }
 
 // ------------------------------ Workflow Studio ------------------------------
-async function browseAiValidatorPrompt() {
-  const button = $("browseAiValidatorPromptButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "…";
-  try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "markdown" }) }); if (!result.cancelled && result.path) { $("aiValidatorPrompt").value = result.path; rememberAiValidatorPrompt($("workflowSelect")?.value || "", result.path); updateAiValidatorPromptPicker(); showToast("AI validation prompt selected"); } }
-  catch (error) { showActionError(error.message, "AI prompt selection failed"); }
-  finally { button.disabled = false; button.textContent = original; }
+function browseAiValidatorPrompt() {
+  return browseValidationResource({
+    buttonId: "browseAiValidatorPromptButton", inputId: "aiValidatorPrompt", kind: "markdown",
+    remember: rememberAiValidatorPrompt, update: updateAiValidatorPromptPicker,
+    success: "AI validator prompt selected", failure: "AI prompt selection failed",
+  });
 }
 
 async function switchView(view) {
