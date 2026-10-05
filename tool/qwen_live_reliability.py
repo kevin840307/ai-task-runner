@@ -131,6 +131,29 @@ if target.read_text(encoding="utf-8") != {EXPECTED!r}:
 print("VALIDATION_PASSED")
 '''
 
+API_RECOVERY_VALIDATOR = f'''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+target = Path(a.project_root).resolve() / "health.txt"
+if not target.is_file():
+    print("VALIDATION_FAILED: missing health.txt")
+    raise SystemExit(1)
+actual = target.read_text(encoding="utf-8")
+allowed = ({EXPECTED!r}, {EXPECTED + "\n"!r}, {EXPECTED + "\r\n"!r})
+if actual not in allowed:
+    print(
+        "VALIDATION_FAILED: health.txt content mismatch; "
+        + "actual=" + repr(actual) + ", chars=" + str(len(actual))
+    )
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
 POLICY = """protected_paths:
   - prompt.md
   - validation.py
@@ -3669,7 +3692,7 @@ def api_recovery_probe(
         # retry/backoff/recovery, not the backend client's internal retry loop.
         qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
     ):
-        project = create_project(root, name)
+        project = create_project(root, name, validator=API_RECOVERY_VALIDATOR)
         workflow, outage_marker, outage_active_marker = _prepare_api_recovery_fixture(project)
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
