@@ -80,7 +80,7 @@ def test_runtime_view_run_snapshot_uses_frozen_request_values():
     assert snapshot["effective_model"] == "stage-model"
 
 
-def test_runtime_view_semantic_fail_recommends_workflow_and_trace():
+def test_runtime_view_semantic_fail_recommends_workflow():
     view = build_runtime_view({
         "project_exists": True,
         "resumable": True,
@@ -89,4 +89,4 @@ def test_runtime_view_semantic_fail_recommends_workflow_and_trace():
     })
     assert view["status"] == "needs_attention"
     assert view["reason"] == "review returned FAIL and the Workflow did not continue."
-    assert view["recommended_actions"][:2] == ["open_workflow", "view_trace"]
+    assert view["recommended_actions"] == ["open_workflow"]
