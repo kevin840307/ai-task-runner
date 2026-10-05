@@ -606,6 +606,83 @@ class ProjectRuntimeMixin:
                 return data
         return {}
 
+    @staticmethod
+    def _activity_summary(stream: str, limit: int = 4) -> list[str]:
+        """Project public agent progress from existing JSONL without exposing thinking blocks."""
+        rows: list[str] = []
+
+        def add(text: object) -> None:
+            value = " ".join(str(text or "").split()).strip()
+            if not value or value in rows:
+                return
+            rows.append(value[:220])
+
+        def tool_label(value: dict) -> None:
+            name = str(value.get("name") or value.get("tool") or value.get("tool_name") or "").strip()
+            if not name:
+                return
+            detail = value.get("input")
+            if not isinstance(detail, dict):
+                detail = value.get("args") if isinstance(value.get("args"), dict) else {}
+            hint = ""
+            for key in ("file_path", "path", "command", "query", "pattern"):
+                item = str(detail.get(key) or "").strip()
+                if item:
+                    hint = item.replace("\n", " ")[:100]
+                    break
+            add(f"Using tool · {name}" + (f" · {hint}" if hint else ""))
+
+        def visit(value: object) -> None:
+            if isinstance(value, list):
+                for item in value:
+                    visit(item)
+                return
+            if not isinstance(value, dict):
+                return
+            kind = str(value.get("type") or "").lower()
+            if kind in {"thinking", "reasoning", "reasoning_content"}:
+                return
+            if kind in {"tool_use", "tool", "tool_call", "tool-call"}:
+                tool_label(value)
+                return
+            if kind == "text":
+                part = value.get("part")
+                if isinstance(part, dict):
+                    add(part.get("text"))
+                else:
+                    add(value.get("text"))
+                return
+            message = value.get("message")
+            if isinstance(message, dict) and str(message.get("role") or "") == "assistant":
+                content = message.get("content")
+                if isinstance(content, str):
+                    add(content)
+                elif isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        part_type = str(part.get("type") or "").lower()
+                        if part_type == "text":
+                            add(part.get("text"))
+                        elif part_type in {"tool_use", "tool", "tool_call", "tool-call"}:
+                            tool_label(part)
+                return
+            part = value.get("part")
+            if isinstance(part, dict):
+                part_type = str(part.get("type") or "").lower()
+                if part_type == "text":
+                    add(part.get("text"))
+                elif part_type in {"tool_use", "tool", "tool_call", "tool-call"}:
+                    tool_label(part)
+
+        for line in str(stream or "").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            visit(event)
+        return rows[-max(1, int(limit or 1)):]
+
     def read_runtime(self, project: Path) -> dict:
         runtime, display_runtime, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
@@ -697,6 +774,7 @@ class ProjectRuntimeMixin:
             "input_prompt": str(state.get("goal") or script_view.get("prompt_preview") or ""),
             "last_error": state.get("last_error") or "",
             "stream": stream,
+            "activity_summary": self._activity_summary(stream),
             "cli_lines": [str(line) for line in console.get("lines", [])],
             "cli_tasks": console.get("tasks", []) if isinstance(console.get("tasks"), list) else [],
             "cli_status": str(console.get("status") or ""),
@@ -777,67 +855,6 @@ class ProjectRuntimeMixin:
         except OSError:
             return []
         return rows[-CHAT_MESSAGE_READ_LIMIT:]
-
-    def run_history(self, project: Path) -> list[dict]:
-        """Derive recent UI run history from existing chat/runtime evidence.
-
-        No second history store is created: completed runs come from assistant
-        messages carrying run_id, while the current active/stopped run comes
-        from the same durable runtime state used by the rest of the UI.
-        """
-        messages = self.messages(project)
-        rows: list[dict] = []
-        latest_user: dict | None = None
-        seen: set[str] = set()
-        for message in messages:
-            role = str(message.get("role") or "")
-            if role == "user":
-                latest_user = message
-                continue
-            run_id = str(message.get("run_id") or "").strip()
-            if role != "assistant" or not run_id or run_id in seen:
-                continue
-            started_at = float((latest_user or {}).get("time") or 0)
-            finished_at = float(message.get("time") or 0)
-            rows.append({
-                "run_id": run_id,
-                "status": "completed",
-                "prompt": str((latest_user or {}).get("content") or ""),
-                "started_at": started_at,
-                "updated_at": finished_at,
-                "duration": max(0.0, finished_at - started_at) if started_at and finished_at else 0.0,
-            })
-            seen.add(run_id)
-
-        runtime = self.read_runtime(project)
-        current_id = str(runtime.get("run_id") or "").strip()
-        if current_id and current_id not in seen and (
-            runtime.get("running") or runtime.get("resumable") or runtime.get("completed")
-        ):
-            if runtime.get("running") and runtime.get("last_error"):
-                status = "recovering"
-            elif runtime.get("running"):
-                status = "running"
-            elif runtime.get("completed"):
-                status = "completed"
-            elif runtime.get("resumable") and (runtime.get("stale") or runtime.get("last_error")):
-                status = "needs_attention"
-            elif runtime.get("resumable"):
-                status = "stopped"
-            else:
-                status = "idle"
-            started_at = float(runtime.get("started_at") or (latest_user or {}).get("time") or 0)
-            updated_at = float(runtime.get("updated_at") or time.time())
-            rows.append({
-                "run_id": current_id,
-                "status": status,
-                "prompt": str(runtime.get("input_prompt") or (latest_user or {}).get("content") or ""),
-                "started_at": started_at,
-                "updated_at": updated_at,
-                "duration": max(0.0, updated_at - started_at) if started_at else 0.0,
-            })
-        return list(reversed(rows[-20:]))
-
 
     @staticmethod
     def _compact_messages(path: Path) -> None:
