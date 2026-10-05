@@ -3430,7 +3430,7 @@ def test_fail_start_launcher_defaults_to_current_failed_probe_and_allows_overrid
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert "--start-probe 33" in text
+    assert "--start-probe 34" in text
     assert "%*" in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
 
@@ -3449,7 +3449,7 @@ def test_api_recovery_validator_accepts_only_line_ending_variants(
 ):
     project = tmp_path / "project"
     project.mkdir()
-    (project / "health.txt").write_text(live.EXPECTED + suffix, encoding="utf-8")
+    (project / "health.txt").write_bytes((live.EXPECTED + suffix).encode("utf-8"))
     validator = project / "validation.py"
     validator.write_text(live.API_RECOVERY_VALIDATOR, encoding="utf-8")
 
@@ -3496,7 +3496,7 @@ def test_api_recovery_validator_rejects_other_content_with_diagnostics(
 
     assert completed.returncode == 1
     assert "actual=" in completed.stdout
-    assert "chars=" in completed.stdout
+    assert "bytes=" in completed.stdout
 
 
 def test_strict_live_validator_still_rejects_trailing_newline(tmp_path: Path):
