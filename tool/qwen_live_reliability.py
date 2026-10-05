@@ -4590,7 +4590,7 @@ def main() -> int:
         if args.soak_final_ai_every == 0:
             args.soak_final_ai_every = 8
         if args.soak_transient_api_every == 0:
-            args.soak_transient_api_every = 4
+            args.soak_transient_api_every = 2
         if args.soak_timeout_every == 0:
             args.soak_timeout_every = 6
         if args.soak_yaml_every == 0:
