@@ -6,6 +6,13 @@ Purpose
 This file records future product/UI direction only.
 It must not replace current release gates in todo.txt or architecture contracts in UI.txt / DevFollow.txt.
 
+Document precedence while this roadmap is not yet implemented:
+- todo.txt + UI.txt + DevFollow.txt describe the current product/runtime contract.
+- future.txt describes the intended future direction.
+- If a future phase intentionally changes current UI ownership/behavior, update the affected current
+  contract/docs in the SAME implementation change after regression coverage exists.
+- Do not pre-emptively rewrite current contracts merely to make them match this roadmap.
+
 Core principles
 ---------------
 - Keep Runner Core authoritative. UI must not create another runtime state machine, retry engine,
@@ -67,6 +74,8 @@ Regression gates for each phase:
 Target product model
 --------------------
 A Chat is a normal AI conversation bound to one project/root path.
+Reuse the existing Project/path registry as the path identity source where practical; do not invent
+a second repository/project registry just for Chat.
 
 Chat
 ├─ root path
@@ -91,10 +100,25 @@ Task execution/history rule:
 - Task identity survives individual execution cycles/runs.
 - Initial Run, Continue, Resume, Rerun and resulting terminal states must remain traceable in Task Detail.
 - Prefer references/indexes to existing run_id / messages / runtime history; do not duplicate runtime logs into a second canonical history store.
+- UI-owned Task persistence may store identity/index metadata such as task_id, chat_id, title, root/workspace
+  reference, run_ids, timestamps and source-message references; it must not duplicate Stage/retry/runtime truth.
 - Task card shows the latest/current state, while Task Detail preserves the chronological execution history.
+- Historical/inactive Task Detail MUST resolve by that Task's recorded run_id/history references.
+  It must never blindly read the path's current state.json/console-view and accidentally show a newer Task.
+- Active runtime projection may be attached only after task/run identity matches the currently owned runtime.
 - When a terminal Task is Continued/Resumed/Rerun, it must reacquire execution-path ownership before becoming active.
 - If another Task currently owns that canonical execution path, Continue/Resume/Rerun must fail closed just like starting a new Task.
 - Creating Task B after Task A completed on the same path is allowed; Task A remains visible until explicitly deleted.
+
+Task action semantics / UX:
+- Do not use Continue, Resume and Rerun as interchangeable labels.
+- Resume means continue an interrupted/incomplete durable Run using the existing Runner resume contract.
+- Rerun means start a fresh Run from the Task's resolved inputs according to the existing force-new/rerun contract.
+- Continue is a product-level follow-up after a terminal Task: preserve the same Task identity/history, capture
+  the new user instruction, then start a new execution segment only after path ownership is acquired.
+- If implementation reveals a better mapping to existing Runner primitives, keep these user-facing meanings
+  but reuse the smallest existing runtime mechanism instead of adding a new recovery engine.
+- Task Detail should visually separate execution segments so users can tell what happened before/after Continue.
 
 Execution-path ownership rule:
 - one canonical/resolved filesystem execution path may have at most one active Task at a time,
@@ -105,8 +129,23 @@ Execution-path ownership rule:
 - normalize/resolve path identity before comparing so equivalent path spellings cannot bypass the guard,
 - reuse existing runtime/process ownership primitives where possible; do not add a second generic lock system.
 
+Chat/path lifecycle:
+- Chat keeps a stable project/root-path identity; path changes must never happen silently.
+- If the folder is moved/missing/unavailable, Chat/history remains readable but starting/continuing Tasks is disabled
+  with a clear "Path unavailable" state.
+- If relinking is later needed, make it an explicit migration action with validation; do not silently reinterpret old Task paths.
+- Deleting a Chat must never silently delete its Tasks/history.
+- A Chat with an active Task cannot be deleted.
+- If Chat deletion is implemented, require explicit confirmation and a clear choice/policy for retained inactive Tasks;
+  prefer Archive/Hide for routine cleanup over destructive deletion.
+
 Workflows and Prompts are shared Library assets.
 They are not children of the selected Chat and must not visually look Chat-scoped.
+The Library is a GLOBAL navigation domain, but the existing asset scopes remain valid:
+- Global assets remain global.
+- Project-scoped Workflow/Prompt assets remain tied to their project/root path.
+- Library UI should expose scope explicitly (for example Global / Project + project selector) instead of
+  implicitly borrowing the currently selected Chat and making scope ambiguous.
 
 Target navigation / information architecture
 --------------------------------------------
@@ -200,9 +239,9 @@ B. New Task from Chat - right-side sheet
 
 Notes:
 - Keep the originating Chat visible while defining the Task.
-- Initial implementation should support Main first.
+- Initial implementation supports Main only; do not render a meaningless workspace selector when there is only one choice.
 - If any Chat already has an active Task owning the same Main/root path, show Main as Busy and do not allow another start.
-- Worktree options may appear only after FINAL PHASE is implemented; do not fake unsupported choices.
+- Add the Workspace selector only when FINAL PHASE worktree support is actually implemented.
 - Task creation should stay short; advanced backend/model options remain collapsed.
 
 C. Tasks view for the selected Chat
@@ -277,6 +316,8 @@ Notes:
 - Do not rebuild Task Detail as a heavy dashboard unless a proven need appears.
 - Preserve prior execution segments so a completed Task that is later Continued still shows what happened before and after Continue.
 - Stop / Continue / Resume / Rerun visibility comes from canonical allowed_actions / existing runtime semantics.
+- Provide a lightweight "Discuss in Chat" action for completed/attention Tasks so normal Chat can reference the
+  Task/result/workspace without copying its entire runtime log into Chat.
 - Runtime diagnostics can stay behind a details/runtime surface instead of dominating the main view.
 
 E. Global Library mode
@@ -285,8 +326,8 @@ E. Global Library mode
 | APP  | CONTEXT SIDEBAR      | MAIN                                                         |
 |      |                      |                                                              |
 | Chat | Library              | Workflows                                      + New Workflow|
-| Lib  | * Workflows          |                                                              |
-| Set  |   Prompts            | Search...                                                    |
+| Lib  | * Workflows          | Scope: [ Global v ]   Search...                               |
+| Set  |   Prompts            |                                                              |
 |      |                      |                                                              |
 |      |                      | Name                   Used          Updated                  |
 |      |                      | * ralphy_ai_validate   18 Tasks      Today                    |
@@ -470,20 +511,27 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
 
 PHASE 5 - Global Library
 ------------------------
-[ ] Move shared reusable assets into a global Library domain.
+[ ] Move reusable assets into a global Library navigation domain.
     - Library is not owned by the selected Chat.
+    - Preserve existing Global + Project asset scopes; "global navigation" does not mean every asset becomes global.
+    - Project scope selection must be explicit and independently understandable.
     - Context sidebar:
       Workflows
       Prompts
 
 [ ] Workflows page
     - Prefer compact searchable list/table for assets rather than large Task-style cards.
+    - Expose asset scope clearly: Global or a specific Project.
     - Open a Workflow into the existing Full Designer.
     - Keep YAML canonical.
-    - New Task selects a Workflow from this shared Library.
+    - New Task selects a compatible Workflow from this Library.
+    - Preserve the existing persisted Workflow visibility setting during migration.
+      Once Chat no longer owns the Workflow picker, reuse that setting for the New Task Workflow picker
+      (rename UI wording such as "Show in Chat" only when the new Task picker replaces the old Chat picker).
 
 [ ] Prompts page
     - Prefer compact searchable list/table.
+    - Expose asset scope clearly: Global or a specific Project.
     - Open a Prompt into the existing Prompt Editor/Test UI.
     - Prompts remain reusable assets referenced by Workflow/Stage configuration.
 
@@ -496,6 +544,7 @@ PHASE 6 - Polish after the basic model is stable
 [ ] Improve navigation ergonomics.
     - Global rail + contextual sidebar + main content.
     - Preserve context when switching Chat <-> Tasks.
+    - Stable Chat/Task/Workflow/Prompt identities should allow refresh/navigation restoration without landing on the wrong item.
     - Clear breadcrumbs/back navigation for Task Detail / Workflow Designer / Prompt Editor.
     - Avoid unnecessary modal stacks.
 
@@ -505,6 +554,22 @@ PHASE 6 - Polish after the basic model is stable
     - Task Detail composer remains usable and attached to the detail surface.
     - No horizontal overflow for long Chat/Task/Workflow/Prompt names.
 
+[ ] Preserve accessibility and predictable interaction.
+    - Status must use text/icon/semantics, not color alone.
+    - Preserve keyboard focus/shortcuts and focus restoration from the current UI.
+    - Destructive Delete/Stop actions remain visually separated and confirmed where appropriate.
+    - Disabled actions explain why when the reason is not obvious (for example path Busy / Path unavailable).
+
+[ ] Cover empty/loading/error states.
+    - New Chat / no Tasks / no Workflows / no Prompts should always expose the next useful action.
+    - Async discovery failures must not blank the whole surface.
+    - Path unavailable and historical-resource-missing states should remain readable and actionable.
+
+[ ] Keep large histories usable.
+    - Do not eagerly render every historical Task execution/log forever.
+    - Use bounded summaries plus lazy/load-more/virtualized detail when scale proves necessary.
+    - Preserve existing bounded runtime output policies; UI history must not become an unbounded memory surface.
+
 [ ] Preserve fast first paint.
     - Shared backend/model discovery must not block Chat/Tasks/Library initial rendering.
     - Load expensive optional discovery asynchronously.
@@ -513,10 +578,12 @@ FINAL PHASE - Worktree support / parallel Task isolation
 --------------------------------------------------------
 Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + Library are stable.
 
-[ ] Add Task workspace selection:
+[ ] Add Task workspace selection only when worktree support actually exists:
     - Main
     - New Worktree
     - Existing Worktree only if a real use case still justifies it.
+    - Do not introduce an automatic Task queue/scheduler merely because a path is Busy; fail clearly or let
+      the user keep/edit a non-running Task draft only if that workflow is explicitly implemented.
 
 [ ] Keep Main Task support permanently.
     - Worktree is an isolation option, not a replacement for Main.
@@ -563,6 +630,18 @@ Non-goals
 - Do not auto-merge completed Tasks.
 - Do not implement worktree support early just because the UI can display it.
 - Do not reintroduce removed legacy Workflow contracts while implementing this redesign.
+
+Implementation review checklist
+-------------------------------
+Before each phase is merged, verify:
+- Scope: is this Global, Chat-owned, Task-owned, Project-asset, or Runner-owned?
+- Identity: after refresh or a newer same-path Task, can the UI still open the correct historical object?
+- Ownership: can stale tabs/double clicks bypass the one-active-Task-per-path rule?
+- History: does the change preserve old Task/Run history without duplicating runtime truth?
+- UX: are Busy / Missing path / Empty / Loading / Error / Completed / Needs Attention states understandable?
+- Compatibility: did current Workflow Studio / Prompt Editor / CLI / Runner behavior stay green unless an
+  explicitly necessary migration was part of this phase?
+- Simplicity: did the implementation add a second store/state machine/scheduler when an existing owner could be reused?
 
 Recommended implementation order
 --------------------------------
