@@ -300,16 +300,36 @@ def test_main_ui_consumes_canonical_runtime_status_actions_and_dedupes_polling()
     assert 'if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;' in app
 
 
-def test_runtime_attention_and_frozen_run_details_are_actionable():
+def test_runtime_attention_stays_actionable_without_permanent_active_run_details():
     root = Path(__file__).resolve().parents[1]
     index = (root / "static" / "index.html").read_text(encoding="utf-8")
     app = (root / "static" / "app.js").read_text(encoding="utf-8")
 
-    for control in ("runtimeGuidance", "runtimeGuidanceWorkflow", "runtimeGuidanceTrace", "activeRunDetails", "activeRunStarted"):
+    for control in ("runtimeGuidance", "runtimeGuidanceWorkflow", "runtimeGuidanceTrace"):
         assert f'id="{control}"' in index
+    assert 'id="activeRunDetails"' not in index
+    assert "function renderActiveRunDetails" not in app
     assert 'recommended.includes("open_workflow")' in app
     assert 'recommended.includes("view_trace")' in app
     assert '$("workflowNav")?.click()' in app
     assert '$("runtimeTraceButton")?.click()' in app
-    assert 'const snap = runtime?.run_snapshot' in app
-    assert 'new Date(started * 1000).toLocaleString()' in app
+    # Runtime snapshot remains part of the canonical projection/signature for
+    # resume/frozen-run correctness; only the space-consuming presentation is removed.
+    assert "runtime.run_snapshot || {}" in app
+
+
+def test_task_validation_resources_remain_visible_and_capability_guarded():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / "static" / "index.html").read_text(encoding="utf-8")
+    app = (root / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert '<div id="validationPickers" class="composer-validation-row options-validation-row">' in index
+    assert '<div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker">' in index
+    assert '<div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker">' in index
+    assert "驗證 File" in index
+    assert "驗證 Prompt" in index
+    assert "renderValidationCapability()" in app
+    assert "Selected Workflow does not use a File Validator." in app
+    assert "Selected Workflow does not use an AI Validator Prompt." in app
+    assert 'validator: workflow?.requires_python_validator ? $("validator").value.trim() : ""' in app
+    assert 'ai_validator_prompt_file: workflow?.has_ai_validator ? $("aiValidatorPrompt").value.trim() : ""' in app
