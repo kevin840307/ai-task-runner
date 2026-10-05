@@ -690,3 +690,92 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             assert page.locator("#workflowSelectedLabel").inner_text() == "ralphy_ai_validate.yaml"
             assert page.locator("#workflowSelect").input_value().replace("\\", "/").endswith("/ralphy_ai_validate.yaml")
             browser.close()
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_task_validation_options_stay_visible_and_follow_workflow_capabilities() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+
+        file_workflow = state.studio_workflow_create("file_task", "global", None)
+        file_doc = state.studio_read(file_workflow["item"]["id"], None)
+        state.studio_save(
+            file_workflow["item"]["id"],
+            (
+                "stages:\n"
+                "  validate_file:\n"
+                "    type: command\n"
+                "    command: \"{python} {validator}\"\n"
+                "flow: [validate_file]\n"
+            ),
+            file_doc["hash"],
+            None,
+        )
+
+        ai_workflow = state.studio_workflow_create("ai_task", "global", None)
+        ai_doc = state.studio_read(ai_workflow["item"]["id"], None)
+        state.studio_save(
+            ai_workflow["item"]["id"],
+            (
+                "stages:\n"
+                "  validate_ai:\n"
+                "    type: ai_validator\n"
+                "    validator: ai\n"
+                "flow: [validate_ai]\n"
+            ),
+            ai_doc["hash"],
+            None,
+        )
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.locator("#optionsButton").click()
+            assert page.locator("#validationPickers").is_visible()
+            assert page.locator("#validatorPicker").is_visible()
+            assert page.locator("#aiValidatorPromptPicker").is_visible()
+            assert page.locator("#activeRunDetails").count() == 0
+
+            page.locator("#workflowSelect").select_option(label=re.compile("file_task"))
+            page.wait_for_timeout(50)
+            assert page.locator("#browseValidatorButton").is_enabled()
+            assert page.locator("#browseAiValidatorPromptButton").is_disabled()
+            assert "此 Workflow 未使用" in page.locator("#aiValidatorPromptResourceName").inner_text()
+
+            page.locator("#workflowSelect").select_option(label=re.compile("ai_task"))
+            page.wait_for_timeout(50)
+            assert page.locator("#browseValidatorButton").is_disabled()
+            assert page.locator("#browseAiValidatorPromptButton").is_enabled()
+            assert "此 Workflow 未使用" in page.locator("#validatorResourceName").inner_text()
+            assert not errors
+            browser.close()
+
