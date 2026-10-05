@@ -45,7 +45,10 @@ def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection
     assert "Real Stage" in text
     assert "Agent Ping" in text
     assert "Mock Technical Error" in text
-    assert 'api<BackendCatalog>(query().project' in text
+    assert "const backendUrl = query().project" in text
+    assert "void api<BackendCatalog>(backendUrl)" in text
+    core_load = text[text.index("const [v, file, c, files] = await Promise.all(["):text.index("const canonicalYaml")]
+    assert "/api/backends" not in core_load
     assert '"/api/backends?models=1"' in text
     assert '&models=1' in text
     assert 'encodeURIComponent(query().project)' in text
