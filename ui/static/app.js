@@ -1984,7 +1984,7 @@ document.addEventListener("click", (event) => {
   if (!$("themePanel").hidden && !$("themePanel").contains(event.target) && !$("themeButton").contains(event.target)) closeThemePanel();
 });
 function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }
-function toggleOptionsPanel() { const open = $("optionsPanel").hidden; if (!open) return closeOptionsPanel(); $("optionsPanel").hidden = false; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
+function toggleOptionsPanel() { const panel = $("optionsPanel"); const open = panel.hidden; if (!open) return closeOptionsPanel(); panel.hidden = false; panel.scrollLeft = 0; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
 $("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptionsPanel(); };
 $("optionsCloseButton").onclick = closeOptionsPanel;
 $("environmentCheckButton").onclick = checkEnvironment;
