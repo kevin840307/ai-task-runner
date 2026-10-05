@@ -743,15 +743,21 @@ def test_add_stage_escape_restores_focus_and_edges_stay_below_handles():
 
 
 
-def test_designer_optional_snap_is_local_only_and_nonsemantic():
+def test_designer_optional_snap_is_local_only_visible_and_nonsemantic():
     text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
 
     assert 'const SNAP_PREF_KEY = "workflow-designer.snap:v1"' in text
     assert 'const [snapEnabled, setSnapEnabled] = useState(readSnapPreference())' in text
     assert 'aria-pressed={snapEnabled}' in text
+    assert 'className={`snap-toggle ${snapEnabled ? "active" : ""}`}' in text
     assert 'snapToGrid={snapEnabled}' in text
     assert 'snapGrid={[20, 20]}' in text
+    assert '<Background gap={20} size={1} />' in text
     assert 'writeSnapPreference(next)' in text
+    assert 'setMessage(next ? tx("snap_enabled") : tx("snap_disabled"))' in text
+    assert 'snap_grid: "網格吸附"' in text
+    assert ".studio-header .snap-toggle.active" in styles
 
 
 
