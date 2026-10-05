@@ -809,7 +809,7 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             # Mixed validation is the densest Chat options case. Verify it at
             # a smaller desktop viewport so both resource cards remain usable
             # without horizontal or viewport overflow.
-            page.set_viewport_size({"width": 1024, "height": 640})
+            page.set_viewport_size({"width": 720, "height": 720})
             choose_workflow("mixed.yaml")
             assert page.locator("#validationPickers").is_visible()
             assert page.locator("#validatorPicker").is_visible()
@@ -818,23 +818,26 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             file_box = page.locator("#validatorPicker").bounding_box()
             ai_box = page.locator("#aiValidatorPromptPicker").bounding_box()
             assert panel_box and file_box and ai_box
-            assert file_box["y"] < ai_box["y"]
+            assert file_box["height"] >= 56
+            assert ai_box["height"] >= 56
+            assert file_box["y"] + file_box["height"] + 6 <= ai_box["y"]
             assert file_box["x"] >= panel_box["x"] - 1
             assert ai_box["x"] >= panel_box["x"] - 1
             assert file_box["x"] + file_box["width"] <= panel_box["x"] + panel_box["width"] + 1
             assert ai_box["x"] + ai_box["width"] <= panel_box["x"] + panel_box["width"] + 1
             assert panel_box["x"] >= -1
-            assert panel_box["x"] + panel_box["width"] <= 1025
+            assert panel_box["x"] + panel_box["width"] <= 721
             assert panel_box["y"] >= -1
-            assert panel_box["y"] + min(panel_box["height"], 640) <= 641
+            assert panel_box["y"] + min(panel_box["height"], 720) <= 721
 
             for picker_id in ("validatorPicker", "aiValidatorPromptPicker"):
                 kind_box = page.locator(f"#{picker_id} .resource-kind").bounding_box()
                 name_box = page.locator(f"#{picker_id} .resource-name").bounding_box()
                 choose_box = page.locator(f"#{picker_id} .resource-action").bounding_box()
                 assert kind_box and name_box and choose_box
-                assert kind_box["y"] < name_box["y"] + name_box["height"]
+                assert kind_box["y"] + kind_box["height"] <= name_box["y"] + 1
                 assert name_box["x"] + name_box["width"] <= choose_box["x"] + 1
+                assert choose_box["height"] >= 26
 
             choose_workflow("plain.yaml")
             assert not page.locator("#validationPickers").is_visible()
