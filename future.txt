@@ -15,6 +15,8 @@ Core principles
 - Reuse existing runtime projection / allowed_actions / RunState / FlowEngine / StageExecutor.
 - Keep completed execution inspectable; do not delete useful history merely because a run finished.
 - Avoid auto-merge behavior. A Task executes work; it does not own integration/merge.
+- Enforce one active Task per canonical execution path across the whole application, not merely per Chat.
+  Different Chats that point at the same Main/root path still share the same execution-path ownership.
 
 
 Migration / non-regression guardrails
@@ -81,6 +83,15 @@ A Task is an execution instance:
 - can be opened to inspect detailed execution,
 - remains visible after Completed / Stopped / Needs Attention,
 - does NOT merge its result back to another branch/workspace.
+
+Execution-path ownership rule:
+- one canonical/resolved filesystem execution path may have at most one active Task at a time,
+- the rule is global across Chats, browser tabs and UI surfaces,
+- Launching / Running / Recovering / Stopping are treated as path-owning active states,
+- terminal/inactive history such as Completed / Stopped does not block a new Task,
+- enforce this on the backend/task-start boundary; UI disabled states are only UX,
+- normalize/resolve path identity before comparing so equivalent path spellings cannot bypass the guard,
+- reuse existing runtime/process ownership primitives where possible; do not add a second generic lock system.
 
 Workflows and Prompts are shared Library assets.
 They are not children of the selected Chat and must not visually look Chat-scoped.
@@ -178,6 +189,7 @@ B. New Task from Chat - right-side sheet
 Notes:
 - Keep the originating Chat visible while defining the Task.
 - Initial implementation should support Main first.
+- If any Chat already has an active Task owning the same Main/root path, show Main as Busy and do not allow another start.
 - Worktree options may appear only after FINAL PHASE is implemented; do not fake unsupported choices.
 - Task creation should stay short; advanced backend/model options remain collapsed.
 
@@ -281,9 +293,12 @@ One Chat / root path:
      +-- Task C -> worktree/task-c
 
 Concurrency rule:
-  MAIN                    -> at most one active writer Task
-  worktree/task-b         -> at most one active writer Task
-  worktree/task-c         -> at most one active writer Task
+  C:\repo\ai-task-runner       -> at most one active Task for this exact execution path
+  ...\worktree\task-b          -> at most one active Task for this exact execution path
+  ...\worktree\task-c          -> at most one active Task for this exact execution path
+
+Different execution paths may run concurrently. The same path may not, even when Tasks were
+created by different Chats.
 
 Completion rule:
   Task B -> Execute -> Validate -> Completed
@@ -451,14 +466,16 @@ Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + L
 
 [ ] Keep Main Task support permanently.
     - Worktree is an isolation option, not a replacement for Main.
-    - Before worktree support exists, multiple Task records may exist but only one active writer
-      on the same Main/root workspace should be allowed at a time.
+    - Before worktree support exists, multiple Task records/history may exist, but only one active Task
+      may own the same canonical Main/root execution path at a time.
+    - This ownership rule applies across different Chats that reference the same path.
 
 [ ] Worktree concurrency rule:
-    - one writer per Main/worktree by default,
-    - separate worktrees allow independent Task writers,
-    - read-only parallelism can remain a later opt-in if proven necessary.
-    - Do not build a generic parallel/DAG scheduler just for worktrees.
+    - one active Task per canonical execution path,
+    - Main and each worktree are separate paths and therefore separate ownership domains,
+    - separate worktrees allow independent Tasks to run concurrently,
+    - do not weaken the rule for multiple browser tabs/Chats,
+    - do not build a generic parallel/DAG scheduler just for worktrees.
 
 [ ] Worktree lifecycle:
     - create/attach workspace for Task,
@@ -475,11 +492,12 @@ Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + L
       the desired merge/integration flow.
     - This keeps Task execution reliable and prevents merge complexity from contaminating the 24H runtime.
 
-[ ] Main busy UX after worktree support:
-    - New Task sheet shows Main Available / Busy.
-    - If Main already has an active writer Task, Main is disabled for another writer and the UI points
-      to the owning Task.
-    - Recommend New Worktree for parallel modification work, but do not force it for simple Main Tasks.
+[ ] Main/path busy UX after worktree support:
+    - New Task sheet shows the selected execution path as Available / Busy.
+    - If Main already has an active Task on the same canonical path, Main is disabled and the UI points
+      to the owning Task, even if it belongs to another Chat.
+    - The same guard applies to an Existing Worktree path.
+    - Recommend New Worktree when the user needs parallel execution, but do not force it for simple Main Tasks.
 
 Non-goals
 ---------
