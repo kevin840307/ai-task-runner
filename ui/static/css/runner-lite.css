@@ -929,7 +929,7 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
    Mixed File + AI validation must never compete for horizontal space. */
 #composePanel .options-panel {
   width: min(380px, calc(100vw - 28px));
-  max-width: calc(100% - 20px);
+  max-width: calc(100vw - 28px);
   max-height: min(70dvh, 520px);
   overflow-x: hidden;
   overflow-y: auto;
