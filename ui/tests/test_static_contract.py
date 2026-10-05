@@ -336,9 +336,11 @@ def test_task_validation_resources_are_workflow_declared_and_not_global():
 
 
 def test_chat_validator_resource_pickers_share_context_aware_browse_flow():
-    app = (STATIC / "app.js").read_text(encoding="utf-8")
-    html = (STATIC / "index.html").read_text(encoding="utf-8")
-    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    static = root / "static"
+    app = (static / "app.js").read_text(encoding="utf-8")
+    html = (static / "index.html").read_text(encoding="utf-8")
+    server = (root / "server.py").read_text(encoding="utf-8")
 
     assert "async function browseValidationResource" in app
     assert 'project: state.project?.path || ""' in app
