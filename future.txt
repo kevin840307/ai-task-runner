@@ -16,6 +16,44 @@ Core principles
 - Keep completed execution inspectable; do not delete useful history merely because a run finished.
 - Avoid auto-merge behavior. A Task executes work; it does not own integration/merge.
 
+
+Migration / non-regression guardrails
+-------------------------------------
+This redesign is an outer product/UI reorganization. It must NOT break or unnecessarily rewrite
+the current Workflow Studio, Prompt Editor, Runner runtime, CLI, YAML contract, live/dry-run behavior,
+resume/recovery/session semantics, or existing API boundaries.
+
+Required migration rules:
+- Keep the existing Runner runtime authoritative and behavior-compatible.
+- Do not change FlowEngine / StageExecutor / RunState semantics merely to support the new Chat/Task shell.
+- Reuse current Workflow Studio / Full Designer rather than rebuilding it inside the new navigation.
+- Reuse current Prompt list/editor/test behavior rather than replacing Prompt semantics.
+- Keep canonical Workflow YAML and existing Prompt resources as the source of truth.
+- Existing Workflow / Prompt APIs should stay compatible unless a separately justified migration is required.
+- Chat / Task metadata is additive UI storage; it must not become a new canonical runtime or Workflow store.
+- Task Detail should adapt/reuse the current execution-oriented Chat UI instead of duplicating its runtime logic.
+- Preserve existing runtime projection / allowed_actions and backend action guards.
+- Keep CLI / programmatic runner usage working even if the entire UI layer is removed.
+- Do not require Worktree support for the first UI migration; Main-only execution must remain fully usable.
+
+Rollout strategy:
+1. Add the new navigation/shell around existing Workflows / Prompts / Runner surfaces.
+2. Move normal Chat and Task indexing into the new UI-owned layer.
+3. Reuse existing Task execution/runtime UI as Task Detail.
+4. Keep current Workflow Studio and Prompt Editor functional throughout the migration.
+5. Only remove old navigation/presentation code after equivalent behavior is covered by tests.
+6. Worktree support comes last and must not be a prerequisite for the UI redesign.
+
+Regression gates for each phase:
+- current Workflow Studio behavior/tests remain green,
+- current Prompt CRUD/editor/test behavior/tests remain green,
+- current Runner deterministic/mock/live reliability tests remain green,
+- existing YAML workflows continue to load/run unchanged,
+- resume/recovery/stop/rerun behavior remains unchanged unless explicitly specified,
+- UI build/browser tests cover both the new shell and reused existing surfaces,
+- no feature phase is considered complete if it causes unrelated current UI/runtime regressions.
+
+
 Target product model
 --------------------
 A Chat is a normal AI conversation bound to one project/root path.
