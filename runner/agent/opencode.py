@@ -86,6 +86,8 @@ class OpenCodeBackend(BaseBackend):
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
         values = _configured_opencode_models(root)
+        if values:
+            return sorted(values)
         try:
             result = run_process([cls.default_command, "models"], root, 5)
         except Exception:
