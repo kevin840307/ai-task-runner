@@ -1173,15 +1173,6 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
 .composer-resource-picker .resource-clear { width: 22px; padding: 0; color: var(--muted); font-size: 14px; }
 .composer-resource-picker .resource-clear:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
 .composer-resource-picker button:disabled { opacity: .45; cursor: default; }
-.composer-resource-picker.resource-unavailable {
-  opacity: .72;
-  border-style: dashed;
-  background: var(--panel-2);
-}
-.composer-resource-picker.resource-unavailable .resource-name {
-  color: var(--muted);
-  font-weight: 650;
-}
 @media (max-width: 720px) {
   .composer-resource-picker { max-width: min(100%, 270px); }
   .composer-resource-picker .resource-name { max-width: 96px; }
