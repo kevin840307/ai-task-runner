@@ -155,6 +155,18 @@ P0 - UI / UX HIGH VALUE
     - Backend / validator / AI validator / environment checks stay under Options.
     - Avoid exposing rarely changed configuration in the normal run path.
 
+[x] Task validator visibility regression + compact active-run UI
+    - File Validator / AI Validator Prompt remain under Task Options and are shown only when the selected Workflow declares the matching capability.
+    - Capability is derived from Workflow Stage contracts, not Workflow filenames:
+      command stages that reference {validator} require File Validator; ai_validator / validator: ai exposes AI Validator Prompt.
+    - Built-in Chat behavior is regression-covered:
+      ralphy_ai_validate + ai => Prompt only; file => File only; mixed => File + Prompt; workflows without either => no validation controls.
+    - Removed the permanent Active Run details panel because it duplicated runtime information and consumed vertical space.
+      Canonical run_snapshot remains in the runtime projection/signature for frozen-run / resume correctness.
+    - Implementation-head CI 84eb37f5658fece0dad2fc08d44974c201dac506:
+      Browser E2E PASS, Ubuntu Python PASS, Windows Python PASS, Studio build/bundle verification PASS
+      in GitHub Actions run 37254375725.
+
 [x] Prompt impact visibility
     - Prompt Editor shows real Workflow / Stage "Used by" evidence from the same backend scanner that guards rename/delete.
     - Backend regression and browser E2E cover a real Workflow referencing a Prompt.
