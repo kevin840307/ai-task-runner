@@ -89,4 +89,4 @@ def test_runtime_view_semantic_fail_recommends_workflow():
     })
     assert view["status"] == "needs_attention"
     assert view["reason"] == "review returned FAIL and the Workflow did not continue."
-    assert view["recommended_actions"] == ["open_workflow"]
+    assert view["recommended_actions"] == ["open_workflow", "reset"]
