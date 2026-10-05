@@ -717,29 +717,29 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Architecture regression forbids structured repair from regaining Fresh Session ownership.
 
 High-value runner work remaining:
-[ ] Finish mixed File Validator + AI Validator Prompt Run options layout.
-    - Current behavior after the first fix: both resources stack vertically and each resource card has independent two-row height.
-    - Remaining reproduced Browser E2E failure at 720x720:
-      validatorPicker x=235 while optionsPanel x=245, so the resource card still protrudes about 10px left of the Run options panel.
-    - Do not paper over this by weakening the bounding-box assertion.
-    - Find and remove the real layout/cascade owner causing the fixed left offset; keep the two cards vertically stacked.
-    - Acceptance:
-      * no overlap between File Validator and AI Validator Prompt,
-      * both cards fully inside the Run options panel,
-      * no horizontal viewport overflow,
-      * readable kind/name/Choose/clear controls,
-      * mixed layout verified at narrow desktop resolution by real Chromium bounding boxes.
-    - Keep this scoped to Chat Run options; do not add a new picker framework.
+[x] Finish mixed File Validator + AI Validator Prompt Run options layout.
+    - Root cause was two-layer Chat popover layout ownership:
+      * a later generic .options-panel rule could not override the earlier scoped #composePanel .options-panel rule because of selector specificity;
+      * the scoped popover max-width was relative to the narrow composer content box, shrinking the 720px viewport case to an 88px client width and creating a 23px internal horizontal scroll.
+    - The Run options popover now has one scoped #composePanel owner for width/overflow, sizes against the viewport,
+      resets stale horizontal scroll when opened, and keeps both validation resources vertically stacked.
+    - Browser E2E now verifies at 720x720:
+      * no File/AI resource overlap,
+      * both cards fully inside Run options,
+      * no panel-internal horizontal scroll/overflow,
+      * no viewport overflow,
+      * readable kind/name/Choose/clear controls.
+    - The fix stayed inside Chat Run options; no picker framework or Runner/runtime behavior changed.
+    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed Chromium Browser E2E in run 37328277877.
 
-[ ] Re-establish exact-HEAD deterministic CI after the mixed picker fix.
-    - Current source HEAD has changed after the previously green implementation HEAD, so the old exact-HEAD CI evidence is stale.
-    - Latest run 37324770650 status at review time:
-      * Studio build: PASS.
+[x] Re-establish exact-HEAD deterministic CI after the mixed picker fix.
+    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed all required deterministic gates
+      in GitHub Actions run 37328277877:
+      * Windows Python: PASS.
       * Ubuntu Python: PASS.
-      * Browser E2E: FAIL only at mixed Run options bounding-box containment.
-      * Windows Python was still running when this TODO entry was written.
-    - After the layout fix, require a new exact-HEAD green run for Windows Python, Ubuntu Python,
-      Chromium Browser E2E and Studio build/bundle verification before updating the deterministic release gate.
+      * Chromium Browser E2E: PASS.
+      * Studio build + committed-bundle verification: PASS.
+    - This replaces the stale pre-fix exact-HEAD evidence.
 
 [ ] Re-run real-Qwen API disconnect probe from probe 34 after deterministic gates are green.
     - The live harness now uses API_RECOVERY_VALIDATOR for API recovery probes only.
@@ -1209,13 +1209,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD 2e5fbbbf84f93de914137ab0901150ee839dfea8 passed all required deterministic gates
-      in GitHub Actions run 37307541655.
+    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed all required deterministic gates
+      in GitHub Actions run 37328277877.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - This green implementation includes the mixed validator-picker responsive layout and API recovery newline/diagnostic fix.
+    - The 720x720 mixed File Validator + AI Validator Prompt regression is covered by real Chromium bounding boxes
+      plus panel internal overflow/scroll assertions.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
