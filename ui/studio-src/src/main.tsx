@@ -2278,7 +2278,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     : <div className="ping-prompt"><strong>Mock Technical Error</strong><small>{tx("test_help")}</small></div>}
                 <div className="test-action-row">
                   <button type="button" className="primary" onClick={() => void testStage()}
-                    disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : testMode === "agent_ping" ? tx("run_ping") : tx("run_error")}</button>
+                    disabled={testing || busy}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : testMode === "agent_ping" ? tx("run_ping") : tx("run_error")}</button>
                   {testing && <button type="button" className="danger" onClick={() => void stopStageTest()}>{tx("stop_test")}</button>}
                   <button type="button" onClick={() => void testPathFromStage()}
                     disabled={pathTesting || busy || dirtyGraph}
