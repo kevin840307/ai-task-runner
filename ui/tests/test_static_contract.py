@@ -204,14 +204,14 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Modified:", self.app_js)
 
 
-    def test_recent_runs_uses_existing_project_history_and_runtime_surface(self):
-        self.assertIn('id="runHistoryButton"', self.html)
-        self.assertIn('id="runHistoryPanel"', self.html)
-        self.assertIn('id="runHistoryList"', self.html)
-        self.assertIn("function refreshRunHistory(", self.app_js)
-        self.assertIn("/api/project/runs?project=", self.app_js)
-        self.assertIn("item.dataset.runId = String(message.run_id)", self.app_js)
-        self.assertIn("setRunHistoryOpen(false)", self.app_js)
+    def test_running_is_the_single_execution_observation_surface(self):
+        self.assertNotIn('id="runHistoryButton"', self.html)
+        self.assertNotIn('id="runHistoryPanel"', self.html)
+        self.assertNotIn("/api/project/runs?project=", self.app_js)
+        self.assertNotIn("function refreshRunHistory(", self.app_js)
+        self.assertIn('class="runtime-activity"', self.app_js)
+        self.assertIn("function renderRuntimeActivity(", self.app_js)
+        self.assertIn("runtime.activity_summary || []", self.app_js)
 
 
 
@@ -263,14 +263,13 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
 
 
-    def test_runtime_trace_uses_bounded_existing_runtime_evidence(self):
-        self.assertIn('id="runtimeTraceButton"', self.html)
-        self.assertIn('id="runtimeTracePanel"', self.html)
-        self.assertIn('id="runtimeTraceList"', self.html)
-        self.assertIn("function renderRuntimeTrace(", self.app_js)
-        self.assertIn("runtime?.recent_transitions", self.app_js)
-        self.assertIn("setRuntimeTraceOpen(false)", self.app_js)
+    def test_trace_panel_is_removed_in_favor_of_running_activity(self):
+        self.assertNotIn('id="runtimeTraceButton"', self.html)
+        self.assertNotIn('id="runtimeTracePanel"', self.html)
+        self.assertNotIn("function renderRuntimeTrace(", self.app_js)
+        self.assertNotIn("runtimeGuidanceTrace", self.html)
         self.assertNotIn("/api/project/trace", self.app_js)
+        self.assertIn("function renderRuntimeActivity(", self.app_js)
 
 
     def test_prompt_used_by_height_is_bounded(self):
@@ -300,22 +299,22 @@ def test_main_ui_consumes_canonical_runtime_status_actions_and_dedupes_polling()
     assert 'if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;' in app
 
 
-def test_runtime_attention_stays_actionable_without_permanent_active_run_details():
+def test_runtime_attention_stays_actionable_without_separate_trace_or_run_panels():
     root = Path(__file__).resolve().parents[1]
     index = (root / "static" / "index.html").read_text(encoding="utf-8")
     app = (root / "static" / "app.js").read_text(encoding="utf-8")
 
-    for control in ("runtimeGuidance", "runtimeGuidanceWorkflow", "runtimeGuidanceTrace"):
+    for control in ("runtimeGuidance", "runtimeGuidanceWorkflow"):
         assert f'id="{control}"' in index
+    for removed in ("runtimeGuidanceTrace", "runtimeTraceButton", "runHistoryButton"):
+        assert removed not in index
+        assert removed not in app
     assert 'id="activeRunDetails"' not in index
     assert "function renderActiveRunDetails" not in app
     assert 'recommended.includes("open_workflow")' in app
-    assert 'recommended.includes("view_trace")' in app
     assert '$("workflowNav")?.click()' in app
-    assert '$("runtimeTraceButton")?.click()' in app
-    # Runtime snapshot remains part of the canonical projection/signature for
-    # resume/frozen-run correctness; only the space-consuming presentation is removed.
     assert "runtime.run_snapshot || {}" in app
+    assert "runtime.activity_summary || []" in app
 
 
 def test_task_validation_resources_are_workflow_declared_and_not_global():
@@ -353,3 +352,16 @@ def test_chat_validator_resource_pickers_share_context_aware_browse_flow():
     assert 'project=str(body.get("project", ""))' in server
     assert 'current=str(body.get("current", ""))' in server
     assert 'options["initialdir"] = initialdir' in server
+
+
+def test_mixed_validation_resource_pickers_have_independent_two_row_height():
+    root = Path(__file__).resolve().parents[1]
+    css = (root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
+
+    assert ".options-validation-row" in css
+    assert "gap: 8px" in css
+    assert ".options-validation-row .composer-resource-picker" in css
+    assert "min-height: 56px" in css
+    assert "grid-template-rows: minmax(16px, auto) minmax(26px, auto)" in css
+    assert "row-gap: 4px" in css
+    assert "overflow: hidden" in css
