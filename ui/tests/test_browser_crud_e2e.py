@@ -806,6 +806,10 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             assert not page.locator("#validatorPicker").is_visible()
             assert page.locator("#aiValidatorPromptPicker").is_visible()
 
+            # Mixed validation is the densest Chat options case. Verify it at
+            # a smaller desktop viewport so both resource cards remain usable
+            # without horizontal or viewport overflow.
+            page.set_viewport_size({"width": 1024, "height": 640})
             choose_workflow("mixed.yaml")
             assert page.locator("#validationPickers").is_visible()
             assert page.locator("#validatorPicker").is_visible()
@@ -819,6 +823,18 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             assert ai_box["x"] >= panel_box["x"] - 1
             assert file_box["x"] + file_box["width"] <= panel_box["x"] + panel_box["width"] + 1
             assert ai_box["x"] + ai_box["width"] <= panel_box["x"] + panel_box["width"] + 1
+            assert panel_box["x"] >= -1
+            assert panel_box["x"] + panel_box["width"] <= 1025
+            assert panel_box["y"] >= -1
+            assert panel_box["y"] + min(panel_box["height"], 640) <= 641
+
+            for picker_id in ("validatorPicker", "aiValidatorPromptPicker"):
+                kind_box = page.locator(f"#{picker_id} .resource-kind").bounding_box()
+                name_box = page.locator(f"#{picker_id} .resource-name").bounding_box()
+                choose_box = page.locator(f"#{picker_id} .resource-action").bounding_box()
+                assert kind_box and name_box and choose_box
+                assert kind_box["y"] < name_box["y"] + name_box["height"]
+                assert name_box["x"] + name_box["width"] <= choose_box["x"] + 1
 
             choose_workflow("plain.yaml")
             assert not page.locator("#validationPickers").is_visible()
