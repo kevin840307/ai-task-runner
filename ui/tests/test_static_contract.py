@@ -361,7 +361,10 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
     assert ".options-validation-row" in css
     assert "gap: 8px" in css
     assert ".options-validation-row .composer-resource-picker" in css
-    assert "min-height: 56px" in css
-    assert "grid-template-rows: minmax(16px, auto) minmax(26px, auto)" in css
-    assert "row-gap: 4px" in css
-    assert "overflow: hidden" in css
+    assert "min-height: 72px" in css
+    assert "grid-template-rows: minmax(18px, auto) minmax(32px, auto)" in css
+    assert "row-gap: 6px" in css
+    assert ".options-validation-row .composer-resource-picker > input" in css
+    assert "position: absolute !important" in css
+    assert "text-overflow: ellipsis" in css
+    assert "min-width: 70px" in css
