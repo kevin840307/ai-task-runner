@@ -76,13 +76,25 @@ Chat
    ├─ Task B
    └─ Task C
 
-A Task is an execution instance:
+A Task is a durable work record/container, not merely the currently active Run:
 - created from the current Chat or manually from the Tasks page,
-- owns task goal + workflow/run metadata,
-- uses the existing Runner runtime,
-- can be opened to inspect detailed execution,
+- owns stable Task identity + goal + workflow/run references,
+- uses the existing Runner runtime for actual execution,
+- can be opened to inspect both current execution and prior execution/continuation history,
 - remains visible after Completed / Stopped / Needs Attention,
+- may later be Continued / Resumed / Rerun as allowed by the existing runtime semantics,
+- a brand-new Task on the same path does not replace or hide older completed Tasks,
+- is removed from the Tasks view only by an explicit Delete Task action,
 - does NOT merge its result back to another branch/workspace.
+
+Task execution/history rule:
+- Task identity survives individual execution cycles/runs.
+- Initial Run, Continue, Resume, Rerun and resulting terminal states must remain traceable in Task Detail.
+- Prefer references/indexes to existing run_id / messages / runtime history; do not duplicate runtime logs into a second canonical history store.
+- Task card shows the latest/current state, while Task Detail preserves the chronological execution history.
+- When a terminal Task is Continued/Resumed/Rerun, it must reacquire execution-path ownership before becoming active.
+- If another Task currently owns that canonical execution path, Continue/Resume/Rerun must fail closed just like starting a new Task.
+- Creating Task B after Task A completed on the same path is allowed; Task A remains visible until explicitly deleted.
 
 Execution-path ownership rule:
 - one canonical/resolved filesystem execution path may have at most one active Task at a time,
@@ -224,7 +236,9 @@ C. Tasks view for the selected Chat
 Notes:
 - Cards are status summaries, not mini dashboards.
 - Entire card is clickable.
-- Completed cards remain available.
+- Completed cards remain available even after newer Tasks are created on the same path.
+- A Task card reflects its latest/current state; prior Run/Continue/Resume/Rerun history stays in Task Detail.
+- Task is removed only through explicit Delete Task.
 - Current Stage / attention reason comes from the canonical runtime projection, not UI inference.
 - After worktree support exists, "main" may become "wt/<task>" on isolated Tasks.
 
@@ -261,7 +275,8 @@ D. Task Detail - reuse the existing/pre-redesign execution Chat
 Notes:
 - This is intentionally close to the old execution-oriented Chat UI.
 - Do not rebuild Task Detail as a heavy dashboard unless a proven need appears.
-- Stop / Resume / Rerun visibility comes from canonical allowed_actions.
+- Preserve prior execution segments so a completed Task that is later Continued still shows what happened before and after Continue.
+- Stop / Continue / Resume / Rerun visibility comes from canonical allowed_actions / existing runtime semantics.
 - Runtime diagnostics can stay behind a details/runtime surface instead of dominating the main view.
 
 E. Global Library mode
@@ -313,6 +328,34 @@ Typical integration flow:
       -> Chat/AI assists separately
 
 The Task runtime must not acquire merge ownership or merge-related recovery state.
+
+
+
+G. Durable Task history / same-path reuse (illustrative only)
+
+Tasks for C:\repo\ai-task-runner:
+
+  Task A  "Fix backend loading"
+    Run #1       -> Completed
+    Continue #1  -> Completed
+    [still visible]
+
+  Task B  "Refactor startup"
+    Run #1       -> Running
+    [currently owns C:\repo\ai-task-runner]
+
+  Task C  "Another fix"
+    New Task record may exist,
+    but cannot start on C:\repo\ai-task-runner while Task B owns that path.
+
+Later:
+  Task B -> Completed -> releases path
+  Task C -> may start
+  Task A / Task B / Task C all remain visible until individually deleted.
+
+Delete:
+  Delete Task A -> removes Task A from the Tasks view/history index after confirmation.
+  It does not auto-merge anything and does not imply future worktree cleanup.
 
 
 PHASE 1 - Normal Chat workspace
@@ -379,7 +422,8 @@ PHASE 3 - Tasks page scoped to the current Chat
     - Active
     - Needs Attention
     - Completed
-    - Completed Tasks remain visible and reopenable.
+    - Completed Tasks remain visible and reopenable even after later Tasks use the same path.
+    - Do not auto-hide or auto-delete older Tasks because a newer Task exists.
 
 [ ] Surface cross-Chat attention without inventing a global Task management product.
     - Chat rows may show small Running / Needs Attention badges.
@@ -410,9 +454,19 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - Backend guards remain authoritative.
     - No Task-specific second control state machine.
 
-[ ] Task completion/history is independent from workspace cleanup.
-    - Completed Task remains inspectable even if its execution workspace is later cleaned.
+[ ] Task completion/history is durable until explicit deletion.
+    - Completed Task remains inspectable even if newer Tasks later run on the same path.
+    - Continue / Resume / Rerun appends/preserves execution history under the same Task instead of replacing its earlier history.
     - Task history must not disappear merely because a future worktree is removed.
+    - Task history must not disappear merely because a new Task is created.
+    - Only explicit Delete Task removes the Task from the Tasks view/index.
+
+[ ] Delete Task is an explicit destructive action.
+    - Require confirmation.
+    - Do not allow deleting an actively running/path-owning Task; Stop it and reach an inactive state first.
+    - Delete removes the Task's UI-owned record/index/history references.
+    - Delete must not merge/rebase/cherry-pick or otherwise modify source-control integration state.
+    - Future worktree cleanup remains a separate operation; deleting a Task must not silently perform Git integration.
 
 PHASE 5 - Global Library
 ------------------------
@@ -496,6 +550,7 @@ Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + L
     - New Task sheet shows the selected execution path as Available / Busy.
     - If Main already has an active Task on the same canonical path, Main is disabled and the UI points
       to the owning Task, even if it belongs to another Chat.
+    - The same guard applies when Continue / Resume / Rerun tries to reacquire a busy path.
     - The same guard applies to an Existing Worktree path.
     - Recommend New Worktree when the user needs parallel execution, but do not force it for simple Main Tasks.
 
