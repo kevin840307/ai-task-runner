@@ -3522,3 +3522,52 @@ def test_strict_live_validator_still_rejects_trailing_newline(tmp_path: Path):
 
     assert completed.returncode == 1
     assert "content mismatch" in completed.stdout
+
+
+def test_api_recovery_validator_allows_only_line_ending_variants_and_reports_bytes(tmp_path: Path):
+    validator = tmp_path / "validation.py"
+    validator.write_text(live.API_RECOVERY_VALIDATOR, encoding="utf-8")
+    state = tmp_path / "state.json"
+    state.write_text("{}", encoding="utf-8")
+    target = tmp_path / "health.txt"
+
+    for content in (
+        live.EXPECTED.encode("utf-8"),
+        (live.EXPECTED + "\n").encode("utf-8"),
+        (live.EXPECTED + "\r\n").encode("utf-8"),
+    ):
+        target.write_bytes(content)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(validator),
+                "--project-root",
+                str(tmp_path),
+                "--state-file",
+                str(state),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        assert "VALIDATION_PASSED" in result.stdout
+
+    target.write_bytes((live.EXPECTED + " wrong").encode("utf-8"))
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--project-root",
+            str(tmp_path),
+            "--state-file",
+            str(state),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "content mismatch" in result.stdout
+    assert "actual=" in result.stdout
+    assert "bytes=" in result.stdout
