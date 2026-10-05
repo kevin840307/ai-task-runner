@@ -656,11 +656,12 @@ def test_transient_proxy_can_simulate_real_disconnect_and_recovery():
         thread.join(timeout=2)
 
 
-def test_dense_coverage_requires_every_mixed_probe():
+def test_dense_coverage_requires_every_mixed_probe_and_transient_http_class():
     complete = live.SoakResult(
         completed=1,
         mixed_validations=1,
-        transient_recoveries=1,
+        transient_recoveries=3,
+        transient_status_counts={429: 1, 502: 1, 503: 1},
         timeout_probes=1,
         yaml_runs=1,
         sandbox_runs=1,
@@ -673,9 +674,24 @@ def test_dense_coverage_requires_every_mixed_probe():
             live.SoakResult(
                 completed=1,
                 mixed_validations=1,
-                transient_recoveries=1,
+                transient_recoveries=3,
+                transient_status_counts={429: 1, 502: 1, 503: 1},
                 timeout_probes=1,
                 yaml_runs=1,
+                elapsed_seconds=1800,
+            )
+        )
+
+    with pytest.raises(RuntimeError, match="transient API HTTP 503"):
+        live.require_dense_coverage(
+            live.SoakResult(
+                completed=1,
+                mixed_validations=1,
+                transient_recoveries=2,
+                transient_status_counts={429: 1, 502: 1},
+                timeout_probes=1,
+                yaml_runs=1,
+                sandbox_runs=1,
                 elapsed_seconds=1800,
             )
         )
@@ -2964,6 +2980,7 @@ def test_soak_resource_bounds_ignore_expected_run_root_growth():
         ({"project_state_json_bytes": 9 * 1024 * 1024}, {"active_process_markers": 0}, "project_state_json_bytes"),
         ({"project_stage_sessions": 2049}, {"active_process_markers": 0}, "project_stage_sessions"),
         ({"project_dynamic_groups": 2049}, {"active_process_markers": 0}, "project_dynamic_groups"),
+        ({"project_dynamic_task_groups": 2049}, {"active_process_markers": 0}, "project_dynamic_task_groups"),
         ({"project_review_failures": 2049}, {"active_process_markers": 0}, "project_review_failures"),
         ({"project_transition_history": live.MAX_TRANSITION_HISTORY + 1}, {"active_process_markers": 0}, "project_transition_history"),
         ({"project_expanded_workflow_stages": 4097}, {"active_process_markers": 0}, "project_expanded_workflow_stages"),
