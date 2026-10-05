@@ -765,13 +765,13 @@ def test_task_validation_options_stay_visible_and_follow_workflow_capabilities()
             assert page.locator("#aiValidatorPromptPicker").is_visible()
             assert page.locator("#activeRunDetails").count() == 0
 
-            page.locator("#workflowSelect").select_option(label=re.compile("file_task"))
+            page.locator("#workflowSelect").select_option(value=file_workflow["item"]["path"])
             page.wait_for_timeout(50)
             assert page.locator("#browseValidatorButton").is_enabled()
             assert page.locator("#browseAiValidatorPromptButton").is_disabled()
             assert "此 Workflow 未使用" in page.locator("#aiValidatorPromptResourceName").inner_text()
 
-            page.locator("#workflowSelect").select_option(label=re.compile("ai_task"))
+            page.locator("#workflowSelect").select_option(value=ai_workflow["item"]["path"])
             page.wait_for_timeout(50)
             assert page.locator("#browseValidatorButton").is_disabled()
             assert page.locator("#browseAiValidatorPromptButton").is_enabled()
