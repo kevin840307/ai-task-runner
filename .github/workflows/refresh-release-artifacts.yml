@@ -1,0 +1,83 @@
+name: Refresh release artifacts
+
+on:
+  push:
+    branches: [minimal-closed-loop-runtime]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-release-artifacts-minimal-closed-loop-runtime
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/studio-src/package-lock.json
+
+      - name: Rebuild Workflow Studio
+        working-directory: ui/studio-src
+        run: |
+          npm ci
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
+          npm run build
+
+      - name: Record artifact refresh evidence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("todo.txt")
+          text = path.read_text(encoding="utf-8")
+          marker = "ARTIFACT REFRESH EVIDENCE (2026-10-05)"
+          block = """
+ARTIFACT REFRESH EVIDENCE (2026-10-05)
+--------------------------------------
+[x] Rebuilt Workflow Studio from the only maintained React source ui/studio-src/** using npm ci + npm run build.
+    - Generated output remains ui/static/workflow-studio-app/**; no generated JS/CSS was hand-edited.
+[x] Refreshed project.bundle.txt from the current branch using tool/bundle.py pack + verify.
+    - node_modules and transient TypeScript build-info were removed before packing.
+    - Existing bundle runtime-artifact exclusions remain authoritative; source/tests/docs and the committed Studio bundle are retained.
+[x] The one-shot artifact-refresh workflow removes itself before project.bundle.txt is packed/committed,
+    so no temporary release mechanism becomes part of the maintained repository or canonical bundle.
+"""
+          if marker not in text:
+              path.write_text(text.rstrip() + "\n\n" + block.strip() + "\n", encoding="utf-8")
+          PY
+
+      - name: Remove transient build inputs and one-shot workflow
+        run: |
+          rm -rf ui/studio-src/node_modules
+          find ui/studio-src -name '*.tsbuildinfo' -delete
+          rm -f .github/workflows/refresh-release-artifacts.yml
+
+      - name: Rebuild and verify project bundle
+        run: |
+          python tool/bundle.py pack . /tmp/project.bundle.txt --exclude project.bundle.txt
+          python tool/bundle.py verify /tmp/project.bundle.txt
+          mv /tmp/project.bundle.txt project.bundle.txt
+          python tool/bundle.py verify project.bundle.txt
+
+      - name: Commit refreshed artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ui/static/workflow-studio-app project.bundle.txt todo.txt .github/workflows/refresh-release-artifacts.yml
+          if git diff --cached --quiet; then
+            echo "Artifacts already current"
+            exit 0
+          fi
+          git commit -m "Refresh Studio and project bundle"
+          git push origin HEAD:minimal-closed-loop-runtime
