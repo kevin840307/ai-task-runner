@@ -4326,6 +4326,11 @@ def require_dense_coverage(result: SoakResult) -> None:
         )
         if count < 1
     ]
+    missing.extend(
+        f"transient API HTTP {status}"
+        for status in API_RECOVERY_STATUS_CODES
+        if result.transient_status_counts.get(status, 0) < 1
+    )
     if missing:
         raise RuntimeError("high-density soak missed: " + ", ".join(missing))
 
