@@ -881,9 +881,26 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
 .composer-validation-row .composer-validator-picker input {
   max-width: 112px;
 }
+/* Options validation resources are stacked intentionally.
+   Mixed File + AI validation must never compete for horizontal space. */
+.options-validation-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+}
+.options-validation-row .composer-resource-picker {
+  width: 100%;
+  max-width: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+.options-validation-row .composer-resource-picker .resource-name {
+  max-width: none;
+}
 @media (max-width: 900px) {
-  .composer-validation-row { flex-wrap: wrap; }
-  .composer-validation-row .composer-validator-picker { max-width: 240px; }
+  .options-validation-row .composer-resource-picker { max-width: none; }
 }
 
 
