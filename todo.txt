@@ -1253,3 +1253,9 @@ RESOURCE BOUND EVIDENCE
     HistoryObserver trims to <=100 model call pairs and <=50 MiB; tests cover both count and byte budget.
 [x] Soak resource sampling records start/max/end and merges each iteration's project state metrics.
 [x] Dynamic child replacement cleanup has deterministic regression for durable and process-local session state.
+
+ARTIFACT REFRESH EVIDENCE (2026-10-05)
+--------------------------------------
+[x] Rebuilt Workflow Studio from ui/studio-src/** using npm ci + npm run build; generated JS/CSS was not hand-edited.
+[x] Refreshed project.bundle.txt using tool/bundle.py pack + verify after removing node_modules and transient TypeScript build-info.
+[x] The one-shot artifact-refresh workflow removes itself before packing/committing, so it is not retained in the repository or canonical bundle.
