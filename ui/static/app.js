@@ -1047,7 +1047,6 @@ function renderWorkflowPickerSelection() {
   updateValidatorPicker();
   updateAiValidatorPromptPicker();
   renderRunConfigurationLock();
-  renderValidationCapability();
   syncComposerReserve();
 }
 function resourceFileName(value, fallback) {
