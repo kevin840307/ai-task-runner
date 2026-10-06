@@ -2851,11 +2851,26 @@ def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runti
 
 
 def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths():
-    cases = {name: expected for name, _prompt, expected in live.DYNAMIC_ROLE_MATRIX_CASES}
+    cases = {
+        name: {
+            "allowed": tuple(allowed),
+            "preferred": preferred,
+        }
+        for name, _prompt, allowed, preferred in live.DYNAMIC_ROLE_MATRIX_CASES
+    }
     assert cases == {
-        "ambiguous-requirement": "requirements_analyst",
-        "existing-failure": "debugger",
-        "verify-only": "verifier",
+        "ambiguous-requirement": {
+            "allowed": ("requirements_analyst", "implementer"),
+            "preferred": "requirements_analyst",
+        },
+        "existing-failure": {
+            "allowed": ("debugger", "implementer"),
+            "preferred": "debugger",
+        },
+        "verify-only": {
+            "allowed": ("verifier",),
+            "preferred": "verifier",
+        },
     }
 
 
