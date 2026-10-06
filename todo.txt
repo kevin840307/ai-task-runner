@@ -1349,6 +1349,14 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 third real-Qwen 43 rerun on source revision 21ee90d5fa1c65042aa03d130ff5f7b0cb346abc, DIRTY=False:
+      * ambiguous-requirement completed successfully after the cross-stage source_evidence runtime fix; the probe advanced to the next case.
+      * existing-failure completed via coordinator -> implementer -> coordinator -> final_validate, but the harness incorrectly required debugger.
+      * This is a harness contract bug, not a runtime failure: implementer is a valid role for repairing an existing broken file.
+      * Role-matrix assertions are now outcome-driven: artifact correctness + completed final validation are hard requirements;
+        reasonable role alternatives are accepted and preferred-role usage is recorded for optimization analysis.
+      * verify-only still rejects unnecessary write-capable implementer/debugger selection.
+      * Real-Qwen 43 must be rerun after the harness expectation fix before marking the full role matrix PASS.
     - 2026-10-06 second real-Qwen 43 ambiguous-requirement rerun used concrete TAIWAN_MATRIX_7F4C
       and correctly stopped at max_cycles=12 instead of looping indefinitely, but still exposed a real runtime handoff-context gap.
       * requirements_analyst repeatedly reported the authoritative value and remaining blocker: none.
