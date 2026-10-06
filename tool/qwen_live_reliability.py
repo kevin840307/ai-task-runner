@@ -2999,11 +2999,18 @@ Use the normal Dynamic Handoff workflow and finish through final validation.
         deadline = time.monotonic() + settings.run_timeout
         outage_until = 0.0
         injected = False
+        coordinator_finished = False
+        successes_before_outage = 0
         try:
             while process.poll() is None and time.monotonic() < deadline:
-                state = read_state(project)
-                session = state.get("ai_session_id")
-                if not injected and isinstance(session, str) and session:
+                if not coordinator_finished:
+                    coordinator_finished = observed_stage_result(
+                        project,
+                        "coordinator",
+                        "pass",
+                    )
+                if not injected and coordinator_finished:
+                    successes_before_outage = proxy.successes
                     proxy.status_code = 503
                     proxy.fail = True
                     outage_until = time.monotonic() + API_RECOVERY_SHORT_OUTAGE_SECONDS
@@ -3019,9 +3026,19 @@ Use the normal Dynamic Handoff workflow and finish through final validation.
 
         code = process.returncode or 0
         starts = _assert_dynamic_run_completed(project, code)
+        if not coordinator_finished:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe never observed initial coordinator PASS"
+            )
         if not injected or proxy.failures <= 0:
             raise RuntimeError(
-                "Dynamic Handoff API recovery probe did not inject an observed HTTP 503"
+                "Dynamic Handoff API recovery probe armed HTTP 503 after coordinator PASS "
+                "but no subsequent model request crossed the proxy"
+            )
+        if proxy.successes <= successes_before_outage:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe observed 503 failures but no successful "
+                "upstream request after outage recovery"
             )
         value = (project / "dynamic_api_recovery.txt").read_text(
             encoding="utf-8-sig"
@@ -3032,7 +3049,9 @@ Use the normal Dynamic Handoff workflow and finish through final validation.
             raise RuntimeError("Dynamic API recovery left stale last_error")
         return {
             "stage_starts": starts,
+            "coordinator_finished_before_outage": coordinator_finished,
             "proxy_failures": proxy.failures,
+            "proxy_successes_before_outage": successes_before_outage,
             "proxy_successes": proxy.successes,
         }
 
