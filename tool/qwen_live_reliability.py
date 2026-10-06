@@ -2953,6 +2953,25 @@ def dynamic_handoff_final_recovery_probe(
     }
 
 
+DYNAMIC_API_RECOVERY_VALIDATOR = '''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+target = Path(a.project_root).resolve() / "dynamic_api_recovery.txt"
+if not target.is_file():
+    print("VALIDATION_FAILED: missing dynamic_api_recovery.txt")
+    raise SystemExit(1)
+if target.read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+    print("VALIDATION_FAILED: dynamic_api_recovery.txt content mismatch")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
 def dynamic_handoff_api_recovery_probe(
     settings: Settings,
     root: Path,
@@ -2967,7 +2986,9 @@ def dynamic_handoff_api_recovery_probe(
             "dynamic-api-recovery-probe",
             prompt="""Create dynamic_api_recovery.txt containing exactly RECOVERED.
 Use the normal Dynamic Handoff workflow and finish through final validation.
+Do not modify validation.py; it already matches this Goal.
 """,
+            validator=DYNAMIC_API_RECOVERY_VALIDATOR,
         )
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
