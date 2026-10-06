@@ -1274,6 +1274,13 @@ RELEASE GATES
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
+    - Real-Qwen example-smoke rerun on source revision 1ae72ce9f37d81271625d46a7f0ba2ce1fd38af5,
+      DIRTY=False, START_PROBE=41 now correctly executes the canonical smoke matrix.
+    - Confirmed PASS so far:
+      * example-smoke-01-basic-command-validator-file
+      * example-smoke-01-basic-command-validator-mixed
+    - Full gate remains open until all configured smoke cases finish and summary reports example_smoke=true
+      with the expected example_smoke_runs count.
     - Real-Qwen high-density run on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
       DIRTY=False, completed [40/41] soak PASS with 12 runs over 1871.5s.
     - Full 0.5H gate is NOT green yet because the fail-start launcher omitted the opt-in example-smoke matrix,
