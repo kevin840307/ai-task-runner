@@ -759,21 +759,21 @@ High-value runner work remaining:
       * [29/41] PASS file-protection · protected-file policy probe.
     - This closes the validator-failure-routing live regression; continue the same run through probes 30-41 for API/recovery/soak evidence.
 
-[ ] Re-run real-Qwen API recovery path from probe 34 after deterministic gates are green.
-    - Real-Qwen rerun on source revision d6916005f8083c505e5b3105b4e53d42e01e0507 with DIRTY=False:
-      * [33/41] PASS api-long-http · long HTTP 429/502/503/45s bounded-session recovery probe.
-      * [34/41] api-disconnect reached validator PASS but the harness then failed in assert_completed()
-        because that post-check still used the old strict text rule instead of the recovery-specific byte contract.
-    - Root cause was duplicate acceptance ownership inside the live harness, not Runner retry/backoff/session behavior.
-    - API_RECOVERY_ALLOWED_BYTES is now the single recovery-specific byte contract used by both:
-      * the generated API_RECOVERY_VALIDATOR, and
-      * the api_recovery_probe post-completion assert_completed() check.
+[x] Re-run real-Qwen API recovery path from probe 34 after deterministic gates are green.
+    - Root cause of the previous api-disconnect false failure was duplicate acceptance ownership inside the live harness,
+      not Runner retry/backoff/session behavior.
+    - API_RECOVERY_ALLOWED_BYTES is the single recovery-specific byte contract used by both the generated
+      API_RECOVERY_VALIDATOR and the api_recovery_probe post-completion assert_completed() check.
     - The recovery-specific contract remains narrow: optional UTF-8 BOM x exact / LF / CRLF only.
-    - Default assert_completed() and the strict general validator remain byte-exact; deterministic regression proves
-      BOM is accepted only when the explicit recovery byte contract is supplied.
-    - run_qwen_live_reliability_fail_start.bat now defaults to probe 34.
-    - Acceptance: api-disconnect passes with bounded Same/Fresh recovery evidence, validator PASS and the shared
-      recovery byte post-check; wrong content must still fail closed.
+    - Default assert_completed() and the strict general validator remain byte-exact.
+    - Real-Qwen rerun on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194 with DIRTY=False:
+      * [34/41] PASS api-disconnect · API disconnect/180s bounded-session recovery probe.
+      * [35/41] PASS multi-todo-resume · multi-TODO/checkpoint resume probe.
+      * [36/41] PASS yaml-list-resume · YAML List/resume + validator_args + per-item Final AI 3/2 probe.
+      * [37/41] PASS yaml-list-endurance · single-process YAML endurance (4 items).
+      * [38/41] PASS final-ai-quorum · Final AI 3/2 quorum probe.
+      * [39/41] PASS timeout-recovery-budget · timeout/recovery-budget probe.
+    - This closes the api-disconnect/recovery regression and materially increases confidence in resume/YAML/final-AI/timeout paths.
 
 
 [x] Improved Chat validation resource picker UX for file / AI / mixed workflows.
@@ -869,7 +869,9 @@ High-value runner work remaining:
     - [x] Dynamic Handoff real-live session validation now uses model event identities to prove
       main/role reuse and fresh isolation, while completed state is required to have no active-only
       ai_session_id/stage_sessions. The harness no longer depends on stale completed session maps.
-    - [ ] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
+    - [x] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
+      Evidence now includes short 429/502/503 probes, [33/41] long HTTP 429/502/503/45s PASS,
+      [34/41] raw disconnect/180s PASS, plus the earlier real session-expiry/Fresh Session live probe.
     - [ ] Confirm real high-density / 0.5H / 24H evidence shows no retry spin and reaches configured max backoff.
     - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
 
@@ -1248,6 +1250,13 @@ RELEASE GATES
     - This exact-HEAD evidence includes high-density 429/502/503/resource gates, semantic validator-failure routing evidence,
       the single shared API recovery byte contract for validator + post-check, and strict default BOM/newline rejection.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
+
+[x] Latest resumed live matrix through probe 39 is green on exact source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
+    - Probes 33-39 all PASS in real Qwen:
+      api-long-http, api-disconnect, multi-todo-resume, yaml-list-resume,
+      yaml-list-endurance, final-ai-quorum, timeout-recovery-budget.
+    - Remaining in this matrix: probe 40 soak and probe 41 example-smoke.
+    - This is not yet the full 0.5H/high-density/24H release gate.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
