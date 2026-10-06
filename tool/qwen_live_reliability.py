@@ -3091,8 +3091,17 @@ the same file exactly, again with no trailing newline or whitespace, and continu
     )
     assert_completed(project, code, "route.txt", ROUTING_FINAL)
     state = read_state(project)
-    if marker.read_text(encoding="utf-8") != ROUTING_INITIAL or state.get("cycle", 1) < 2:
-        raise RuntimeError("validator failure did not route back through another planning cycle")
+    if marker.read_text(encoding="utf-8") != ROUTING_INITIAL:
+        raise RuntimeError("validator failure probe did not observe the expected initial value")
+    transitions = state.get("transition_history", [])
+    if not any(
+        isinstance(item, dict)
+        and item.get("stage") == "validate_file"
+        and item.get("status") == "fail"
+        and item.get("target") == "planning"
+        for item in transitions
+    ):
+        raise RuntimeError("validator failure did not route from validate_file back to planning")
     planning_prompts = stage_prompt_records(project, "planning")
     if len(planning_prompts) < 2 or not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
