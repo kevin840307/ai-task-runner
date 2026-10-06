@@ -2799,12 +2799,12 @@ def test_soak_transient_status_rotation_covers_all_http_classes():
 
 
 def test_bundled_dynamic_handoff_is_probe_42_and_runs_after_example_smoke():
-    assert len(live.PROBE_ORDER) == 42
-    assert live.PROBE_ORDER[-2:] == (
+    bundled_index = live.PROBE_ORDER.index("bundled-dynamic-handoff")
+    assert bundled_index + 1 == 42
+    assert live.PROBE_ORDER[bundled_index - 1 : bundled_index + 1] == (
         "example-smoke",
         "bundled-dynamic-handoff",
     )
-    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 42
 
 
 def test_dynamic_handoff_extended_live_probes_are_43_through_46():
