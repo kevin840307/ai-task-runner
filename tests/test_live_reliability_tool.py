@@ -2865,6 +2865,25 @@ def test_dynamic_handoff_api_recovery_arms_after_initial_coordinator_pass():
 
 
 
+def test_dynamic_handoff_api_recovery_fixture_validator_matches_goal():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("DYNAMIC_API_RECOVERY_VALIDATOR")
+    end = source.index("\ndef dynamic_handoff_api_recovery_probe", start)
+    block = source[start:end]
+
+    assert "dynamic_api_recovery.txt" in block
+    assert "RECOVERED" in block
+    assert "health.txt" not in block
+
+    probe_start = source.index("def dynamic_handoff_api_recovery_probe")
+    probe_end = source.index("\ndef dynamic_handoff_stop_resume_probe", probe_start)
+    probe = source[probe_start:probe_end]
+    assert "validator=DYNAMIC_API_RECOVERY_VALIDATOR" in probe
+    assert "Do not modify validation.py" in probe
+
+
+
+
 def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths():
     cases = {
         name: {
