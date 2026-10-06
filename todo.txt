@@ -1349,6 +1349,15 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 real-Qwen rerun on source revision 986325f541e96704aed7944580e4028184a68585, DIRTY=False:
+      * [43/46] PASS dynamic-handoff-role-matrix.
+      * [44/46] PASS dynamic-handoff-final-recovery.
+      * 45 failed before exercising recovery because the harness armed HTTP 503 by polling ai_session_id; the run completed
+        without any proxied request observing the injected failure.
+      * This is an injection-timing race in the probe, not evidence that Dynamic Handoff recovery failed.
+      * Fixed 45 to wait for durable coordinator PASS, then arm HTTP 503 so the next worker/model request crosses the outage.
+      * Probe now also requires at least one 503 failure and a later successful upstream request after recovery.
+      * Real-Qwen 45-46 rerun is required before marking them PASS.
     - 2026-10-06 third real-Qwen 43 rerun on source revision 21ee90d5fa1c65042aa03d130ff5f7b0cb346abc, DIRTY=False:
       * ambiguous-requirement completed successfully after the cross-stage source_evidence runtime fix; the probe advanced to the next case.
       * existing-failure completed via coordinator -> implementer -> coordinator -> final_validate, but the harness incorrectly required debugger.
