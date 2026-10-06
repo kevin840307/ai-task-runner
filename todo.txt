@@ -1340,7 +1340,12 @@ RELEASE GATES
     - Existing dedicated dynamic-handoff-session-policy probe remains unchanged to cover main/role/fresh identity semantics.
     - Exact implementation HEAD bb4ed85025f7673ea2a076264ea7eccdf40011f5 passed all four CI gates
       in GitHub Actions run 37466898305.
-    - [ ] Real-Qwen probe 42 still must PASS before treating the bundled dynamic_handoff.yaml optimization as live-validated.
+    - [x] Real-Qwen probe 42 PASS on source revision 29cf8af95cf513ad26d6465b2dd0986c9203d4d2, DIRTY=False.
+      Actual route: coordinator -> implementer -> coordinator -> final_validate.
+      Evidence: total_stage_starts=4, coordinator_runs=2, roles_used=[implementer], role_runs=1,
+      writer_roles=[implementer], final_validate_runs=1.
+      This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
+      while still reaching independent fresh-session final validation.
 
 [x] High-density soak green
     - [40/41] PASS soak · 0.5H soak completed (12 runs).
