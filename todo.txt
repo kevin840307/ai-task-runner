@@ -1262,25 +1262,27 @@ RELEASE GATES
       focused coordinator/worker prompts, plus all prior recovery/resource/YAML/runtime regressions.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
-[x] Latest resumed live matrix through probe 40 is green on exact source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
-    - Probes 33-40 all PASS in real Qwen:
-      api-long-http, api-disconnect, multi-todo-resume, yaml-list-resume,
-      yaml-list-endurance, final-ai-quorum, timeout-recovery-budget, 0.5H high-density soak.
-    - [40/41] soak summary: 12 runs / 1871.5s, transient 429=2 / 502=2 / 503=2,
-      timeout=2, YAML=1, sandbox=1, mixed Final AI=1, backoff cap 30s reached.
-    - Probe 41 did not execute in that run because the old fail-start launcher omitted the opt-in example-smoke matrix.
-    - High-density 0.5H soak itself is green; full Real-Qwen 0.5H gate remains open until example-smoke runs.
-    - Full 24H Windows soak remains the final unattended-duration gate.
+[x] Original 41-probe live matrix is fully green across soak + example smoke.
+    - Probes 33-40 are green on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
+    - Probe 41 example-smoke later ran all 6 canonical cases and all 6 PASS on source revision
+      1ae72ce9f37d81271625d46a7f0ba2ce1fd38af5, DIRTY=False.
+    - The original Real-Qwen 0.5H/high-density release gate is therefore complete.
+    - New probe 42 bundled-dynamic-handoff was added after this evidence and still requires its own real-Qwen PASS.
 
-[ ] Real-Qwen 0.5H gate green:
+
+[x] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
     - Real-Qwen example-smoke rerun on source revision 1ae72ce9f37d81271625d46a7f0ba2ce1fd38af5,
-      DIRTY=False, START_PROBE=41 now correctly executes the canonical smoke matrix.
-    - Confirmed PASS so far:
+      DIRTY=False, START_PROBE=41 correctly executed the canonical 2-project x 3-workflow smoke matrix.
+    - All 6/6 example-smoke cases PASS:
       * example-smoke-01-basic-command-validator-file
       * example-smoke-01-basic-command-validator-mixed
-    - Full gate remains open until all configured smoke cases finish and summary reports example_smoke=true
-      with the expected example_smoke_runs count.
+      * example-smoke-01-basic-command-validator-ralphy-ai-validate
+      * example-smoke-10-skill-prompt-review-workflow-file
+      * example-smoke-10-skill-prompt-review-workflow-mixed
+      * example-smoke-10-skill-prompt-review-workflow-ralphy-ai-validate
+    - This closes the original 41-probe Real-Qwen 0.5H gate together with the previously green [40/41] high-density soak.
+    - Probe 42 was added afterwards for shipped dynamic_handoff.yaml optimization and remains a separate new live-validation item.
     - Real-Qwen high-density run on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
       DIRTY=False, completed [40/41] soak PASS with 12 runs over 1871.5s.
     - Full 0.5H gate is NOT green yet because the fail-start launcher omitted the opt-in example-smoke matrix,
