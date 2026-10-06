@@ -2274,6 +2274,20 @@ def test_full_loop_workflow_uses_deterministic_rollback_and_qwen_verification(tm
     compile(live.FULL_LOOP_REVIEW_GATE, "full_loop_review_gate.py", "exec")
 
 
+def test_validator_failure_probe_uses_durable_semantic_route_evidence():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def validator_failure_routing_probe")
+    end = source.index("\ndef file_protection_probe", start)
+    block = source[start:end]
+
+    assert 'state.get("transition_history", [])' in block
+    assert 'item.get("stage") == "validate_file"' in block
+    assert 'item.get("status") == "fail"' in block
+    assert 'item.get("target") == "planning"' in block
+    assert 'state.get("cycle"' not in block
+    assert 'stage_prompt_records(project, "planning")' in block
+
+
 def test_live_reliability_main_includes_complete_closed_loop_probe():
     source = Path(live.__file__).read_text(encoding="utf-8")
     main = source[source.index("def main() -> int:"):]
