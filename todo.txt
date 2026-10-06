@@ -754,7 +754,10 @@ High-value runner work remaining:
       can be rerun directly; explicit --start-probe still overrides it.
     - Exact implementation HEAD c3e94904999c6b8bd6d29f8f8e5293df060d456f passed Windows Python,
       Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37448808129.
-    - Real-Qwen probe 28 must still be rerun before claiming validator-failure-routing live PASS.
+    - Real-Qwen rerun on source revision c3e94904999c6b8bd6d29f8f8e5293df060d456f with DIRTY=False:
+      * [28/41] PASS validator-failure-routing · validator FAIL -> Planning shared-feedback routing probe.
+      * [29/41] PASS file-protection · protected-file policy probe.
+    - This closes the validator-failure-routing live regression; continue the same run through probes 30-41 for API/recovery/soak evidence.
 
 [ ] Re-run real-Qwen API disconnect probe from probe 34 after deterministic gates are green.
     - The live harness now uses API_RECOVERY_VALIDATOR for API recovery probes only.
