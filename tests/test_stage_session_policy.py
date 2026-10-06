@@ -370,3 +370,72 @@ def test_stage_backend_model_override_survives_runtime_configuration(tmp_path, m
     assert calls
     assert calls[0][1] is True
     assert ctx.state.stage_sessions["worker"] == "stage-session"
+
+
+def test_same_session_continue_includes_bounded_previous_stage_evidence(tmp_path):
+    ctx = context(tmp_path)
+    stage = BaseStage(BaseStageSpec(
+        name="coordinator",
+        prompt="unused",
+        session_policy="role",
+    ))
+    client = SimpleNamespace(session_id="coordinator-session")
+    ctx.scratch["prompt_contracts"] = {
+        stage._prompt_contract_identity(): "coordinator-session"
+    }
+    previous = StageResult(
+        "requirements_analyst",
+        "pass",
+        output="resolved requirement\nremaining blocker: none",
+    )
+
+    prompt = stage._shared_control_prompt(ctx, previous, client)
+
+    assert "mode: continue" in prompt
+    assert "source_stage: requirements_analyst" in prompt
+    assert "source_evidence:" in prompt
+    assert "remaining blocker: none" in prompt
+
+
+def test_same_session_continue_does_not_echo_same_stage_output(tmp_path):
+    ctx = context(tmp_path)
+    stage = BaseStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        session_policy="role",
+    ))
+    client = SimpleNamespace(session_id="worker-session")
+    ctx.scratch["prompt_contracts"] = {
+        stage._prompt_contract_identity(): "worker-session"
+    }
+    previous = StageResult("worker", "pass", output="old self output")
+
+    prompt = stage._shared_control_prompt(ctx, previous, client)
+
+    assert "source_evidence:" not in prompt
+
+
+def test_previous_stage_evidence_is_bounded(tmp_path):
+    ctx = context(tmp_path)
+    stage = BaseStage(BaseStageSpec(
+        name="coordinator",
+        prompt="unused",
+        session_policy="role",
+    ))
+    client = SimpleNamespace(session_id="coordinator-session")
+    ctx.scratch["prompt_contracts"] = {
+        stage._prompt_contract_identity(): "coordinator-session"
+    }
+    previous = StageResult(
+        "requirements_analyst",
+        "pass",
+        output="A" * 4000 + "TAIL",
+    )
+
+    prompt = stage._shared_control_prompt(ctx, previous, client)
+
+    evidence = prompt.split("source_evidence:\n", 1)[1].split(
+        "\nThe original Stage prompt", 1
+    )[0]
+    assert len(evidence) == 2500
+    assert evidence.endswith("TAIL")
