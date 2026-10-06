@@ -1349,6 +1349,16 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 second real-Qwen 43 ambiguous-requirement rerun used concrete TAIWAN_MATRIX_7F4C
+      and correctly stopped at max_cycles=12 instead of looping indefinitely, but still exposed a real runtime handoff-context gap.
+      * requirements_analyst repeatedly reported the authoritative value and remaining blocker: none.
+      * coordinator same-session continuation received source_stage=requirements_analyst but NOT that Stage's output/evidence.
+      * coordinator therefore kept selecting requirements_analyst from stale session context until cycle limit exhaustion.
+      * Root cause is global shared-control transport, not the bundled Dynamic Handoff YAML itself.
+      * Runtime fix: cross-stage same-session continuation now includes bounded source_evidence from previous Stage output/data
+        (max 2500 chars); same-Stage retry/continue does not echo its own previous output.
+      * This preserves the design rule: Same Session only receives new information, with bounded prompts.
+      * Real-Qwen 43 must be rerun after this runtime fix before marking PASS.
     - 2026-10-06 first real-Qwen 43 ambiguous-requirement attempt exposed a harness semantic-loop case:
       * REQUIREMENTS.md contained literal REQUIRED_VALUE; Final Validator interpreted that as placeholder text and FAILed.
       * requirements_analyst had already produced/verified matrix_requirement.txt=REQUIRED_VALUE, but coordinator kept following
