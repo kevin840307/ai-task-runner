@@ -1347,6 +1347,26 @@ RELEASE GATES
       This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
       while still reaching independent fresh-session final validation.
 
+[ ] Dynamic Handoff extended live matrix 43-46.
+    - [ ] 43 dynamic-handoff-role-matrix:
+      real bundled dynamic_handoff.yaml across ambiguous requirement, existing failure/debug and verify-only scenarios;
+      assert the expected specialist participates and record coordinator/role usage.
+    - [ ] 44 dynamic-handoff-final-recovery:
+      real bundled Final Validator must FAIL once, route back through coordinator, repair missing approval evidence,
+      then PASS and complete.
+    - [ ] 45 dynamic-handoff-api-recovery:
+      run shipped dynamic_handoff.yaml through the real transient proxy, inject HTTP 503 while an AI session is active,
+      recover without stale last_error and still reach final validation.
+    - [ ] 46 dynamic-handoff-stop-resume:
+      stop.request only after an actual Dynamic worker role is active, verify clean Supervisor stop/no stale control files,
+      resume the same durable run and finish through final validation.
+    - All four reuse the current Runner/StageExecutor/FlowEngine/StateStore and shipped workflow path;
+      no second orchestrator/recovery/session implementation was added.
+    - Deterministic regressions lock probe order 43-46 and verify the live implementations reuse the shipped workflow
+      plus existing transient-proxy and stop/resume primitives.
+    - Real-Qwen PASS evidence is required before checking these items.
+
+
 [x] High-density soak green
     - [40/41] PASS soak · 0.5H soak completed (12 runs).
     - state/log/history growth: PASS within configured safety rails.
