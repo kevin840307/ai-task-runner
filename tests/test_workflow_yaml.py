@@ -827,7 +827,7 @@ def test_handoff_stage_defaults_to_durable_role_session():
     assert spec.session_policy == "role"
 
 
-def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
+def test_builtin_dynamic_handoff_workflow_uses_one_router_with_lean_roles():
     workflow = load_workflow(WORKFLOWS["dynamic_handoff"])
     coordinator = workflow[0]
     final_validate = workflow[-1]
@@ -839,17 +839,19 @@ def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
         "implementer",
         "debugger",
         "verifier",
-        "risk_reviewer",
         "final_validate",
     ]
+    assert Path(coordinator["prompt"]).name == "dynamic_handoff.md"
     roles = {item["name"]: item for item in workflow[1:]}
+    assert "risk_reviewer" not in roles
     assert coordinator["session_policy"] == "role"
     assert roles["requirements_analyst"]["session_policy"] == "role"
     assert roles["solution_architect"]["session_policy"] == "role"
     assert roles["implementer"]["session_policy"] == "role"
     assert roles["debugger"]["session_policy"] == "role"
     assert roles["verifier"]["session_policy"] == "role"
-    assert roles["risk_reviewer"]["session_policy"] == "role"
+    verifier = str(roles["verifier"].get("instructions") or "")
+    assert all(term in verifier for term in ("reliability", "security", "maintainability"))
     assert final_validate["type"] == "ai_validator"
     assert final_validate["session_policy"] == "fresh"
     assert all(
@@ -860,14 +862,19 @@ def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
 
 
 def test_dynamic_worker_prompt_renders_stage_instructions():
-    prompt = (
-        Path(WORKFLOWS["dynamic_handoff"]).parent.parent
-        / "prompts"
-        / "common"
-        / "dynamic_worker.md"
-    ).read_text(encoding="utf-8")
-    assert "{{ instructions }}" in prompt
-    assert "Assigned responsibility:" in prompt
+    prompt_root = Path(WORKFLOWS["dynamic_handoff"]).parent.parent / "prompts" / "common"
+    worker = (prompt_root / "dynamic_worker.md").read_text(encoding="utf-8")
+    coordinator = (prompt_root / "dynamic_handoff.md").read_text(encoding="utf-8")
+
+    assert "{{ instructions }}" in worker
+    assert "Assigned responsibility:" in worker
+    assert "do not repeat analysis or reads already established" in worker
+    assert "remaining blocker or risk" in worker
+
+    assert "{{ goal }}" in coordinator
+    assert "{{ previous }}" in coordinator
+    assert "avoid unnecessary analysis roles" in coordinator
+    assert "final validation" in coordinator
 
 
 @pytest.mark.parametrize("policy", ["main", "role", "fresh"])
