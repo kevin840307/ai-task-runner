@@ -3117,6 +3117,7 @@ Keep the work minimal and finish through final validation.
     stop_request = work / "stop.request"
     marker = work / "runner-process.json"
     checkpoint: dict[str, object] = {}
+    checkpoint_role = ""
     role_names = {
         "requirements_analyst", "solution_architect", "implementer",
         "debugger", "verifier",
@@ -3124,22 +3125,24 @@ Keep the work minimal and finish through final validation.
     deadline = time.monotonic() + settings.run_timeout
     try:
         while process.poll() is None and time.monotonic() < deadline:
-            state = read_state(project)
-            stage = str(state.get("stage") or "")
-            session = state.get("ai_session_id")
-            if (
-                marker.is_file()
-                and stage in role_names
-                and isinstance(session, str)
-                and session
-            ):
-                checkpoint = dict(state)
+            started_roles = [
+                str(event.get("stage") or "")
+                for event in runner_events(project)
+                if (
+                    event.get("type") == "runner.stage"
+                    and event.get("action") == "start"
+                    and str(event.get("stage") or "") in role_names
+                )
+            ]
+            if marker.is_file() and started_roles:
+                checkpoint_role = started_roles[-1]
+                checkpoint = dict(read_state(project))
                 stop_request.write_text("stop\n", encoding="utf-8")
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
         if not checkpoint:
             raise RuntimeError(
-                "Dynamic Handoff stop/resume could not capture an in-role checkpoint"
+                "Dynamic Handoff stop/resume observed no worker-role start before run exit"
             )
         code = process.wait(timeout=min(settings.run_timeout, 30))
     finally:
@@ -3153,7 +3156,9 @@ Keep the work minimal and finish through final validation.
     stopped = read_state(project)
     if stopped.get("completed") is True:
         raise RuntimeError("Dynamic Handoff stop incorrectly completed the run")
-    if checkpoint.get("run_id") and stopped.get("run_id") != checkpoint.get("run_id"):
+    if not checkpoint.get("run_id"):
+        raise RuntimeError("Dynamic Handoff stop/resume captured no durable run_id")
+    if stopped.get("run_id") != checkpoint.get("run_id"):
         raise RuntimeError("Dynamic Handoff stop/resume replaced durable run_id")
 
     resumed = run_command(
@@ -3174,6 +3179,7 @@ Keep the work minimal and finish through final validation.
     if (project / "dynamic_stop_b.txt").read_text(encoding="utf-8-sig").strip() != "B":
         raise RuntimeError("Dynamic stop/resume artifact B mismatch")
     return {
+        "checkpoint_role": checkpoint_role,
         "checkpoint_stage": str(checkpoint.get("stage") or ""),
         "checkpoint_position": checkpoint.get("workflow_position"),
         "stage_starts": starts,
