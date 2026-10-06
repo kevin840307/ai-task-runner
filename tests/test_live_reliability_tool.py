@@ -2804,6 +2804,16 @@ def test_long_http_probe_is_in_stable_probe_order():
     assert live.PROBE_ORDER.index("api-long-http") < live.PROBE_ORDER.index("api-disconnect")
 
 
+def test_api_recovery_probe_uses_shared_recovery_byte_contract_for_post_check():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def api_recovery_probe")
+    end = source.index("\ndef _require_recovery_backoff_cap", start)
+    block = source[start:end]
+
+    assert "accepted_bytes=API_RECOVERY_ALLOWED_BYTES" in block
+    assert "assert_completed(project, code)" not in block
+
+
 def test_api_recovery_probe_acknowledges_active_outage_before_execute():
     source = (
         Path(__file__).resolve().parents[1]
@@ -3550,6 +3560,33 @@ def test_api_recovery_validator_rejects_other_content_with_diagnostics(
     assert "bytes=" in completed.stdout
 
 
+def test_assert_completed_can_use_recovery_byte_contract_without_relaxing_default(
+    tmp_path: Path,
+):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    debug = work / "debug"
+    debug.mkdir(parents=True)
+    (work / "state.json").write_text(
+        '{"completed": true, "stage": "completed"}',
+        encoding="utf-8",
+    )
+    (work / "log.txt").write_text("ok", encoding="utf-8")
+    (debug / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+    (debug / "last-result.txt").write_text("result", encoding="utf-8")
+    (project / "health.txt").write_bytes(
+        b"\xef\xbb\xbf" + live.EXPECTED.encode("utf-8")
+    )
+
+    live.assert_completed(
+        project,
+        0,
+        accepted_bytes=live.API_RECOVERY_ALLOWED_BYTES,
+    )
+    with pytest.raises(RuntimeError, match="validator passed but health.txt is incorrect"):
+        live.assert_completed(project, 0)
+
+
 def test_strict_live_validator_still_rejects_utf8_bom(tmp_path: Path):
     project = tmp_path / "project"
     project.mkdir()
@@ -3609,12 +3646,7 @@ def test_api_recovery_validator_allows_only_line_ending_variants_and_reports_byt
     state.write_text("{}", encoding="utf-8")
     target = tmp_path / "health.txt"
 
-    plain = (
-        live.EXPECTED.encode("utf-8"),
-        (live.EXPECTED + "\n").encode("utf-8"),
-        (live.EXPECTED + "\r\n").encode("utf-8"),
-    )
-    for content in (*plain, *(b"\xef\xbb\xbf" + item for item in plain)):
+    for content in live.API_RECOVERY_ALLOWED_BYTES:
         target.write_bytes(content)
         result = subprocess.run(
             [
