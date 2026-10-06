@@ -2798,6 +2798,58 @@ def test_soak_transient_status_rotation_covers_all_http_classes():
     ] == [429, 502, 503, 429, 502, 503]
 
 
+def test_bundled_dynamic_handoff_is_probe_42_and_runs_after_example_smoke():
+    assert len(live.PROBE_ORDER) == 42
+    assert live.PROBE_ORDER[-2:] == (
+        "example-smoke",
+        "bundled-dynamic-handoff",
+    )
+    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 42
+
+
+def test_bundled_dynamic_handoff_asset_is_lean_and_uses_focused_coordinator_prompt():
+    from runner.workflow.loader import load_workflow
+
+    workflow = Path(__file__).resolve().parents[1] / "runner" / "assets" / "workflows" / "dynamic_handoff.yaml"
+    loaded = load_workflow(workflow)
+    by_name = {str(item["name"]): item for item in loaded}
+
+    assert set(by_name) == {
+        "coordinator",
+        "requirements_analyst",
+        "solution_architect",
+        "implementer",
+        "debugger",
+        "verifier",
+        "final_validate",
+    }
+    assert "risk_reviewer" not in by_name
+    assert Path(str(by_name["coordinator"]["prompt"])).name == "dynamic_handoff.md"
+    assert by_name["coordinator"]["targets"] == [
+        "requirements_analyst",
+        "solution_architect",
+        "implementer",
+        "debugger",
+        "verifier",
+        "final_validate",
+    ]
+    verifier = str(by_name["verifier"].get("instructions") or "")
+    for term in ("reliability", "security", "maintainability"):
+        assert term in verifier
+
+
+def test_bundled_dynamic_handoff_probe_runs_shipped_asset_not_inline_fixture():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def bundled_dynamic_handoff_probe")
+    end = source.index("\n\nREVIEW_ROUTING_PROMPT", start)
+    block = source[start:end]
+
+    assert "workflow=DYNAMIC_HANDOFF_WORKFLOW" in block
+    assert "assert_state_completed(project, code)" in block
+    assert '"final_validate" not in starts' in block
+    assert '"risk_reviewer" in starts' in block
+
+
 def test_long_http_probe_is_in_stable_probe_order():
     assert "api-long-http" in live.PROBE_ORDER
     assert live.PROBE_ORDER.index("api-503") < live.PROBE_ORDER.index("api-long-http")
