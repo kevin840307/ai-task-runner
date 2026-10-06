@@ -741,11 +741,27 @@ High-value runner work remaining:
       * Studio build + committed-bundle verification: PASS.
     - This replaces the stale pre-fix exact-HEAD evidence.
 
+[x] Fixed validator-failure-routing live harness false failure at probe 28.
+    - Real run evidence reached a correct completed deliverable (route.txt=RECOVERED) after Validator FAIL,
+      while the harness rejected it only because it treated state.cycle >= 2 as the primary semantic proof.
+    - Bundled file.yaml still owns validate_file FAIL -> planning; Runner routing semantics were not changed.
+    - The probe now verifies the durable semantic transition directly:
+      validate_file / fail / target=planning in transition_history.
+    - It still independently requires a second Planning model prompt carrying RUNNER_SHARED_STAGE_CONTROL,
+      mode: continue, Validator feedback and VALIDATION_FAILED, so the check was not weakened.
+    - state.cycle is no longer treated as semantic truth by this live probe.
+    - run_qwen_live_reliability_fail_start.bat now defaults to probe 28 so the currently reproduced failure
+      can be rerun directly; explicit --start-probe still overrides it.
+    - Exact implementation HEAD c3e94904999c6b8bd6d29f8f8e5293df060d456f passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37448808129.
+    - Real-Qwen probe 28 must still be rerun before claiming validator-failure-routing live PASS.
+
 [ ] Re-run real-Qwen API disconnect probe from probe 34 after deterministic gates are green.
     - The live harness now uses API_RECOVERY_VALIDATOR for API recovery probes only.
     - It accepts only exact expected bytes, expected + LF, or expected + CRLF and reports actual bytes/length for any other mismatch.
     - The strict general validator remains byte-exact, so global file-contract coverage was not relaxed.
-    - run_qwen_live_reliability_fail_start.bat defaults to probe 34 so the failed api-disconnect area can be resumed directly.
+    - The generic fail-start helper now follows the latest reproduced failure (probe 28);
+      use --start-probe 34 to jump directly to api-disconnect after probe 28 is green.
     - Acceptance: api-disconnect passes with bounded Same/Fresh session recovery evidence and validate_file PASS;
       any other content mismatch must remain a real failure.
 
@@ -1215,14 +1231,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD e76cb10776de3015f992998d3416b1b275fd6cde passed all required deterministic gates
-      in GitHub Actions run 37387744410.
+    - Exact implementation HEAD c3e94904999c6b8bd6d29f8f8e5293df060d456f passed all required deterministic gates
+      in GitHub Actions run 37448808129.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - This exact-HEAD evidence includes the 720x720 mixed validator regression plus the stricter high-density
-      429/502/503 per-status acceptance, run-6 transient cadence coverage and dynamic_task_groups resource ceiling regression.
+    - This exact-HEAD evidence includes the stricter high-density 429/502/503/resource gates and the
+      validator-failure-routing live harness fix that uses durable semantic transition evidence instead of cycle coupling.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
