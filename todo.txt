@@ -1349,6 +1349,16 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 uploaded dynamic-api-recovery-probe evidence exposed a second 45 harness-fixture issue:
+      * the run had progressed through coordinator -> final_validate FAIL -> coordinator -> implementer.
+      * final_validate inspected the default protected validation.py, which still validated health.txt / the generic live-probe text,
+        while the Dynamic Handoff Goal required dynamic_api_recovery.txt=RECOVERED.
+      * coordinator therefore told implementer to update validation.py; every attempted edit was correctly restored by protected-file safety,
+        producing repeated runner.recovery retries with "protected file modified and restored: ...validation.py".
+      * durable state remained coherent; this is fixture contract pollution, not evidence of Dynamic Handoff state corruption.
+      * Fixed 45 to generate a goal-matching protected validator for dynamic_api_recovery.txt=RECOVERED and explicitly tell the agent
+        not to modify validation.py.
+      * Real-Qwen 45 must be rerun after this fixture fix; the uploaded stuck run is not a valid API-recovery verdict.
     - 2026-10-06 real-Qwen rerun on source revision 986325f541e96704aed7944580e4028184a68585, DIRTY=False:
       * [43/46] PASS dynamic-handoff-role-matrix.
       * [44/46] PASS dynamic-handoff-final-recovery.
