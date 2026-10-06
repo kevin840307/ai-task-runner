@@ -2859,6 +2859,24 @@ def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths()
     }
 
 
+def test_dynamic_handoff_live_probes_use_concrete_requirement_token_and_cycle_bound():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    assert "TAIWAN_MATRIX_7F4C" in source
+    assert '"REQUIREMENTS.md").write_text("REQUIRED_VALUE' not in source
+
+    for function_name in (
+        "bundled_dynamic_handoff_probe",
+        "dynamic_handoff_role_matrix_probe",
+        "dynamic_handoff_final_recovery_probe",
+        "dynamic_handoff_api_recovery_probe",
+        "dynamic_handoff_stop_resume_probe",
+    ):
+        start = source.index(f"def {function_name}")
+        next_def = source.find("\ndef ", start + 5)
+        block = source[start:] if next_def < 0 else source[start:next_def]
+        assert "max_cycles=12" in block
+
+
 
 
 def test_bundled_dynamic_handoff_asset_is_lean_and_uses_focused_coordinator_prompt():
