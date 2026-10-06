@@ -1252,14 +1252,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD b8ccd34ad1973450d259f45ec1d0cc30185d3194 passed all required deterministic gates
-      in GitHub Actions run 37456259179.
+    - Exact implementation HEAD bb4ed85025f7673ea2a076264ea7eccdf40011f5 passed all required deterministic gates
+      in GitHub Actions run 37466898305.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - This exact-HEAD evidence includes high-density 429/502/503/resource gates, semantic validator-failure routing evidence,
-      the single shared API recovery byte contract for validator + post-check, and strict default BOM/newline rejection.
+    - This exact-HEAD evidence includes the new probe 42 contract, shipped dynamic_handoff.yaml lean-role contract,
+      focused coordinator/worker prompts, plus all prior recovery/resource/YAML/runtime regressions.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [x] Latest resumed live matrix through probe 40 is green on exact source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
@@ -1296,6 +1296,7 @@ RELEASE GATES
 
     Must cover at least:
     - file / ai / mixed topologies
+    - shipped dynamic_handoff.yaml end-to-end real-Qwen probe (42)
     - Plan dynamic children
     - Review FAIL rollback/closure
     - Validator FAIL routing/closure
@@ -1316,6 +1317,28 @@ RELEASE GATES
     - fail-start now delegates to the canonical 0.5H gate and only adds --start-probe 34; %* still permits operator override.
     - This removes duplicated gate configuration and prevents future coverage drift.
     - Re-run is still required before marking the full Real-Qwen 0.5H gate green.
+
+[x] Added probe 42 for the shipped dynamic_handoff.yaml and simplified the bundled role design.
+    - PROBE_ORDER now has 42 entries; probe 42 is bundled-dynamic-handoff and runs after example-smoke.
+    - Probe 42 runs the actual runner/assets/workflows/dynamic_handoff.yaml with real Qwen; it does not use
+      the smaller inline Dynamic Handoff session-policy fixture.
+    - The live task requires a concrete artifact, must start at coordinator, use a write-capable role,
+      reach final_validate, complete cleanly, and leave no active-only AI/session state.
+    - Summary records actual stage starts, coordinator run count, roles used, writer roles and final_validate count
+      so the real run can inform whether role count/prompt routing should be simplified further.
+    - Bundled workflow was reduced from 6 worker roles to 5 worker roles:
+      requirements_analyst, solution_architect, implementer, debugger, verifier.
+    - Removed risk_reviewer because its reliability/security/maintainability responsibility substantially overlapped verifier;
+      verifier now owns independent behavior/test/evidence plus material reliability/security/maintainability risk review.
+    - final_validate remains independent with session_policy=fresh; it was not merged into verifier.
+    - coordinator now uses common/dynamic_handoff.md and explicitly prefers action when the Goal is clear,
+      avoids unnecessary analysis roles/repeated specialists, and chooses final validation as soon as evidence is sufficient.
+    - dynamic_worker.md now tells each specialist to reuse existing evidence, avoid repeated reads/analysis,
+      make the smallest useful change/assessment and return concise outcome/evidence/blocker information.
+    - Existing dedicated dynamic-handoff-session-policy probe remains unchanged to cover main/role/fresh identity semantics.
+    - Exact implementation HEAD bb4ed85025f7673ea2a076264ea7eccdf40011f5 passed all four CI gates
+      in GitHub Actions run 37466898305.
+    - [ ] Real-Qwen probe 42 still must PASS before treating the bundled dynamic_handoff.yaml optimization as live-validated.
 
 [x] High-density soak green
     - [40/41] PASS soak · 0.5H soak completed (12 runs).
