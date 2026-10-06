@@ -2766,6 +2766,357 @@ def bundled_dynamic_handoff_probe(settings: Settings, root: Path) -> dict[str, o
     }
 
 
+
+DYNAMIC_ROLE_MATRIX_CASES = (
+    (
+        "ambiguous-requirement",
+        """Read REQUIREMENTS.md first. The file contains the authoritative requested value.
+Create matrix_requirement.txt containing exactly that value.
+Do not guess the value and do not modify REQUIREMENTS.md.
+Use the specialist that best resolves requirement ambiguity before implementation.
+""",
+        "requirements_analyst",
+    ),
+    (
+        "existing-failure",
+        """The existing broken.txt is incorrect and failure.log explains the concrete defect.
+Diagnose that existing failure and repair broken.txt so it contains exactly FIXED.
+Do not rewrite unrelated files.
+""",
+        "debugger",
+    ),
+    (
+        "verify-only",
+        """The required deliverable verify_only.txt already exists and should contain exactly VERIFIED.
+Do not modify project files if it is already correct.
+Independently verify the existing evidence and finish through final validation.
+""",
+        "verifier",
+    ),
+)
+
+
+def _dynamic_stage_starts(project: Path) -> list[str]:
+    return [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+
+
+def _assert_dynamic_run_completed(project: Path, code: int) -> list[str]:
+    assert_state_completed(project, code)
+    starts = _dynamic_stage_starts(project)
+    if not starts or starts[0] != "coordinator":
+        raise RuntimeError(f"Dynamic Handoff did not start at coordinator: {starts!r}")
+    if "final_validate" not in starts:
+        raise RuntimeError(f"Dynamic Handoff never reached final_validate: {starts!r}")
+    state = read_state(project)
+    if state.get("ai_session_id") or state.get("stage_sessions"):
+        raise RuntimeError("completed Dynamic Handoff retained active-only session state")
+    return starts
+
+
+def dynamic_handoff_role_matrix_probe(
+    settings: Settings,
+    root: Path,
+) -> list[dict[str, object]]:
+    """Exercise role selection across distinct real-Qwen bundled-workflow scenarios."""
+    results: list[dict[str, object]] = []
+    for name, prompt, expected_role in DYNAMIC_ROLE_MATRIX_CASES:
+        project = create_project(root, f"dynamic-role-{name}", prompt=prompt)
+        if name == "ambiguous-requirement":
+            (project / "REQUIREMENTS.md").write_text("REQUIRED_VALUE\n", encoding="utf-8")
+        elif name == "existing-failure":
+            (project / "broken.txt").write_text("BROKEN\n", encoding="utf-8")
+            (project / "failure.log").write_text(
+                "broken.txt must contain exactly FIXED\n", encoding="utf-8"
+            )
+        elif name == "verify-only":
+            (project / "verify_only.txt").write_text("VERIFIED\n", encoding="utf-8")
+
+        code = run_command(
+            runner_command(
+                settings,
+                project,
+                workflow=DYNAMIC_HANDOFF_WORKFLOW,
+                ai_only=True,
+            ),
+            console_log(project, "console.jsonl"),
+            settings.run_timeout,
+        )
+        starts = _assert_dynamic_run_completed(project, code)
+        if expected_role not in starts:
+            raise RuntimeError(
+                f"Dynamic Handoff role matrix {name} skipped expected role "
+                f"{expected_role}: {starts!r}"
+            )
+        if name == "ambiguous-requirement":
+            value = (project / "matrix_requirement.txt").read_text(
+                encoding="utf-8-sig"
+            ).strip()
+            if value != "REQUIRED_VALUE":
+                raise RuntimeError(
+                    f"ambiguous-requirement produced wrong value: {value!r}"
+                )
+        elif name == "existing-failure":
+            value = (project / "broken.txt").read_text(encoding="utf-8-sig").strip()
+            if value != "FIXED":
+                raise RuntimeError(f"existing-failure was not repaired: {value!r}")
+        elif name == "verify-only":
+            value = (project / "verify_only.txt").read_text(
+                encoding="utf-8-sig"
+            ).strip()
+            if value != "VERIFIED":
+                raise RuntimeError(f"verify-only changed required evidence: {value!r}")
+
+        results.append({
+            "case": name,
+            "expected_role": expected_role,
+            "roles_used": sorted({
+                item for item in starts
+                if item in {
+                    "requirements_analyst", "solution_architect", "implementer",
+                    "debugger", "verifier",
+                }
+            }),
+            "coordinator_runs": starts.count("coordinator"),
+            "stage_starts": starts,
+        })
+    return results
+
+
+DYNAMIC_FINAL_RECOVERY_PROMPT = """Create final_recovery.txt containing exactly READY.
+Do not create final_approval.txt until final validation explicitly reports that final_approval.txt is missing.
+Completion requires final_approval.txt to contain exactly RECOVERED.
+When final validation reports the missing approval, create it and then validate again.
+"""
+
+
+def dynamic_handoff_final_recovery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Prove real bundled Final Validator FAIL routes back through coordinator and recovers."""
+    project = create_project(
+        root,
+        "dynamic-final-recovery-probe",
+        prompt=DYNAMIC_FINAL_RECOVERY_PROMPT,
+    )
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+        ),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    starts = _assert_dynamic_run_completed(project, code)
+    if not observed_stage_result(project, "final_validate", "fail"):
+        raise RuntimeError("bundled final_validate never produced the required initial FAIL")
+    if not observed_stage_result(project, "final_validate", "pass"):
+        raise RuntimeError("bundled final_validate never PASSed after coordinator recovery")
+    if starts.count("final_validate") < 2 or starts.count("coordinator") < 2:
+        raise RuntimeError(
+            f"final validation recovery did not route back through coordinator: {starts!r}"
+        )
+    if (project / "final_recovery.txt").read_text(encoding="utf-8-sig").strip() != "READY":
+        raise RuntimeError("final recovery primary artifact mismatch")
+    if (project / "final_approval.txt").read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+        raise RuntimeError("final recovery approval artifact mismatch")
+    return {
+        "stage_starts": starts,
+        "coordinator_runs": starts.count("coordinator"),
+        "final_validate_runs": starts.count("final_validate"),
+    }
+
+
+def dynamic_handoff_api_recovery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Inject a real HTTP 503 while the shipped Dynamic Handoff workflow is active."""
+    with (
+        transient_proxy(settings.api_port) as proxy,
+        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
+    ):
+        project = create_project(
+            root,
+            "dynamic-api-recovery-probe",
+            prompt="""Create dynamic_api_recovery.txt containing exactly RECOVERED.
+Use the normal Dynamic Handoff workflow and finish through final validation.
+""",
+        )
+        log = console_log(project, "console.jsonl")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        stream = log.open("w", encoding="utf-8")
+        probe_env = os.environ.copy()
+        probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"
+        options: dict[str, object] = {
+            "cwd": ROOT,
+            "stdin": subprocess.DEVNULL,
+            "stdout": stream,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+            "env": probe_env,
+        }
+        if os.name == "nt":
+            options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            options["start_new_session"] = True
+        process = subprocess.Popen(
+            runner_command(
+                settings,
+                project,
+                workflow=DYNAMIC_HANDOFF_WORKFLOW,
+                ai_only=True,
+            ),
+            **options,
+        )
+        deadline = time.monotonic() + settings.run_timeout
+        outage_until = 0.0
+        injected = False
+        try:
+            while process.poll() is None and time.monotonic() < deadline:
+                state = read_state(project)
+                session = state.get("ai_session_id")
+                if not injected and isinstance(session, str) and session:
+                    proxy.status_code = 503
+                    proxy.fail = True
+                    outage_until = time.monotonic() + API_RECOVERY_SHORT_OUTAGE_SECONDS
+                    injected = True
+                if proxy.fail and proxy.failures > 0 and time.monotonic() >= outage_until:
+                    proxy.fail = False
+                time.sleep(0.1)
+        finally:
+            proxy.fail = False
+            if process.poll() is None:
+                terminate(process)
+            stream.close()
+
+        code = process.returncode or 0
+        starts = _assert_dynamic_run_completed(project, code)
+        if not injected or proxy.failures <= 0:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe did not inject an observed HTTP 503"
+            )
+        value = (project / "dynamic_api_recovery.txt").read_text(
+            encoding="utf-8-sig"
+        ).strip()
+        if value != "RECOVERED":
+            raise RuntimeError(f"Dynamic API recovery artifact mismatch: {value!r}")
+        if str(read_state(project).get("last_error") or ""):
+            raise RuntimeError("Dynamic API recovery left stale last_error")
+        return {
+            "stage_starts": starts,
+            "proxy_failures": proxy.failures,
+            "proxy_successes": proxy.successes,
+        }
+
+
+def dynamic_handoff_stop_resume_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Stop a shipped Dynamic Handoff run after role selection, then resume it."""
+    project = create_project(
+        root,
+        "dynamic-stop-resume-probe",
+        prompt="""Create dynamic_stop_a.txt containing exactly A and dynamic_stop_b.txt containing exactly B.
+Keep the work minimal and finish through final validation.
+""",
+    )
+    first_log = console_log(project, "first-console.jsonl")
+    first_log.parent.mkdir(parents=True, exist_ok=True)
+    stream = first_log.open("w", encoding="utf-8")
+    options: dict[str, object] = {
+        "cwd": ROOT,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stream,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    process = subprocess.Popen(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+        ),
+        **options,
+    )
+    work = project / ".ai-task-runner"
+    stop_request = work / "stop.request"
+    marker = work / "runner-process.json"
+    checkpoint: dict[str, object] = {}
+    role_names = {
+        "requirements_analyst", "solution_architect", "implementer",
+        "debugger", "verifier",
+    }
+    deadline = time.monotonic() + settings.run_timeout
+    try:
+        while process.poll() is None and time.monotonic() < deadline:
+            state = read_state(project)
+            stage = str(state.get("stage") or "")
+            session = state.get("ai_session_id")
+            if (
+                marker.is_file()
+                and stage in role_names
+                and isinstance(session, str)
+                and session
+            ):
+                checkpoint = dict(state)
+                stop_request.write_text("stop\n", encoding="utf-8")
+                break
+            time.sleep(0.1)
+        if not checkpoint:
+            raise RuntimeError(
+                "Dynamic Handoff stop/resume could not capture an in-role checkpoint"
+            )
+        code = process.wait(timeout=min(settings.run_timeout, 30))
+    finally:
+        if process.poll() is None:
+            terminate(process)
+        stream.close()
+    if code != 130:
+        raise RuntimeError(f"Dynamic Handoff stop.request exit mismatch: {code}")
+    if marker.exists() or stop_request.exists():
+        raise RuntimeError("Dynamic Handoff stop cleanup left stale control files")
+    stopped = read_state(project)
+    if stopped.get("completed") is True:
+        raise RuntimeError("Dynamic Handoff stop incorrectly completed the run")
+    if checkpoint.get("run_id") and stopped.get("run_id") != checkpoint.get("run_id"):
+        raise RuntimeError("Dynamic Handoff stop/resume replaced durable run_id")
+
+    resumed = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+            resume=True,
+        ),
+        console_log(project, "resume-console.jsonl"),
+        settings.run_timeout,
+    )
+    starts = _assert_dynamic_run_completed(project, resumed)
+    if (project / "dynamic_stop_a.txt").read_text(encoding="utf-8-sig").strip() != "A":
+        raise RuntimeError("Dynamic stop/resume artifact A mismatch")
+    if (project / "dynamic_stop_b.txt").read_text(encoding="utf-8-sig").strip() != "B":
+        raise RuntimeError("Dynamic stop/resume artifact B mismatch")
+    return {
+        "checkpoint_stage": str(checkpoint.get("stage") or ""),
+        "checkpoint_position": checkpoint.get("workflow_position"),
+        "stage_starts": starts,
+    }
+
+
 REVIEW_ROUTING_PROMPT = """Make review.txt contain exactly these two logical lines:
 READY
 REVIEW_REQUIRED
@@ -4770,6 +5121,10 @@ def main() -> int:
     soak_result = SoakResult()
     example_results: list[tuple[ExampleSmokeCase, Path]] = []
     bundled_dynamic_result: dict[str, object] = {}
+    dynamic_role_matrix: list[dict[str, object]] = []
+    dynamic_final_recovery: dict[str, object] = {}
+    dynamic_api_recovery: dict[str, object] = {}
+    dynamic_stop_resume: dict[str, object] = {}
 
     if probe_enabled("ownership-lock", start_probe):
         runner_ownership_preflight(run_root)
@@ -4965,6 +5320,30 @@ def main() -> int:
                 f"(roles={','.join(bundled_dynamic_result.get('roles_used', []))}, "
                 f"coordinator_runs={bundled_dynamic_result.get('coordinator_runs', 0)})",
             )
+        if probe_enabled("dynamic-handoff-role-matrix", start_probe):
+            dynamic_role_matrix = dynamic_handoff_role_matrix_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-role-matrix",
+                "bundled Dynamic Handoff multi-scenario role selection matrix",
+            )
+        if probe_enabled("dynamic-handoff-final-recovery", start_probe):
+            dynamic_final_recovery = dynamic_handoff_final_recovery_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-final-recovery",
+                "Final Validator FAIL -> coordinator -> repair -> PASS",
+            )
+        if probe_enabled("dynamic-handoff-api-recovery", start_probe):
+            dynamic_api_recovery = dynamic_handoff_api_recovery_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-api-recovery",
+                "Dynamic Handoff + injected HTTP 503 recovery",
+            )
+        if probe_enabled("dynamic-handoff-stop-resume", start_probe):
+            dynamic_stop_resume = dynamic_handoff_stop_resume_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-stop-resume",
+                "Dynamic Handoff in-role stop.request -> resume",
+            )
     summary = {
         "passed": True,
         "source_revision": revision,
@@ -5064,6 +5443,10 @@ def main() -> int:
             for case, project in example_results
         ],
         "bundled_dynamic_handoff": bundled_dynamic_result,
+        "dynamic_handoff_role_matrix": dynamic_role_matrix,
+        "dynamic_handoff_final_recovery": dynamic_final_recovery,
+        "dynamic_handoff_api_recovery": dynamic_api_recovery,
+        "dynamic_handoff_stop_resume": dynamic_stop_resume,
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(
