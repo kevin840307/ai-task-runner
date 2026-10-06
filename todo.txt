@@ -759,19 +759,21 @@ High-value runner work remaining:
       * [29/41] PASS file-protection · protected-file policy probe.
     - This closes the validator-failure-routing live regression; continue the same run through probes 30-41 for API/recovery/soak evidence.
 
-[ ] Re-run real-Qwen API recovery path from probe 33 after deterministic gates are green.
-    - Latest reproduced live failure is probe 33 api-long-http, not Runner backoff/session recovery itself:
-      validate_file rejected health.txt only because Qwen/Windows wrote the exact expected UTF-8 text with a leading BOM
-      (EF BB BF); probe 32 api-503 had already passed immediately before it.
-    - API_RECOVERY_VALIDATOR remains recovery-specific and now accepts only the exact expected text with:
-      optional UTF-8 BOM x no line ending / LF / CRLF.
-    - Any other bytes still fail closed and print actual=repr(bytes) plus byte length for diagnosis.
-    - The strict general validator remains byte-exact and explicitly rejects both a trailing newline and UTF-8 BOM,
-      so the normal file contract was not relaxed globally.
-    - run_qwen_live_reliability_fail_start.bat now defaults to probe 33 so api-long-http is revalidated first;
-      use --start-probe 34 only after probe 33 is green to jump directly to api-disconnect.
-    - Acceptance: probe 33 passes all long 429/502/503 recovery cases, then api-disconnect passes with bounded
-      Same/Fresh session recovery evidence and validate_file PASS.
+[ ] Re-run real-Qwen API recovery path from probe 34 after deterministic gates are green.
+    - Real-Qwen rerun on source revision d6916005f8083c505e5b3105b4e53d42e01e0507 with DIRTY=False:
+      * [33/41] PASS api-long-http · long HTTP 429/502/503/45s bounded-session recovery probe.
+      * [34/41] api-disconnect reached validator PASS but the harness then failed in assert_completed()
+        because that post-check still used the old strict text rule instead of the recovery-specific byte contract.
+    - Root cause was duplicate acceptance ownership inside the live harness, not Runner retry/backoff/session behavior.
+    - API_RECOVERY_ALLOWED_BYTES is now the single recovery-specific byte contract used by both:
+      * the generated API_RECOVERY_VALIDATOR, and
+      * the api_recovery_probe post-completion assert_completed() check.
+    - The recovery-specific contract remains narrow: optional UTF-8 BOM x exact / LF / CRLF only.
+    - Default assert_completed() and the strict general validator remain byte-exact; deterministic regression proves
+      BOM is accepted only when the explicit recovery byte contract is supplied.
+    - run_qwen_live_reliability_fail_start.bat now defaults to probe 34.
+    - Acceptance: api-disconnect passes with bounded Same/Fresh recovery evidence, validator PASS and the shared
+      recovery byte post-check; wrong content must still fail closed.
 
 
 [x] Improved Chat validation resource picker UX for file / AI / mixed workflows.
@@ -784,19 +786,18 @@ High-value runner work remaining:
     - Exact implementation HEAD 2e5fbbbf84f93de914137ab0901150ee839dfea8 passed Windows Python, Ubuntu Python,
       Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37307541655.
 
-[x] Kept API recovery live acceptance narrow while covering harmless UTF-8 serialization variants.
+[x] Kept API recovery live acceptance narrow while removing duplicate harness acceptance ownership.
     - Earlier api-disconnect evidence showed exact expected content with only LF/CRLF variation.
-    - Latest real-Qwen run on source revision c3e94904999c6b8bd6d29f8f8e5293df060d456f, DIRTY=False,
-      passed [32/41] api-503 and then failed [33/41] api-long-http only because health.txt began with UTF-8 BOM:
-      actual=b'\\xef\\xbb\\xbfAI Task Runner live probe passed.'.
-    - API_RECOVERY_VALIDATOR now accepts exactly six byte forms: optional UTF-8 BOM multiplied by
-      exact expected bytes / expected + LF / expected + CRLF.
-    - Wrong content still fails closed with actual bytes/length diagnostics.
-    - Strict general VALIDATOR still rejects both trailing newline and UTF-8 BOM; global deliverable semantics remain byte-exact.
-    - Deterministic regressions cover all six recovery-specific forms, wrong-content rejection, and strict BOM/newline rejection.
+    - A later real-Qwen long-HTTP run exposed UTF-8 BOM as another harmless serialization variant; after that fix,
+      source revision d6916005f8083c505e5b3105b4e53d42e01e0507, DIRTY=False, passed [33/41] api-long-http.
+    - The following [34/41] api-disconnect run proved the generated validator accepted the artifact, but the generic
+      assert_completed() post-check still re-applied a stricter duplicate rule and produced a false failure.
+    - API_RECOVERY_ALLOWED_BYTES now owns the six allowed recovery-specific byte forms once, and both the generated
+      API_RECOVERY_VALIDATOR and api_recovery_probe post-check consume that same contract.
+    - Wrong content still fails closed; default assert_completed() plus strict VALIDATOR still reject BOM/newline.
     - Runner StageExecutor/session/backoff semantics were intentionally unchanged.
-    - Exact implementation HEAD 69cf513f369976ddbf7f2e4edeef43282da09d75 passed Windows Python,
-      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37453116632.
+    - Exact implementation HEAD b8ccd34ad1973450d259f45ec1d0cc30185d3194 passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37456259179.
 
 [x] Fix the currently reproduced live/backend failure before continuing.
     - Reproduced short API outage false failure: a 5s outage can legitimately consume the shared
@@ -1238,14 +1239,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD 69cf513f369976ddbf7f2e4edeef43282da09d75 passed all required deterministic gates
-      in GitHub Actions run 37453116632.
+    - Exact implementation HEAD b8ccd34ad1973450d259f45ec1d0cc30185d3194 passed all required deterministic gates
+      in GitHub Actions run 37456259179.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - This exact-HEAD evidence includes the high-density 429/502/503/resource gates, semantic validator-failure routing evidence,
-      recovery-specific UTF-8 BOM/LF/CRLF handling, and strict-validator BOM/newline rejection.
+    - This exact-HEAD evidence includes high-density 429/502/503/resource gates, semantic validator-failure routing evidence,
+      the single shared API recovery byte contract for validator + post-check, and strict default BOM/newline rejection.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
