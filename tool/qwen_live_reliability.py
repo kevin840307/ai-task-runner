@@ -35,6 +35,7 @@ WORKFLOWS = {
     name: RUNNER_WORKFLOWS[name]
     for name in ("file", "ai", "mixed")
 }
+DYNAMIC_HANDOFF_WORKFLOW = ROOT / "runner" / "assets" / "workflows" / "dynamic_handoff.yaml"
 BUILTIN_FINAL_AI_RUNS = 3
 BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
 LIVE_RETRY_DELAY_SECONDS = 2
@@ -82,6 +83,7 @@ PROBE_ORDER = (
     "timeout-recovery-budget",
     "soak",
     "example-smoke",
+    "bundled-dynamic-handoff",
 )
 
 QWEN_SANDBOX_ERROR_MARKERS = (
@@ -2678,6 +2680,88 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
 
 
 
+BUNDLED_DYNAMIC_EXPECTED = "DYNAMIC_HANDOFF_BUNDLED_PASS"
+
+BUNDLED_DYNAMIC_PROMPT = f"""Create a file named dynamic_handoff_probe.txt containing exactly:
+{BUNDLED_DYNAMIC_EXPECTED}
+
+Keep the change minimal. Do not modify runner control files.
+The Goal is already clear, so avoid unnecessary analysis roles.
+After implementation, use only the independent verification needed to establish completion, then finish through final validation.
+"""
+
+
+def bundled_dynamic_handoff_probe(settings: Settings, root: Path) -> dict[str, object]:
+    """Run the shipped dynamic_handoff.yaml end to end with real Qwen."""
+    project = create_project(
+        root,
+        "bundled-dynamic-handoff-probe",
+        prompt=BUNDLED_DYNAMIC_PROMPT,
+    )
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+        ),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_state_completed(project, code)
+
+    target = project / "dynamic_handoff_probe.txt"
+    if not target.is_file():
+        raise RuntimeError("bundled Dynamic Handoff did not create the required artifact")
+    actual = target.read_text(encoding="utf-8-sig").rstrip("\r\n")
+    if actual != BUNDLED_DYNAMIC_EXPECTED:
+        raise RuntimeError(
+            "bundled Dynamic Handoff artifact mismatch: "
+            f"expected={BUNDLED_DYNAMIC_EXPECTED!r}, actual={actual!r}"
+        )
+
+    starts = [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    if not starts or starts[0] != "coordinator":
+        raise RuntimeError(f"bundled Dynamic Handoff did not start at coordinator: {starts!r}")
+    if "final_validate" not in starts:
+        raise RuntimeError("bundled Dynamic Handoff never reached final_validate")
+    writers = [name for name in starts if name in {"implementer", "debugger"}]
+    if not writers:
+        raise RuntimeError(
+            "bundled Dynamic Handoff completed without an implementation/debugging writer"
+        )
+    if "risk_reviewer" in starts:
+        raise RuntimeError("removed risk_reviewer unexpectedly returned to bundled workflow")
+
+    role_names = {
+        "requirements_analyst",
+        "solution_architect",
+        "implementer",
+        "debugger",
+        "verifier",
+    }
+    roles = [name for name in starts if name in role_names]
+    state = read_state(project)
+    if state.get("ai_session_id") or state.get("stage_sessions"):
+        raise RuntimeError(
+            "completed bundled Dynamic Handoff retained active-only session state"
+        )
+    return {
+        "workflow": str(DYNAMIC_HANDOFF_WORKFLOW),
+        "stage_starts": starts,
+        "total_stage_starts": len(starts),
+        "coordinator_runs": starts.count("coordinator"),
+        "roles_used": sorted(set(roles)),
+        "role_runs": len(roles),
+        "writer_roles": sorted(set(writers)),
+        "final_validate_runs": starts.count("final_validate"),
+    }
+
+
 REVIEW_ROUTING_PROMPT = """Make review.txt contain exactly these two logical lines:
 READY
 REVIEW_REQUIRED
@@ -4681,6 +4765,7 @@ def main() -> int:
     transient_observed = False
     soak_result = SoakResult()
     example_results: list[tuple[ExampleSmokeCase, Path]] = []
+    bundled_dynamic_result: dict[str, object] = {}
 
     if probe_enabled("ownership-lock", start_probe):
         runner_ownership_preflight(run_root)
@@ -4868,6 +4953,14 @@ def main() -> int:
                 )
                 example_results.append((case, project))
                 print_probe_pass("example-smoke", f"copied-example real-agent smoke {case.name}")
+        if probe_enabled("bundled-dynamic-handoff", start_probe):
+            bundled_dynamic_result = bundled_dynamic_handoff_probe(settings, run_root)
+            print_probe_pass(
+                "bundled-dynamic-handoff",
+                "bundled dynamic_handoff.yaml real-Qwen workflow probe "
+                f"(roles={','.join(bundled_dynamic_result.get('roles_used', []))}, "
+                f"coordinator_runs={bundled_dynamic_result.get('coordinator_runs', 0)})",
+            )
     summary = {
         "passed": True,
         "source_revision": revision,
@@ -4966,6 +5059,7 @@ def main() -> int:
             }
             for case, project in example_results
         ],
+        "bundled_dynamic_handoff": bundled_dynamic_result,
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(
