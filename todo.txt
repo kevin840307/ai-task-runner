@@ -387,6 +387,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate api-long-http after semantic closed-loop fixture fix.
+    - 2026-10-07 full live rerun: [30/46] api-502 PASS, [31/46] api-429 PASS, [32/46] api-503 PASS.
+    - Probe 33 api-long-http failed in the 429 case after transport recovery because execute returned a normal AI result
+      without actually creating health.txt; validate_file correctly reported "missing health.txt" and the fixture stopped.
+    - StageExecutor did not misclassify a technical ERROR: the failure was semantic incompleteness after the outage cleared.
+    - Fixed the shared API recovery Workflow so validate_file FAIL routes back to execute, preserving strict health.txt validation.
+    - Added max_cycles=4 to the API recovery probe so semantic recovery is bounded and cannot loop indefinitely.
+    - Runner technical retry/session ownership is unchanged; this is a live closed-loop fixture correction.
+    - Rerun from probe 33 is required before marking this item PASS.
+
 [x] Kept the controlled backoff agent faithful to Same Session/Fresh Session identity.
     - When Qwen-style --resume <session> is present, the fake agent now returns that same session id.
     - Only a Fresh invocation without --resume creates a new synthetic session id.
