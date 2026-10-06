@@ -3873,3 +3873,24 @@ def test_api_recovery_validator_allows_only_line_ending_variants_and_reports_byt
     assert "content mismatch" in result.stdout
     assert "actual=" in result.stdout
     assert "bytes=" in result.stdout
+
+
+def test_api_recovery_fixture_routes_semantic_validation_fail_back_to_execute():
+    from runner.workflow.loader import load_workflow
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        project = Path(directory)
+        workflow, _armed, _active = live._prepare_api_recovery_fixture(project)
+        loaded = {str(item["name"]): item for item in load_workflow(workflow)}
+
+    assert loaded["validate_file"]["routes"] == {"fail": "execute"}
+
+
+def test_api_recovery_probe_bounds_semantic_recovery_cycles():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def api_recovery_probe")
+    end = source.index("\ndef _require_recovery_backoff_cap", start)
+    block = source[start:end]
+
+    assert "max_cycles=4" in block
