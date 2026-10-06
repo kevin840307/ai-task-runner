@@ -84,6 +84,10 @@ PROBE_ORDER = (
     "soak",
     "example-smoke",
     "bundled-dynamic-handoff",
+    "dynamic-handoff-role-matrix",
+    "dynamic-handoff-final-recovery",
+    "dynamic-handoff-api-recovery",
+    "dynamic-handoff-stop-resume",
 )
 
 QWEN_SANDBOX_ERROR_MARKERS = (
