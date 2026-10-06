@@ -3,13 +3,13 @@ stages:
     type: handoff
     label: Dynamic Coordinator
     status: AI 正在動態選擇下一個專業角色
+    prompt: common/dynamic_handoff.md
     targets:
       - requirements_analyst
       - solution_architect
       - implementer
       - debugger
       - verifier
-      - risk_reviewer
       - final_validate
     session_policy: role
 
@@ -64,18 +64,7 @@ stages:
     label: Verification Engineer
     status: Verification Engineer 正在獨立檢查測試與證據
     prompt: common/dynamic_worker.md
-    instructions: Independently verify behavior, tests, build evidence, and remaining defects. Do not modify production/source files.
-    session_policy: role
-    readonly_safety: observe
-    routes:
-      pass: coordinator
-
-  risk_reviewer:
-    type: base
-    label: Risk & Quality Reviewer
-    status: Risk Reviewer 正在檢查可靠性、品質與失敗模式
-    prompt: common/dynamic_worker.md
-    instructions: Review correctness, reliability, security, maintainability, hidden coupling, edge cases, and operational failure modes. Report only material risks.
+    instructions: Independently verify behavior, tests, evidence, remaining defects, and material reliability/security/maintainability risks. Do not modify production/source files.
     session_policy: role
     readonly_safety: observe
     routes:
@@ -100,5 +89,4 @@ flow:
   - implementer
   - debugger
   - verifier
-  - risk_reviewer
   - final_validate
