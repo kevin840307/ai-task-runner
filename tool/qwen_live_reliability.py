@@ -587,6 +587,7 @@ def runner_command(
     sandbox: bool | None = None,
     script: Path | None = None,
     workflow: Path | None = None,
+    max_cycles: int | None = None,
 ) -> list[str]:
     effective_sandbox = settings.sandbox if sandbox is None else sandbox
     validator = "ai" if ai_only else str(project / "validation.py")
@@ -618,6 +619,8 @@ def runner_command(
         command.append("--sandbox")
     if workflow is not None and script is None:
         command.extend(["--workflow", str(workflow)])
+    if max_cycles is not None:
+        command.extend(["--max-cycles", str(max_cycles)])
     if resume:
         command.append("--resume")
     else:
@@ -2707,7 +2710,7 @@ def bundled_dynamic_handoff_probe(settings: Settings, root: Path) -> dict[str, o
             settings,
             project,
             workflow=DYNAMIC_HANDOFF_WORKFLOW,
-            ai_only=True,
+            ai_only=True,\n                max_cycles=12,
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
@@ -2826,7 +2829,7 @@ def dynamic_handoff_role_matrix_probe(
     for name, prompt, expected_role in DYNAMIC_ROLE_MATRIX_CASES:
         project = create_project(root, f"dynamic-role-{name}", prompt=prompt)
         if name == "ambiguous-requirement":
-            (project / "REQUIREMENTS.md").write_text("REQUIRED_VALUE\n", encoding="utf-8")
+            (project / "REQUIREMENTS.md").write_text("TAIWAN_MATRIX_7F4C\n", encoding="utf-8")
         elif name == "existing-failure":
             (project / "broken.txt").write_text("BROKEN\n", encoding="utf-8")
             (project / "failure.log").write_text(
@@ -2840,7 +2843,7 @@ def dynamic_handoff_role_matrix_probe(
                 settings,
                 project,
                 workflow=DYNAMIC_HANDOFF_WORKFLOW,
-                ai_only=True,
+                ai_only=True,\n                max_cycles=12,
             ),
             console_log(project, "console.jsonl"),
             settings.run_timeout,
@@ -2855,7 +2858,7 @@ def dynamic_handoff_role_matrix_probe(
             value = (project / "matrix_requirement.txt").read_text(
                 encoding="utf-8-sig"
             ).strip()
-            if value != "REQUIRED_VALUE":
+            if value != "TAIWAN_MATRIX_7F4C":
                 raise RuntimeError(
                     f"ambiguous-requirement produced wrong value: {value!r}"
                 )
@@ -2908,7 +2911,7 @@ def dynamic_handoff_final_recovery_probe(
             settings,
             project,
             workflow=DYNAMIC_HANDOFF_WORKFLOW,
-            ai_only=True,
+            ai_only=True,\n                max_cycles=12,
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
@@ -2971,7 +2974,7 @@ Use the normal Dynamic Handoff workflow and finish through final validation.
                 settings,
                 project,
                 workflow=DYNAMIC_HANDOFF_WORKFLOW,
-                ai_only=True,
+                ai_only=True,\n                max_cycles=12,
             ),
             **options,
         )
@@ -3047,7 +3050,7 @@ Keep the work minimal and finish through final validation.
             settings,
             project,
             workflow=DYNAMIC_HANDOFF_WORKFLOW,
-            ai_only=True,
+            ai_only=True,\n                max_cycles=12,
         ),
         **options,
     )
@@ -3101,6 +3104,7 @@ Keep the work minimal and finish through final validation.
             workflow=DYNAMIC_HANDOFF_WORKFLOW,
             ai_only=True,
             resume=True,
+            max_cycles=12,
         ),
         console_log(project, "resume-console.jsonl"),
         settings.run_timeout,
