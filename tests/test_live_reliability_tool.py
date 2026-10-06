@@ -2807,6 +2807,60 @@ def test_bundled_dynamic_handoff_is_probe_42_and_runs_after_example_smoke():
     assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 42
 
 
+def test_dynamic_handoff_extended_live_probes_are_43_through_46():
+    assert len(live.PROBE_ORDER) == 46
+    assert live.PROBE_ORDER[-5:] == (
+        "bundled-dynamic-handoff",
+        "dynamic-handoff-role-matrix",
+        "dynamic-handoff-final-recovery",
+        "dynamic-handoff-api-recovery",
+        "dynamic-handoff-stop-resume",
+    )
+    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 43
+    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 44
+    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 45
+    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 46
+
+
+def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runtime_primitives():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+
+    for function_name in (
+        "dynamic_handoff_role_matrix_probe",
+        "dynamic_handoff_final_recovery_probe",
+        "dynamic_handoff_api_recovery_probe",
+        "dynamic_handoff_stop_resume_probe",
+    ):
+        start = source.index(f"def {function_name}")
+        next_def = source.find("\ndef ", start + 5)
+        block = source[start:] if next_def < 0 else source[start:next_def]
+        assert "DYNAMIC_HANDOFF_WORKFLOW" in block
+
+    api_start = source.index("def dynamic_handoff_api_recovery_probe")
+    api_end = source.index("\ndef dynamic_handoff_stop_resume_probe", api_start)
+    api_block = source[api_start:api_end]
+    assert "transient_proxy" in api_block
+    assert "qwen_test_endpoint" in api_block
+    assert "proxy.status_code = 503" in api_block
+
+    stop_start = source.index("def dynamic_handoff_stop_resume_probe")
+    stop_end = source.index("\n\nREVIEW_ROUTING_PROMPT", stop_start)
+    stop_block = source[stop_start:stop_end]
+    assert 'stop_request.write_text("stop\\n"' in stop_block
+    assert "resume=True" in stop_block
+
+
+def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths():
+    cases = {name: expected for name, _prompt, expected in live.DYNAMIC_ROLE_MATRIX_CASES}
+    assert cases == {
+        "ambiguous-requirement": "requirements_analyst",
+        "existing-failure": "debugger",
+        "verify-only": "verifier",
+    }
+
+
+
+
 def test_bundled_dynamic_handoff_asset_is_lean_and_uses_focused_coordinator_prompt():
     from runner.workflow.loader import load_workflow
 
