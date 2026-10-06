@@ -304,6 +304,8 @@ CUSTOM_DYNAMIC_WORKFLOW = '''stages:
     type: command
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    routes:
+      fail: execute
 
 flow:
   - discover
@@ -4248,7 +4250,12 @@ def api_recovery_probe(
         else:
             options["start_new_session"] = True
         process = subprocess.Popen(
-            runner_command(settings, project, workflow=workflow),
+            runner_command(
+                settings,
+                project,
+                workflow=workflow,
+                max_cycles=4,
+            ),
             **options,
         )
         deadline = time.monotonic() + settings.run_timeout
