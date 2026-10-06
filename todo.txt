@@ -1268,13 +1268,16 @@ RELEASE GATES
       yaml-list-endurance, final-ai-quorum, timeout-recovery-budget, 0.5H high-density soak.
     - [40/41] soak summary: 12 runs / 1871.5s, transient 429=2 / 502=2 / 503=2,
       timeout=2, YAML=1, sandbox=1, mixed Final AI=1, backoff cap 30s reached.
-    - Remaining in this matrix: probe 41 example-smoke only.
+    - Probe 41 did not execute in that run because the old fail-start launcher omitted the opt-in example-smoke matrix.
+    - High-density 0.5H soak itself is green; full Real-Qwen 0.5H gate remains open until example-smoke runs.
     - Full 24H Windows soak remains the final unattended-duration gate.
 
-[x] Real-Qwen 0.5H gate green:
+[ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
     - Real-Qwen high-density run on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
       DIRTY=False, completed [40/41] soak PASS with 12 runs over 1871.5s.
+    - Full 0.5H gate is NOT green yet because the fail-start launcher omitted the opt-in example-smoke matrix,
+      so [41/41] did not execute (summary: example_smoke=false, example_smoke_runs=0).
     - Coverage inside soak:
       * transient API every 2 runs: 6 total, 429=2 / 502=2 / 503=2
       * timeout every 6 runs: 2
@@ -1298,6 +1301,14 @@ RELEASE GATES
     - YAML List resume
     - custom Stage / producer-defined child Workflow
     - complete closed-loop probe
+
+[x] Fixed fail-start launcher drift that skipped probe 41.
+    - qwen_live_reliability.py runs example-smoke only for explicit example cases.
+    - Canonical tool\qwen_live_reliability_0_5h.bat supplies the 2-project x 3-workflow smoke matrix.
+    - The root fail-start launcher previously duplicated 0.5H flags but omitted those smoke arguments, so probe 41 had zero cases.
+    - fail-start now delegates to the canonical 0.5H gate and only adds --start-probe 34; %* still permits operator override.
+    - This removes duplicated gate configuration and prevents future coverage drift.
+    - Re-run is still required before marking the full Real-Qwen 0.5H gate green.
 
 [x] High-density soak green
     - [40/41] PASS soak · 0.5H soak completed (12 runs).
