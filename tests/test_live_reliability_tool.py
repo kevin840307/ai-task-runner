@@ -2884,6 +2884,23 @@ def test_dynamic_handoff_api_recovery_fixture_validator_matches_goal():
 
 
 
+def test_dynamic_handoff_stop_resume_uses_durable_role_start_not_racy_state_polling():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def dynamic_handoff_stop_resume_probe")
+    end = source.index("\n\nREVIEW_ROUTING_PROMPT", start)
+    block = source[start:end]
+
+    assert 'event.get("type") == "runner.stage"' in block
+    assert 'event.get("action") == "start"' in block
+    assert "started_roles" in block
+    assert "stage in role_names" not in block
+    assert 'state.get("ai_session_id")' not in block
+    assert 'stop_request.write_text("stop\\n"' in block
+    assert '"checkpoint_role": checkpoint_role' in block
+
+
+
+
 def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths():
     cases = {
         name: {
