@@ -455,6 +455,15 @@ class BaseStage:
             last_output = str(getattr(task, "last_output", "") or "").strip()
             if last_output:
                 lines.append("executor_evidence:\n" + last_output[-2500:])
+        if mode == "continue" and previous is not None and previous.stage != self.name:
+            evidence = str(previous.output or "").strip()
+            if not evidence and previous.data:
+                try:
+                    evidence = json.dumps(previous.data, ensure_ascii=False)
+                except TypeError:
+                    evidence = str(previous.data)
+            if evidence:
+                lines.append("source_evidence:\n" + evidence[-2500:])
         if error:
             lines.append("previous_error: " + error[-2000:])
         if feedback:
