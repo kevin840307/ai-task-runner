@@ -1349,6 +1349,15 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 first real-Qwen 43 ambiguous-requirement attempt exposed a harness semantic-loop case:
+      * REQUIREMENTS.md contained literal REQUIRED_VALUE; Final Validator interpreted that as placeholder text and FAILed.
+      * requirements_analyst had already produced/verified matrix_requirement.txt=REQUIRED_VALUE, but coordinator kept following
+        the stale validator concern back to requirements_analyst.
+      * captured state reached cycle=37, workflow_position=0, completed=false with repeated
+        coordinator -> requirements_analyst transitions; project retained active runtime markers because the run was still active.
+      * This is not evidence of state corruption; it is a bad test token plus an unbounded live semantic loop.
+      * Fixed harness value to concrete TAIWAN_MATRIX_7F4C and bounded bundled Dynamic Handoff live probes 42-46 with max_cycles=12.
+      * Real-Qwen rerun of 43 is required; do not mark 43 PASS from the failed/stuck attempt.
     - [ ] 43 dynamic-handoff-role-matrix:
       real bundled dynamic_handoff.yaml across ambiguous requirement, existing failure/debug and verify-only scenarios;
       assert the expected specialist participates and record coordinator/role usage.
