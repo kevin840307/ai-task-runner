@@ -3482,14 +3482,25 @@ def test_batch_gates_forward_live_probe_selector_arguments():
         assert "%*" in text
 
 
-@pytest.mark.parametrize("suffix", ["", "\n", "\r\n"])
-def test_api_recovery_validator_accepts_only_line_ending_variants(
+@pytest.mark.parametrize(
+    ("prefix", "suffix"),
+    [
+        (b"", ""),
+        (b"", "\n"),
+        (b"", "\r\n"),
+        (b"\xef\xbb\xbf", ""),
+        (b"\xef\xbb\xbf", "\n"),
+        (b"\xef\xbb\xbf", "\r\n"),
+    ],
+)
+def test_api_recovery_validator_accepts_only_bom_and_line_ending_variants(
     tmp_path: Path,
+    prefix: bytes,
     suffix: str,
 ):
     project = tmp_path / "project"
     project.mkdir()
-    (project / "health.txt").write_bytes((live.EXPECTED + suffix).encode("utf-8"))
+    (project / "health.txt").write_bytes(prefix + (live.EXPECTED + suffix).encode("utf-8"))
     validator = project / "validation.py"
     validator.write_text(live.API_RECOVERY_VALIDATOR, encoding="utf-8")
 
@@ -3539,6 +3550,33 @@ def test_api_recovery_validator_rejects_other_content_with_diagnostics(
     assert "bytes=" in completed.stdout
 
 
+def test_strict_live_validator_still_rejects_utf8_bom(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "health.txt").write_bytes(
+        b"\xef\xbb\xbf" + live.EXPECTED.encode("utf-8")
+    )
+    validator = project / "validation.py"
+    validator.write_text(live.VALIDATOR, encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--project-root",
+            str(project),
+            "--state-file",
+            str(project / "state.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "content mismatch" in completed.stdout
+
+
 def test_strict_live_validator_still_rejects_trailing_newline(tmp_path: Path):
     project = tmp_path / "project"
     project.mkdir()
@@ -3571,11 +3609,12 @@ def test_api_recovery_validator_allows_only_line_ending_variants_and_reports_byt
     state.write_text("{}", encoding="utf-8")
     target = tmp_path / "health.txt"
 
-    for content in (
+    plain = (
         live.EXPECTED.encode("utf-8"),
         (live.EXPECTED + "\n").encode("utf-8"),
         (live.EXPECTED + "\r\n").encode("utf-8"),
-    ):
+    )
+    for content in (*plain, *(b"\xef\xbb\xbf" + item for item in plain)):
         target.write_bytes(content)
         result = subprocess.run(
             [
