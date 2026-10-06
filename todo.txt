@@ -1349,6 +1349,15 @@ RELEASE GATES
       while still reaching independent fresh-session final validation.
 
 [ ] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-06 real-Qwen rerun on source revision b1feeef229d8987410396d54a2f5d3550d3937a1, DIRTY=False:
+      * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503 and successful recovery.
+      * 46 failed before exercising stop/resume because the harness required polling state.stage to equal a worker role
+        AND ai_session_id to be durably visible at the same instant; fast worker transitions can skip that observation window.
+      * This is a probe timing race, not evidence that stop/resume failed.
+      * Fixed 46 to trigger stop.request from durable runner.stage/start evidence for any real worker role while the Supervisor
+        marker is active; the checkpoint keeps the current durable state/run_id but no longer depends on transient state.stage/session timing.
+      * Poll interval tightened to 50ms only for observing the durable role-start event; runtime behavior is unchanged.
+      * Real-Qwen 46 rerun is required before marking PASS.
     - 2026-10-06 uploaded dynamic-api-recovery-probe evidence exposed a second 45 harness-fixture issue:
       * the run had progressed through coordinator -> final_validate FAIL -> coordinator -> implementer.
       * final_validate inspected the default protected validation.py, which still validated health.txt / the generic live-probe text,
