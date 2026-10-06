@@ -809,7 +809,7 @@ High-value runner work remaining:
     - Runner retry/session semantics were not loosened to satisfy the harness.
     - Latest exact HEAD deterministic gates are green; reopen this item only for a newly reproduced failure.
 
-[ ] Verify state/log/history growth during soak.
+[x] Verify state/log/history growth during soak.
     - Implemented: resource-observation.jsonl plus require_resource_bounds() safety rails.
     - Soak now fails on leftover active process markers, large harness thread/handle/RSS leakage,
       catastrophic per-project state/session/dynamic/review growth, oversized expanded workflows,
@@ -829,13 +829,22 @@ High-value runner work remaining:
     - Deterministic ceiling coverage now explicitly includes dynamic_task_groups in addition to
       state size, stage_sessions, dynamic_groups, review_failures, transition history, expanded Workflow and debug history.
     - run_root_bytes is intentionally observation-only because each soak iteration retains a new Project.
-    - Deterministic safety-rail coverage is green on Ubuntu/Windows; still requires real high-density
-      + 24H evidence before marking this parent item complete.
+    - Real 0.5H high-density soak on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
+      DIRTY=False, completed 12 runs in 1871.5s with all safety rails green:
+      * max state.json: 6402 bytes
+      * max transition_history: 8
+      * max expanded Workflow stages: 5
+      * max debug history: 38110 bytes
+      * max stage_sessions/dynamic_groups/dynamic_task_groups/review_failures: 0
+      * active_process_markers: 0 throughout baseline/max/end
+      * harness threads stayed at 1
+      * run-root growth was expected retained-project growth only.
+    - 24H evidence is still required for the final release gate, but this parent high-density growth check is now green.
     - No unbounded state.json growth.
     - No unbounded warning/debug/history growth.
     - No repeated stale dynamic/session entries after completion/resume.
 
-[ ] Verify retry/backoff behavior under long failure windows.
+[x] Verify retry/backoff behavior under long failure windows.
     - [x] Deterministic long-transient regression covers 7 consecutive transient failures:
       bounded two-failure session budget, repeated Fresh Session rotation, 1s unlimited-retry safety floor,
       successful completion, structured recovery/session events and final last_error cleanup.
@@ -872,7 +881,9 @@ High-value runner work remaining:
     - [x] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
       Evidence now includes short 429/502/503 probes, [33/41] long HTTP 429/502/503/45s PASS,
       [34/41] raw disconnect/180s PASS, plus the earlier real session-expiry/Fresh Session live probe.
-    - [ ] Confirm real high-density / 0.5H / 24H evidence shows no retry spin and reaches configured max backoff.
+    - [x] Real high-density / 0.5H evidence shows no retry spin and reaches configured max backoff.
+      Recovery observation: 15 retry waits, min 0.0s, max 30.0s, configured cap 30s, cap_reached=true.
+      24H still remains a separate final-duration acceptance gate.
     - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
 
 [x] Do not optimize save/write frequency without soak evidence.
@@ -1251,15 +1262,27 @@ RELEASE GATES
       the single shared API recovery byte contract for validator + post-check, and strict default BOM/newline rejection.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
-[x] Latest resumed live matrix through probe 39 is green on exact source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
-    - Probes 33-39 all PASS in real Qwen:
+[x] Latest resumed live matrix through probe 40 is green on exact source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
+    - Probes 33-40 all PASS in real Qwen:
       api-long-http, api-disconnect, multi-todo-resume, yaml-list-resume,
-      yaml-list-endurance, final-ai-quorum, timeout-recovery-budget.
-    - Remaining in this matrix: probe 40 soak and probe 41 example-smoke.
-    - This is not yet the full 0.5H/high-density/24H release gate.
+      yaml-list-endurance, final-ai-quorum, timeout-recovery-budget, 0.5H high-density soak.
+    - [40/41] soak summary: 12 runs / 1871.5s, transient 429=2 / 502=2 / 503=2,
+      timeout=2, YAML=1, sandbox=1, mixed Final AI=1, backoff cap 30s reached.
+    - Remaining in this matrix: probe 41 example-smoke only.
+    - Full 24H Windows soak remains the final unattended-duration gate.
 
-[ ] Real-Qwen 0.5H gate green:
+[x] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
+    - Real-Qwen high-density run on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
+      DIRTY=False, completed [40/41] soak PASS with 12 runs over 1871.5s.
+    - Coverage inside soak:
+      * transient API every 2 runs: 6 total, 429=2 / 502=2 / 503=2
+      * timeout every 6 runs: 2
+      * YAML every 7 runs: 1
+      * sandbox every 7 runs: 1
+      * mixed + Final AI every 8 runs: 1
+      * recovery backoff reached 30s configured cap
+      * no active-process marker leak or active-only state-map retention.
 
     Must cover at least:
     - file / ai / mixed topologies
@@ -1276,10 +1299,11 @@ RELEASE GATES
     - custom Stage / producer-defined child Workflow
     - complete closed-loop probe
 
-[ ] High-density soak green
-    - state/log/history growth
-    - retry/backoff spin
-    - ownership/orphan leak
+[x] High-density soak green
+    - [40/41] PASS soak · 0.5H soak completed (12 runs).
+    - state/log/history growth: PASS within configured safety rails.
+    - retry/backoff spin: PASS; 15 observed waits, max 30s cap reached.
+    - ownership/orphan leak: PASS; active_process_markers stayed 0 and completed-run technical maps stayed empty.
 
 [ ] Full 24H Windows soak green:
     tool\qwen_live_reliability_24h.bat
