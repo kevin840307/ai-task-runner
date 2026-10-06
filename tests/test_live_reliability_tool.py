@@ -2850,6 +2850,21 @@ def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runti
     assert "resume=True" in stop_block
 
 
+def test_dynamic_handoff_api_recovery_arms_after_initial_coordinator_pass():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def dynamic_handoff_api_recovery_probe")
+    end = source.index("\ndef dynamic_handoff_stop_resume_probe", start)
+    block = source[start:end]
+
+    assert 'observed_stage_result(\n                        project,\n                        "coordinator",\n                        "pass",' in block
+    assert "successes_before_outage = proxy.successes" in block
+    assert "proxy.status_code = 503" in block
+    assert "proxy.failures <= 0" in block
+    assert "proxy.successes <= successes_before_outage" in block
+
+
+
+
 def test_dynamic_handoff_role_matrix_covers_requirement_debug_and_verify_paths():
     cases = {
         name: {
