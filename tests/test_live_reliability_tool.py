@@ -3480,7 +3480,7 @@ def test_fail_start_launcher_defaults_to_current_failed_probe_and_allows_overrid
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert "--start-probe 33" in text
+    assert "--start-probe 34" in text
     assert "%*" in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
 
