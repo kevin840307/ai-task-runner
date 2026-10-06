@@ -1252,14 +1252,15 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD bb4ed85025f7673ea2a076264ea7eccdf40011f5 passed all required deterministic gates
-      in GitHub Actions run 37466898305.
+    - Exact implementation HEAD 443d173f81a5ff586c54293d928f9addf57eaf92 passed all required deterministic gates
+      in GitHub Actions run 37471026044.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - This exact-HEAD evidence includes the new probe 42 contract, shipped dynamic_handoff.yaml lean-role contract,
-      focused coordinator/worker prompts, plus all prior recovery/resource/YAML/runtime regressions.
+    - This exact-HEAD evidence includes probes 42-46 contracts, shipped dynamic_handoff.yaml lean-role contract,
+      focused coordinator/worker prompts, Dynamic Handoff role/final-recovery/API-recovery/stop-resume live harness wiring,
+      plus all prior recovery/resource/YAML/runtime regressions.
     - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [x] Original 41-probe live matrix is fully green across soak + example smoke.
@@ -1364,6 +1365,8 @@ RELEASE GATES
       no second orchestrator/recovery/session implementation was added.
     - Deterministic regressions lock probe order 43-46 and verify the live implementations reuse the shipped workflow
       plus existing transient-proxy and stop/resume primitives.
+    - Exact implementation HEAD 443d173f81a5ff586c54293d928f9addf57eaf92 passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37471026044.
     - Real-Qwen PASS evidence is required before checking these items.
 
 
