@@ -3982,3 +3982,17 @@ def test_api_recovery_fail_route_is_scoped_to_api_fixture():
 
     assert api_loaded["validate_file"]["routes"] == {"fail": "execute"}
     assert "routes" not in custom_loaded["validate_file"]
+
+
+def test_validator_failure_routing_uses_durable_stage_event_order_not_bounded_trace():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def validator_failure_routing_probe")
+    end = source.index("\ndef file_protection_probe", start)
+    block = source[start:end]
+
+    assert "validator_fail_index = next(" in block
+    assert 'event.get("stage") == "validate_file"' in block
+    assert 'event.get("result") == "fail"' in block
+    assert "planning_restart_index = next(" in block
+    assert 'event.get("stage") == "planning"' in block
+    assert "transition_history" not in block
