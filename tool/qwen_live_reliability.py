@@ -304,8 +304,6 @@ CUSTOM_DYNAMIC_WORKFLOW = '''stages:
     type: command
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
-    routes:
-      fail: execute
 
 flow:
   - discover
@@ -4087,6 +4085,8 @@ API_RECOVERY_WORKFLOW = '''stages:
     type: command
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    routes:
+      fail: execute
 
 flow:
   - warmup
