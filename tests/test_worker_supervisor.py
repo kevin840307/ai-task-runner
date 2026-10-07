@@ -791,3 +791,34 @@ def test_supervisor_recovers_hung_worker_from_durable_state(tmp_path, monkeypatc
     assert len(commands) == 2
     assert "--resume" not in commands[0]
     assert "--resume" in commands[1]
+
+
+def test_supervisor_does_not_resume_semantic_stop_with_saved_state(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text(
+        '{"run_id":"semantic-stop","stage":"max_cycles_exhausted","cycle":5}',
+        encoding="utf-8",
+    )
+    request = _request(tmp_path)
+    calls = []
+
+    def fake_popen(command, env):
+        calls.append(list(command))
+        return FakeWorker(1, 101)
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 1
+    assert len(calls) == 1
+    assert "--resume" not in calls[0]
