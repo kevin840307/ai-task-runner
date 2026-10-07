@@ -55,7 +55,10 @@ class FlowEngine:
             if limit != -1 and state.cycle > limit:
                 self.context.set_stage("max_cycles_exhausted", f"cycle limit {limit} reached")
                 self.context.save_state()
-                return 2
+                # This is an intentional semantic fail-closed stop, not a worker crash.
+                # Return the normal workflow-stop code so Supervisor does not auto-resume
+                # the same exhausted checkpoint forever.
+                return 1
             position = state.workflow_position
             previous, stopped = self._run_stage(position, executor, previous)
             if stopped:
