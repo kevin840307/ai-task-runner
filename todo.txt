@@ -396,7 +396,15 @@ LIVE REGRESSION NOTES
     - Runtime fix: max_cycles exhaustion is an intentional semantic fail-closed stop and now returns code 1.
       Supervisor therefore stops naturally without gaining Workflow-specific knowledge or another terminal-state table.
     - Deterministic FlowEngine test locks max_cycles_exhausted => code 1; Supervisor test locks code 1 + saved state => no --resume.
-    - Live/soak must be rerun to prove no repeated Supervisor resume at the exhausted checkpoint.
+    - Existing probe 14 loop-detection now also runs a real CLI/Supervisor semantic-loop preflight:
+      * one command Stage intentionally FAIL-routes to itself with max_cycles=1;
+      * expected process exit is 1 and durable stage is max_cycles_exhausted;
+      * loop Stage must start exactly once before exhaustion;
+      * no Supervisor runner.retry is allowed;
+      * runner-process.json, run.lock and worker-heartbeat must all be cleaned.
+    - This keeps 24H crash recovery enabled for real abnormal worker exits while preventing deterministic semantic terminal states
+      from becoming infinite Supervisor resume loops.
+    - Real live probe 14 / soak rerun is still required before checking this item.
 [ ] Revalidate probe 28 validator-failure-routing after evidence-oracle fix.
     - 2026-10-07 live rerun: [23/46] workflow-mixed PASS, [24/46] dynamic-handoff-session-policy PASS,
       [25/46] custom-dynamic-producer PASS, [26/46] review-failure-routing PASS and [27/46] complete-closed-loop PASS.
