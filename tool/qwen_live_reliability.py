@@ -2077,6 +2077,86 @@ def technical_artifact_safety_preflight() -> None:
             raise RuntimeError("project dotfiles were incorrectly blanket-ignored")
 
 
+MAX_CYCLE_SUPERVISOR_WORKFLOW = '''stages:
+  loop_gate:
+    type: command
+    result_kind: validation
+    command: "{python} loop_gate.py"
+    routes:
+      fail: loop_gate
+
+flow:
+  - loop_gate
+'''
+
+
+def max_cycle_supervisor_preflight(settings: Settings, root: Path) -> None:
+    """Prove semantic cycle exhaustion terminates Supervisor instead of crash-resume looping."""
+    project = create_project(root, "max-cycle-supervisor-preflight")
+    (project / "loop_gate.py").write_text(
+        "print('VALIDATION_FAILED: intentional semantic loop')\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    workflow = project / "max-cycle-workflow.yaml"
+    workflow.write_text(MAX_CYCLE_SUPERVISOR_WORKFLOW, encoding="utf-8")
+    log = console_log(project, "console.jsonl")
+
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=workflow,
+            max_cycles=1,
+        ),
+        log,
+        min(settings.run_timeout, 60),
+    )
+    state = read_state(project)
+    if code != 1:
+        raise RuntimeError(
+            f"max-cycle semantic stop returned unexpected exit code: {code}"
+        )
+    if state.get("stage") != "max_cycles_exhausted" or state.get("completed") is True:
+        raise RuntimeError(
+            "max-cycle semantic stop did not persist terminal fail-closed state: "
+            f"stage={state.get('stage')!r}, completed={state.get('completed')!r}, "
+            f"cycle={state.get('cycle')!r}"
+        )
+
+    starts = [
+        event for event in runner_events(project)
+        if event.get("type") == "runner.stage"
+        and event.get("action") == "start"
+        and event.get("stage") == "loop_gate"
+    ]
+    if len(starts) != 1:
+        raise RuntimeError(
+            "Supervisor restarted an exhausted semantic loop: "
+            f"loop_gate_starts={len(starts)}"
+        )
+
+    console_events = jsonl_events(log)
+    if any(event.get("type") == "runner.retry" for event in console_events):
+        raise RuntimeError(
+            "Supervisor scheduled crash recovery after max_cycles semantic stop"
+        )
+
+    work = project / ".ai-task-runner"
+    stale = [
+        name for name in (
+            "runner-process.json",
+            "run.lock",
+            "worker-heartbeat",
+        )
+        if (work / name).exists()
+    ]
+    if stale:
+        raise RuntimeError(
+            f"semantic stop left Supervisor runtime marker(s): {stale!r}"
+        )
+
+
 def loop_detection_contract_preflight() -> None:
     """Lock Qwen loop classification plus the shared Stage retry/session contract."""
     if str(ROOT) not in sys.path:
@@ -5335,7 +5415,11 @@ def main() -> int:
         print_probe_pass("stage-result-mapping", "Review/Validator boolean verdict mapping preflight")
     if probe_enabled("loop-detection", start_probe):
         loop_detection_contract_preflight()
-        print_probe_pass("loop-detection", "Qwen loop-detection + bounded Planning retry preflight")
+        max_cycle_supervisor_preflight(settings, run_root)
+        print_probe_pass(
+            "loop-detection",
+            "Qwen loop-detection + semantic max-cycle Supervisor no-resume preflight",
+        )
     if probe_enabled("runtime-long-path", start_probe):
         runtime_long_path_preflight()
         print_probe_pass("runtime-long-path", ">MAX_PATH runtime resource/state/copy preflight")
