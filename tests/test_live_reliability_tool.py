@@ -3894,3 +3894,53 @@ def test_api_recovery_probe_bounds_semantic_recovery_cycles():
     block = source[start:end]
 
     assert "max_cycles=4" in block
+
+
+def test_dynamic_session_policy_allows_only_controlled_rotation(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    work.mkdir(parents=True)
+    events = [
+        {
+            "type": "model.prompt",
+            "session": "session-a",
+            "session_mode": "resume",
+        },
+        {
+            "type": "runner.recovery",
+            "action": "retry",
+            "retry": 2,
+            "retry_mode": "recover",
+        },
+        {
+            "type": "runner.session",
+            "action": "fresh",
+            "previous_session": "session-a",
+        },
+    ]
+    (work / "log.txt").write_text(
+        "\n".join(json.dumps(item) for item in events) + "\n",
+        encoding="utf-8",
+    )
+
+    live._assert_session_reuse_or_controlled_rotation(
+        project,
+        "main_role",
+        ["session-a", "session-b"],
+        "main",
+    )
+
+
+def test_dynamic_session_policy_rejects_unproven_rotation(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    work.mkdir(parents=True)
+    (work / "log.txt").write_text("", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="without controlled recovery"):
+        live._assert_session_reuse_or_controlled_rotation(
+            project,
+            "main_role",
+            ["session-a", "session-b"],
+            "main",
+        )
