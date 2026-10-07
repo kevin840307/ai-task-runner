@@ -525,3 +525,23 @@ def test_transition_history_is_bounded_for_long_running_loops(tmp_path):
     assert ctx.state.transition_history[-1]["stage"] == "review"
     assert ctx.state.transition_history[-1]["status"] == "pass"
     assert all(set(item) == {"stage", "status", "target", "cycle", "kind", "timestamp"} for item in ctx.state.transition_history)
+
+
+def test_max_cycles_exhaustion_is_terminal_semantic_stop(tmp_path):
+    workflow = [
+        node("work"),
+        node("review", routes={"fail": "work"}),
+    ]
+    ctx = context(tmp_path, workflow)
+    ctx.config.max_cycles = 1
+
+    def callback(stage, _ctx, previous):
+        if stage.name == "review":
+            return StageResult("review", "fail", kind="review")
+        return StageResult(stage.name, "pass")
+
+    code = FlowEngine(ctx).run(Executor(callback))
+
+    assert code == 1
+    assert ctx.state.stage == "max_cycles_exhausted"
+    assert ctx.state.completed is False
