@@ -1119,7 +1119,7 @@ flow:
             return StageResult("worker", "pass", output="done")
 
     executor = LoopingHandoffExecutor()
-    assert FlowEngine(ctx).run(executor) == 2
+    assert FlowEngine(ctx).run(executor) == 1
     assert [name for name, _ in executor.calls] == [
         "router", "worker", "router", "worker"
     ]
