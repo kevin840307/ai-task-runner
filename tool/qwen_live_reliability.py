@@ -2568,6 +2568,55 @@ flow:
 """
 
 
+def _assert_session_reuse_or_controlled_rotation(
+    project: Path,
+    stage: str,
+    sessions: list[str],
+    policy: str,
+) -> None:
+    if len(sessions) < 2:
+        raise RuntimeError(
+            f"session_policy={policy} produced insufficient session evidence for {stage}: "
+            f"{sessions!r}"
+        )
+    first, second = sessions[-2:]
+    if first == second:
+        return
+
+    events = runner_events(project)
+    fresh_previous = {
+        str(event.get("previous_session") or "")
+        for event in events
+        if event.get("type") == "runner.session"
+        and event.get("action") == "fresh"
+        and str(event.get("previous_session") or "")
+    }
+    recovery_modes = {
+        str(event.get("retry_mode") or "")
+        for event in events
+        if _structured_recovery_event(event)
+    }
+    resumed_sessions = {
+        str(event.get("session") or "")
+        for event in events
+        if event.get("type") in {"model.prompt", "model.result"}
+        and event.get("session_mode") == "resume"
+        and str(event.get("session") or "")
+    }
+    if (
+        "recover" in recovery_modes
+        and first in fresh_previous
+        and first in resumed_sessions
+    ):
+        return
+
+    raise RuntimeError(
+        f"session_policy={policy} changed session without controlled recovery for {stage}: "
+        f"sessions={sessions!r}, fresh_previous={sorted(fresh_previous)!r}, "
+        f"recovery_modes={sorted(recovery_modes)!r}, resumed={sorted(resumed_sessions)!r}"
+    )
+
+
 def _assert_dynamic_session_policy_evidence(
     project: Path,
     state: dict[str, object],
@@ -2579,14 +2628,18 @@ def _assert_dynamic_session_policy_evidence(
     main_results = stage_result_sessions(project, "main_role")
     stable_results = stage_result_sessions(project, "stable_role")
     fresh_results = stage_result_sessions(project, "fresh_role")
-    if len(main_results) < 2 or len(set(main_results[-2:])) != 1:
-        raise RuntimeError(
-            "session_policy=main did not reuse the primary Runner session"
-        )
-    if len(stable_results) < 2 or len(set(stable_results[-2:])) != 1:
-        raise RuntimeError(
-            "session_policy=role did not reuse the same role-specific session"
-        )
+    _assert_session_reuse_or_controlled_rotation(
+        project,
+        "main_role",
+        main_results,
+        "main",
+    )
+    _assert_session_reuse_or_controlled_rotation(
+        project,
+        "stable_role",
+        stable_results,
+        "role",
+    )
     if not fresh_results:
         raise RuntimeError("session_policy=fresh produced no real model session evidence")
     if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
