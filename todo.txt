@@ -387,6 +387,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate probe 25 custom Dynamic Producer after fixture-scope regression fix.
+    - 2026-10-07 live rerun: [24/46] dynamic-handoff-session-policy PASS, then probe 25 failed before execution.
+    - Root cause was a harness-only regression from the API-recovery closed-loop patch: CUSTOM_DYNAMIC_WORKFLOW.validate_file
+      was accidentally given routes.fail=execute even though execute exists only inside the dynamically produced child Workflow,
+      not the static parent Workflow. The canonical loader correctly rejected that dangling static route.
+    - Restored CUSTOM_DYNAMIC_WORKFLOW to discover -> validate_file with no static fail route.
+    - Kept routes.fail=execute only inside API_RECOVERY_WORKFLOW, where execute is a real static Stage.
+    - Added deterministic regressions that load both fixtures and assert the route is scoped only to API recovery.
+    - Runner loader/FlowEngine behavior was correct and unchanged. Real-Qwen probe 25 rerun required.
+
 [ ] Revalidate probe 24 Dynamic Handoff session-policy evidence.
     - 2026-10-07 full live rerun reached [23/46] workflow-mixed PASS, then probe 24 failed because
       main_role's two successful model.result session ids were not identical.
