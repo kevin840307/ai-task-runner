@@ -387,6 +387,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate semantic-stop / Supervisor no-resume loop protection.
+    - 2026-10-07 soak-api-503 evidence showed a real runtime infinite-resume bug, not only a live-harness issue.
+    - FlowEngine max_cycles exhaustion set stage=max_cycles_exhausted but returned exit code 2.
+    - Supervisor treats only 0/1/130 as terminal and auto-resumes other codes when durable state exists.
+    - Result: max_cycles_exhausted -> worker exit 2 -> Supervisor --resume -> same exhausted checkpoint -> exit 2 forever,
+      with exponential retry delay eventually reaching 30s; observed log became repeated runner.progress/bind heartbeats.
+    - Runtime fix: max_cycles exhaustion is an intentional semantic fail-closed stop and now returns code 1.
+      Supervisor therefore stops naturally without gaining Workflow-specific knowledge or another terminal-state table.
+    - Deterministic FlowEngine test locks max_cycles_exhausted => code 1; Supervisor test locks code 1 + saved state => no --resume.
+    - Live/soak must be rerun to prove no repeated Supervisor resume at the exhausted checkpoint.
 [ ] Revalidate probe 28 validator-failure-routing after evidence-oracle fix.
     - 2026-10-07 live rerun: [23/46] workflow-mixed PASS, [24/46] dynamic-handoff-session-policy PASS,
       [25/46] custom-dynamic-producer PASS, [26/46] review-failure-routing PASS and [27/46] complete-closed-loop PASS.
