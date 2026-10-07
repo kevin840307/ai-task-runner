@@ -3666,15 +3666,34 @@ the same file exactly, again with no trailing newline or whitespace, and continu
     state = read_state(project)
     if marker.read_text(encoding="utf-8") != ROUTING_INITIAL:
         raise RuntimeError("validator failure probe did not observe the expected initial value")
-    transitions = state.get("transition_history", [])
-    if not any(
-        isinstance(item, dict)
-        and item.get("stage") == "validate_file"
-        and item.get("status") == "fail"
-        and item.get("target") == "planning"
-        for item in transitions
-    ):
-        raise RuntimeError("validator failure did not route from validate_file back to planning")
+    events = runner_events(project)
+    validator_fail_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event.get("type") == "runner.stage"
+            and event.get("action") == "finish"
+            and event.get("stage") == "validate_file"
+            and event.get("result") == "fail"
+        ),
+        None,
+    )
+    planning_restart_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if validator_fail_index is not None
+            and index > validator_fail_index
+            and event.get("type") == "runner.stage"
+            and event.get("action") == "start"
+            and event.get("stage") == "planning"
+        ),
+        None,
+    )
+    if validator_fail_index is None or planning_restart_index is None:
+        raise RuntimeError(
+            "validator failure did not durably route from validate_file back to planning"
+        )
     planning_prompts = stage_prompt_records(project, "planning")
     if len(planning_prompts) < 2 or not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
