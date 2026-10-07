@@ -387,7 +387,19 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
-[ ] Revalidate semantic-stop / Supervisor no-resume loop protection.
+[x] 2026-10-07 full real-Qwen short confidence gate revalidated all soak-driven fixes.
+    - Source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False.
+    - Full [01/46] through [46/46] gate PASS.
+    - Revalidates the semantic-stop/Supervisor no-resume fix, probe 24 session-policy evidence,
+      probe 25 custom Dynamic Producer fixture scope, probe 28 validator-routing evidence oracle,
+      and probe 33 long-HTTP semantic closed loop.
+    - 0.5H high-density soak completed 10 runs in 1942.813s.
+    - Transient recovery coverage: 5 soak recoveries with 429=2, 502=2, 503=1; long HTTP recovery PASS;
+      180s long raw-disconnect recovery PASS.
+    - Resource gate ended with active_process_markers=0 and completed-run technical maps/history metrics at zero.
+    - This is strong short-duration unattended evidence; it does not replace the separate true 24H Windows soak gate.
+
+[x] Revalidated semantic-stop / Supervisor no-resume loop protection.
     - 2026-10-07 soak-api-503 evidence showed a real runtime infinite-resume bug, not only a live-harness issue.
     - FlowEngine max_cycles exhaustion set stage=max_cycles_exhausted but returned exit code 2.
     - Supervisor treats only 0/1/130 as terminal and auto-resumes other codes when durable state exists.
@@ -405,7 +417,7 @@ LIVE REGRESSION NOTES
     - This keeps 24H crash recovery enabled for real abnormal worker exits while preventing deterministic semantic terminal states
       from becoming infinite Supervisor resume loops.
     - Real live probe 14 / soak rerun is still required before checking this item.
-[ ] Revalidate probe 28 validator-failure-routing after evidence-oracle fix.
+[x] Revalidated probe 28 validator-failure-routing after evidence-oracle fix.
     - 2026-10-07 live rerun: [23/46] workflow-mixed PASS, [24/46] dynamic-handoff-session-policy PASS,
       [25/46] custom-dynamic-producer PASS, [26/46] review-failure-routing PASS and [27/46] complete-closed-loop PASS.
     - Probe 28 completed the requested RECOVERED artifact but failed its post-check because it required the bounded
@@ -416,7 +428,7 @@ LIVE REGRESSION NOTES
     - Strict artifact/result checks remain unchanged. FlowEngine routing behavior is unchanged.
     - Deterministic regression now forbids probe 28 from depending on transition_history. Real-Qwen probe 28 rerun required.
 
-[ ] Revalidate probe 25 custom Dynamic Producer after fixture-scope regression fix.
+[x] Revalidated probe 25 custom Dynamic Producer after fixture-scope regression fix.
     - 2026-10-07 live rerun: [24/46] dynamic-handoff-session-policy PASS, then probe 25 failed before execution.
     - Root cause was a harness-only regression from the API-recovery closed-loop patch: CUSTOM_DYNAMIC_WORKFLOW.validate_file
       was accidentally given routes.fail=execute even though execute exists only inside the dynamically produced child Workflow,
@@ -426,7 +438,7 @@ LIVE REGRESSION NOTES
     - Added deterministic regressions that load both fixtures and assert the route is scoped only to API recovery.
     - Runner loader/FlowEngine behavior was correct and unchanged. Real-Qwen probe 25 rerun required.
 
-[ ] Revalidate probe 24 Dynamic Handoff session-policy evidence.
+[x] Revalidated probe 24 Dynamic Handoff session-policy evidence.
     - 2026-10-07 full live rerun reached [23/46] workflow-mixed PASS, then probe 24 failed because
       main_role's two successful model.result session ids were not identical.
     - Runtime session_policy=main still reuses the primary AIClient; AIClient preserves the existing session id on normal resume.
@@ -436,7 +448,7 @@ LIVE REGRESSION NOTES
     - Unproven session changes still FAIL; role-session policy uses the same rule.
     - Deterministic positive/negative regressions added. Real-Qwen probe 24 rerun required before checking this item.
 
-[ ] Revalidate api-long-http after semantic closed-loop fixture fix.
+[x] Revalidated api-long-http after semantic closed-loop fixture fix.
     - 2026-10-07 full live rerun: [30/46] api-502 PASS, [31/46] api-429 PASS, [32/46] api-503 PASS.
     - Probe 33 api-long-http failed in the 429 case after transport recovery because execute returned a normal AI result
       without actually creating health.txt; validate_file correctly reported "missing health.txt" and the fixture stopped.
@@ -1407,7 +1419,13 @@ RELEASE GATES
       This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
       while still reaching independent fresh-session final validation.
 
-[ ] Dynamic Handoff extended live matrix 43-46.
+[x] Dynamic Handoff extended live matrix 43-46.
+    - Final real-Qwen evidence on source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False:
+      * [43/46] PASS dynamic-handoff-role-matrix.
+      * [44/46] PASS dynamic-handoff-final-recovery.
+      * [45/46] PASS dynamic-handoff-api-recovery; proxy_failures=2, proxy_successes_before_outage=1, proxy_successes=14.
+      * [46/46] PASS dynamic-handoff-stop-resume; checkpoint_role=implementer and the resumed run completed final validation.
+      * Bundled probe 42 also PASS with coordinator -> implementer -> coordinator -> final_validate.
     - 2026-10-06 real-Qwen rerun on source revision b1feeef229d8987410396d54a2f5d3550d3937a1, DIRTY=False:
       * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503 and successful recovery.
       * 46 failed before exercising stop/resume because the harness required polling state.stage to equal a worker role
@@ -1463,16 +1481,16 @@ RELEASE GATES
       * This is not evidence of state corruption; it is a bad test token plus an unbounded live semantic loop.
       * Fixed harness value to concrete TAIWAN_MATRIX_7F4C and bounded bundled Dynamic Handoff live probes 42-46 with max_cycles=12.
       * Real-Qwen rerun of 43 is required; do not mark 43 PASS from the failed/stuck attempt.
-    - [ ] 43 dynamic-handoff-role-matrix:
+    - [x] 43 dynamic-handoff-role-matrix:
       real bundled dynamic_handoff.yaml across ambiguous requirement, existing failure/debug and verify-only scenarios;
       assert the expected specialist participates and record coordinator/role usage.
-    - [ ] 44 dynamic-handoff-final-recovery:
+    - [x] 44 dynamic-handoff-final-recovery:
       real bundled Final Validator must FAIL once, route back through coordinator, repair missing approval evidence,
       then PASS and complete.
-    - [ ] 45 dynamic-handoff-api-recovery:
+    - [x] 45 dynamic-handoff-api-recovery:
       run shipped dynamic_handoff.yaml through the real transient proxy, inject HTTP 503 while an AI session is active,
       recover without stale last_error and still reach final validation.
-    - [ ] 46 dynamic-handoff-stop-resume:
+    - [x] 46 dynamic-handoff-stop-resume:
       stop.request only after an actual Dynamic worker role is active, verify clean Supervisor stop/no stale control files,
       resume the same durable run and finish through final validation.
     - All four reuse the current Runner/StageExecutor/FlowEngine/StateStore and shipped workflow path;
