@@ -2280,11 +2280,12 @@ def test_validator_failure_probe_uses_durable_semantic_route_evidence():
     end = source.index("\ndef file_protection_probe", start)
     block = source[start:end]
 
-    assert 'state.get("transition_history", [])' in block
-    assert 'item.get("stage") == "validate_file"' in block
-    assert 'item.get("status") == "fail"' in block
-    assert 'item.get("target") == "planning"' in block
-    assert 'state.get("cycle"' not in block
+    assert "validator_fail_index = next(" in block
+    assert 'event.get("stage") == "validate_file"' in block
+    assert 'event.get("result") == "fail"' in block
+    assert "planning_restart_index = next(" in block
+    assert 'event.get("stage") == "planning"' in block
+    assert "transition_history" not in block
     assert 'stage_prompt_records(project, "planning")' in block
 
 
