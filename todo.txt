@@ -387,6 +387,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate probe 24 Dynamic Handoff session-policy evidence.
+    - 2026-10-07 full live rerun reached [23/46] workflow-mixed PASS, then probe 24 failed because
+      main_role's two successful model.result session ids were not identical.
+    - Runtime session_policy=main still reuses the primary AIClient; AIClient preserves the existing session id on normal resume.
+    - A different second id is therefore acceptable only when the run proves controlled technical recovery:
+      the old session was actually resumed, runner.recovery used retry_mode=recover, and runner.session/fresh records the old id.
+    - Updated probe 24 to accept identical ids directly or this strictly evidenced controlled rotation only.
+    - Unproven session changes still FAIL; role-session policy uses the same rule.
+    - Deterministic positive/negative regressions added. Real-Qwen probe 24 rerun required before checking this item.
+
 [ ] Revalidate api-long-http after semantic closed-loop fixture fix.
     - 2026-10-07 full live rerun: [30/46] api-502 PASS, [31/46] api-429 PASS, [32/46] api-503 PASS.
     - Probe 33 api-long-http failed in the 429 case after transport recovery because execute returned a normal AI result
