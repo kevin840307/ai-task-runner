@@ -3944,3 +3944,41 @@ def test_dynamic_session_policy_rejects_unproven_rotation(tmp_path):
             ["session-a", "session-b"],
             "main",
         )
+
+
+def test_custom_dynamic_workflow_has_no_route_to_generated_child_name():
+    from runner.workflow.loader import load_workflow
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        workflow = Path(directory) / "custom.yaml"
+        workflow.write_text(live.CUSTOM_DYNAMIC_WORKFLOW, encoding="utf-8")
+        loaded = {str(item["name"]): item for item in load_workflow(workflow)}
+
+    assert "routes" not in loaded["validate_file"]
+
+
+def test_api_recovery_fail_route_is_scoped_to_api_fixture():
+    from runner.workflow.loader import load_workflow
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        project = root / "api"
+        project.mkdir()
+        api_workflow, _armed, _active = live._prepare_api_recovery_fixture(project)
+        api_loaded = {
+            str(item["name"]): item for item in load_workflow(api_workflow)
+        }
+
+        custom_workflow = root / "custom.yaml"
+        custom_workflow.write_text(
+            live.CUSTOM_DYNAMIC_WORKFLOW,
+            encoding="utf-8",
+        )
+        custom_loaded = {
+            str(item["name"]): item for item in load_workflow(custom_workflow)
+        }
+
+    assert api_loaded["validate_file"]["routes"] == {"fail": "execute"}
+    assert "routes" not in custom_loaded["validate_file"]
