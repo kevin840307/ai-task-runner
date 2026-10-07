@@ -3996,3 +3996,30 @@ def test_validator_failure_routing_uses_durable_stage_event_order_not_bounded_tr
     assert "planning_restart_index = next(" in block
     assert 'event.get("stage") == "planning"' in block
     assert "transition_history" not in block
+
+
+def test_max_cycle_supervisor_preflight_runs_real_cli_without_resume_loop(tmp_path: Path):
+    config = replace(
+        settings(tmp_path),
+        command=_fake_qwen_command(tmp_path),
+        run_timeout=30,
+        agent_timeout=10,
+        planning_timeout=10,
+    )
+
+    live.max_cycle_supervisor_preflight(config, tmp_path)
+
+    project = tmp_path / "max-cycle-supervisor-preflight"
+    state = live.read_state(project)
+    assert state["stage"] == "max_cycles_exhausted"
+    assert state["completed"] is False
+    assert not (project / ".ai-task-runner" / "runner-process.json").exists()
+    assert not (project / ".ai-task-runner" / "run.lock").exists()
+    assert not (project / ".ai-task-runner" / "worker-heartbeat").exists()
+
+
+def test_loop_detection_probe_includes_supervisor_semantic_stop_preflight():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    assert "max_cycle_supervisor_preflight(settings, run_root)" in source
+    assert "Supervisor restarted an exhausted semantic loop" in source
+    assert "runner.retry" in source
