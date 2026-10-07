@@ -387,6 +387,17 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate probe 28 validator-failure-routing after evidence-oracle fix.
+    - 2026-10-07 live rerun: [23/46] workflow-mixed PASS, [24/46] dynamic-handoff-session-policy PASS,
+      [25/46] custom-dynamic-producer PASS, [26/46] review-failure-routing PASS and [27/46] complete-closed-loop PASS.
+    - Probe 28 completed the requested RECOVERED artifact but failed its post-check because it required the bounded
+      transition_history to still contain validate_file FAIL -> planning.
+    - transition_history is intentionally capped at MAX_TRANSITION_HISTORY and is a UI/runtime trace, not an unbounded audit log.
+    - Replaced that live oracle with durable event ordering: validate_file runner.stage finish(result=fail) must occur before
+      a later planning runner.stage start; the existing second Planning prompt must also contain shared Validator failure feedback.
+    - Strict artifact/result checks remain unchanged. FlowEngine routing behavior is unchanged.
+    - Deterministic regression now forbids probe 28 from depending on transition_history. Real-Qwen probe 28 rerun required.
+
 [ ] Revalidate probe 25 custom Dynamic Producer after fixture-scope regression fix.
     - 2026-10-07 live rerun: [24/46] dynamic-handoff-session-policy PASS, then probe 25 failed before execution.
     - Root cause was a harness-only regression from the API-recovery closed-loop patch: CUSTOM_DYNAMIC_WORKFLOW.validate_file
