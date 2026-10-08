@@ -387,6 +387,27 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate true 24H soak after malformed Windows write-path recovery fix.
+    - 2026-10-08 true 24H gate progressed through [39/46] timeout-recovery-budget PASS, then soak run
+      soak-api-502-0028 failed closed at max_cycles_exhausted (cycle=5) instead of hanging forever.
+    - Uploaded project evidence proves HTTP/API recovery was not the final failure: every Execute invocation returned PASS,
+      but Python validation repeatedly reported missing health.txt.
+    - The project contained the requested bytes under one malformed filename instead of project_root/health.txt:
+      C<U+F03A><U+F05C>Users<U+F05C>...<U+F05C>soak-api-502-0028<U+F05C>health.txt.
+      runner.stage changed_files recorded the same malformed path.
+    - Root cause: agent/Windows path transport can flatten an absolute Windows write target into a single filename by
+      replacing ':' and '\\' with private-use glyphs. The model then reports success while the requested relative artifact is absent.
+    - Production Runner fix, not live-only:
+      * managed Qwen rules now require project-relative write paths and explicitly forbid constructing/flattening absolute paths;
+      * already-generated QWEN.md files migrate away from the legacy absolute-write-root wording;
+      * protected-path instructions are slash-normalized to avoid feeding backslash-heavy Windows paths to the agent;
+      * StageExecutor detects the observed flattened-drive filename signature, deletes the malformed artifact, converts that
+        apparent PASS into a technical ERROR, and uses the existing Fresh recovery envelope before semantic routing can advance.
+    - Deterministic regressions cover legacy QWEN.md migration and malformed-write cleanup/retry -> correct relative artifact.
+    - The earlier semantic-stop fix behaved correctly here: max_cycles_exhausted returned exit=1 and did not enter Supervisor
+      infinite --resume. This 24H attempt is a valid release-blocking functional failure, not a hang.
+    - Full deterministic CI plus real-Qwen short gate/high-density soak should be revalidated before restarting the true 24H gate.
+
 [x] 2026-10-07 full real-Qwen short confidence gate revalidated all soak-driven fixes.
     - Source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False.
     - Full [01/46] through [46/46] gate PASS.
