@@ -8,7 +8,12 @@ from pathlib import Path
 from ...bootstrap import current_runtime
 from ...config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError, is_transient_error
-from ...workspace import changed_project_files, project_manifest
+from ...workspace import (
+    changed_project_files,
+    is_malformed_windows_path_filename,
+    project_manifest,
+)
+from ...utils import remove_path
 from ...runtime import events as progress
 from ...runtime.events import sleep_with_heartbeat
 from ..contracts import (
@@ -237,10 +242,27 @@ class StageExecutor:
         if before is not None:
             changed = changed_project_files(ctx.root, ctx.work, before)
             if changed:
-                result = replace(
-                    result,
-                    changed_files=list(dict.fromkeys([*result.changed_files, *changed])),
-                )
+                malformed = [
+                    relative
+                    for relative in changed
+                    if is_malformed_windows_path_filename(relative)
+                ]
+                if malformed:
+                    for relative in malformed:
+                        remove_path(ctx.root / relative)
+                    error = RunnerError(
+                        "malformed absolute-path filename created; "
+                        "use project-relative paths only: " + ", ".join(malformed)
+                    )
+                    result = replace(
+                        StageResult.error_result(stage.name, error),
+                        changed_files=malformed,
+                    )
+                else:
+                    result = replace(
+                        result,
+                        changed_files=list(dict.fromkeys([*result.changed_files, *changed])),
+                    )
 
         try:
             violations = self.hooks.after(action, tokens)
