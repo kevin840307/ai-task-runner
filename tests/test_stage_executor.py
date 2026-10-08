@@ -558,3 +558,42 @@ def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path,
         and event["previous_session"] == "session-before-partial-write"
         for event in records
     )
+
+
+def test_executor_recovers_from_flattened_windows_absolute_path_filename(
+    tmp_path,
+    monkeypatch,
+):
+    malformed = "C\uf03a\uf05cUsers\uf05ckevin\uf05cproject\uf05chealth.txt"
+
+    class WritesMalformedThenCorrect(Stage):
+        mode = "write"
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                (ctx.root / malformed).write_text("wrong path", encoding="utf-8")
+                return StageResult(self.name, "pass", output="created")
+            (ctx.root / "health.txt").write_text("ok", encoding="utf-8")
+            return StageResult(self.name, "pass", output="created")
+
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = 1
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = WritesMalformedThenCorrect()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 2
+    assert not (tmp_path / malformed).exists()
+    assert (tmp_path / "health.txt").read_text(encoding="utf-8") == "ok"
+    assert sleeps == [0.0]
