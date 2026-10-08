@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -107,6 +108,21 @@ def tree_manifest(root: Path, excluded: set[str]) -> dict[str, tuple[str, str | 
 
 def project_manifest(root: Path, work: Path) -> dict[str, tuple[str, str | None]]:
     return tree_manifest(root, excluded_dirs(root, work))
+
+
+def is_malformed_windows_path_filename(path: Path | str) -> bool:
+    """Detect a Windows absolute path accidentally flattened into one filename.
+
+    Qwen/Windows tool transport has been observed replacing ':' and '\\' with
+    private-use glyphs U+F03A/U+F05C, producing names such as
+    'C<U+F03A><U+F05C>Users<U+F05C>...<U+F05C>health.txt' under project_root.
+    Such a file can never satisfy a project-relative deliverable and must not be
+    treated as successful Stage work.
+    """
+    value = Path(path).as_posix()
+    if "/" in value or len(value) < 4:
+        return False
+    return bool(re.match(r"^[A-Za-z]\uf03a\uf05c", value)) and value.count("\uf05c") >= 2
 
 
 def changed_project_files(
@@ -240,12 +256,17 @@ def _without_managed_block(text: str, start_marker: str, end_marker: str) -> str
 def ensure_instruction_file(root: Path, filename: str) -> Path:
     path = root / filename
     existing = io_path(path).read_text(encoding="utf-8") if io_path(path).exists() else ""
+    relative_write_rules = (
+        "- The current working directory is the project root. For every project write, "
+        "use a project-relative path such as `health.txt` or `src/app.py`.\n"
+        "- Never construct, encode, flatten, or use an absolute filesystem path as a filename."
+    )
     if RUNNER_RULE_MARKER not in existing:
         existing = existing.rstrip() + f"""
 
 {RUNNER_RULE_MARKER}
 - You may read files outside this project when needed.
-- You may write, create, rename, or delete files only under: {root}
+{relative_write_rules}
 - Never modify runner state directly.
 - Python owns task order and completion state.
 - Execute only the current task supplied by the runner.
@@ -253,6 +274,23 @@ def ensure_instruction_file(root: Path, filename: str) -> Path:
 - Complete the task with the smallest clean change possible; avoid unnecessary code, files, abstractions, dependencies, refactoring, or unrelated modifications.
 - Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
 """
+    else:
+        # Migrate already-generated instruction files so a long-lived project
+        # does not retain the old Windows absolute-write-path wording.
+        prefixes = (
+            "- You may write, create, rename, or delete files only under: ",
+        )
+        lines = existing.splitlines()
+        migrated: list[str] = []
+        replaced = False
+        for line in lines:
+            if any(line.startswith(prefix) for prefix in prefixes):
+                if not replaced:
+                    migrated.extend(relative_write_rules.splitlines())
+                    replaced = True
+                continue
+            migrated.append(line)
+        existing = "\n".join(migrated)
     existing = _without_managed_block(
         existing, PROJECT_INSTRUCTIONS_START, PROJECT_INSTRUCTIONS_END
     )
@@ -303,6 +341,7 @@ __all__ = [
     "ensure_instruction_file",
     "excluded_dirs",
     "instruction_text",
+    "is_malformed_windows_path_filename",
     "is_technical_artifact",
     "project_manifest",
     "protected_paths",
