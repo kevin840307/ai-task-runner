@@ -386,7 +386,7 @@ class SafetyHook:
         protected = self._protected(root)
         if not protected:
             return ""
-        paths = "\n".join(f"- {path}" for path in protected)
+        paths = "\n".join(f"- {path.as_posix()}" for path in protected)
         return (
             "Safety rules:\n"
             "- Never modify runner state, runner source, validator inputs, backend-owned rules, or other protected paths listed below.\n"
