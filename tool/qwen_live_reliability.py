@@ -3183,7 +3183,9 @@ def dynamic_handoff_final_recovery_probe(
         "dynamic-final-recovery-probe",
         prompt=DYNAMIC_FINAL_RECOVERY_PROMPT,
     )
-    workflow = _prepare_dynamic_final_recovery_workflow(project)
+    workflow = _prepare_dynamic_final_recovery_workflow(
+        project, DYNAMIC_HANDOFF_WORKFLOW
+    )
     code = run_command(
         runner_command(
             settings,
