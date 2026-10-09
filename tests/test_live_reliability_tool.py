@@ -2851,6 +2851,72 @@ def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runti
     assert "resume=True" in stop_block
 
 
+def test_dynamic_final_recovery_fixture_preserves_fresh_ai_validation(tmp_path):
+    project = tmp_path / "case"
+    project.mkdir()
+    workflow = live._prepare_dynamic_final_recovery_workflow(project)
+    stages = load_workflow(workflow)
+    by_name = {stage["name"]: stage for stage in stages}
+    assert by_name["approval_gate"]["routes"] == {
+        "pass": "final_validate",
+        "fail": "coordinator",
+    }
+    assert by_name["final_validate"]["type"] == "ai_validator"
+    assert by_name["final_validate"]["session_policy"] == "fresh"
+    assert by_name["final_validate"]["routes"]["fail"] == "coordinator"
+    assert "approval_gate" in by_name["coordinator"]["targets"]
+    assert "final_validate" not in by_name["coordinator"]["targets"]
+
+
+def test_dynamic_final_approval_gate_always_fails_first_then_checks_evidence(tmp_path):
+    project = tmp_path / "case"
+    project.mkdir()
+    live._prepare_dynamic_final_recovery_workflow(project)
+    gate = project / "final_approval_gate.py"
+    (project / "final_recovery.txt").write_text("READY", encoding="utf-8")
+    (project / "final_approval.txt").write_text("RECOVERED", encoding="utf-8")
+    first = subprocess.run(
+        [sys.executable, str(gate)], cwd=project, capture_output=True, text=True
+    )
+    assert first.returncode == 1
+    assert "VALIDATION_FAILED" in first.stdout
+    assert not (project / "final_approval.txt").exists()
+    second = subprocess.run(
+        [sys.executable, str(gate)], cwd=project, capture_output=True, text=True
+    )
+    assert second.returncode == 1
+    (project / "final_approval.txt").write_text("RECOVERED", encoding="utf-8")
+    third = subprocess.run(
+        [sys.executable, str(gate)], cwd=project, capture_output=True, text=True
+    )
+    assert third.returncode == 0
+    assert "VALIDATION_PASSED" in third.stdout
+
+
+def test_dynamic_final_recovery_event_order_is_fail_closed(monkeypatch, tmp_path):
+    def evidence(events):
+        monkeypatch.setattr(live, "runner_events", lambda project: [
+            {"type": "runner.stage", "stage": stage,
+             "action": action, "result": result}
+            for stage, action, result in events
+        ])
+        monkeypatch.setattr(live, "stage_result_sessions",
+                            lambda project, stage: ["fresh-session"])
+        live._assert_dynamic_final_recovery_events(tmp_path)
+
+    valid = [
+        ("approval_gate", "finish", "fail"),
+        ("coordinator", "start", ""),
+        ("implementer", "start", ""),
+        ("approval_gate", "finish", "pass"),
+        ("final_validate", "finish", "pass"),
+    ]
+    evidence(valid)
+    for missing in (1, 2, 3, 4):
+        with pytest.raises(RuntimeError):
+            evidence([item for i, item in enumerate(valid) if i != missing])
+
+
 def test_dynamic_handoff_api_recovery_arms_after_initial_coordinator_pass():
     source = Path(live.__file__).read_text(encoding="utf-8")
     start = source.index("def dynamic_handoff_api_recovery_probe")
@@ -3671,7 +3737,7 @@ def test_fail_start_launcher_reuses_canonical_0_5h_gate_and_allows_override():
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 34 %*' in text
+    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 44 %*' in text
     assert "--high-density" not in text
     assert "--example-smoke-matrix-project" not in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
