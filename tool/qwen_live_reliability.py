@@ -3070,9 +3070,9 @@ print("VALIDATION_PASSED")
 '''
 
 
-def _prepare_dynamic_final_recovery_workflow(project: Path) -> Path:
+def _prepare_dynamic_final_recovery_workflow(\n    project: Path, source_workflow: Path = DYNAMIC_HANDOFF_WORKFLOW\n) -> Path:
     """Adapt only this live fixture; preserve the shipped Final AI Validator."""
-    source = DYNAMIC_HANDOFF_WORKFLOW.read_text(encoding="utf-8")
+    source = source_workflow.read_text(encoding="utf-8")
     target = "      - final_validate\\n"
     if source.count(target) != 1 or source.count("  final_validate:\\n") != 1:
         raise RuntimeError("shipped Dynamic Handoff approval-gate insertion point changed")
