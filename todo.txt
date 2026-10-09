@@ -1440,7 +1440,7 @@ RELEASE GATES
       This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
       while still reaching independent fresh-session final validation.
 
-[x] Dynamic Handoff extended live matrix 43-46.
+[ ] Dynamic Handoff extended live matrix 43-46.
     - Final real-Qwen evidence on source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False:
       * [43/46] PASS dynamic-handoff-role-matrix.
       * [44/46] PASS dynamic-handoff-final-recovery.
@@ -1505,7 +1505,17 @@ RELEASE GATES
     - [x] 43 dynamic-handoff-role-matrix:
       real bundled dynamic_handoff.yaml across ambiguous requirement, existing failure/debug and verify-only scenarios;
       assert the expected specialist participates and record coordinator/role usage.
-    - [x] 44 dynamic-handoff-final-recovery:
+    - 2026-10-09 newly reproduced probe 44 failure: the first final_validate FAIL
+      was only encouraged by prompt text, not guaranteed by fixture state.
+      The run may legitimately finish with an immediate PASS; that does not prove
+      the FAIL -> coordinator recovery contract. Reopened probe 44 for live retest.
+    - New live-only fixture inserts approval_gate ahead of the original fresh
+      AI final_validate. First gate call deterministically FAILs and removes any
+      premature approval; FAIL routes to coordinator, a writer must recreate
+      final_approval.txt, second gate must PASS, then real fresh Final AI must PASS.
+      Strict event ordering and artifact checks retained; shipped workflow unchanged.
+    - Fail-start launcher now defaults to --start-probe 44 and supports %* overrides.
+    - [ ] 44 dynamic-handoff-final-recovery:
       real bundled Final Validator must FAIL once, route back through coordinator, repair missing approval evidence,
       then PASS and complete.
     - [x] 45 dynamic-handoff-api-recovery:
