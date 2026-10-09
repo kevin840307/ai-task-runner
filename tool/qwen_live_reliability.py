@@ -3075,34 +3075,61 @@ def _prepare_dynamic_final_recovery_workflow(
     source_workflow: Path = DYNAMIC_HANDOFF_WORKFLOW,
 ) -> Path:
     """Adapt only this live fixture; preserve the shipped Final AI Validator."""
-    source = source_workflow.read_text(encoding="utf-8")
-    target = "      - final_validate\\n"
-    if source.count(target) != 1 or source.count("  final_validate:\\n") != 1:
-        raise RuntimeError("shipped Dynamic Handoff approval-gate insertion point changed")
-    source = source.replace(target, "      - approval_gate\\n", 1)
-    gate = """  approval_gate:
-    type: command
-    label: Deterministic Final Approval Gate
-    command: "{python} final_approval_gate.py"
-    result_kind: validation
-    routes:
-      pass: final_validate
-      fail: coordinator
+    try:
+        import yaml
+        data = yaml.safe_load(source_workflow.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise RuntimeError(f"cannot load shipped Dynamic Handoff workflow: {error}") from error
+    if not isinstance(data, dict):
+        raise RuntimeError("shipped Dynamic Handoff workflow must be a mapping")
+    stages = data.get("stages")
+    flow = data.get("flow")
+    if not isinstance(stages, dict) or not isinstance(flow, list):
+        raise RuntimeError("shipped Dynamic Handoff workflow shape changed")
+    coordinator = stages.get("coordinator")
+    final_validate = stages.get("final_validate")
+    if (
+        not isinstance(coordinator, dict)
+        or not isinstance(final_validate, dict)
+        or final_validate.get("type") != "ai_validator"
+        or final_validate.get("session_policy") != "fresh"
+    ):
+        raise RuntimeError("shipped Dynamic Handoff final validation contract changed")
+    targets = coordinator.get("targets")
+    if not isinstance(targets, list) or targets.count("final_validate") != 1:
+        raise RuntimeError("shipped Dynamic Handoff coordinator target contract changed")
+    if flow.count("final_validate") != 1:
+        raise RuntimeError("shipped Dynamic Handoff flow contract changed")
 
-"""
-    source = source.replace("  final_validate:\\n", gate + "  final_validate:\\n", 1)
-    flow = "  - final_validate\\n"
-    if source.count(flow) != 1:
-        raise RuntimeError("shipped Dynamic Handoff flow insertion point changed")
-    source = source.replace(flow, "  - approval_gate\\n  - final_validate\\n", 1)
+    coordinator["targets"] = [
+        "approval_gate" if target == "final_validate" else target
+        for target in targets
+    ]
+    stages["approval_gate"] = {
+        "type": "command",
+        "label": "Deterministic Final Approval Gate",
+        "command": "{python} final_approval_gate.py",
+        "result_kind": "validation",
+        "routes": {
+            "pass": "final_validate",
+            "fail": "coordinator",
+        },
+    }
+    final_index = flow.index("final_validate")
+    flow.insert(final_index, "approval_gate")
+
     (project / "final_approval_gate.py").write_text(
         DYNAMIC_FINAL_APPROVAL_GATE, encoding="utf-8"
     )
     workflow = project / "dynamic-final-recovery-workflow.yaml"
-    workflow.write_text(source, encoding="utf-8")
+    workflow.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
     from runner.workflow.loader import load_workflow
-    stages = load_workflow(workflow)
-    names = [str(stage.get("name") or "") for stage in stages]
+
+    loaded = load_workflow(workflow)
+    names = [str(stage.get("name") or "") for stage in loaded]
     if names[-2:] != ["approval_gate", "final_validate"]:
         raise RuntimeError(f"dynamic final recovery fixture topology drifted: {names!r}")
     return workflow
