@@ -3039,41 +3039,135 @@ def dynamic_handoff_role_matrix_probe(
 
 
 DYNAMIC_FINAL_RECOVERY_PROMPT = """Create final_recovery.txt containing exactly READY.
-Do not create final_approval.txt until final validation explicitly reports that final_approval.txt is missing.
-Completion requires final_approval.txt to contain exactly RECOVERED.
-When final validation reports the missing approval, create it and then validate again.
+Completion also requires final_approval.txt containing exactly RECOVERED.
+Use the Dynamic Handoff approval gate: if it rejects the first attempt, repair
+the missing approval evidence and revisit the gate before final AI validation.
+Do not modify validation.py or workflow configuration.
 """
+
+DYNAMIC_FINAL_APPROVAL_GATE = '''from pathlib import Path
+
+root = Path.cwd()
+marker = root / ".ai-task-runner" / "final-approval-gate-first-fail"
+approval = root / "final_approval.txt"
+primary = root / "final_recovery.txt"
+marker.parent.mkdir(parents=True, exist_ok=True)
+if not marker.exists():
+    # The first semantic FAIL is a deterministic fixture condition, not an
+    # instruction asking the model to intentionally leave work incomplete.
+    # Discard premature approval so recovery must repair real missing evidence.
+    approval.unlink(missing_ok=True)
+    marker.write_text("rejected\\n", encoding="utf-8")
+    print("VALIDATION_FAILED: final approval must be repaired after the gate")
+    raise SystemExit(1)
+if not primary.is_file() or primary.read_text(encoding="utf-8-sig").strip() != "READY":
+    print("VALIDATION_FAILED: final_recovery.txt must contain READY")
+    raise SystemExit(1)
+if not approval.is_file() or approval.read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+    print("VALIDATION_FAILED: final_approval.txt must contain RECOVERED")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
+def _prepare_dynamic_final_recovery_workflow(project: Path) -> Path:
+    """Adapt only this live fixture; preserve the shipped Final AI Validator."""
+    source = DYNAMIC_HANDOFF_WORKFLOW.read_text(encoding="utf-8")
+    target = "      - final_validate\\n"
+    if source.count(target) != 1 or source.count("  final_validate:\\n") != 1:
+        raise RuntimeError("shipped Dynamic Handoff approval-gate insertion point changed")
+    source = source.replace(target, "      - approval_gate\\n", 1)
+    gate = """  approval_gate:
+    type: command
+    label: Deterministic Final Approval Gate
+    command: "{python} final_approval_gate.py"
+    result_kind: validation
+    routes:
+      pass: final_validate
+      fail: coordinator
+
+"""
+    source = source.replace("  final_validate:\\n", gate + "  final_validate:\\n", 1)
+    flow = "  - final_validate\\n"
+    if source.count(flow) != 1:
+        raise RuntimeError("shipped Dynamic Handoff flow insertion point changed")
+    source = source.replace(flow, "  - approval_gate\\n  - final_validate\\n", 1)
+    (project / "final_approval_gate.py").write_text(
+        DYNAMIC_FINAL_APPROVAL_GATE, encoding="utf-8"
+    )
+    workflow = project / "dynamic-final-recovery-workflow.yaml"
+    workflow.write_text(source, encoding="utf-8")
+    from runner.workflow.loader import load_workflow
+    stages = load_workflow(workflow)
+    names = [str(stage.get("name") or "") for stage in stages]
+    if names[-2:] != ["approval_gate", "final_validate"]:
+        raise RuntimeError(f"dynamic final recovery fixture topology drifted: {names!r}")
+    return workflow
+
+
+def _assert_dynamic_final_recovery_events(project: Path) -> None:
+    """Fail closed on actual semantic order; never infer recovery from final files."""
+    events = [
+        (str(event.get("stage") or ""), str(event.get("action") or ""),
+         str(event.get("result") or ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage"
+    ]
+    failed = next(
+        (i for i, e in enumerate(events)
+         if e == ("approval_gate", "finish", "fail")), None
+    )
+    if failed is None:
+        raise RuntimeError("deterministic approval gate did not produce its initial FAIL")
+    passed = next(
+        (i for i, e in enumerate(events)
+         if i > failed and e == ("approval_gate", "finish", "pass")), None
+    )
+    if passed is None:
+        raise RuntimeError("approval gate never PASSed after recovery")
+    if not any(e == ("coordinator", "start", "") for e in events[failed + 1:passed]):
+        raise RuntimeError("approval FAIL did not route back through coordinator")
+    if not any(
+        e[0] in {"implementer", "debugger"} and e[1] == "start"
+        for e in events[failed + 1:passed]
+    ):
+        raise RuntimeError("approval FAIL recovered without a write-capable specialist")
+    if not any(
+        e == ("final_validate", "finish", "pass") for e in events[passed + 1:]
+    ):
+        raise RuntimeError("fresh Final AI Validator did not PASS after approval recovery")
+    sessions = stage_result_sessions(project, "final_validate")
+    if not sessions or not all(sessions):
+        raise RuntimeError("Final AI Validator session evidence is missing")
 
 
 def dynamic_handoff_final_recovery_probe(
     settings: Settings,
     root: Path,
 ) -> dict[str, object]:
-    """Prove real bundled Final Validator FAIL routes back through coordinator and recovers."""
+    """Prove deterministic FAIL -> coordinator repair -> real fresh Final AI PASS."""
     project = create_project(
         root,
         "dynamic-final-recovery-probe",
         prompt=DYNAMIC_FINAL_RECOVERY_PROMPT,
     )
+    workflow = _prepare_dynamic_final_recovery_workflow(project)
     code = run_command(
         runner_command(
             settings,
             project,
-            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            workflow=workflow,
             ai_only=True,
-                max_cycles=12,
+            max_cycles=12,
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
     starts = _assert_dynamic_run_completed(project, code)
-    if not observed_stage_result(project, "final_validate", "fail"):
-        raise RuntimeError("bundled final_validate never produced the required initial FAIL")
-    if not observed_stage_result(project, "final_validate", "pass"):
-        raise RuntimeError("bundled final_validate never PASSed after coordinator recovery")
-    if starts.count("final_validate") < 2 or starts.count("coordinator") < 2:
+    _assert_dynamic_final_recovery_events(project)
+    if starts.count("approval_gate") < 2 or starts.count("coordinator") < 2:
         raise RuntimeError(
-            f"final validation recovery did not route back through coordinator: {starts!r}"
+            f"approval recovery did not route back through coordinator: {starts!r}"
         )
     if (project / "final_recovery.txt").read_text(encoding="utf-8-sig").strip() != "READY":
         raise RuntimeError("final recovery primary artifact mismatch")
@@ -3082,6 +3176,7 @@ def dynamic_handoff_final_recovery_probe(
     return {
         "stage_starts": starts,
         "coordinator_runs": starts.count("coordinator"),
+        "approval_gate_runs": starts.count("approval_gate"),
         "final_validate_runs": starts.count("final_validate"),
     }
 
