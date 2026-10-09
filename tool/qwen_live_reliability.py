@@ -3078,6 +3078,8 @@ def _prepare_dynamic_final_recovery_workflow(
     try:
         import yaml
         data = yaml.safe_load(source_workflow.read_text(encoding="utf-8"))
+    except ImportError as error:
+        raise RuntimeError("probe-44 fixture requires PyYAML") from error
     except (OSError, yaml.YAMLError) as error:
         raise RuntimeError(f"cannot load shipped Dynamic Handoff workflow: {error}") from error
     if not isinstance(data, dict):
