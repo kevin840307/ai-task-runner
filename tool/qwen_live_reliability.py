@@ -3070,7 +3070,10 @@ print("VALIDATION_PASSED")
 '''
 
 
-def _prepare_dynamic_final_recovery_workflow(\n    project: Path, source_workflow: Path = DYNAMIC_HANDOFF_WORKFLOW\n) -> Path:
+def _prepare_dynamic_final_recovery_workflow(
+    project: Path,
+    source_workflow: Path = DYNAMIC_HANDOFF_WORKFLOW,
+) -> Path:
     """Adapt only this live fixture; preserve the shipped Final AI Validator."""
     source = source_workflow.read_text(encoding="utf-8")
     target = "      - final_validate\\n"
