@@ -1440,7 +1440,22 @@ RELEASE GATES
       This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
       while still reaching independent fresh-session final validation.
 
-[ ] Dynamic Handoff extended live matrix 43-46.
+[x] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-09 real-Qwen rerun on source revision 37eee687e620c05c3115099efd572676a176c1c3, DIRTY=False:
+      * [44/46] PASS dynamic-handoff-final-recovery.
+        stage_starts=[coordinator, verifier, coordinator, implementer, coordinator,
+        approval_gate, coordinator, implementer, coordinator, verifier, coordinator,
+        approval_gate, final_validate]; coordinator_runs=6; approval_gate_runs=2;
+        final_validate_runs=1.
+      * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503;
+        proxy_failures=2, proxy_successes_before_outage=1, proxy_successes=17.
+      * [46/46] PASS dynamic-handoff-stop-resume;
+        checkpoint_role=implementer, checkpoint_stage=workflow_route,
+        checkpoint_position=3; resumed run reached final_validate.
+      * This closes the reopened probe-44 fixture issue: deterministic approval FAIL
+        routed through coordinator and a write-capable specialist, then the unchanged
+        fresh Final AI Validator completed successfully.
+      * Current fail-start launcher defaults to --start-probe 44 for focused reruns.
     - Final real-Qwen evidence on source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False:
       * [43/46] PASS dynamic-handoff-role-matrix.
       * [44/46] PASS dynamic-handoff-final-recovery.
@@ -1515,7 +1530,7 @@ RELEASE GATES
       final_approval.txt, second gate must PASS, then real fresh Final AI must PASS.
       Strict event ordering and artifact checks retained; shipped workflow unchanged.
     - Fail-start launcher now defaults to --start-probe 44 and supports %* overrides.
-    - [ ] 44 dynamic-handoff-final-recovery:
+    - [x] 44 dynamic-handoff-final-recovery:
       real bundled Final Validator must FAIL once, route back through coordinator, repair missing approval evidence,
       then PASS and complete.
     - [x] 45 dynamic-handoff-api-recovery:
@@ -1530,7 +1545,7 @@ RELEASE GATES
       plus existing transient-proxy and stop/resume primitives.
     - Exact implementation HEAD 443d173f81a5ff586c54293d928f9addf57eaf92 passed Windows Python,
       Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37471026044.
-    - Real-Qwen PASS evidence is required before checking these items.
+    - Real-Qwen PASS evidence requirement satisfied by the 2026-10-09 44-46 rerun above.
 
 
 [x] High-density soak green
