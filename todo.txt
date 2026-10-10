@@ -387,6 +387,22 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate API-recovery soak semantic repair budget after soak-api-502-0454.
+    - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
+      timeout-recovery-budget PASS, then soak-api-502-0454 failed closed.
+    - Durable evidence: validate_file FAILed at cycle=4 with missing health.txt and
+      routes.fail=execute, but the probe was configured max_cycles=4.
+    - Because warmup -> arm -> execute -> validate_file already consumes cycles 1-4,
+      cycle 5 was max_cycles_exhausted before the routed execute repair could run.
+    - This is a live-harness contract bug, not evidence of Runner/Supervisor failure:
+      semantic stop correctly returned exit=1 and did not auto-resume forever.
+    - Fix: API recovery probe now uses API_RECOVERY_MAX_CYCLES=8, preserving a hard
+      bound while allowing two execute -> validate semantic repair rounds after the
+      initial validation attempt. Validator strictness and runtime retry/session logic
+      are unchanged.
+    - Deterministic regression locks the eight-cycle bounded repair budget.
+    - fail-start now resumes at probe 40 (soak) for the focused real-Qwen rerun.
+
 [ ] Revalidate true 24H soak after malformed Windows write-path recovery fix.
     - 2026-10-08 true 24H gate progressed through [39/46] timeout-recovery-budget PASS, then soak run
       soak-api-502-0028 failed closed at max_cycles_exhausted (cycle=5) instead of hanging forever.
@@ -1567,7 +1583,7 @@ RELEASE GATES
     - no unbounded state/log/history growth
     - frozen Workflow/Prompt resources stable across Resume
 
-[x] Current HEAD deterministic CI green
+[ ] Current HEAD deterministic CI green
     - HEAD 1d46986eca94df83dc2c107f55dae797509bba3d.
     - GitHub Actions runs 37939807355 and 37939813893 completed successfully.
     - This includes the probe-44 deterministic fixture/oracle regression and the explicit shipped-workflow dependency check.
