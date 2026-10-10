@@ -1567,6 +1567,11 @@ RELEASE GATES
     - no unbounded state/log/history growth
     - frozen Workflow/Prompt resources stable across Resume
 
+[x] Current HEAD deterministic CI green
+    - HEAD 1d46986eca94df83dc2c107f55dae797509bba3d.
+    - GitHub Actions runs 37939807355 and 37939813893 completed successfully.
+    - This includes the probe-44 deterministic fixture/oracle regression and the explicit shipped-workflow dependency check.
+
 [ ] Final release cleanup
     - rerun deterministic CI after any soak-driven fix
     - rebuild/commit Studio bundle after final Studio source changes
