@@ -40,6 +40,7 @@ BUILTIN_FINAL_AI_RUNS = 3
 BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
 LIVE_RETRY_DELAY_SECONDS = 2
 LIVE_RETRY_MAX_DELAY_SECONDS = 30
+API_RECOVERY_MAX_CYCLES = 8  # 4 initial Stages + 2 bounded execute/validate repair rounds
 
 PROBE_ORDER = (
     "ownership-lock",
@@ -4535,7 +4536,7 @@ def api_recovery_probe(
                 settings,
                 project,
                 workflow=workflow,
-                max_cycles=4,
+                max_cycles=API_RECOVERY_MAX_CYCLES,
             ),
             **options,
         )
