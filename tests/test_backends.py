@@ -4,22 +4,27 @@ from pathlib import Path
 
 import pytest
 
-from runner.backends.registry import (
-    BACKENDS,
+from runner.agent import (
+    AIClient,
+    AIError,
+    BackendError,
+    BackendResult,
+    BaseBackend,
+    available_models,
     backend_names,
     configure_backend_args,
+    configure_model_args,
+    create_ai_client,
     create_backend,
+    is_session_invalid_error,
+    is_transient_service_error,
     sandbox_supported,
+    split_command,
 )
-from runner.ai.contracts import BackendResult
-from runner.backends.base import BaseBackend, split_command
-from runner.ai.client import AIClient
-from runner.ai.errors import AIError, BackendError
-from runner.ai.session import is_transient_service_error
-from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
-from runner.backends.qwen import QwenBackend, ensure_qwen_rules
+from runner.agent.backend import BACKENDS
+from runner.agent.opencode import OpenCodeBackend, ensure_opencode_rules
+from runner.agent.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
-
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert backend_names() == ("qwen", "opencode")
@@ -27,8 +32,8 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert BACKENDS["opencode"] is OpenCodeBackend
     assert issubclass(QwenBackend, BaseBackend)
     assert issubclass(OpenCodeBackend, BaseBackend)
-    assert QwenBackend.__module__ == "runner.backends.qwen"
-    assert OpenCodeBackend.__module__ == "runner.backends.opencode"
+    assert QwenBackend.__module__ == "runner.agent.qwen"
+    assert OpenCodeBackend.__module__ == "runner.agent.opencode"
 
     qwen = create_backend("qwen", sys.executable, tmp_path, [])
     opencode = create_backend("opencode", sys.executable, tmp_path, [])
@@ -75,13 +80,13 @@ def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatc
 
 def test_core_has_no_backend_specific_command_logic():
     root = Path(__file__).resolve().parents[1]
-    source = (root / "runner" / "task_runner.py").read_text(encoding="utf-8")
+    source = (root / "runner" / "workflow_runner.py").read_text(encoding="utf-8")
     assert "[\"--resume\"," not in source
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
     assert 'backend == "opencode"' not in source
     assert 'backend == "qwen"' not in source
-    assert 'runner.backends.qwen' not in source
+    assert 'runner.agent.qwen' not in source
 
 
 def test_sandbox_arguments_are_owned_by_the_backend_adapter():
@@ -94,6 +99,11 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
         ["--sandbox"],
         sandbox=True,
     ).count("-s") == 0
+
+
+def test_session_invalid_classifier_accepts_qwen_missing_saved_session_message():
+    assert is_session_invalid_error("No saved session found")
+    assert is_session_invalid_error("Error: No saved session found for abc-123")
 
 
 def test_transient_service_classifier_excludes_qwen_sandbox_docker_failures():
@@ -223,6 +233,33 @@ def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     assert prompt not in captured["command"]
     assert "--session" in captured["command"]
     assert "--auto" in captured["command"]
+
+
+def test_opencode_models_include_project_config_without_cli_discovery(tmp_path, monkeypatch):
+    (tmp_path / "opencode.json").write_text(
+        json.dumps({
+            "model": "lmstudio/default-model",
+            "provider": {
+                "lmstudio": {
+                    "models": {
+                        "qwen3.5-9b": {},
+                        "qwen3.5-4b": {},
+                    }
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("configured OpenCode models must not wait for CLI discovery")
+
+    monkeypatch.setattr("runner.agent.opencode.run_process", fail_if_called)
+
+    models = available_models("opencode", tmp_path)
+
+    assert "lmstudio/default-model" in models
+    assert "lmstudio/qwen3.5-9b" in models
+    assert "lmstudio/qwen3.5-4b" in models
 
 
 def test_opencode_json_parser_uses_text_events_and_error_message(tmp_path):
@@ -608,7 +645,7 @@ def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
 
 def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
     captured = {}
@@ -636,7 +673,7 @@ def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
 
 def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, [])
     monkeypatch.setattr(
@@ -650,7 +687,7 @@ def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
 
 def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
     calls = []
@@ -670,7 +707,7 @@ def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
 
 
 def test_opencode_runtime_permission_environment_reaches_process_runner(tmp_path, monkeypatch):
-    import runner.backends.base as base_module
+    import runner.agent.backend as base_module
     from runner.runtime.process_runner import ProcessResult
 
     backend = OpenCodeBackend(sys.executable, tmp_path, [])
@@ -686,3 +723,239 @@ def test_opencode_runtime_permission_environment_reaches_process_runner(tmp_path
     assert result.return_code == 0
     permission = json.loads(captured["environment"]["OPENCODE_CONFIG_CONTENT"])["permission"]
     assert permission["external_directory"] == "deny"
+
+
+
+def test_backend_adapter_owns_model_override(monkeypatch):
+    assert configure_model_args(
+        "qwen",
+        ["--existing", "--model", "old-model", "--model=older-model"],
+        "new-model",
+    ) == ["--existing", "--model", "new-model"]
+
+    class CustomBackend(BaseBackend):
+        name = "custom-model"
+        default_command = "custom-model"
+
+        @classmethod
+        def configure_model_args(cls, extra_args, model):
+            return [*extra_args, f"--chosen-model={model}"]
+
+        def build_command(self, prompt, session_id):
+            return []
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, CustomBackend.name, CustomBackend)
+    assert configure_model_args("custom-model", ["--x"], "m1") == [
+        "--x",
+        "--chosen-model=m1",
+    ]
+
+
+def test_opencode_model_override_uses_shared_backend_adapter_contract():
+    args = configure_model_args(
+        "opencode",
+        ["--auto", "--model", "old", "--model=older"],
+        "provider/new-model",
+    )
+
+    assert args == ["--auto", "--model", "provider/new-model"]
+
+
+def test_future_backend_can_own_model_override_without_core_or_ui_branch(monkeypatch):
+    class FutureBackend(BaseBackend):
+        name = "future-agent"
+        default_command = "future-agent"
+
+        @classmethod
+        def configure_model_args(cls, extra_args, model):
+            return [*extra_args, f"--engine={model}"]
+
+        def build_command(self, prompt, session_id):
+            return []
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, FutureBackend.name, FutureBackend)
+
+    assert configure_model_args("future-agent", ["--x"], "m-next") == [
+        "--x",
+        "--engine=m-next",
+    ]
+
+
+def test_ai_client_backend_override_uses_target_default_command_and_model(tmp_path):
+    from runner.config.runtime import RuntimeConfig
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.session_id = kwargs.get("session_id", "")
+        def set_runtime(self, *args, **kwargs):
+            captured["runtime"] = (args, kwargs)
+
+    config = RuntimeConfig(
+        backend="qwen",
+        command="custom-qwen-command",
+        agent_args=["--model", "global-model"],
+    )
+    create_ai_client(
+        config,
+        tmp_path,
+        backend_override="opencode",
+        model_override="stage-model",
+        constructor=FakeClient,
+    )
+
+    assert captured["backend"] == "opencode"
+    assert captured["command"] is None
+    assert captured["extra_args"].count("--model") == 1
+    assert captured["extra_args"][captured["extra_args"].index("--model") + 1] == "stage-model"
+    assert "--auto" in captured["extra_args"]
+
+
+
+def test_ai_client_reports_effective_model_from_backend_adapter(tmp_path, monkeypatch):
+    class FakeBackend:
+        name = "qwen"
+        base_command = "qwen"
+        root = tmp_path
+        extra_args = ["--model", "stage-model"]
+
+        def configure_runtime(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "runner.agent.client.create_backend",
+        lambda *args, **kwargs: FakeBackend(),
+    )
+
+    client = AIClient(
+        backend="qwen",
+        command=None,
+        root=tmp_path,
+        extra_args=["--model", "stage-model"],
+    )
+
+    assert client.model == "stage-model"
+    client.set_extra_args(["--model", "next-model"])
+    assert client.model == "next-model"
+
+
+def test_backend_catalog_discovers_plugin_backends_before_listing_models(tmp_path, monkeypatch, capsys):
+    import tool.backend_catalog as catalog_tool
+
+    calls = []
+    monkeypatch.setattr(
+        catalog_tool,
+        "discover_plugins",
+        lambda: calls.append("discover"),
+    )
+    monkeypatch.setattr(
+        catalog_tool,
+        "backend_names",
+        lambda: ("qwen", "plugin-backend"),
+    )
+    monkeypatch.setattr(
+        catalog_tool,
+        "available_models",
+        lambda name, root: [f"{name}/model-a"],
+    )
+
+    assert catalog_tool.main([
+        "--project-root", str(tmp_path),
+        "--models",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == ["discover"]
+    assert payload["backends"] == ["qwen", "plugin-backend"]
+    assert payload["models"] == {
+        "qwen": ["qwen/model-a"],
+        "plugin-backend": ["plugin-backend/model-a"],
+    }
+
+
+def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+    import runner.agent.opencode as opencode_module
+
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    (qwen_home / "settings.json").write_text(
+        """{
+  // user selectable models
+  "model": {"name": "qwen-user"},
+  "modelProviders": {
+    "openai": [
+      {"id": "qwen-a"},
+      {"id": "qwen-b"}
+    ]
+  }
+}""",
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    (project / ".qwen").mkdir(parents=True)
+    (project / ".qwen" / "settings.json").write_text(
+        '{"modelProviders":{"openai":[{"id":"qwen-project"}]}}',
+        encoding="utf-8",
+    )
+    system_defaults = tmp_path / "system-defaults.json"
+    system_settings = tmp_path / "system-settings.json"
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    monkeypatch.setenv("QWEN_CODE_SYSTEM_DEFAULTS_PATH", str(system_defaults))
+    monkeypatch.setenv("QWEN_CODE_SYSTEM_SETTINGS_PATH", str(system_settings))
+    monkeypatch.setenv("QWEN_MODEL", "qwen-env")
+
+    # Project modelProviders replaces the lower-precedence user catalog.
+    assert available_models("qwen", project) == [
+        "qwen-env",
+        "qwen-project",
+        "qwen-user",
+    ]
+
+    # System settings have the highest settings-file precedence.
+    system_settings.write_text(
+        '{"model":{"name":"qwen-system-current"},"modelProviders":{"openai":[{"id":"qwen-system"}]}}',
+        encoding="utf-8",
+    )
+    assert available_models("qwen", project) == [
+        "qwen-env",
+        "qwen-system",
+        "qwen-system-current",
+    ]
+
+    monkeypatch.setattr(
+        opencode_module,
+        "run_process",
+        lambda *args, **kwargs: ProcessResult(
+            "provider/model-b\nprovider/model-a\nprovider/model-b\n",
+            0,
+        ),
+    )
+    assert available_models("opencode", project) == [
+        "provider/model-a",
+        "provider/model-b",
+    ]
+
+    qwen = QwenBackend(
+        sys.executable,
+        project,
+        configure_model_args("qwen", [], "qwen-project"),
+    )
+    qwen_command = qwen.build_command("prompt", "")
+    assert qwen_command[qwen_command.index("--model") + 1] == "qwen-project"
+
+    opencode = OpenCodeBackend(
+        sys.executable,
+        project,
+        configure_model_args("opencode", ["--auto"], "provider/model-a"),
+    )
+    opencode_command = opencode.build_command("prompt", "")
+    assert opencode_command[opencode_command.index("--model") + 1] == "provider/model-a"

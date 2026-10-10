@@ -10,10 +10,8 @@ import yaml
 from pathlib import Path
 
 try:
-    from .workflow_storage import project_package_prompt_dir, project_package_workflow_dir
     from .server_support import background_process_kwargs
 except ImportError:
-    from workflow_storage import project_package_prompt_dir, project_package_workflow_dir
     from server_support import background_process_kwargs
 
 RUNTIME_DIR = ".ai-task-runner"
@@ -101,7 +99,6 @@ class WorkflowBuilderMixin:
         self,
         request: str,
         backend: str = "",
-        folder: str = "",
         filename: str = "",
     ) -> dict:
         """Start a brand-new validated draft job in the UI-owned workspace.
@@ -118,7 +115,6 @@ class WorkflowBuilderMixin:
             request = str(request or "").strip()
             if not request:
                 raise ValueError("Workflow requirements are required")
-            folder = self._normalize_workflow_folder(folder)
             filename = str(filename or "").strip()
             if not filename:
                 raise ValueError("Workflow filename is required")
@@ -160,7 +156,6 @@ class WorkflowBuilderMixin:
                 "message": "Preparing Workflow Builder",
                 "request": request,
                 "backend": str(backend or ""),
-                "folder": folder,
                 "filename": filename,
                 "created_at": time.time(),
                 "updated_at": time.time(),
@@ -202,7 +197,7 @@ class WorkflowBuilderMixin:
                 status.update({"state": "failed", "message": str(exc), "process_log": str(process_log), "updated_at": time.time()})
                 self._atomic_json(job_root / "status.json", status)
                 raise
-            return {"ok": True, "job_id": job_id, "state": "queued", "message": "Workflow Builder started. No Workflow has been created yet.", "workspace": str(job_root), "folder": folder, "filename": filename}
+            return {"ok": True, "job_id": job_id, "state": "queued", "message": "Workflow Builder started. No Workflow has been created yet.", "workspace": str(job_root), "filename": filename}
 
     def studio_generate_active(self) -> dict:
         """Return the single active Generator job so a reopened UI can resume it."""
@@ -221,7 +216,6 @@ class WorkflowBuilderMixin:
                 "active": True,
                 "request": str(status.get("request") or ""),
                 "backend": str(status.get("backend") or ""),
-                "folder": str(status.get("folder") or ""),
                 "filename": str(status.get("filename") or ""),
                 "workspace": str(self._builder_job_root(job_id)),
             }
@@ -267,9 +261,9 @@ class WorkflowBuilderMixin:
             for row in prompt_rows:
                 if not isinstance(row, dict):
                     continue
-                name = str(row.get("name") or "").strip().replace("\\", "/")
-                if not name or name.startswith("/") or ".." in Path(name).parts:
-                    raise ValueError("Invalid generated Prompt name")
+                name = str(row.get("name") or "").strip()
+                if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", name, re.IGNORECASE):
+                    raise ValueError("Generated Prompt must be one Markdown file name")
                 target = (prompts / name).resolve()
                 if not self._is_within(target, prompts):
                     raise ValueError("Generated Prompt is outside the draft Prompt directory")
@@ -339,30 +333,28 @@ class WorkflowBuilderMixin:
             result["draft"] = self._builder_preview(job_root, status)
             return result
 
-    def studio_generate_save(self, project: Path | None, job_id: str, folder: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
+    def studio_generate_save(self, project: Path | None, job_id: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
         with self._builder_lock, self._edit_lock:
-            # Publishing mutates a real Workflow/Prompt asset, so keep the existing
-            # global edit guard here even though draft generation itself is independent.
-            self._require_editable()
+            # Active runs already use frozen Workflow/Prompt snapshots.
+            # Publishing this asset therefore affects only future runs.
             job_root = self._builder_job_root(job_id)
             status = self._read_json(job_root / "status.json") or {}
             if status.get("state") != "ready":
                 raise ValueError("Workflow Builder draft is not ready to Save")
-            raw, folder, destination, output_workflow, output_prompt_dir = self._workflow_output_paths(project, folder, filename, destination)
+            raw, _folder, scope, output_workflow, asset_root = self._workflow_output_paths(project, "", filename, destination)
             if output_workflow.exists():
                 raise ValueError(f"Workflow already exists: {output_workflow.name}")
             draft_workflow, draft_prompt_dir = self._builder_apply_edits(job_root, status, workflow_content, prompt_rows)
             self._builder_validate_draft(job_root, draft_workflow, draft_prompt_dir)
-            command = [sys.executable, str(self.repo_root / "workflow_builder" / "publish.py"), "--project-root", str(job_root), "--draft-workflow", str(draft_workflow), "--draft-prompt-dir", str(draft_prompt_dir), "--output-workflow", str(output_workflow), "--output-prompt-dir", str(output_prompt_dir)]
+            command = [sys.executable, str(self.repo_root / "workflow_builder" / "publish.py"), "--project-root", str(job_root), "--draft-workflow", str(draft_workflow), "--draft-prompt-dir", str(draft_prompt_dir), "--output-asset-root", str(asset_root), "--workflow-name", raw]
             result_process = self._process_module.run(command, cwd=self.repo_root, capture_output=True, text=True, timeout=75)
             if result_process.returncode != 0:
                 raise ValueError("Workflow draft publish failed: " + (result_process.stdout or result_process.stderr or "")[-12000:])
-            scope = "custom" if destination == "custom" else "project"
             item = self._studio_item(output_workflow, scope, "workflow")
             file_data = self.studio_read(item["id"], project)
             shutil.rmtree(job_root, ignore_errors=True)
             self._builder_clear_active(job_id)
-            return {"ok": True, "workflow": str(output_workflow), "prompt_dir": str(output_prompt_dir), "folder": folder, "item": item, "file": file_data, "message": f"Workflow {folder}/{raw} saved"}
+            return {"ok": True, "workflow": str(output_workflow), "asset_dir": str(asset_root), "item": item, "file": file_data, "message": f"Workflow {raw} saved"}
 
     def studio_generate_cancel(self, job_id: str) -> dict:
         with self._builder_lock:

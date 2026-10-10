@@ -7,10 +7,10 @@ from types import SimpleNamespace
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState
 from runner.workflow.loader import load_workflow
-from runner.workflow.pipeline import Pipeline
+from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage, stage_catalog
-from runner.workflow.stages.contracts import StageContext, StageResult
-from runner.workflow.stages.executor import StageExecutor
+from runner.workflow.stages import StageContext, StageResult
+from runner.workflow.execution import StageExecutor
 
 
 @dataclass(frozen=True)
@@ -18,13 +18,15 @@ class ExtensionSpec:
     name: str
     status: str = "Extension"
     message: str = "OK"
-    retry: int | None = 0
 
 
 class ExtensionStage:
-    """Test-only Stage proving ordinary extensions need no Core branch."""
+    """Test-only Stage proving ordinary extensions need no Core/UI branch."""
 
     spec_class = ExtensionSpec
+    ui_title = "Contract Extension"
+    ui_description = "Test plugin Stage"
+    ui_category = "testing"
     result_kind = "generic"
     mode = "readonly"
     actor = "extension"
@@ -32,14 +34,12 @@ class ExtensionStage:
     run_state = ""
     track_changes = False
     tolerate_restored_changes = False
-    skip_on_error = False
     fresh_session_on_start = False
 
     def __init__(self, spec: ExtensionSpec) -> None:
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
-        self.retry = spec.retry
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         return StageResult(self.name, "pass", output=self.spec.message)
@@ -66,8 +66,8 @@ def _context(tmp_path: Path, workflow: list[dict]) -> StageContext:
         goal="goal",
         workflow=workflow,
         workflow_explicit=True,
-        same_session_retries=0,
-        stage_retry_delay=0,
+        stage_retries=0,
+        retry_delay=0,
     )
     return StageContext(
         config=config,
@@ -102,7 +102,10 @@ flow:
 
         catalog = stage_catalog()
         assert name in catalog
-        assert {item["name"] for item in catalog[name]["options"]} >= {"status", "message", "retry"}
+        assert catalog[name]["title"] == "Contract Extension"
+        assert catalog[name]["description"] == "Test plugin Stage"
+        assert catalog[name]["category"] == "testing"
+        assert {item["name"] for item in catalog[name]["options"]} >= {"status", "message"}
 
         workflow = load_workflow(workflow_file)
         stage = create_stage(workflow[0])
@@ -110,7 +113,7 @@ flow:
         assert stage.spec.message == "EXTENSION_OK"
 
         ctx = _context(tmp_path, workflow)
-        Pipeline(ctx, workflow).run(StageExecutor(Hooks()))
+        FlowEngine(ctx).run(StageExecutor(Hooks()))
 
         assert ctx.state.completed is True
         assert ctx.state.workflow_position == 1
@@ -122,7 +125,6 @@ flow:
 class TaskProducerSpec:
     name: str
     status: str = "Task Producer"
-    retry: int | None = 0
     produces: str = "tasks"
 
 
@@ -137,14 +139,12 @@ class TaskProducerStage:
     run_state = ""
     track_changes = False
     tolerate_restored_changes = False
-    skip_on_error = False
     fresh_session_on_start = False
 
     def __init__(self, spec: TaskProducerSpec) -> None:
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
-        self.retry = spec.retry
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         return StageResult(
@@ -155,11 +155,26 @@ class TaskProducerStage:
                 "tasks": [
                     {
                         "title": "Extension task",
-                        "description": "Exercise a task-scoped Stage from a custom producer.",
+                        "description": "Exercise producer-defined child Stages.",
                         "deliverable": "Completed extension task",
-                        "acceptance_criteria": ["The task-scoped Stage completes."],
+                        "acceptance_criteria": ["The producer-defined child Workflow completes."],
                     }
-                ]
+                ],
+                "stages": [
+                    {
+                        "name": "child_execute",
+                        "type": "contract_task_consumer",
+                        "message": "TASK_CONSUMED",
+                        "task_id": "c01-t001",
+                    },
+                    {
+                        "name": "child_done",
+                        "type": "contract_task_consumer",
+                        "message": "TASK_COMPLETE",
+                        "task_id": "c01-t001",
+                        "task_complete": True,
+                    },
+                ],
             },
         )
 
@@ -167,7 +182,7 @@ class TaskProducerStage:
         return result
 
 
-def test_registered_task_producer_drives_task_scope_without_plan_or_core_changes(tmp_path):
+def test_registered_task_producer_expands_its_own_child_workflow_without_core_changes(tmp_path):
     producer_name = "contract_task_producer"
     consumer_name = "contract_task_consumer"
     register_stage(producer_name, TaskProducerStage)
@@ -180,25 +195,106 @@ stages:
   discover:
     type: {producer_name}
     produces: tasks
-  execute:
+  after:
     type: {consumer_name}
-    message: TASK_CONSUMED
+    message: PARENT_CONTINUED
 flow:
   - discover
-  - stage: execute
-    scope: task
+  - after
 """.lstrip(),
             encoding="utf-8",
         )
 
         workflow = load_workflow(workflow_file)
         ctx = _context(tmp_path, workflow)
-        Pipeline(ctx, workflow).run(StageExecutor(Hooks()))
+        FlowEngine(ctx).run(StageExecutor(Hooks()))
 
         assert ctx.state.completed is True
         assert len(ctx.state.tasks) == 1
         assert ctx.state.tasks[0].status == "completed"
         assert ctx.state.current == 1
+        names = [item["name"] for item in ctx.state.expanded_workflow]
+        assert names[0] == "discover"
+        assert names[1].endswith("__child_execute")
+        assert names[2].endswith("__child_done")
+        assert names[3] == "after"
     finally:
         STAGE_REGISTRY.pop(producer_name, None)
         STAGE_REGISTRY.pop(consumer_name, None)
+
+
+
+def test_explicit_produces_overrides_ai_profile_result_kind():
+    from runner.workflow.registry import stage_result_kind
+
+    assert stage_result_kind({
+        "name": "generator",
+        "type": "base",
+        "profile": "execute",
+        "produces": "stages",
+    }) == "stages"
+    assert stage_result_kind({
+        "name": "generator",
+        "type": "base",
+        "profile": "review",
+        "produces": "tasks",
+    }) == "tasks"
+
+def test_ai_stage_catalog_exposes_profile_metadata_for_studio():
+    catalog = stage_catalog()
+    profiles = catalog["base"]["profiles"]
+
+    assert set(profiles) == {"generic", "execute", "review"}
+    assert profiles["generic"]["defaults"]["prompt"] == "common/generic.md"
+    assert profiles["execute"]["defaults"]["prompt"] == "common/execution.md"
+    assert profiles["review"]["defaults"]["prompt"] == "common/review.md"
+    assert profiles["review"]["defaults"]["error_policy"] == {"retries": 2}
+    assert profiles["review"]["defaults"]["max_failures"] == 3
+
+
+
+def test_catalog_exposes_dynamic_output_metadata_for_special_stages():
+    catalog = stage_catalog()
+    assert catalog["plan"]["result_kind"] == "tasks"
+    assert catalog["plan"]["dynamic_output"] is True
+    assert catalog["base"]["dynamic_output"] is False
+
+
+
+def test_stage_catalog_backend_and_model_are_registry_driven(monkeypatch):
+    from runner.agent.backend import BACKENDS, BaseBackend, BackendResult
+    from runner.workflow.registry import workflow_catalog
+
+    class PluginBackend(BaseBackend):
+        name = "plugin-backend"
+        default_command = "plugin-backend"
+        def build_command(self, prompt, session_id):
+            return []
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, PluginBackend.name, PluginBackend)
+    catalog = workflow_catalog()
+    options = {
+        item["name"]: item
+        for item in catalog["stage_types"]["base"]["options"]
+    }
+
+    assert options["backend"]["type"] == "enum"
+    assert "qwen" in options["backend"]["values"]
+    assert "opencode" in options["backend"]["values"]
+    assert "plugin-backend" in options["backend"]["values"]
+    assert options["model"]["type"] == "str"
+
+
+def test_all_ai_backed_stage_catalogs_expose_backend_model_but_command_does_not():
+    catalog = stage_catalog()
+
+    for stage_type in ("base", "plan", "handoff", "ai_validator"):
+        names = {item["name"] for item in catalog[stage_type]["options"]}
+        assert {"backend", "model", "session_policy"} <= names
+
+    command_names = {item["name"] for item in catalog["command"]["options"]}
+    assert "backend" not in command_names
+    assert "model" not in command_names
+    assert "session_policy" not in command_names

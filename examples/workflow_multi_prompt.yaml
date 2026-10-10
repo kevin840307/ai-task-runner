@@ -1,9 +1,32 @@
 stages:
-  run_prompt:
-    type: task
+  step_a:
+    type: base
+    profile: execute
+    prompt: prompts/step_a.md
 
-  review:
-    type: review
+  review_a:
+    type: base
+    profile: review
+    prompt: prompts/review_a.md
+    routes:
+      fail: step_a
+
+  step_b:
+    type: base
+    profile: execute
+    prompt: prompts/step_b.md
+
+  review_b:
+    type: base
+    profile: review
+    prompt: prompts/review_b.md
+    routes:
+      fail: step_b
+
+  step_c:
+    type: base
+    profile: execute
+    prompt: prompts/step_c.md
 
   validate_file:
     type: command
@@ -11,22 +34,9 @@ stages:
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
-  - stage: run_prompt
-    prompt: prompts/step_a.md
-
-  - stage: review
-    prompt: prompts/review_a.md
-    retry: 1
-    skip: true
-
-  - stage: run_prompt
-    prompt: prompts/step_b.md
-
-  - stage: review
-    prompt: prompts/review_b.md
-    skip: false
-
-  - stage: run_prompt
-    prompt: prompts/step_c.md
-
+  - step_a
+  - review_a
+  - step_b
+  - review_b
+  - step_c
   - validate_file

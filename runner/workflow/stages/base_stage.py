@@ -6,18 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from ...ai.client import configure_ai_client, create_ai_client
-from ...ai.structured_output import structured_call
-from ...errors import ConfigurationError
-from ...prompts.context import build_stage_prompt_context
-from ...prompts.loader import render_prompt
-from ...prompts.protocols import append_stage_protocol
-from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
+from ...agent import backend_names, configure_ai_client, create_ai_client, sandbox_supported, structured_call
+from ...config.defaults import MAX_MODEL_NAME_CHARS
+from ...errors import ConfigurationError, RunnerError
+from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
+from ..profiles import profile_names, profile_semantics
+from ..contracts import MODE_READONLY, StageContext, StageMode, StageResult
+
+AIStageProfile = Literal["generic", "execute", "review"]
+SessionPolicy = Literal["auto", "main", "role", "fresh"]
+
+EXECUTION_TARGET_FIELDS = ("backend", "model")
+EXECUTION_TARGET_SESSION_FIELD = "session_policy"
+EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES = frozenset({"main"})
+
 
 ResultParser = Callable[[str, StageContext], Any]
 @dataclass(frozen=True)
 class BaseStageSpec:
     name: str
+    profile: AIStageProfile = "generic"
     status: str = "AI Stage"
     prompt: str = ""
     instructions: str = ""
@@ -28,36 +36,98 @@ class BaseStageSpec:
     allow_project_read: bool = False
     parser: ResultParser | None = None
     structured_retries: int = 1
-    structured_fresh_retries: int = 0
-    retry: int | None = None
     runs: int | None = None
     required_passes: int | None = None
     readonly_safety: str = ""
     track_changes: bool = False
     tolerate_restored_changes: bool = False
     timeout: float | None = None
-    session_key: str = ""
-    fresh_session_each_run: bool = False
-    fresh_session_on_start: bool = False
-    skip_on_error: bool = False
+    backend: str = ""
+    model: str = ""
+    session_policy: SessionPolicy = "auto"
     produces: str = ""
+    max_failures: int | None = None
 
 
 
 class BaseStage:
+    ui_title = "AI Stage"
+    ui_description = "General AI Stage; choose Generic, Execute, or Review behavior profile."
+    ui_category = "build"
+    ui_constraints = {
+        "execution_target": {
+            "paired_fields": list(EXECUTION_TARGET_FIELDS),
+            "session_policy_field": EXECUTION_TARGET_SESSION_FIELD,
+            "incompatible_session_policies": sorted(
+                EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES
+            ),
+        }
+    }
     """Perform one or more AI interactions and return only resulting facts."""
 
     result_kind = "generic"
+    protocol_kind = ""
     parser_name = ""
     backend_mode = "runtime"
     timeout_config_attr = "agent_timeout"
-    retry_config_attr = ""
     runs_config_attr = ""
     required_passes_config_attr = ""
     client_cache_key = ""
     result_flag = ""
 
+    @staticmethod
+    def validate_execution_target(
+        name: str,
+        backend: str = "",
+        model: str = "",
+        session_policy: SessionPolicy = "auto",
+    ) -> None:
+        backend = str(backend or "").strip()
+        model = str(model or "").strip()
+        if bool(backend) != bool(model):
+            raise ConfigurationError(
+                f"AI Stage {name} backend and model must be configured together"
+            )
+        if backend and backend not in backend_names():
+            raise ConfigurationError(f"AI Stage {name} backend is unsupported: {backend}")
+        if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
+            raise ConfigurationError(f"AI Stage {name} model is invalid")
+        if (
+            backend
+            and model
+            and session_policy in EXECUTION_TARGET_INCOMPATIBLE_SESSION_POLICIES
+        ):
+            raise ConfigurationError(
+                f"AI Stage {name} cannot combine backend/model override "
+                f"with session_policy={session_policy}"
+            )
+
     def __init__(self, spec: BaseStageSpec) -> None:
+        profile = str(spec.profile or "generic")
+        self.validate_execution_target(
+            spec.name,
+            spec.backend,
+            spec.model,
+            spec.session_policy,
+        )
+        if profile not in profile_names():
+            raise ConfigurationError(
+                f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
+            )
+        semantics = profile_semantics(profile)
+        if semantics == "execute":
+            self.result_kind = "task"
+        elif semantics == "review":
+            from ..results import PARSERS
+            if spec.parser is None:
+                spec = replace(spec, parser=PARSERS["review"])
+            self.result_kind = "review"
+            self.backend_mode = "review"
+            self.timeout_config_attr = "planning_timeout"
+            self.client_cache_key = "review_client"
+            self.result_flag = "completed"
+        if spec.produces:
+            self.result_kind = spec.produces
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
@@ -65,14 +135,11 @@ class BaseStage:
         self.run_state = spec.run_state
         self.mode = spec.mode
         self.actor = spec.actor
-        self.retry = spec.retry
-        self.skip_on_error = spec.skip_on_error
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
-        self.fresh_session_on_start = spec.fresh_session_on_start
         if spec.parser is None and self.parser_name:
-            from ..result_parsers import PARSERS
+            from ..results import PARSERS
             self.spec = replace(spec, parser=PARSERS[self.parser_name])
         self._completed_runs: list[StageResult] = []
         self._run_pending = False
@@ -81,7 +148,7 @@ class BaseStage:
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         """Perform one Stage attempt. Retry/Hook/Event are owned by StageExecutor."""
         if not self.enabled(ctx):
-            return StageResult(self.name, "pass", output="STAGE_SKIPPED", skipped=True)
+            return StageResult(self.name, "pass", output="STAGE_DISABLED")
 
         runs = self._configured_int(ctx, self.spec.runs, self.runs_config_attr, 1)
         required = self._configured_int(
@@ -95,7 +162,7 @@ class BaseStage:
         self._attempt_checkpoint = len(self._completed_runs)
         while len(self._completed_runs) < runs:
             client = self._client(ctx)
-            if self.spec.fresh_session_each_run and not self._run_pending:
+            if self.spec.session_policy == "fresh" and not self._run_pending:
                 client.session_id = ""
             self._run_pending = True
             self._completed_runs.append(self._run_once(ctx, previous, client))
@@ -136,13 +203,6 @@ class BaseStage:
             return "pass"
         return "pass" if data[self.result_flag] is True else "fail"
 
-    def retry_limit(self, ctx: StageContext) -> int | None:
-        if self.spec.retry is not None:
-            return self.spec.retry
-        if self.retry_config_attr:
-            return int(getattr(ctx.config, self.retry_config_attr))
-        return None
-
     def discard_attempt_results(self) -> None:
         """Discard votes produced by an attempt rejected by execution hooks."""
         del self._completed_runs[self._attempt_checkpoint :]
@@ -151,38 +211,45 @@ class BaseStage:
     def _run_once(self, ctx: StageContext, previous: StageResult | None, client) -> StageResult:
         spec = self.spec
         backend_mode = self._backend_mode(ctx)
-        configure_ai_client(
-            client,
-            ctx.config,
-            backend_mode,
-            allow_project_read=spec.allow_project_read,
-        )
+        if client is ctx.ai_client:
+            configure_ai_client(
+                client,
+                ctx.config,
+                backend_mode,
+                allow_project_read=spec.allow_project_read,
+            )
+        else:
+            client.set_runtime(
+                backend_mode,
+                allow_project_read=spec.allow_project_read,
+                sandbox=getattr(ctx.config, "sandbox", False),
+            )
         try:
             prompt = self._prompt(ctx, previous, client)
 
+            def ask(text: str) -> str:
+                raw = self._ask(ctx, client, text)
+                # A successful model response proves this session already saw
+                # the Stage context even if structured parsing later rejects
+                # the response. Checkpoint transport state here so technical
+                # retry can send only the shared recovery delta.
+                self._remember_prompt(ctx, client)
+                self._persist_session(ctx, client)
+                return raw
+
             def call() -> tuple[str, Any]:
                 if spec.parser is None:
-                    raw = self._ask(ctx, client, prompt)
+                    raw = ask(prompt)
                     return raw, raw
                 data = structured_call(
                     prompt,
                     lambda text: spec.parser(text, ctx),
-                    lambda text: self._ask(ctx, client, text),
+                    ask,
                     retries=spec.structured_retries,
-                    fresh_ask=lambda: self._structured_fresh_ask(ctx, client, previous),
-                    fresh_retries=spec.structured_fresh_retries,
                 )
                 return "", data
 
-            output, data = client.run_with_retry(
-                call,
-                spec.status,
-                ctx.execution.label or spec.detail,
-                ctx.config.api_retry_wait,
-                ctx.config.api_retry_max_wait,
-                max_elapsed=ctx.config.api_retry_timeout,
-            )
-            self._remember_prompt(ctx, client)
+            output, data = call()
             status = self.result_status(data)
         finally:
             if client is ctx.ai_client:
@@ -198,20 +265,6 @@ class BaseStage:
             return int(explicit)
         return int(getattr(ctx.config, field)) if field else int(default)
 
-    def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
-        client.session_id = ""
-        original = self._original_prompt(ctx, previous)
-        original_mode = ctx.execution.retry_mode
-        try:
-            ctx.execution.retry_mode = "recover"
-            control = self._shared_control_prompt(ctx, previous, client)
-        finally:
-            ctx.execution.retry_mode = original_mode
-        prompt = "Stage instructions:\n" + original.rstrip()
-        if control:
-            prompt += "\n\n" + control
-        return self._ask(ctx, client, self._with_immutable_protocol(prompt))
-
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
             prompt,
@@ -220,6 +273,9 @@ class BaseStage:
             timeout=self._timeout(ctx),
         )
 
+    def has_session(self, ctx: StageContext) -> bool:
+        return bool(getattr(self._client(ctx), "session_id", ""))
+
     def reset_session(self, ctx: StageContext) -> str:
         """Drop only this Stage's AI session so unrelated sessions remain reusable."""
         client = self._client(ctx)
@@ -227,11 +283,13 @@ class BaseStage:
         client.session_id = ""
         if client is ctx.ai_client:
             ctx.state.ai_session_id = ""
+        elif self._uses_stage_session():
+            ctx.state.stage_sessions.pop(self.name, None)
         contracts = ctx.scratch.get("prompt_contracts")
-        if isinstance(contracts, set) and previous:
-            ctx.scratch["prompt_contracts"] = {
-                item for item in contracts if not (isinstance(item, tuple) and len(item) == 2 and item[1] == previous)
-            }
+        if isinstance(contracts, dict) and previous:
+            identity = self._prompt_contract_identity()
+            if contracts.get(identity) == previous:
+                contracts.pop(identity, None)
         ctx.save_state()
         return previous
 
@@ -243,8 +301,49 @@ class BaseStage:
     def _backend_mode(self, ctx: StageContext) -> str:
         return self.backend_mode
 
+    def _uses_stage_session(self) -> bool:
+        return self.spec.session_policy == "role" or (
+            self.spec.session_policy == "auto"
+            and bool(str(self.spec.backend or "").strip() or str(self.spec.model or "").strip())
+        )
+
     def _client(self, ctx: StageContext):
-        key = self.spec.session_key or self.client_cache_key
+        policy = self.spec.session_policy
+        if policy == "main":
+            return ctx.ai_client
+
+        if policy in {"role", "fresh"} or self._uses_stage_session():
+            key = f"stage_session:{self.name}"
+            client = ctx.scratch.get(key)
+            if client is None:
+                backend_override = str(self.spec.backend or "").strip()
+                if (
+                    backend_override
+                    and bool(getattr(ctx.config, "sandbox", False))
+                    and not sandbox_supported(backend_override)
+                ):
+                    raise ConfigurationError(
+                        f"AI Stage {self.name} backend does not support sandbox mode: {backend_override}"
+                    )
+                client = create_ai_client(
+                    ctx.config,
+                    ctx.root,
+                    ctx.work / "debug",
+                    mode=self._backend_mode(ctx),
+                    timeout=self._timeout(ctx),
+                    allow_project_read=self.spec.allow_project_read,
+                    backend_override=backend_override,
+                    model_override=str(self.spec.model or "").strip(),
+                    session_id=(
+                        ctx.state.stage_sessions.get(self.name, "")
+                        if self._uses_stage_session()
+                        else ""
+                    ),
+                )
+                ctx.scratch[key] = client
+            return client
+
+        key = self.client_cache_key
         if not key:
             return ctx.ai_client
         client = ctx.scratch.get(key)
@@ -258,6 +357,18 @@ class BaseStage:
             )
             ctx.scratch[key] = client
         return client
+
+    def _persist_session(self, ctx: StageContext, client) -> None:
+        session_id = str(getattr(client, "session_id", "") or "")
+        if self._uses_stage_session():
+            if session_id:
+                ctx.state.stage_sessions[self.name] = session_id
+            else:
+                ctx.state.stage_sessions.pop(self.name, None)
+            ctx.save_state()
+        elif client is ctx.ai_client and session_id:
+            ctx.state.ai_session_id = session_id
+            ctx.save_state()
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
         original = self._original_prompt(ctx, previous)
@@ -344,6 +455,15 @@ class BaseStage:
             last_output = str(getattr(task, "last_output", "") or "").strip()
             if last_output:
                 lines.append("executor_evidence:\n" + last_output[-2500:])
+        if mode == "continue" and previous is not None and previous.stage != self.name:
+            evidence = str(previous.output or "").strip()
+            if not evidence and previous.data:
+                try:
+                    evidence = json.dumps(previous.data, ensure_ascii=False)
+                except TypeError:
+                    evidence = str(previous.data)
+            if evidence:
+                lines.append("source_evidence:\n" + evidence[-2500:])
         if error:
             lines.append("previous_error: " + error[-2000:])
         if feedback:
@@ -375,7 +495,7 @@ class BaseStage:
         # Structured AI stages keep their semantic verdict in StageResult.data.
         # Their output may intentionally be empty, so top-level rollback must
         # transport reason/missing_items from data instead of relying on output.
-        if previous is not None and previous.status in {"fail", "replan"}:
+        if previous is not None and previous.status == "fail":
             data = previous.data if isinstance(previous.data, dict) else {}
             if previous.kind == "review" and data.get("completed") is False:
                 reason = str(data.get("reason") or "").strip()
@@ -398,7 +518,7 @@ class BaseStage:
                         + json.dumps(missing, ensure_ascii=False)[-2500:]
                     )
 
-        if previous is not None and previous.status in {"fail", "error", "replan"}:
+        if previous is not None and previous.status in {"fail", "error"}:
             detail = str(previous.error or previous.output or "").strip()
             if detail:
                 parts.append(f"{previous.stage}: {detail[-2000:]}")
@@ -408,12 +528,31 @@ class BaseStage:
         session = str(getattr(client, "session_id", "") or "")
         if not session:
             return False
-        return (self.spec.prompt, session) in ctx.scratch.get("prompt_contracts", set())
+        contracts = ctx.scratch.get("prompt_contracts")
+        return (
+            isinstance(contracts, dict)
+            and contracts.get(self._prompt_contract_identity()) == session
+        )
 
     def _remember_prompt(self, ctx: StageContext, client) -> None:
         session = str(getattr(client, "session_id", "") or "")
-        if session and self.spec.prompt:
-            ctx.scratch.setdefault("prompt_contracts", set()).add((self.spec.prompt, session))
+        if not session or not self.spec.prompt:
+            return
+        contracts = ctx.scratch.setdefault("prompt_contracts", {})
+        if not isinstance(contracts, dict):
+            contracts = {}
+            ctx.scratch["prompt_contracts"] = contracts
+        contracts[self._prompt_contract_identity()] = session
+
+    def _prompt_contract_identity(self) -> tuple[str, str, str, str, str]:
+        """Static prompt identity reusable across dynamically generated sibling Stages."""
+        return (
+            str(self.spec.profile or "generic"),
+            str(self.spec.prompt or ""),
+            str(self.spec.instructions or ""),
+            str(self.spec.backend or ""),
+            str(self.spec.model or ""),
+        )
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
@@ -434,7 +573,7 @@ class BaseStage:
 
     def _with_immutable_protocol(self, prompt: str) -> str:
         """Append Runner-owned wire contract after editable Stage instructions."""
-        return append_stage_protocol(prompt, self.result_kind)
+        return append_stage_protocol(prompt, self.protocol_kind or self.result_kind)
 
 
 BaseStage.spec_class = BaseStageSpec

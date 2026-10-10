@@ -20,8 +20,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--project-root", required=True)
     p.add_argument("--draft-workflow", required=True)
     p.add_argument("--draft-prompt-dir", required=True)
-    p.add_argument("--output-workflow", required=True)
-    p.add_argument("--output-prompt-dir", required=True)
+    p.add_argument("--output-asset-root", required=True)
+    p.add_argument("--workflow-name", required=True)
     p.add_argument("--overwrite", action="store_true")
     return p
 
@@ -36,8 +36,8 @@ def main(argv: list[str] | None = None) -> int:
         published = _publish(
             workflow,
             prompts,
-            Path(args.output_workflow),
-            Path(args.output_prompt_dir),
+            Path(args.output_asset_root),
+            args.workflow_name,
             overwrite=args.overwrite,
         )
     except Exception as exc:

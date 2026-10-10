@@ -98,8 +98,6 @@ def _runner_command(workspace: Path, script: Path, extra: Sequence[str]) -> list
         "--loop-context-compress",
         "--project-root",
         str(workspace / "examples"),
-        "--execution-mode",
-        "linear",
         "--script",
         str(script),
         *extra,

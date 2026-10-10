@@ -1,0 +1,339 @@
+"""Reliable execution boundary shared by every Stage."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from ...bootstrap import current_runtime
+from ...config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
+from ...errors import ConfigurationError, RunnerError, is_transient_error
+from ...workspace import (
+    changed_project_files,
+    is_malformed_windows_path_filename,
+    project_manifest,
+)
+from ...utils import remove_path
+from ...runtime import events as progress
+from ...runtime.events import sleep_with_heartbeat
+from ..contracts import (
+    MODE_READONLY,
+    MODE_WRITE,
+    Stage,
+    StageContext,
+    StageExecution,
+    StageResult,
+)
+
+
+@dataclass(frozen=True)
+class StageAction:
+    stage: Stage
+    context: StageContext
+    label: str = ""
+
+    @property
+    def name(self) -> str:
+        return self.stage.name
+
+    @property
+    def root(self) -> Path:
+        return self.context.root.resolve()
+
+    @property
+    def work(self) -> Path:
+        return self.context.work.resolve()
+
+    @property
+    def mode(self) -> str:
+        return getattr(self.stage, "mode", MODE_READONLY)
+
+    @property
+    def actor(self) -> str:
+        return getattr(self.stage, "actor", "stage")
+
+    @property
+    def track_changes(self) -> bool:
+        return self.mode == MODE_WRITE or bool(getattr(self.stage, "track_changes", False))
+
+
+class StageExecutor:
+    """Run a Stage until it returns a semantic result or an unrecoverable error.
+
+    The unattended default is unlimited technical recovery. One Same Session stays
+    bounded: after a small same-session retry budget, the Stage receives a Fresh Session
+    and continues. Retry counters are attempt-local; durable resume only needs to know
+    which Workflow Stage is current.
+    """
+
+    def __init__(self, hooks=None) -> None:
+        self.hooks = hooks or current_runtime().hooks
+
+    def run(
+        self,
+        stage: Stage,
+        ctx: StageContext,
+        previous: StageResult | None = None,
+        *,
+        label: str = "",
+        retry_limit: int | None = None,
+    ) -> StageResult:
+        retry_limit = int(ctx.config.stage_retries if retry_limit is None else retry_limit)
+        unlimited = retry_limit == -1
+        retries_used = 0
+        failures_in_session = 0
+        attempt = 0
+        retry_mode = "initial"
+        previous_error = ""
+        base_retry_delay = float(ctx.config.retry_delay)
+        if unlimited:
+            base_retry_delay = max(1.0, base_retry_delay)
+        retry_max_delay = max(base_retry_delay, float(ctx.config.retry_max_delay))
+        service_delay = base_retry_delay
+
+        run_state = str(getattr(stage, "run_state", "") or "")
+        if run_state:
+            ctx.set_stage(run_state, "")
+        progress.stage_started(StageAction(stage, ctx, label))
+
+        while True:
+            attempt += 1
+            if attempt > 1:
+                progress.set_status(
+                    str(getattr(stage, "status", "") or stage.name),
+                    str(label or getattr(stage, "detail", "") or ""),
+                )
+            ctx.execution = StageExecution(
+                attempt=attempt,
+                retry_mode=retry_mode,
+                previous_error=previous_error,
+                label=label,
+            )
+            result = self._attempt(stage, ctx, previous)
+            if result.status != "error":
+                break
+
+            error = result.error or RunnerError(result.output or "stage error")
+            if isinstance(error, ConfigurationError):
+                raise error
+            previous_error = str(error)
+            ctx.set_stage(str(ctx.state.stage or run_state or stage.name), previous_error)
+            ctx.save_state()
+            if not unlimited and retries_used >= retry_limit:
+                break
+
+            retries_used += 1
+
+            if result.changed_files:
+                # A write-side Stage may fail after leaving valid partial work.
+                # Do not replay the same conversation blindly and do not turn
+                # that recoverable condition into a 24H stop. Preserve disk
+                # state, rotate only this Stage session, and let the shared
+                # recovery envelope inspect/continue from current evidence.
+                self._fresh_session(stage, ctx)
+                failures_in_session = 0
+                retry_mode = "recover"
+                service_delay = base_retry_delay
+                self._announce_recovery(
+                    stage, retry_mode, retries_used, service_delay, previous_error
+                )
+                self._sleep(ctx, service_delay)
+                continue
+
+            failures_in_session, retry_mode = self._next_session_retry(
+                stage, ctx, failures_in_session
+            )
+            retry_delay = service_delay if is_transient_error(error) else base_retry_delay
+            self._announce_recovery(
+                stage, retry_mode, retries_used, retry_delay, previous_error
+            )
+            self._sleep(ctx, retry_delay)
+            if is_transient_error(error) and service_delay:
+                service_delay = min(
+                    retry_max_delay,
+                    max(base_retry_delay, service_delay * 2),
+                )
+            else:
+                service_delay = base_retry_delay
+
+        try:
+            result = stage.finish(ctx, result)
+            from ..results import reduce_result
+
+            # An explicit runtime StageResult kind is authoritative. This keeps
+            # dynamic producers extensible: a plugin/custom Stage may return
+            # kind="tasks" or kind="stages" without duplicating that declaration
+            # on the class. Declarative spec/class kinds only fill generic results.
+            if result.kind == "generic":
+                produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
+                declared = produces or str(
+                    getattr(stage, "result_kind", "generic") or "generic"
+                )
+                if declared != "generic":
+                    result = replace(result, kind=declared)
+            result = reduce_result(ctx, result)
+        except ConfigurationError:
+            raise
+        except Exception as error:
+            result = self._recoverable_error_result(stage.name, error)
+
+        final_error = ""
+        if result.status == "error":
+            final_error = str(result.error or result.output or "stage error")
+        ctx.set_stage(str(ctx.state.stage or run_state or stage.name), final_error)
+        ctx.execution = StageExecution()
+        ctx.save_state()
+        progress.stage_finished(StageAction(stage, ctx, label), result)
+        return result
+
+    @staticmethod
+    def _announce_recovery(
+        stage: Stage,
+        retry_mode: str,
+        retry_number: int,
+        wait_seconds: float,
+        error: str,
+    ) -> None:
+        detail = (
+            f"{retry_mode} · retry {retry_number} · wait {wait_seconds:g}s · "
+            f"{error[:180]}"
+        )
+        # UI status is transient; runner.recovery is the stable structured
+        # observability contract used by logs/live reliability probes.
+        progress.set_status("Recovering", detail)
+        progress.publish(
+            "runner.recovery",
+            "retry",
+            stage=str(getattr(stage, "name", "") or ""),
+            retry_mode=retry_mode,
+            retry=retry_number,
+            wait_seconds=wait_seconds,
+            error=error,
+        )
+
+    def _attempt(
+        self,
+        stage: Stage,
+        ctx: StageContext,
+        previous: StageResult | None,
+    ) -> StageResult:
+        action = StageAction(stage, ctx)
+        before = project_manifest(ctx.root, ctx.work) if action.track_changes else None
+        tokens = []
+        try:
+            tokens = self.hooks.before(action)
+            ctx.execution.change_detected = self.hooks.change_detector(
+                action, tokens, lambda: False
+            )
+            result = stage.run(ctx, previous)
+            if not isinstance(result, StageResult):
+                raise RunnerError(f"stage {stage.name} must return StageResult")
+            if result.stage != stage.name:
+                result = replace(result, stage=stage.name)
+        except (KeyboardInterrupt, SystemExit):
+            try:
+                self.hooks.after(action, tokens)
+            except BaseException:
+                pass
+            raise
+        except Exception as error:
+            result = self._recoverable_error_result(stage.name, error)
+
+        if before is not None:
+            changed = changed_project_files(ctx.root, ctx.work, before)
+            if changed:
+                malformed = [
+                    relative
+                    for relative in changed
+                    if is_malformed_windows_path_filename(relative)
+                ]
+                if malformed:
+                    for relative in malformed:
+                        remove_path(ctx.root / relative)
+                    error = RunnerError(
+                        "malformed absolute-path filename created; "
+                        "use project-relative paths only: " + ", ".join(malformed)
+                    )
+                    result = replace(
+                        StageResult.error_result(stage.name, error),
+                        changed_files=malformed,
+                    )
+                else:
+                    result = replace(
+                        result,
+                        changed_files=list(dict.fromkeys([*result.changed_files, *changed])),
+                    )
+
+        try:
+            violations = self.hooks.after(action, tokens)
+        except Exception as error:
+            violations = []
+            if result.status != "error":
+                result = self._recoverable_error_result(stage.name, error)
+
+        if violations:
+            tolerate = bool(getattr(stage, "tolerate_restored_changes", False))
+            violations = [
+                item
+                for item in violations
+                if not (tolerate and getattr(item, "kind", "") == MODE_READONLY)
+            ]
+        if violations:
+            discard = getattr(stage, "discard_attempt_results", None)
+            if callable(discard):
+                discard()
+            result = StageResult.error_result(
+                stage.name,
+                RunnerError("; ".join(item.message for item in violations)),
+            )
+        return result
+
+    def _next_session_retry(
+        self,
+        stage: Stage,
+        ctx: StageContext,
+        failures_in_session: int,
+    ) -> tuple[int, str]:
+        failures_in_session += 1
+        if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
+            self._fresh_session(stage, ctx)
+            return 0, "recover"
+        return (
+            failures_in_session,
+            "retry" if self._has_session(stage, ctx) else "recover",
+        )
+
+    @staticmethod
+    def _recoverable_error_result(stage_name: str, error: Exception) -> StageResult:
+        """Retry declared Runner failures and transient filesystem/transport OS errors only."""
+        if isinstance(error, (RunnerError, OSError)):
+            return StageResult.error_result(stage_name, error)
+        raise ConfigurationError(
+            f"stage {stage_name} raised unexpected {type(error).__name__}: {error}"
+        ) from error
+
+    def _fresh_session(self, stage: Stage, ctx: StageContext) -> None:
+        reset = getattr(stage, "reset_session", None)
+        if callable(reset):
+            previous = str(reset(ctx) or "")
+        else:
+            previous = str(ctx.ai_client.session_id or "")
+            ctx.reset_sessions()
+        progress.session_fresh(previous)
+
+    @staticmethod
+    def _has_session(stage: Stage, ctx: StageContext) -> bool:
+        checker = getattr(stage, "has_session", None)
+        if callable(checker):
+            return bool(checker(ctx))
+        return bool(ctx.ai_client.session_id) or any(
+            bool(getattr(value, "session_id", "")) for value in ctx.scratch.values()
+        )
+
+    @staticmethod
+    def _sleep(ctx: StageContext, seconds: float) -> None:
+        if seconds > 0:
+            sleep_with_heartbeat(seconds)
+
+
+__all__ = ["StageAction", "StageExecutor"]

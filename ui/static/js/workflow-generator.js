@@ -43,10 +43,9 @@ export function createWorkflowGenerator(deps) {
   }
   function resetGenerateWorkflowState({ keepRequest = false } = {}) {
     clearGenerateWorkflowPoll(); const request = keepRequest ? (state.generateWorkflowRequestText || $("generateWorkflowRequest")?.value || "") : "";
-    const folder = keepRequest ? ($("generateWorkflowFolder")?.value || "") : ""; const filename = keepRequest ? ($("generateWorkflowFilename")?.value || "") : "";
+    const filename = keepRequest ? ($("generateWorkflowFilename")?.value || "") : "";
     state.generateWorkflowDirty = false; state.generateWorkflowJobId = ""; state.generateWorkflowPhase = "idle"; state.generateWorkflowDraft = null; state.generateWorkflowPromptIndex = 0; state.generateWorkflowReviewTab = "visual"; state.generateWorkflowRequestText = request; state.generateWorkflowWorkspace = "";
     if ($("generateWorkflowRequest")) $("generateWorkflowRequest").value = request;
-    if ($("generateWorkflowFolder")) $("generateWorkflowFolder").value = folder;
     if ($("generateWorkflowFilename")) $("generateWorkflowFilename").value = filename;
     updateGenerateWorkflowTargetPreview();
     if ($("generateWorkflowPreview")) $("generateWorkflowPreview").value = "";
@@ -78,7 +77,7 @@ export function createWorkflowGenerator(deps) {
     $("generateWorkflowReady").hidden = phase !== "ready";
     $("generateWorkflowFailed").hidden = phase !== "failed";
     $("generateWorkflowPageBadge").hidden = phase !== "ready";
-    const titles = { form: ["Generate Workflow with AI", "Describe the Workflow you want. Generate creates a temporary Draft only."], running: ["Generating Workflow", "AI is building and validating a new temporary Draft."], cancelling: ["Cancelling Workflow", "Stopping the current generation and cleaning temporary runtime state."], ready: ["Review generated Workflow", "Review or edit the Draft. Save is the only action that creates a real Workflow."], failed: ["Workflow generation failed", "Nothing was added to Custom or Project."] };
+    const titles = { form: ["Generate Workflow with AI", "Describe the Workflow you want. Generate creates a temporary Draft only."], running: ["Generating Workflow", "AI is building and validating a new temporary Draft."], cancelling: ["Cancelling Workflow", "Stopping the current generation and cleaning temporary runtime state."], ready: ["Review generated Workflow", "Review or edit the Draft. Save is the only action that creates a real Workflow."], failed: ["Workflow generation failed", "Nothing was added to Global or Project assets."] };
     const [title, subtitle] = titles[phase] || titles.form; $("generateWorkflowPageTitle").textContent = title; $("generateWorkflowPageSubtitle").textContent = subtitle;
     $("generateWorkflowBack").disabled = phase === "cancelling";
     applyStudioGuardToDialogs();
@@ -115,7 +114,7 @@ export function createWorkflowGenerator(deps) {
   function renderGeneratedDraft(data) {
     const draft = data?.draft || {}; state.generateWorkflowDraft = { workflow: draft.workflow || "", prompts: Array.isArray(draft.prompts) ? draft.prompts.map((row) => ({ name: row.name || "Prompt", content: row.content || "" })) : [], visual: draft.visual || { stages: [], flow: [] }, validation: draft.validation || "" }; state.generateWorkflowPromptIndex = 0; state.generateWorkflowDirty = false;
     $("generateWorkflowPreview").value = state.generateWorkflowDraft.workflow; $("generateDraftDirtyHint").hidden = true; $("generateWorkflowValidation").textContent = "Validation PASS · Workflow dry-run matrix completed"; $("generateWorkflowValidation").classList.add("success");
-    if ($("generateWorkflowReadyTarget")) { const folder = $("generateWorkflowFolder")?.value.trim() || "<folder>", filename = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename")?.value) || "<filename>"; $("generateWorkflowReadyTarget").textContent = `runner/workflow/custom/${folder}/${filename}`; }
+    if ($("generateWorkflowReadyTarget")) { const filename = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename")?.value) || "<filename>"; $("generateWorkflowReadyTarget").textContent = `Workflow: ${filename} · Prompt category chosen automatically on Save`; }
     renderGeneratedDraftFlow(); renderGeneratedDraftPrompts(); setGeneratedDraftTab("visual");
   }
   function hydrateActiveGenerateWorkflow(data, { openPage = true } = {}) {
@@ -123,7 +122,6 @@ export function createWorkflowGenerator(deps) {
     resetGenerateWorkflowState(); fillGenerateWorkflowBackends();
     state.generateWorkflowJobId = String(data.job_id); state.generateWorkflowRequestText = String(data.request || "");
     $("generateWorkflowRequest").value = state.generateWorkflowRequestText;
-    if ($("generateWorkflowFolder")) $("generateWorkflowFolder").value = String(data.folder || "");
     if ($("generateWorkflowFilename")) $("generateWorkflowFilename").value = String(data.filename || "");
     updateGenerateWorkflowTargetPreview();
     if ([...$("generateWorkflowBackend").options].some((option) => option.value === String(data.backend || ""))) $("generateWorkflowBackend").value = String(data.backend || "");
@@ -170,17 +168,23 @@ export function createWorkflowGenerator(deps) {
     if (!/\.ya?ml$/i.test(name)) name += /workflow/i.test(name) ? ".yaml" : ".workflow.yaml";
     return name;
   }
+  function workflowKey(filename) {
+    return String(filename || "").replace(/\.ya?ml$/i, "").replace(/\.workflow$/i, "");
+  }
   function updateGenerateWorkflowTargetPreview() {
-    const folder = ($("generateWorkflowFolder")?.value || "<folder>").trim() || "<folder>";
     const filename = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename")?.value || "") || "<filename>";
-    if ($("generateWorkflowTargetPreview")) $("generateWorkflowTargetPreview").textContent = `runner/workflow/custom/${folder}/${filename}`;
+    if ($("generateWorkflowTargetPreview")) $("generateWorkflowTargetPreview").textContent = `runner/assets/workflows/${filename}`;
   }
   function updateGenerateWorkflowSavePreview() {
-    const folder = ($("generateWorkflowSaveFolder")?.value || "<folder>").trim() || "<folder>";
     const filename = normalizeGeneratedWorkflowFilename($("generateWorkflowSaveFilename")?.value || "") || "<filename>";
-    const destination = $("generateWorkflowDestination")?.value || "custom";
-    if ($("generateWorkflowSavePathPreview")) $("generateWorkflowSavePathPreview").textContent = destination === "project" ? `<project>/${filename}` : `runner/workflow/custom/${folder}/${filename}`;
-    if ($("generateWorkflowSavePromptPreview")) $("generateWorkflowSavePromptPreview").textContent = destination === "project" ? `Owned files: <project>/prompts/${folder}` : `Owned files: runner/prompts/custom/${folder}`;
+    const key = workflowKey(filename) || "<workflow-name>";
+    const destination = $("generateWorkflowDestination")?.value || "global";
+    if ($("generateWorkflowSavePathPreview")) $("generateWorkflowSavePathPreview").textContent = destination === "project"
+      ? `<project>/.ai-task-runner/assets/workflows/${filename}`
+      : `runner/assets/workflows/${filename}`;
+    if ($("generateWorkflowSavePromptPreview")) $("generateWorkflowSavePromptPreview").textContent = destination === "project"
+      ? `Prompts: <project>/.ai-task-runner/assets/prompts/workflow/${key}/`
+      : `Prompts: runner/assets/prompts/workflow/${key}/`;
   }
   async function openGenerateWorkflowPage() {
     if (!(await confirmDiscardStudio())) return;
@@ -191,7 +195,7 @@ export function createWorkflowGenerator(deps) {
       resetGenerateWorkflowState(); fillGenerateWorkflowBackends(); showWorkflowGeneratorPage(); setGenerateWorkflowPhase("form");
       const info = await api("/api/studio/draft"); if (!info.available) throw new Error(info.message || "AI Workflow Builder is unavailable.");
       setGenerateWorkflowWorkspace("", info.workspace_pattern || info.workspace_root || "");
-      $("generateWorkflowHint").textContent = "Choose the owned Folder + Filename up front. Generation stays temporary until Validate & Save. Only one Generator job can exist at a time."; updateGenerateWorkflowTargetPreview(); setTimeout(() => $("generateWorkflowRequest").focus(), 0);
+      $("generateWorkflowHint").textContent = "Choose the Workflow filename. Generation stays temporary until Validate & Save; Prompt folders are assigned automatically."; updateGenerateWorkflowTargetPreview(); setTimeout(() => $("generateWorkflowRequest").focus(), 0);
     }
     catch (error) { $("generateWorkflowHint").textContent = error.message; $("generateWorkflowHint").classList.add("error"); setGenerateWorkflowPhase("form"); showActionError(error.message, "Workflow Builder unavailable"); }
   }
@@ -216,12 +220,12 @@ export function createWorkflowGenerator(deps) {
   }
   async function confirmGenerateWorkflow() {
     const request = $("generateWorkflowRequest").value.trim(); if (!request) { $("generateWorkflowHint").textContent = "Describe the Workflow you want before Generate."; $("generateWorkflowHint").classList.add("error"); return; }
-    const folder = $("generateWorkflowFolder").value.trim(), filename = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename").value);
-    if (!folder || !filename) { $("generateWorkflowHint").textContent = "Folder and Filename are required before Generate."; $("generateWorkflowHint").classList.add("error"); return; }
+    const filename = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename").value);
+    if (!filename) { $("generateWorkflowHint").textContent = "Workflow Filename is required before Generate."; $("generateWorkflowHint").classList.add("error"); return; }
     $("generateWorkflowFilename").value = filename; updateGenerateWorkflowTargetPreview();
     state.generateWorkflowRequestText = request; state.generateWorkflowDirty = false; $("generateWorkflowHint").classList.remove("error"); $("generateWorkflowRunningStatus").textContent = "Starting Workflow Builder…"; setGenerateWorkflowPhase("running");
     try {
-      const result = await api("/api/studio/generate", { method: "POST", body: JSON.stringify({ request, backend: $("generateWorkflowBackend").value, folder, filename }) });
+      const result = await api("/api/studio/generate", { method: "POST", body: JSON.stringify({ request, backend: $("generateWorkflowBackend").value, filename }) });
       if (result.existing) { const active = await api("/api/studio/generate/active"); hydrateActiveGenerateWorkflow(active); return; }
       state.generateWorkflowJobId = result.job_id; setGenerateWorkflowWorkspace(result.workspace || ""); $("generateWorkflowRunningStatus").textContent = result.message || "AI is generating Workflow draft…"; startGenerateWorkflowPoll();
     }
@@ -240,18 +244,17 @@ export function createWorkflowGenerator(deps) {
   }
   function openGenerateWorkflowSaveModal() {
     if (!state.generateWorkflowJobId || state.generateWorkflowPhase !== "ready") return;
-    $("generateWorkflowSaveFolder").value = $("generateWorkflowFolder").value.trim();
     $("generateWorkflowSaveFilename").value = normalizeGeneratedWorkflowFilename($("generateWorkflowFilename").value);
-    $("generateWorkflowDestination").value = "custom"; $("generateWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project;
+    $("generateWorkflowDestination").value = "global"; $("generateWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project;
     updateGenerateWorkflowSavePreview();
-    $("generateWorkflowSaveHint").textContent = state.generateWorkflowDirty ? "Draft was modified. Validate & Save will revalidate the current YAML and Prompts." : "Save publishes the Draft into this owned Folder without touching common/system assets."; $("generateWorkflowSaveHint").classList.remove("error"); $("generateWorkflowSaveBackdrop").hidden = false; setTimeout(() => $("generateWorkflowSaveFolder").focus(), 0);
+    $("generateWorkflowSaveHint").textContent = state.generateWorkflowDirty ? "Draft was modified. Validate & Save will revalidate the current YAML and Prompts." : "Save publishes the Workflow and places generated Prompts under its workflow category automatically."; $("generateWorkflowSaveHint").classList.remove("error"); $("generateWorkflowSaveBackdrop").hidden = false; setTimeout(() => $("generateWorkflowSaveFilename").focus(), 0);
   }
   async function saveGenerateWorkflowDraft() {
-    const folder = $("generateWorkflowSaveFolder").value.trim(), filename = normalizeGeneratedWorkflowFilename($("generateWorkflowSaveFilename").value);
-    if (!folder || !filename) { $("generateWorkflowSaveHint").textContent = "Folder and Filename are required."; $("generateWorkflowSaveHint").classList.add("error"); return; }
+    const filename = normalizeGeneratedWorkflowFilename($("generateWorkflowSaveFilename").value);
+    if (!filename) { $("generateWorkflowSaveHint").textContent = "Workflow Filename is required."; $("generateWorkflowSaveHint").classList.add("error"); return; }
     $("generateWorkflowSaveFilename").value = filename; updateGenerateWorkflowSavePreview();
     $("generateWorkflowSaveConfirm").disabled = true; $("generateWorkflowSaveHint").textContent = "Validating current Draft and publishing…"; $("generateWorkflowSaveHint").classList.remove("error");
-    try { const result = await api("/api/studio/generate/save", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", job_id: state.generateWorkflowJobId, folder, filename, destination: $("generateWorkflowDestination").value, ...generatedDraftPayload() }) }); closeGenerateWorkflowSaveModal(); resetGenerateWorkflowState(); showWorkflowStudioPage(); state.studioSourceKind = "workflow"; await refreshStudioFiles({ force: true }); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item?.id || row.path === result.workflow) || result.item; if (item) await openStudioFile(item); showToast(result.message || "Workflow saved"); }
+    try { const result = await api("/api/studio/generate/save", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", job_id: state.generateWorkflowJobId, filename, destination: $("generateWorkflowDestination").value, ...generatedDraftPayload() }) }); closeGenerateWorkflowSaveModal(); resetGenerateWorkflowState(); showWorkflowStudioPage(); state.studioSourceKind = "workflow"; await refreshStudioFiles({ force: true }); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item?.id || row.path === result.workflow) || result.item; if (item) await openStudioFile(item); showToast(result.message || "Workflow saved"); }
     catch (error) { $("generateWorkflowSaveHint").textContent = error.message; $("generateWorkflowSaveHint").classList.add("error"); showActionError(error.message, "Workflow save failed"); }
     finally { $("generateWorkflowSaveConfirm").disabled = false; }
   }

@@ -11,7 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from ..runtime.run_state import RunState, Task
-from ..utils.files import io_path
+from ..utils import io_path
 
 
 class LiveUI:
@@ -323,6 +323,9 @@ class ConsoleObserver:
         self.ui = LiveUI(human_output=config.human_output)
         work = getattr(runtime, "work", None)
         self.snapshot_path = Path(work) / "console-view.json" if work is not None else None
+        self.recovery: dict[str, object] = {}
+        self.effective_backend = ""
+        self.effective_model = ""
 
     def _write_payload(self, payload: dict) -> None:
         if self.snapshot_path is None:
@@ -339,6 +342,9 @@ class ConsoleObserver:
     def _write_snapshot(self) -> None:
         payload = self.ui.snapshot()
         if payload is not None:
+            payload["recovery"] = dict(self.recovery)
+            payload["effective_backend"] = self.effective_backend
+            payload["effective_model"] = self.effective_model
             self._write_payload(payload)
 
     @staticmethod
@@ -379,6 +385,15 @@ class ConsoleObserver:
 
     def __call__(self, event: dict) -> None:
         kind = str(event.get("type", ""))
+        if kind in {"model.prompt", "model.result"}:
+            backend = str(event.get("backend") or "").strip()
+            model = str(event.get("model") or "").strip()
+            if backend:
+                self.effective_backend = backend
+            if model:
+                self.effective_model = model
+            self._write_snapshot()
+            return
         if kind.startswith("script.item_"):
             self.ui.stop()
             snapshot = self._script_snapshot(event)
@@ -398,6 +413,15 @@ class ConsoleObserver:
             return
         state = event.get("state")
         action = event.get("action")
+        if kind == "runner.recovery" and action == "retry":
+            self.recovery = {
+                "retry_mode": str(event.get("retry_mode") or ""),
+                "retry": int(event.get("retry") or 0),
+                "wait_seconds": float(event.get("wait_seconds") or 0),
+                "error": str(event.get("error") or ""),
+            }
+        elif kind == "runner.stage" and action == "finish":
+            self.recovery = {}
         if kind == "runner.progress" and state is not None:
             self.ui.bind(state)
         elif kind == "runner.status" and action == "set":

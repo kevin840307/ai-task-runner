@@ -1,0 +1,10 @@
+stages:
+  echo_message:
+    type: echo
+    status: Echo input
+    prefix: "Echo: "
+    routes:
+      fail: stop
+
+flow:
+  - echo_message

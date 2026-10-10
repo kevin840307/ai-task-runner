@@ -38,7 +38,7 @@ Use `runner.api.RunRequest` / `runner.api.run()` as the shared execution entry f
 `runner/bootstrap.py` is the composition root. Backend/plugin registries compose dependencies at the boundary; Workflow must not discover concrete plugins or backends itself.
 
 ## UI / extension maintenance boundary
-UI is an adapter beside CLI, not a Workflow Plugin. Pipeline, StageExecutor, Stage, AI client, and Workflow loader must not import UI code. External Stage/backend registration happens before Workflow validation through installed extensions; runtime-only plugins attach later through the Hook/Event boundary. A new external Stage must not require a Stage-name branch in Pipeline.
+UI is an adapter beside CLI, not a Workflow Plugin. FlowEngine, StageExecutor, Stage, AI client, and Workflow loader must not import UI code. External Stage/backend registration happens before Workflow validation through installed extensions; runtime-only plugins attach later through the Hook/Event boundary. A new external Stage must not require a Stage-name branch in FlowEngine.
 
 Editable Workflow/prompt files use the shared atomic resource functions and optimistic `expected_hash`; an active Run uses its durable Workflow/Stage-prompt/Goal/final-AI-prompt snapshot. Keep one Run per worker process for isolation rather than adding in-process global runtime concurrency solely for UI.
 
@@ -47,10 +47,7 @@ For the current product model, one Project has at most one active Runtime. Conve
 ## Project policy
 Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
 
-Project responsibilities are centralized in:
-- `runner/project/files.py`: manifest/change detection/restore/stale snapshot cleanup.
-- `runner/project/policy.py`: project policy and protected paths.
-- `runner/project/instructions.py`: Runner-managed QWEN.md/AGENTS.md sections.
+Project filesystem/policy responsibilities are centralized in `runner/workspace.py`: manifest/change detection, protected paths, reusable snapshots, and project-level workspace helpers. Do not recreate a parallel `project/` service layer.
 
 ## Current task execution contract
 A fresh/rebuilt Executor receives the Current Task, Original Goal as global context, necessary validator/review feedback, and the full Stage instruction. When a normal same session already knows the same Stage prompt contract, `continuation_prompt` sends only the next TODO or newly produced Review/Validator evidence. Recovery continuations remain even smaller: Stage identity, new failure evidence, a readonly reminder when applicable, and the required next action/output contract.
@@ -60,12 +57,14 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 
 ## Session / recovery contract
 - Initial call: full Stage prompt.
-- Real failure: bounded same-session retry, default maximum two retries.
-- Same session still fails: fresh session + complete necessary context.
-- Same persistent failure after fresh recovery: return `replan` and create a new plan.
-- Different failure fingerprint: reset the persistent-failure streak. Timeout identity must come from the backend semantic recovery key, not volatile raw stderr; keep the full stderr only for diagnostics.
-- Transient API/service failure: AI transport backoff; do not consume Stage failure budget. Canonical API resumes durable state after an exhausted wait window.
-- Final AI voting: every validation run starts a different fresh session.
+- Technical failure: retry the same usable Session first. After the bounded per-session attempt budget, rotate only the failing Stage to a Fresh Session and continue with the shared recovery envelope.
+- Global unattended default: `stage_retries=-1`, so technical recovery is unlimited unless a Stage explicitly overrides it with finite `error_policy.retries`.
+- Finite non-Review exhaustion: return ERROR and fail closed at the current Stage.
+- Finite Review exhaustion: fail-soft Skip to the ordinary next Stage; keep a later authoritative validator.
+- Classified transient API/service failures preserve the usable Session and use capped exponential backoff.
+- If a write attempt already changed project files before ERROR, preserve those files, rotate that Stage Session, inspect current project evidence, and recover rather than blindly replaying the same write.
+- There is no hidden automatic replan/restart path. Planning is revisited only through explicit semantic PASS/FAIL routing.
+- Final AI voting: every validation run starts a different Fresh Session.
 
 ## Validation and YAML List
 Validator feedback in state is bounded to 20,000 characters with the start and end preserved. Runner sets `AI_TASK_RUNNER_WORK_DIR` for validator processes, and maintained templates write reports under its `validator-reports/` directory (falling back to `.ai-task-runner` when run standalone). External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`.
@@ -74,18 +73,18 @@ Three validation modes are supported: AI-only, File-only, and Mixed. Mixed valid
 
 YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
 
-Workflow YAML has only two top-level keys: `stages` defines reusable named nodes and `flow` defines the static top-level sequence. `recover` may contain a static recovery Stage sequence; there is no reusable-subflow, `expand`, or `foreach` DSL. The registry is only `type -> class`. Prefer semantic built-ins (`plan`, `task`, `review`, `ai_validator`, `command`) so their safe defaults stay out of YAML; use `base` only for deliberately generic AI behavior. `PlanStage` is the built-in Task producer. A top-level Plan automatically enters the built-in `Task -> Review -> Repair(on FAIL) -> Review` task lifecycle through loader normalization, so normal YAML does not repeat those flow nodes. Any Stage may still declare `produces: tasks`; explicit contiguous `scope: task` nodes are reserved for advanced/custom task producers or custom per-TODO SOPs. Ordinary Stage classes remain routing-agnostic.
+Workflow YAML has only two top-level keys: `stages` defines named nodes and `flow` defines their ordered membership. The registry remains only `type -> class`. General AI behavior uses `type: base` with `profile: generic | execute | review`; dedicated types are reserved for genuinely special runtime semantics such as `plan`, `ai_validator`, `command`, `handoff`, or plugins. Producer Stages may return `tasks` or `stages` together with producer-defined child Stage definitions; Runner executes the child Workflow before continuing the parent.
 
-Use the shared 1-based `restart_at` YAML option when a top-level Stage must route logical FAIL or exhausted recovery to a current/earlier Workflow position. Keep session recovery, Task production, and completion rules in their existing semantic owners; they are not arbitrary YAML topology.
+PASS/FAIL result edges are the only semantic routing mechanism. Backward edges implement rollback/loops. Technical ERROR stays inside StageExecutor retry/recovery and is never a graph edge. There is no public `recover`, `restart_at`, Repair Stage, repeat/max-attempt graph, or hidden replan topology. A Review may intentionally use a finite local `error_policy.retries`; after exhaustion it fail-soft skips to the next Stage, so an authoritative validator should remain later in the flow.
 
 ## Prompt contract
-All bundled Stage prompts use Jinja + `StrictUndefined`. Top-level template variables come only from `runner/prompts/context.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly.
+All bundled Stage prompts use Jinja + `StrictUndefined`. Template context/rendering is owned by `runner/prompting.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly. Bundled prompt resources live under `runner/assets/prompts/<category>/`.
 
-Ordinary write work should use `type: task`, and read-only verdict work should use `type: review`; use `type: base` only for intentionally generic AI behavior. A genuinely new behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader and Pipeline must not gain Stage-name-specific branches.
+Ordinary write work uses `type: base, profile: execute`; read-only verdict work uses `type: base, profile: review`; custom AI behavior uses `profile: generic`. A genuinely new special behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader, FlowEngine, and StageExecutor must not gain Stage-name-specific branches.
 
-A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. `StageResult.kind` selects the small durable-state reducer (`tasks`, `task`, `review`, `validation`, or `generic`); composition stays in generic Pipeline/routing data.
+A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. `StageResult.kind` selects the small durable-state reducer (`tasks`, `task`, `review`, `validation`, or `generic`); composition stays in generic FlowEngine/routing data.
 
-Common Stage execution capabilities are owned by `StageExecutor`, not reimplemented inside each Stage. User-facing Stage specs expose direct overrides such as `retry`, `timeout`, `skip_on_error`, `track_changes`, `session_key`, `prompt`, and `parser`; implementation lookup names such as `retry_attr`, `timeout_attr`, and `client_cache_key` are accepted only by the legacy YAML loader; Stage execution uses direct `retry`/`timeout` values or Stage-owned defaults. Routing-only fields (`recover`, `repeat`, `max_attempts`, `on_exhausted`, `fresh_after_same_failures`, `restart_at`, `label`, `scope`) belong to `FlowNode` and are removed before Stage construction. `retry: 0` disables same-session retry and therefore escalates an error directly to the existing fresh-session recovery path; a zero retry budget does not permit `skip_on_error`.
+Common Stage execution capabilities are owned by `StageExecutor`, not reimplemented inside each Stage. Public common controls are intentionally small: `error_policy.retries`, `timeout`, `track_changes`, `readonly_safety`, `session_policy`, `session_key`, `prompt`, plus Stage-specific options from the registry catalog. `routes` accepts only PASS/FAIL semantic targets. Removed legacy fields such as `retry`, `skip_on_error`, `recover`, `repeat`, `max_attempts`, `on_exhausted`, `fresh_after_same_failures`, and `restart_at` must not be reintroduced as compatibility shims.
 
 If the requirement is only conditional text/formatting, use Jinja. Only genuinely computed planning-specific context belongs in `PlanStage`.
 

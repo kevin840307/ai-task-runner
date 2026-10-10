@@ -5,7 +5,6 @@ UIState composition remains in server.py.
 """
 from __future__ import annotations
 
-import ast
 import csv
 import json
 import os
@@ -17,6 +16,7 @@ import uuid
 from pathlib import Path
 
 from project_registry import path_key, project_file_lock
+from runtime_view import build_runtime_view
 
 try:
     from .server_support import background_process_kwargs as _background_process_kwargs
@@ -25,11 +25,14 @@ except ImportError:  # direct ui/main.py execution
 
 UI_STATE_DIR = ".ai-task-runner/ui"
 MESSAGES_FILE = "messages.jsonl"
+CHAT_MESSAGE_READ_LIMIT = 200
+CHAT_MESSAGE_RETAIN = 400
+CHAT_MESSAGE_COMPACT_TRIGGER = 600
+CHAT_MESSAGE_MAX_BYTES = 10 * 1024 * 1024
 CHAT_STATE_FILE = "chat-state.json"
 LAUNCH_STATE_FILE = "launching.json"
 LAUNCH_RESERVATION_GRACE = 30.0
 RUNTIME_DIR = ".ai-task-runner"
-PROJECTS_PAYLOAD_CACHE_SECONDS = 1.5
 
 
 class ProjectRuntimeMixin:
@@ -42,11 +45,11 @@ class ProjectRuntimeMixin:
     def _project_display_path(path: str | Path) -> str:
         return str(Path(path).expanduser().resolve())
 
-    def projects_payload(self) -> dict:
+    def projects_payload(self, exclude_runtime_path: str = "") -> dict:
         # Runtime status is live process/state data. Do not cache it using only
         # projects.json mtime: that can replay a pre-run/pre-stop status on the
         # next sidebar poll and make rows visibly oscillate.
-        projects = self.projects()
+        projects = self.projects(exclude_runtime_path=exclude_runtime_path)
         running = sum(1 for item in projects if item.get("runtime_status") == "running")
         return {
             "projects": projects,
@@ -65,15 +68,17 @@ class ProjectRuntimeMixin:
             return 10000
         return 8000
 
-    def projects(self) -> list[dict]:
+    def projects(self, *, exclude_runtime_path: str = "") -> list[dict]:
         try:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rows = []
         project_rows = rows if isinstance(rows, list) else []
-        # Take the Windows process snapshot only when at least one tracked
-        # Project has runtime process evidence. Idle-only lists avoid tasklist.
-        alive_pids = self._process_snapshot() if self._projects_need_process_snapshot(project_rows) else None
+        exclude_key = self._project_path_key(exclude_runtime_path) if exclude_runtime_path else ""
+        # Take the Windows process snapshot only when at least one non-excluded
+        # Project has runtime process evidence. The active Project is already
+        # covered by /api/project/runtime and should not trigger a duplicate tasklist scan.
+        alive_pids = self._process_snapshot() if self._projects_need_process_snapshot(project_rows, exclude_key) else None
         result: list[dict] = []
         seen: set[str] = set()
         for item in project_rows:
@@ -88,7 +93,11 @@ class ProjectRuntimeMixin:
                 continue
             seen.add(key)
             project_path = Path(path)
-            summary = self._project_runtime_summary(project_path, alive_pids)
+            summary = (
+                {"status": "idle", "stage": "", "completed_count": 0, "total": 0}
+                if exclude_key and key == exclude_key
+                else self._project_runtime_summary(project_path, alive_pids)
+            )
             result.append({
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
@@ -100,12 +109,14 @@ class ProjectRuntimeMixin:
             })
         return result
 
-    def _projects_need_process_snapshot(self, rows: list[dict]) -> bool:
+    def _projects_need_process_snapshot(self, rows: list[dict], exclude_key: str = "") -> bool:
         for item in rows:
             if not isinstance(item, dict):
                 continue
             path = str(item.get("path", "")).strip()
             if not path:
+                continue
+            if exclude_key and self._project_path_key(path) == exclude_key:
                 continue
             project = Path(path)
             runtime = self.runtime_dir(project)
@@ -138,70 +149,54 @@ class ProjectRuntimeMixin:
             raise ValueError("Environment check returned invalid result")
         return data
 
-    def backend_catalog(self) -> dict:
-        """Return backend names without importing Runner Core into the UI."""
-        names: set[str] = set()
-        backends_root = self.repo_root / "runner" / "backends"
-        for path in backends_root.glob("*.py") if backends_root.is_dir() else ():
-            if path.name.startswith("_"):
-                continue
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
-                continue
-            for node in tree.body:
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                for child in node.body:
-                    if not isinstance(child, (ast.Assign, ast.AnnAssign)):
-                        continue
-                    target = child.targets[0] if isinstance(child, ast.Assign) and child.targets else getattr(child, "target", None)
-                    value = child.value if isinstance(child, (ast.Assign, ast.AnnAssign)) else None
-                    if isinstance(target, ast.Name) and target.id == "name" and isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        if value.value.strip():
-                            names.add(value.value.strip())
-        default = ""
-        defaults = self.repo_root / "runner" / "config" / "defaults.py"
-        try:
-            tree = ast.parse(defaults.read_text(encoding="utf-8"))
-            for node in tree.body:
-                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "DEFAULT_BACKEND" for t in node.targets):
-                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                        default = node.value.value.strip()
-                        break
-        except (OSError, SyntaxError):
-            pass
-        if default:
-            names.add(default)
-        return {"default": default, "backends": sorted(names)}
-
-    def execution_mode_catalog(self) -> dict:
-        """Return the Runner-owned top-level orchestration catalog."""
-        tool = self.repo_root / "tool" / "execution_mode_catalog.py"
+    def backend_catalog(
+        self,
+        project: Path | None = None,
+        *,
+        include_models: bool = False,
+    ) -> dict:
+        """Return Runner-owned backend/model choices without importing Core into UI."""
+        tool = self.repo_root / "tool" / "backend_catalog.py"
+        command = [sys.executable, str(tool)]
+        if project is not None:
+            command.extend(["--project-root", str(project)])
+        if include_models:
+            command.append("--models")
         try:
             completed = subprocess.run(
-                [sys.executable, str(tool)],
+                command,
                 cwd=str(self.repo_root),
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=20,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ValueError(f"Execution mode catalog unavailable: {exc}") from exc
+            raise ValueError(f"Backend catalog unavailable: {exc}") from exc
         if completed.returncode != 0:
             detail = (completed.stderr or completed.stdout or "").strip()
-            raise ValueError("Execution mode catalog failed: " + detail[-2000:])
+            raise ValueError("Backend catalog failed: " + detail[-2000:])
         try:
             payload = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
-            raise ValueError("Execution mode catalog returned invalid JSON") from exc
-        if not isinstance(payload, dict):
-            raise ValueError("Execution mode catalog must be an object")
+            raise ValueError("Backend catalog returned invalid JSON") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("backends"), list):
+            raise ValueError("Backend catalog is missing backends")
+        if not isinstance(payload.get("models"), dict):
+            payload["models"] = {}
         return payload
 
     def workflow_catalog(self) -> dict:
-        """Return the Runner-owned Stage/editor contract without importing Core."""
+        """Return the Runner-owned Stage/editor contract without importing Runner modules.
+
+        The catalog is immutable for one UI server process. Cache the first valid
+        result so normal Stage edits do not spawn a Python subprocess repeatedly
+        and unrelated subprocess mocks/tests cannot accidentally intercept it.
+        """
+        cached = getattr(self, "_workflow_catalog_cache", None)
+        if isinstance(cached, dict):
+            return cached
+
         tool = self.repo_root / "tool" / "workflow_catalog.py"
         try:
             completed = subprocess.run(
@@ -223,6 +218,7 @@ class ProjectRuntimeMixin:
             raise ValueError("Workflow catalog returned invalid JSON") from exc
         if not isinstance(payload, dict) or not isinstance(payload.get("stage_types"), dict):
             raise ValueError("Workflow catalog is missing stage_types")
+        self._workflow_catalog_cache = payload
         return payload
 
     def add_project(self, path: str) -> dict:
@@ -287,7 +283,6 @@ class ProjectRuntimeMixin:
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
-        self._projects_payload_cache = None
 
     def runtime_dir(self, project: Path) -> Path:
         return project / RUNTIME_DIR
@@ -447,20 +442,29 @@ class ProjectRuntimeMixin:
         runtime, _, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         pid_value = self._marker_pid(marker.get("supervisor_pid"))
-        status = "idle"
-        if pid_value and self._pid_alive(pid_value, alive_pids):
+        supervisor_running = bool(pid_value and self._pid_alive(pid_value, alive_pids))
+        if supervisor_running:
             self._clear_launch_reservation(project)
-            status = "running"
-        elif self._active_launch_reservation(project, alive_pids):
-            status = "running"
-        else:
-            completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
-            if completed:
-                status = "completed"
-            elif marker and state:
-                status = "interrupted"
-            elif state:
-                status = "stopped"
+        launching = bool(
+            not supervisor_running
+            and self._active_launch_reservation(project, alive_pids)
+        )
+        running = supervisor_running or launching
+        completed = (
+            self._script_completed(script_view)
+            if script_view.get("mode") == "script"
+            else bool(state.get("completed"))
+        )
+        resumable = bool(state and not completed)
+        stale = bool(marker and not supervisor_running and not launching)
+        view = build_runtime_view({
+            "project_exists": True,
+            "running": running,
+            "completed": completed,
+            "resumable": resumable,
+            "stale": stale,
+            "last_error": state.get("last_error") or "",
+        })
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
         completed_count = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "completed")
         stage = str(state.get("stage") or "")
@@ -470,7 +474,7 @@ class ProjectRuntimeMixin:
             prefix = f"Script {index}/{total}" if index and total else "Script"
             stage = f"{prefix} · {stage}" if stage else prefix
         return {
-            "status": status,
+            "status": view["status"],
             "stage": stage,
             "completed_count": completed_count,
             "total": len(tasks),
@@ -569,6 +573,23 @@ class ProjectRuntimeMixin:
         model = cls._normalize_model(value)
         return [] if not model else ["--agent-arg=--model", f"--agent-arg={model}"]
 
+    def _has_user_message_record(self, project: Path) -> bool:
+        path = project / UI_STATE_DIR / MESSAGES_FILE
+        if not path.is_file():
+            return False
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(item, dict) and item.get("role") == "user":
+                        return True
+        except OSError:
+            return False
+        return False
+
     def _latest_run_request(self, project: Path) -> dict:
         requests = project / UI_STATE_DIR / "requests"
         if not requests.is_dir():
@@ -585,11 +606,90 @@ class ProjectRuntimeMixin:
                 return data
         return {}
 
+    @staticmethod
+    def _activity_summary(stream: str, limit: int = 4) -> list[str]:
+        """Project public agent progress from existing JSONL without exposing thinking blocks."""
+        rows: list[str] = []
+
+        def add(text: object) -> None:
+            value = " ".join(str(text or "").split()).strip()
+            if not value or value in rows:
+                return
+            rows.append(value[:220])
+
+        def tool_label(value: dict) -> None:
+            name = str(value.get("name") or value.get("tool") or value.get("tool_name") or "").strip()
+            if not name:
+                return
+            detail = value.get("input")
+            if not isinstance(detail, dict):
+                detail = value.get("args") if isinstance(value.get("args"), dict) else {}
+            hint = ""
+            for key in ("file_path", "path", "command", "query", "pattern"):
+                item = str(detail.get(key) or "").strip()
+                if item:
+                    hint = item.replace("\n", " ")[:100]
+                    break
+            add(f"Using tool · {name}" + (f" · {hint}" if hint else ""))
+
+        def visit(value: object) -> None:
+            if isinstance(value, list):
+                for item in value:
+                    visit(item)
+                return
+            if not isinstance(value, dict):
+                return
+            kind = str(value.get("type") or "").lower()
+            if kind in {"thinking", "reasoning", "reasoning_content"}:
+                return
+            if kind in {"tool_use", "tool", "tool_call", "tool-call"}:
+                part = value.get("part")
+                tool_label(part if isinstance(part, dict) else value)
+                return
+            if kind == "text":
+                part = value.get("part")
+                if isinstance(part, dict):
+                    add(part.get("text"))
+                else:
+                    add(value.get("text"))
+                return
+            message = value.get("message")
+            if isinstance(message, dict) and str(message.get("role") or "") == "assistant":
+                content = message.get("content")
+                if isinstance(content, str):
+                    add(content)
+                elif isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        part_type = str(part.get("type") or "").lower()
+                        if part_type == "text":
+                            add(part.get("text"))
+                        elif part_type in {"tool_use", "tool", "tool_call", "tool-call"}:
+                            tool_label(part)
+                return
+            part = value.get("part")
+            if isinstance(part, dict):
+                part_type = str(part.get("type") or "").lower()
+                if part_type == "text":
+                    add(part.get("text"))
+                elif part_type in {"tool_use", "tool", "tool_call", "tool-call"}:
+                    tool_label(part)
+
+        for line in str(stream or "").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            visit(event)
+        return rows[-max(1, int(limit or 1)):]
+
     def read_runtime(self, project: Path) -> dict:
         runtime, display_runtime, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         request = self._latest_run_request(project)
-        stream = self._display_stream(self._read_text(display_runtime / "stream.log", limit=12000))
+        raw_stream = self._read_text(display_runtime / "stream.log", limit=12000)
+        stream = self._display_stream(raw_stream)
         supervisor_pid = self._marker_pid(marker.get("supervisor_pid"))
         supervisor_running = bool(supervisor_pid and self._pid_alive(supervisor_pid))
         if supervisor_running:
@@ -626,9 +726,7 @@ class ProjectRuntimeMixin:
                 current_task = str(task.get("title") or task.get("id") or "")
         completed = script_completed if script_mode else bool(state.get("completed"))
         resumable = bool(state and not completed)
-        if not running and completed and not script_mode:
-            self.sync_completion(project)
-        return {
+        payload = {
             "running": running,
             "launching": launching,
             "run_id": state.get("run_id") or "",
@@ -636,6 +734,18 @@ class ProjectRuntimeMixin:
             "pid": pid,
             "worker_pid": marker.get("worker_pid"),
             "stage": state.get("stage") or "",
+            "cycle": int(state.get("cycle") or 1),
+            "workflow_position": int(state.get("workflow_position") or 0),
+            "last_transition": (
+                {
+                    "stage": str((state.get("transition_previous") or {}).get("stage") or ""),
+                    "status": str((state.get("transition_previous") or {}).get("status") or ""),
+                    "target": str((state.get("transition_previous") or {}).get("target") or ""),
+                    "kind": str((state.get("transition_previous") or {}).get("kind") or ""),
+                }
+                if isinstance(state.get("transition_previous"), dict)
+                else {}
+            ),
             "task": current_task,
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
@@ -650,6 +760,7 @@ class ProjectRuntimeMixin:
             "input_prompt": str(state.get("goal") or script_view.get("prompt_preview") or ""),
             "last_error": state.get("last_error") or "",
             "stream": stream,
+            "activity_summary": self._activity_summary(raw_stream),
             "cli_lines": [str(line) for line in console.get("lines", [])],
             "cli_tasks": console.get("tasks", []) if isinstance(console.get("tasks"), list) else [],
             "cli_status": str(console.get("status") or ""),
@@ -661,9 +772,30 @@ class ProjectRuntimeMixin:
             "backend": str(request.get("backend") or ""),
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),
-            "execution_mode": str(request.get("execution_mode") or "linear"),
             "validator": str(request.get("validator") or ""),
+            "readonly_safety": str(request.get("readonly_safety") or ""),
+            "effective_backend": str(console.get("effective_backend") or ""),
+            "effective_model": str(console.get("effective_model") or ""),
+            "recovery": (
+                console.get("recovery")
+                if isinstance(console.get("recovery"), dict)
+                else {}
+            ),
         }
+        view = build_runtime_view({
+            **payload,
+            "project_exists": project.is_dir(),
+            "request": request,
+            "can_rerun": self._has_user_message_record(project),
+        })
+        payload["view"] = view
+        payload["status"] = view["status"]
+        payload["actions"] = view["actions"]
+        payload["attention_reason"] = view["reason"]
+        payload["recommended_actions"] = view["recommended_actions"]
+        payload["recovery"] = view["recovery"]
+        payload["run_snapshot"] = view["run"]
+        return payload
 
     def active_projects(self) -> list[dict]:
         active: list[dict] = []
@@ -679,9 +811,13 @@ class ProjectRuntimeMixin:
     def edit_guard(self) -> dict:
         active = self.active_projects()
         return {
-            "editable": not active,
+            "editable": True,
             "active_projects": active,
-            "reason": "" if not active else "Workflow and prompt editing is locked while any tracked project is running.",
+            "reason": (
+                ""
+                if not active
+                else "Active runs use frozen Workflow/Prompt snapshots; edits apply to the next run."
+            ),
         }
 
     def messages(self, project: Path) -> list[dict]:
@@ -704,7 +840,41 @@ class ProjectRuntimeMixin:
                         rows.append(item)
         except OSError:
             return []
-        return rows[-200:]
+        return rows[-CHAT_MESSAGE_READ_LIMIT:]
+
+    @staticmethod
+    def _compact_messages(path: Path) -> None:
+        try:
+            if not path.is_file():
+                return
+            raw = path.read_text(encoding="utf-8").splitlines()
+            if (
+                len(raw) <= CHAT_MESSAGE_COMPACT_TRIGGER
+                and path.stat().st_size <= CHAT_MESSAGE_MAX_BYTES
+            ):
+                return
+            kept: list[str] = []
+            size = 0
+            for line in reversed(raw):
+                encoded = len(line.encode("utf-8")) + 1
+                if kept and (
+                    len(kept) >= CHAT_MESSAGE_RETAIN
+                    or size + encoded > CHAT_MESSAGE_MAX_BYTES
+                ):
+                    break
+                kept.append(line)
+                size += encoded
+            kept.reverse()
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(
+                ("\n".join(kept) + "\n") if kept else "",
+                encoding="utf-8",
+            )
+            os.replace(temporary, path)
+        except OSError:
+            # Chat retention is a UI maintenance path; never fail a run/message
+            # because compaction could not be completed.
+            return
 
     def append_message(self, project: Path, role: str, content: str, *, run_id: str = "") -> None:
         with self._chat_lock:
@@ -713,8 +883,10 @@ class ProjectRuntimeMixin:
             row = {"role": role, "content": content, "time": time.time()}
             if run_id:
                 row["run_id"] = run_id
-            with (folder / MESSAGES_FILE).open("a", encoding="utf-8") as handle:
+            path = folder / MESSAGES_FILE
+            with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            self._compact_messages(path)
 
     def clear_chat_history(self, project: Path, *, reset_stopped: bool = False) -> dict:
         """Clear persisted UI conversation history.
@@ -790,9 +962,9 @@ class ProjectRuntimeMixin:
             if not str(workflow or "").strip():
                 raise ValueError("Select a Workflow before Run")
             runtime = self.read_runtime(project)
-            if runtime.get("running"):
-                raise ValueError("This project already has an active runtime")
-            if runtime.get("resumable"):
+            if not runtime.get("actions", {}).get("run"):
+                if runtime.get("running"):
+                    raise ValueError("This project already has an active runtime")
                 raise ValueError("Previous task is stopped or interrupted. Continue it or Reset before starting a new task.")
             if runtime.get("completed") or runtime.get("stale"):
                 self._reset_runtime_locked(project)
@@ -816,7 +988,6 @@ class ProjectRuntimeMixin:
                     model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -828,12 +999,32 @@ class ProjectRuntimeMixin:
                 raise
             self.append_message(project, "user", message)
 
+    def resume(self, project: Path) -> None:
+        """Resume only a durable stopped run; launch() remains the process owner."""
+        with self._runtime_lock:
+            runtime = self.read_runtime(project)
+            if not runtime.get("actions", {}).get("resume"):
+                raise ValueError("This project does not have a stopped run to Continue")
+            request = self._latest_run_request(project)
+            self.launch(
+                project,
+                None,
+                mode="resume",
+                backend=str(request.get("backend") or ""),
+                model=str(request.get("model") or ""),
+                validator=str(request.get("validator") or ""),
+                workflow=str(request.get("workflow") or ""),
+                readonly_safety=str(request.get("readonly_safety") or "restore"),
+            )
+
     def rerun_last(self, project: Path, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
         """Atomically reset and relaunch the last user task within this UI process."""
         with self._chat_lock, self._runtime_lock:
             runtime = self.read_runtime(project)
-            if runtime.get("running"):
-                raise ValueError("This project already has an active runtime")
+            if not runtime.get("actions", {}).get("rerun"):
+                if runtime.get("running"):
+                    raise ValueError("This project already has an active runtime")
+                raise ValueError("No completed task is available to rerun")
             last = next((m["content"] for m in reversed(self.messages(project)) if m.get("role") == "user"), "")
             if not last:
                 raise ValueError("No previous task to rerun")
@@ -847,7 +1038,6 @@ class ProjectRuntimeMixin:
                 self.launch(
                     project, None, mode="run", backend=backend, model=request["model"],
                     validator=request["validator"], workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -867,7 +1057,6 @@ class ProjectRuntimeMixin:
         model: str = "",
         validator: str = "",
         workflow: str = "",
-        execution_mode: str = "linear",
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
@@ -888,7 +1077,6 @@ class ProjectRuntimeMixin:
                     raise ValueError("Goal is required")
                 if mode == "rerun":
                     command.append("--force-new")
-            command += ["--execution-mode", str(execution_mode or "linear")]
             if backend:
                 command += ["--backend", backend]
             command += self._model_cli_args(model)
@@ -937,7 +1125,7 @@ class ProjectRuntimeMixin:
         if workflow_path is not None:
             allowed = {path_key(path) for path in self._known_workflow_paths(project)}
             if path_key(workflow_path) not in allowed:
-                raise ValueError("Selected Workflow is outside the allowed System / Custom / Project workflow roots")
+                raise ValueError("Selected Workflow is outside the allowed Global / Project Workflow asset roots")
             if not workflow_path.is_file():
                 raise ValueError(f"Workflow not found: {workflow_path}")
         requirements = self._workflow_requirements(workflow_path) if workflow_path else {"requires_python_validator": False, "has_ai_validator": False}
@@ -994,7 +1182,6 @@ class ProjectRuntimeMixin:
             "backend": backend or "",
             "model": model_value,
             "mode": request_mode,
-            "execution_mode": "linear",
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
             "validator": validator_value,
@@ -1008,16 +1195,24 @@ class ProjectRuntimeMixin:
         os.replace(tmp, request_dir / "request.json")
         return {**manifest, "request_dir": str(request_dir)}
 
-    def stop(self, project: Path) -> None:
-        runtime = self.runtime_dir(project)
-        runtime.mkdir(parents=True, exist_ok=True)
-        (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
+    def stop(self, project: Path) -> dict:
+        """Request stop only for an active owner; repeated/stale Stop is harmless."""
+        with self._runtime_lock:
+            if not self.read_runtime(project).get("actions", {}).get("stop"):
+                return {"ok": True, "requested": False}
+            runtime = self.runtime_dir(project)
+            runtime.mkdir(parents=True, exist_ok=True)
+            (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
+            return {"ok": True, "requested": True}
 
     def reset_runtime(self, project: Path) -> dict:
         """Clear Runner-owned state for a new task while preserving UI history."""
         with self._runtime_lock:
-            if self.read_runtime(project).get("running"):
-                raise ValueError("Stop the active runtime before Reset")
+            runtime = self.read_runtime(project)
+            if not runtime.get("actions", {}).get("reset"):
+                if runtime.get("running"):
+                    raise ValueError("Stop the active runtime before Reset")
+                raise ValueError("There is no stopped runtime to Reset")
             removed = self._reset_runtime_locked(project)
             return {"ok": True, "removed": removed}
 
@@ -1182,7 +1377,6 @@ __all__ = [
     "LAUNCH_RESERVATION_GRACE",
     "LAUNCH_STATE_FILE",
     "MESSAGES_FILE",
-    "PROJECTS_PAYLOAD_CACHE_SECONDS",
     "ProjectRuntimeMixin",
     "RUNTIME_DIR",
     "UI_STATE_DIR",

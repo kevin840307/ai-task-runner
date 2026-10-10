@@ -790,3 +790,4 @@ body.projects-collapsed .project-add-button { width: 34px; height: 34px; border-
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 22%, transparent);
 }
+

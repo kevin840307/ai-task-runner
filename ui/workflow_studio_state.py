@@ -12,7 +12,10 @@ import json
 import os
 import re
 import subprocess
+import signal
+import threading
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -22,28 +25,14 @@ from jinja2 import Environment, meta
 from project_registry import path_key
 
 try:
-    from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from .workflow_graph import build_workflow_graph
-    from .workflow_storage import (
-        iter_project_packages,
-        project_package_for_asset,
-        project_package_folders,
-        project_package_prompt_dir,
-        project_package_workflow_dir,
-    )
+    from .workflow_storage import project_asset_root
 except ImportError:  # direct ui/main.py execution
-    from workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from workflow_graph import build_workflow_graph
-    from workflow_storage import (
-        iter_project_packages,
-        project_package_for_asset,
-        project_package_folders,
-        project_package_prompt_dir,
-        project_package_workflow_dir,
-    )
+    from workflow_storage import project_asset_root
+
 
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
-SYSTEM_SCOPES = {"system"}
 
 
 class _IndentedSafeDumper(yaml.SafeDumper):
@@ -54,63 +43,32 @@ class _IndentedSafeDumper(yaml.SafeDumper):
 class WorkflowStudioMixin:
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
+        """List editable Workflow YAML and Prompt Markdown from the two asset roots."""
+        scopes: list[tuple[str, Path | None]] = [("global", None)]
+        if project is not None:
+            scopes.append(("project", project))
+
         workflows: list[dict] = []
         prompts: list[dict] = []
-        roots: list[tuple[str, Path]] = [
-            ("system", self.repo_root / "runner" / "workflow" / "system"),
-            ("custom", self.repo_root / "runner" / "workflow" / "custom"),
-        ]
-        prompt_roots: list[tuple[str, Path]] = [
-            ("system", self.repo_root / "runner" / "prompts" / "stages"),
-            ("system", self.repo_root / "runner" / "prompts" / "system"),
-            ("custom", self.repo_root / "runner" / "prompts" / "custom"),
-        ]
-        if project is not None:
-            for _folder, _package_root, workflow_dir, prompt_dir in (iter_project_packages(project) or ()):
-                roots.append(("project", workflow_dir))
-                if prompt_dir.is_dir():
-                    prompt_roots.append(("project", prompt_dir))
+        visibility = self._workflow_visibility()
+        for scope, selected_project in scopes:
+            workflow_root = self._asset_root("workflow", scope, selected_project)
+            prompt_root = self._asset_root("prompt", scope, selected_project)
+            if workflow_root.is_dir():
+                for path in sorted(workflow_root.glob("*.yaml")) + sorted(workflow_root.glob("*.yml")):
+                    workflows.append(self._studio_item(path, scope, "workflow", visibility))
+            if prompt_root.is_dir():
+                for path in sorted(prompt_root.rglob("*.md")):
+                    prompts.append(self._studio_item(path, scope, "prompt"))
 
-        workflow_visibility = self._workflow_visibility()
-        seen: set[str] = set()
-        for scope, root in roots:
-            if not root.is_dir():
-                continue
-            candidates = root.rglob("*.yaml")
-            for path in candidates:
-                if scope == "system" and path.name.lower() == "workflow_builder.yaml":
-                    continue
-                item = self._studio_item(path, scope, "workflow", workflow_visibility)
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    workflows.append(item)
-            for path in root.rglob("*.yml"):
-                if scope == "system" and path.name.lower() == "workflow_builder.yml":
-                    continue
-                item = self._studio_item(path, scope, "workflow", workflow_visibility)
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    workflows.append(item)
-
-        seen.clear()
-        for scope, root in prompt_roots:
-            if not root.is_dir():
-                continue
-            for path in root.rglob("*.md"):
-                item = self._studio_item(path, scope, "prompt")
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    prompts.append(item)
-
-        order = {"system": 0, "custom": 1, "project": 2}
+        order = {"global": 0, "project": 1}
+        key = lambda item: (
+            order.get(item["scope"], 9),
+            item.get("display_name", item["name"]).lower(),
+        )
         return {
-            "workflows": sorted(workflows, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
-            "prompts": sorted(prompts, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
-            "custom_folders": {
-                "workflow": self.studio_custom_folders("workflow"),
-                "prompt": self.studio_custom_folders("prompt"),
-            },
-            "project_folders": project_package_folders(project) if project is not None else [],
+            "workflows": sorted(workflows, key=key),
+            "prompts": sorted(prompts, key=key),
             "guard": self.edit_guard(),
         }
 
@@ -138,7 +96,7 @@ class WorkflowStudioMixin:
 
     def _stage_prompt_tag_paths(self) -> list[str]:
         """Read the stable Stage prompt context contract without importing Runner."""
-        context_file = self.repo_root / "runner" / "prompts" / "context.py"
+        context_file = self.repo_root / "runner" / "prompting.py"
         try:
             tree = ast.parse(context_file.read_text(encoding="utf-8"))
         except (OSError, SyntaxError) as exc:
@@ -149,16 +107,16 @@ class WorkflowStudioMixin:
         return paths
 
     def _loader_prompt_contracts(self) -> dict[str, list[str]]:
-        """Discover dedicated System Prompt variables from literal render_prompt calls.
+        """Discover dedicated shared Prompt variables from literal render_prompt calls.
 
-        `system/rules.md` is not a Stage prompt. It is rendered by the prompt
+        `common/rules.md` is not a Stage prompt. It is rendered by the prompt
         loader with its own values. Immutable output/retry protocols live in
-        runner/prompts/protocols.py and are intentionally not Studio resources.
+        runner/prompting.py and are intentionally not Studio resources.
         Parse that contract statically so Workflow Studio does not import Runner Core
         and does not show false Prompt warnings when those files are inspected.
         """
-        loader_file = self.repo_root / "runner" / "prompts" / "loader.py"
-        prompt_root = (self.repo_root / "runner" / "prompts").resolve()
+        loader_file = self.repo_root / "runner" / "prompting.py"
+        prompt_root = self._global_asset_root("prompt")
         try:
             tree = ast.parse(loader_file.read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
@@ -208,7 +166,7 @@ class WorkflowStudioMixin:
             "workflow.validator_feedback": "Current workflow validator feedback.",
             "rules": "Runner AI rules for the project.",
             "always_instructions": "User-enforced always instructions.",
-            "plugin_rules": "Plugin-provided Runner rules used by system/rules.md.",
+            "plugin_rules": "Plugin-provided Runner rules used by common/rules.md.",
         }
         for key in paths:
             if not key or key in seen:
@@ -219,7 +177,7 @@ class WorkflowStudioMixin:
                 "label": key.replace("_", " ").replace(".", " · ").title(),
                 "description": descriptions.get(key, f"Runtime prompt context: {key}."),
             })
-        source = str(prompt_path) if prompt_path is not None else str(self.repo_root / "runner" / "prompts" / "context.py")
+        source = str(prompt_path) if prompt_path is not None else str(self.repo_root / "runner" / "prompting.py")
         return {"tags": tags, "source": source, "contract": contract}
 
     def _check_prompt_content(self, content: str, prompt_path: Path | None = None) -> dict:
@@ -253,56 +211,33 @@ class WorkflowStudioMixin:
             raise ValueError("Prompt check is available only for Prompt files")
         return self._check_prompt_content(content, path)
 
-    def studio_workflow_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
-        """Create one blank workflow without touching Runner/Core code."""
+    def studio_workflow_create(
+        self,
+        name: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Create one editable Workflow in Global or Project assets."""
         with self._edit_lock:
-            self._require_editable()
-            raw = str(name or "").strip()
-            if not raw:
-                raise ValueError("Workflow name is required")
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Workflow name must be a file name, not a path")
-            if not raw.lower().endswith((".yaml", ".yml")):
-                raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
-                raise ValueError("Workflow file name contains unsupported characters")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before creating a Project workflow")
-                default_folder = re.sub(r"(?i)\.workflow$", "", Path(raw).stem).strip() or "workflow"
-                rel_folder = self._normalize_workflow_folder(folder or default_folder)
-                if "/" in rel_folder:
-                    raise ValueError("Project Workflow folder must be one folder name")
-                target_root = project_package_workflow_dir(project, rel_folder)
-                target_root.mkdir(parents=True, exist_ok=True)
-                target = (target_root / raw).resolve()
-                if not self._is_within(target, target_root):
-                    raise ValueError("Workflow path is outside the Project Workflow package")
-            elif destination == "custom":
-                root = self._custom_asset_root("workflow")
-                root.mkdir(parents=True, exist_ok=True)
-                rel_folder = self._normalize_custom_folder(folder)
-                target_root = (root / Path(rel_folder)).resolve() if rel_folder else root
-                if not self._is_within(target_root, root):
-                    raise ValueError("Workflow folder is outside the Custom Workflow folder")
-                target_root.mkdir(parents=True, exist_ok=True)
-                target = (target_root / raw).resolve()
-                if not self._is_within(target, root):
-                    raise ValueError("Workflow path is outside the Custom Workflow folder")
-            else:
-                raise ValueError("Workflow destination must be project or custom")
+            raw = self._normalize_studio_asset_name("workflow", name)
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root("workflow", scope, project)
+            root.mkdir(parents=True, exist_ok=True)
+            target = (root / raw).resolve()
             if target.exists():
                 raise ValueError(f"Workflow already exists: {target.name}")
-            content = "stages:\n  planning:\n    type: plan\n\nflow:\n  - planning\n"
+            content = (
+                "stages:\n"
+                "  start:\n"
+                "    type: base\n"
+                "    prompt: common/execution.md\n\n"
+                "flow:\n"
+                "  - start\n"
+            )
             self._validate_workflow_before_write(target, content)
-            try:
-                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-                with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                    handle.write(content)
-            except FileExistsError as exc:
-                raise ValueError(f"Workflow already exists: {target.name}") from exc
-            scope = "project" if destination == "project" else "custom"
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
             item = self._studio_item(target, scope, "workflow")
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
@@ -310,20 +245,19 @@ class WorkflowStudioMixin:
         path, kind, scope = self._resolve_studio_file(file_id, project)
         content = path.read_text(encoding="utf-8")
         stat = path.stat()
-        return {
+        result = {
             **self._studio_item(path, scope, kind),
             "content": content,
             "hash": self._hash_text(content),
             "mtime": stat.st_mtime,
             "guard": self.edit_guard(),
         }
+        if kind == "prompt":
+            result["used_by"] = self._prompt_usages(path, project)
+        return result
 
     def studio_save(self, file_id: str, content: str, expected_hash: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            guard = self.edit_guard()
-            if not guard["editable"]:
-                names = ", ".join(p["name"] for p in guard["active_projects"])
-                raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if path.suffix.lower() not in EDITABLE_SUFFIXES:
@@ -362,16 +296,12 @@ class WorkflowStudioMixin:
                 "type": str(config.get("type") or "base"),
                 "status": str(config.get("status") or ""),
                 "prompt": str(config.get("prompt") or ""),
-                "recover": config.get("recover") if isinstance(config.get("recover"), list) else [],
             })
         flow_raw = data.get("flow") or []
-        flow = []
-        if isinstance(flow_raw, list):
-            for item in flow_raw:
-                if isinstance(item, str):
-                    flow.append({"stage": item})
-                elif isinstance(item, dict):
-                    flow.append(dict(item))
+        flow = [
+            item for item in flow_raw
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(flow_raw, list) else []
         return {
             "id": file_id,
             "name": path.name,
@@ -384,10 +314,6 @@ class WorkflowStudioMixin:
 
     def studio_visual_save(self, file_id: str, flow: list, expected_hash: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            guard = self.edit_guard()
-            if not guard["editable"]:
-                names = ", ".join(p["name"] for p in guard["active_projects"])
-                raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
@@ -402,14 +328,11 @@ class WorkflowStudioMixin:
                 raise ValueError(f"Workflow YAML is invalid: {exc}") from exc
             if not isinstance(data, dict):
                 raise ValueError("Workflow YAML root must be a mapping")
-            normalized = []
-            for item in flow if isinstance(flow, list) else []:
-                if isinstance(item, str) and item.strip():
-                    normalized.append(item.strip())
-                elif isinstance(item, dict) and str(item.get("stage", "")).strip():
-                    clean = dict(item)
-                    clean["stage"] = str(clean["stage"]).strip()
-                    normalized.append(clean if len(clean) > 1 else clean["stage"])
+            normalized = [
+                item.strip()
+                for item in flow if isinstance(flow, list)
+                if isinstance(item, str) and item.strip()
+            ]
             # Reuse the canonical Flow block writer instead of emitting an
             # indentless sequence here.  The Visual editor must never turn a
             # valid Workflow into malformed YAML merely by reordering Stages.
@@ -426,18 +349,15 @@ class WorkflowStudioMixin:
         expected_hash: str,
         project: Path | None = None,
         *,
-        flow_index: int | None = None,
-        scope: str = "",
-        flow_fields: dict | None = None,
         validate_only: bool = False,
     ) -> dict:
-        """Patch or validate direct Stage/Flow fields without rewriting unrelated YAML/comments."""
+        """Patch or validate one n8n-style Stage node."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope_name)
             if kind != "workflow":
                 raise ValueError("Stage editor is available only for workflow YAML")
+
             content = path.read_text(encoding="utf-8")
             self._require_hash(content, expected_hash)
             data = self._load_workflow_yaml(content)
@@ -445,61 +365,338 @@ class WorkflowStudioMixin:
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
 
-            allowed = {
-                "type", "status", "run_state", "actor", "mode", "prompt",
-                "continuation_prompt", "instructions", "detail", "produces",
-                "session_key", "parser", "cwd", "result_kind", "validator", "command",
-                "allow_project_read", "track_changes", "tolerate_restored_changes",
-                "fresh_session_each_run", "fresh_session_on_start", "skip_on_error",
-                "repair_plan", "structured_retries", "structured_fresh_retries",
-                "retry", "runs", "required_passes", "min_tasks", "timeout",
-                "recover", "clean_work",
-            }
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
-            clean: dict = {}
-            for key, value in fields.items():
-                if key not in allowed:
-                    raise ValueError(f"Unsupported Stage field: {key}")
-                clean[key] = value
-            self._validate_stage_editor_fields(clean)
+            clean = {str(key): value for key, value in fields.items() if str(key) != "name"}
             updated = self._patch_stage_fields(content, stage_name, clean)
-            parsed_after_fields = self._load_workflow_yaml(updated)
-            final_stage = (parsed_after_fields.get("stages") or {}).get(stage_name, {}) if isinstance(parsed_after_fields, dict) else {}
-            if isinstance(final_stage, dict) and final_stage.get("type") == "command" and not final_stage.get("command"):
-                raise ValueError("Command Stage requires a command")
-
-            if flow_index is not None:
-                parsed = self._load_workflow_yaml(updated)
-                flow = parsed.get("flow") if isinstance(parsed, dict) else None
-                if not isinstance(flow, list) or not 0 <= flow_index < len(flow):
-                    raise ValueError("Flow step no longer exists; reload Workflow Studio")
-                current = flow[flow_index]
-                current_name = current if isinstance(current, str) else str(current.get("stage", "")) if isinstance(current, dict) else ""
-                if current_name != stage_name:
-                    raise ValueError("Flow changed on disk; reload Workflow Studio")
-                row = dict(current) if isinstance(current, dict) else {"stage": stage_name}
-                row["stage"] = stage_name
-                updates = dict(flow_fields or {})
-                updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "routes", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
-                unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
-                if unknown_flow:
-                    raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
-                self._validate_flow_editor_fields(updates, flow, flow_index, final_stage)
-                for key, value in updates.items():
-                    if value in (None, ""):
-                        row.pop(key, None)
-                    else:
-                        row[key] = value
-                flow[flow_index] = row if len(row) > 1 else stage_name
-                updated = self._replace_flow_block(updated, flow)
-
             validation = self._validate_workflow_before_write(path, updated)
             if validate_only:
-                return {"ok": True, "summary": "Validation passed", "output": validation.get("output", "")[-20000:]}
+                return {
+                    "ok": True,
+                    "summary": "Validation passed",
+                    "output": validation.get("output", "")[-20000:],
+                }
             self._atomic_write(path, updated)
-            return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
+            return {
+                "file": self.studio_read(file_id, project),
+                "visual": self.studio_visual(file_id, project),
+            }
+
+    def studio_stage_source(
+        self,
+        file_id: str,
+        stage_name: str,
+        mode: str,
+        project: Path | None = None,
+        *,
+        fields: dict | None = None,
+        source: str = "",
+    ) -> dict:
+        """Format/parse one Stage YAML fragment without writing the Workflow."""
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Stage source editor is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        stages = data.get("stages") if isinstance(data, dict) else None
+        saved = stages.get(stage_name) if isinstance(stages, dict) else None
+        draft = dict(fields) if isinstance(fields, dict) else None
+        current = saved if isinstance(saved, dict) else draft
+        if not isinstance(current, dict):
+            raise ValueError(f"Stage not found: {stage_name}")
+
+        if mode == "format":
+            candidate = dict(draft) if draft is not None else dict(current)
+            candidate.pop("name", None)
+            candidate.pop("routes", None)
+            candidate.pop("targets", None)
+            return {
+                "ok": True,
+                "source": yaml.safe_dump(candidate, sort_keys=False, allow_unicode=True).rstrip() + "\n",
+            }
+
+        if mode != "parse":
+            raise ValueError("Stage source mode must be format or parse")
+        try:
+            parsed = yaml.safe_load(source) or {}
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Stage YAML is invalid: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Stage YAML must be a mapping")
+        if "name" in parsed:
+            raise ValueError("Stage key/name is managed by the Workflow and cannot be changed here")
+        if "routes" in parsed or "targets" in parsed:
+            raise ValueError("Stage routing is managed by the Routing tab and cannot be changed in Stage YAML")
+
+        original_type = str(current.get("type") or "")
+        parsed_type = str(parsed.get("type") or original_type)
+        if original_type and parsed_type != original_type:
+            raise ValueError("Stage type is immutable; create a new Stage to change type")
+        if original_type and "type" not in parsed:
+            parsed["type"] = original_type
+
+        # Validate through the same complete-Workflow boundary used by Save.
+        # Unsaved Designer Stages are inserted only into this temporary candidate;
+        # nothing is persisted until the user saves the Workflow.
+        candidate = path.read_text(encoding="utf-8")
+        if isinstance(saved, dict):
+            candidate = self._patch_stage_fields(candidate, stage_name, parsed)
+        else:
+            candidate = self._insert_stage_block(candidate, stage_name, parsed)
+        self._validate_workflow_before_write(path, candidate)
+        return {"ok": True, "fields": parsed}
+
+    def studio_path_test(
+        self,
+        file_id: str,
+        stage_name: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Dry-run the saved canonical Workflow from one Stage to closure.
+
+        This never mutates the Workflow file or production run state. It reuses
+        tool/workflow_dryrun.py, which in turn uses the production loader and
+        FlowEngine with mock Stage results.
+        """
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Path test is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        stages = data.get("stages")
+        if not isinstance(stages, dict) or stage_name not in stages:
+            raise ValueError(f"Stage not found: {stage_name}")
+
+        command = [
+            sys.executable,
+            str(self.repo_root / "tool" / "workflow_dryrun.py"),
+            str(path),
+            "--from-stage",
+            str(stage_name),
+            "--max-steps",
+            "500",
+            "--json",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Path test failed: {exc}") from exc
+
+        raw = (completed.stdout or "").strip()
+        payload: dict = {}
+        if raw:
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {}
+        if completed.returncode == 2 or not payload:
+            detail = (completed.stderr or completed.stdout or "dry-run returned no JSON").strip()
+            raise ValueError(f"Path test failed: {detail[-4000:]}")
+        return {
+            "ok": completed.returncode == 0 and bool(payload.get("completed")),
+            "exit_code": completed.returncode,
+            "from_stage": str(stage_name),
+            "completed": bool(payload.get("completed")),
+            "error": payload.get("error"),
+            "cycle": payload.get("cycle"),
+            "stage": payload.get("stage"),
+            "transitions": list(payload.get("transitions") or []),
+        }
+
+
+    def _stage_test_runtime(self):
+        lock = getattr(self, "_studio_stage_test_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._studio_stage_test_lock = lock
+            self._studio_stage_test_processes = {}
+            self._studio_stage_test_cancelled = set()
+        return lock, self._studio_stage_test_processes, self._studio_stage_test_cancelled
+
+    @staticmethod
+    def _terminate_stage_test_process(process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        pid = int(getattr(process, "pid", 0) or 0)
+        if os.name == "nt" and pid > 0:
+            try:
+                result = subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    check=False,
+                )
+                if result.returncode != 0:
+                    process.kill()
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            return
+        try:
+            if pid > 0:
+                os.killpg(pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except OSError:
+            try:
+                process.terminate()
+            except OSError:
+                return
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                if pid > 0:
+                    os.killpg(pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except OSError:
+                pass
+
+    def studio_stage_test_cancel(self, test_id: str) -> dict:
+        key = str(test_id or "").strip()
+        if not key:
+            raise ValueError("Stage test id is required")
+        lock, processes, cancelled = self._stage_test_runtime()
+        with lock:
+            if len(cancelled) >= 64:
+                cancelled.clear()
+            cancelled.add(key)
+            process = processes.get(key)
+            if process is None:
+                return {"ok": True, "cancelled": True, "pending": True}
+        self._terminate_stage_test_process(process)
+        return {"ok": True, "cancelled": True, "pending": False}
+
+    def studio_stage_test(
+        self,
+        file_id: str,
+        stage_name: str,
+        input_text: str,
+        project: Path | None = None,
+        *,
+        backend: str = "",
+        probe_mode: str = "stage",
+        test_scenario: str = "pass",
+        graph: dict | None = None,
+        test_id: str = "",
+    ) -> dict:
+        """Execute one Stage in a disposable Project, including unsaved graph drafts."""
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Stage test is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        if graph is not None:
+            if not isinstance(graph, dict) or not isinstance(graph.get("stages"), list) or not isinstance(graph.get("flow"), list):
+                raise ValueError("Stage test graph requires stages and flow")
+            routes = graph.get("routes") or {}
+            if not isinstance(routes, dict):
+                raise ValueError("Stage test routes must be an object")
+            stages = {}
+            for row in graph["stages"]:
+                if not isinstance(row, dict):
+                    raise ValueError("Each Stage must be an object")
+                name = str(row.get("name") or "").strip()
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name) or name in stages:
+                    raise ValueError(f"Invalid or duplicate Stage key: {name}")
+                config = {key: value for key, value in row.items() if key not in {"name", "routes"} and value is not None and value != ""}
+                mapping = routes.get(name, row.get("routes"))
+                if mapping:
+                    config["routes"] = mapping
+                stages[name] = config
+            data = {"stages": stages, "flow": graph["flow"]}
+        if stage_name not in data.get("stages", {}):
+            raise ValueError(f"Stage not found: {stage_name}")
+
+        with tempfile.TemporaryDirectory(prefix="ai-task-runner-stage-test-") as test_project:
+            command = [
+                sys.executable,
+                str(self.repo_root / "tool" / "stage_probe.py"),
+                "--project-root",
+                test_project,
+                "--workflow",
+                str(path),
+                "--stage",
+                str(stage_name),
+                "--request-stdin",
+            ]
+            if str(backend or "").strip():
+                command += ["--backend", str(backend).strip()]
+            payload_text = json.dumps(
+                {
+                    "input": input_text,
+                    "workflow": data,
+                    "probe_mode": str(probe_mode or "stage"),
+                    "test_scenario": str(test_scenario or "pass"),
+                },
+                ensure_ascii=False,
+            )
+            key = str(test_id or "").strip() or uuid.uuid4().hex
+            lock, processes, cancelled = self._stage_test_runtime()
+            popen_kwargs = {
+                "cwd": str(self.repo_root),
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": True,
+            }
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            else:
+                popen_kwargs["start_new_session"] = True
+            try:
+                process = subprocess.Popen(command, **popen_kwargs)
+            except OSError as exc:
+                raise ValueError(f"Stage test failed: {exc}") from exc
+
+            cancel_immediately = False
+            with lock:
+                processes[key] = process
+                if key in cancelled:
+                    cancelled.discard(key)
+                    cancel_immediately = True
+            if cancel_immediately:
+                self._terminate_stage_test_process(process)
+
+            try:
+                stdout, stderr = process.communicate(payload_text, timeout=900)
+            except subprocess.TimeoutExpired as exc:
+                self._terminate_stage_test_process(process)
+                raise ValueError("Stage test timed out after 900 seconds") from exc
+            finally:
+                with lock:
+                    was_cancelled = key in cancelled
+                    processes.pop(key, None)
+                    cancelled.discard(key)
+
+            if was_cancelled or cancel_immediately:
+                return {"ok": False, "cancelled": True, "test_id": key}
+            completed = subprocess.CompletedProcess(command, process.returncode or 0, stdout, stderr)
+
+            raw = (completed.stdout or "").strip().splitlines()
+            payload = {}
+            if raw:
+                try:
+                    payload = json.loads(raw[-1])
+                except json.JSONDecodeError:
+                    payload = {}
+            if completed.returncode != 0 and not payload:
+                detail = (completed.stderr or completed.stdout or "").strip()
+                raise ValueError("Stage test failed: " + detail[-6000:])
+            if not isinstance(payload, dict):
+                raise ValueError("Stage test returned invalid output")
+            if payload.get("error") and not payload.get("stage"):
+                raise ValueError(str(payload.get("error")))
+            return payload
 
     def studio_stage_add(
         self,
@@ -516,7 +713,6 @@ class WorkflowStudioMixin:
     ) -> dict:
         """Insert one Stage with minimal YAML churn, then optionally append it to flow."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope_name)
             if kind != "workflow":
@@ -535,8 +731,8 @@ class WorkflowStudioMixin:
                 raise ValueError(f"Stage already exists: {name}")
             if stage_type == "command" and not str(command or "").strip():
                 raise ValueError("Command Stage requires a command")
-            if stage_type == "base" and not str(prompt or "").strip():
-                raise ValueError("Base Stage requires a Prompt")
+            # AI profile defaults are catalog/runtime-owned. Only validate a Prompt
+            # when the user explicitly overrides the profile default.
             if str(prompt or "").strip() and self._resolve_prompt_reference(path, str(prompt).strip()) is None:
                 raise ValueError(f"Prompt not found: {str(prompt).strip()}")
 
@@ -571,106 +767,6 @@ class WorkflowStudioMixin:
             column = int(getattr(mark, "column", 0)) + 1 if mark is not None else 0
             message = getattr(exc, "problem", None) or str(exc).splitlines()[0]
             return {"ok": False, "summary": str(message), "line": line, "column": column}
-
-    def _validate_stage_editor_fields(self, fields: dict) -> None:
-        stage_type = fields.get("type")
-        if stage_type is not None:
-            if stage_type not in self._supported_stage_types():
-                raise ValueError("Unsupported Stage type")
-        mode = fields.get("mode")
-        if mode not in (None, "", "readonly", "write"):
-            raise ValueError("Stage mode must be readonly or write")
-        parser = fields.get("parser")
-        if parser not in (None, "", "review", "validation"):
-            raise ValueError("Stage parser must be review or validation")
-        produces = fields.get("produces")
-        if produces not in (None, "", "tasks"):
-            raise ValueError("Stage produces must be tasks when specified")
-        for key in ("retry", "structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
-            value = fields.get(key)
-            if value is None:
-                continue
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise ValueError(f"Stage {key} must be an integer")
-            minimum = -1 if key == "retry" else (1 if key in {"runs", "min_tasks"} else 0)
-            if value < minimum:
-                raise ValueError(f"Stage {key} must be >= {minimum}")
-        timeout = fields.get("timeout")
-        if timeout is not None and (not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout < 0):
-            raise ValueError("Stage timeout must be a non-negative number")
-
-    @staticmethod
-    def _validate_flow_editor_fields(updates: dict, flow: list, index: int, stage: dict) -> None:
-        scope = updates.get("scope")
-        if scope not in (None, "", "task"):
-            raise ValueError("Flow scope must be task when specified")
-        label = updates.get("label")
-        if label is not None and (not isinstance(label, str) or not label.strip()):
-            raise ValueError("Flow label must be a non-empty string")
-        status = updates.get("status")
-        if status is not None and (not isinstance(status, str) or not status.strip()):
-            raise ValueError("Flow status must be a non-empty string")
-        prompt = updates.get("prompt")
-        if prompt is not None and (not isinstance(prompt, str) or not prompt.strip()):
-            raise ValueError("Flow prompt must be a non-empty string")
-        routes = updates.get("routes")
-        if routes is not None:
-            if not isinstance(routes, dict) or not routes:
-                raise ValueError("Flow routes must be a non-empty object")
-            unknown_statuses = sorted(str(key) for key in routes if key not in {"pass", "fail", "error", "replan"})
-            if unknown_statuses:
-                raise ValueError(f"Flow routes has unsupported status: {', '.join(unknown_statuses)}")
-            allowed_targets = {"next", "done", "stop"}
-            for flow_item in flow:
-                route_name = flow_item if isinstance(flow_item, str) else flow_item.get("stage") if isinstance(flow_item, dict) else None
-                if isinstance(route_name, str) and route_name:
-                    allowed_targets.add(route_name)
-            for status_name, target in routes.items():
-                if not isinstance(target, str) or not target.strip():
-                    raise ValueError(f"Flow routes.{status_name} must be a non-empty target")
-                if target not in allowed_targets:
-                    raise ValueError(f"Flow routes.{status_name} references unknown Flow stage: {target}")
-        restart_at = updates.get("restart_at")
-        if restart_at:
-            allowed = set()
-            for item in flow[: index + 1]:
-                name = item if isinstance(item, str) else item.get("stage") if isinstance(item, dict) else None
-                if isinstance(name, str) and name:
-                    allowed.add(name)
-            if restart_at not in allowed:
-                raise ValueError("restart_at must reference this or an earlier Flow stage")
-        for key in ("repeat", "max_attempts", "fresh_after_same_failures"):
-            value = updates.get(key)
-            if value is None:
-                continue
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                raise ValueError(f"Flow {key} must be a positive integer")
-        on_exhausted = updates.get("on_exhausted")
-        if on_exhausted not in (None, "continue", "fail"):
-            raise ValueError("Flow on_exhausted must be continue or fail")
-        recover = updates.get("recover")
-        if recover is None and isinstance(stage, dict):
-            recover = stage.get("recover")
-        if recover is not None and not isinstance(recover, (list, tuple)):
-            raise ValueError("Flow recover must be a Stage list")
-        if updates.get("fresh_after_same_failures") is not None and not recover:
-            raise ValueError("fresh_after_same_failures requires recover stages")
-        if isinstance(updates.get("repeat"), int) and updates["repeat"] > 1 and not recover:
-            raise ValueError("repeat > 1 requires recover stages")
-        if updates.get("max_attempts") is not None and not recover:
-            raise ValueError("max_attempts requires recover stages")
-        if on_exhausted is not None and updates.get("max_attempts") is None:
-            raise ValueError("on_exhausted requires max_attempts")
-        if updates.get("max_attempts") is not None and updates.get("repeat") is not None:
-            raise ValueError("max_attempts cannot be combined with repeat")
-        if updates.get("max_attempts") is not None and updates.get("restart_at") is not None:
-            raise ValueError("max_attempts cannot be combined with restart_at")
-
-    def _require_editable(self) -> None:
-        guard = self.edit_guard()
-        if not guard["editable"]:
-            names = ", ".join(p["name"] for p in guard["active_projects"])
-            raise ValueError(f"Cannot edit workflow/prompt while runtime is active: {names}")
 
     def _require_hash(self, content: str, expected_hash: str) -> None:
         if expected_hash and expected_hash != self._hash_text(content):
@@ -801,17 +897,21 @@ class WorkflowStudioMixin:
             except subprocess.TimeoutExpired as exc:
                 raise ValueError("Workflow validation timed out after 45 seconds") from exc
             output = (result.stdout or result.stderr or "").strip()
-            if result.returncode != 0:
-                raise ValueError("Workflow validation failed: " + output[-12000:])
             try:
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
-                raise ValueError("Workflow validation returned invalid JSON") from exc
-            if payload.get("execution_mode", "linear") != "linear":
-                raise ValueError("Workflow validation used an incompatible execution mode")
-            if not payload.get("closed"):
-                raise ValueError("Workflow validation matrix did not reach closure")
-            return {"ok": True, "output": output, "payload": payload}
+                raise ValueError("Workflow validation failed: " + output[-12000:]) from exc
+            if payload.get("valid") is not True:
+                raise ValueError("Workflow validation failed: " + output[-12000:])
+            # Save validates the canonical graph/schema. A workflow may intentionally
+            # stop on PASS/FAIL, so matrix closure is diagnostic rather than a write
+            # requirement. Invalid loaders/routes still fail before this point.
+            return {
+                "ok": True,
+                "output": output,
+                "payload": payload,
+                "warning": "" if payload.get("closed") else "Workflow has non-closing paths.",
+            }
         finally:
             try:
                 temporary.unlink()
@@ -819,66 +919,43 @@ class WorkflowStudioMixin:
                 pass
 
     def _require_studio_writable(self, scope: str) -> None:
-        if scope in SYSTEM_SCOPES:
-            raise ValueError("System workflow/prompt is read only. Create or import a Custom copy to edit it.")
+        if scope not in {"global", "project"}:
+            raise ValueError("Unknown Workflow asset scope")
 
     def _workflow_requirements(self, path: Path | None) -> dict:
         result = {"requires_python_validator": False, "has_ai_validator": False}
         if path is None or not path.is_file():
             return result
         try:
-            stat = path.stat()
-            key = os.path.normcase(str(path.resolve()))
-            cached = self._workflow_requirement_cache.get(key)
-            if cached and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
-                return dict(cached[2])
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):
             return result
         stages = data.get("stages") if isinstance(data, dict) else {}
-        flow = data.get("flow") if isinstance(data, dict) else []
-        if not isinstance(stages, dict) or not isinstance(flow, list):
+        if not isinstance(stages, dict):
             return result
-        seen: set[tuple[str, str]] = set()
-
-        def visit(item) -> None:
-            if isinstance(item, str):
-                name, overrides = item, {}
-            elif isinstance(item, dict):
-                name, overrides = str(item.get("stage", "")), {k: v for k, v in item.items() if k != "stage"}
-            else:
-                return
-            cfg = dict(stages.get(name) or {}) if isinstance(stages.get(name), dict) else {}
-            cfg.update(overrides)
-            signature = (name, json.dumps(cfg, ensure_ascii=False, sort_keys=True, default=str))
-            if signature in seen:
-                return
-            seen.add(signature)
+        for cfg in stages.values():
+            if not isinstance(cfg, dict):
+                continue
             stage_type = str(cfg.get("type") or "base")
-            if stage_type == "ai_validator":
+            if stage_type == "ai_validator" or str(cfg.get("validator") or "").strip().lower() == "ai":
                 result["has_ai_validator"] = True
             command = cfg.get("command")
             command_text = " ".join(command) if isinstance(command, list) else str(command or "")
-            if stage_type == "command" and str(cfg.get("result_kind") or "") == "validation" and "{validator}" in command_text:
+            if stage_type == "command" and "{validator}" in command_text:
                 result["requires_python_validator"] = True
-            recover = cfg.get("recover")
-            if isinstance(recover, list):
-                for child in recover:
-                    visit(child)
-
-        for row in flow:
-            visit(row)
-        self._workflow_requirement_cache[key] = (stat.st_mtime_ns, stat.st_size, dict(result))
         return result
 
-    def _resolve_prompt_reference(self, workflow_path: Path, reference: str) -> Path | None:
+    def _resolve_prompt_reference(
+        self, workflow_path: Path, reference: str
+    ) -> Path | None:
         value = str(reference or "").strip()
         if not value:
             return None
         raw = Path(value).expanduser()
         candidates = [raw] if raw.is_absolute() else [
             workflow_path.parent / raw,
-            self.repo_root / "runner" / "prompts" / raw,
+            workflow_path.parent.parent / "prompts" / raw,
+            self._global_asset_root("prompt") / raw,
         ]
         for candidate in candidates:
             try:
@@ -889,10 +966,24 @@ class WorkflowStudioMixin:
                 return resolved
         return None
 
+    def _effective_stage_prompt_reference(self, config: dict) -> str:
+        prompt = str(config.get("prompt") or "").strip()
+        if prompt:
+            return prompt
+        stage_type = str(config.get("type") or "base")
+        catalog = (self.workflow_catalog().get("stage_types") or {}).get(stage_type) or {}
+        if stage_type == "base":
+            profile = str(config.get("profile") or "generic")
+            defaults = ((catalog.get("profiles") or {}).get(profile) or {}).get("defaults") or {}
+            return str(defaults.get("prompt") or "").strip()
+        for option in catalog.get("options") or []:
+            if option.get("name") == "prompt":
+                return str(option.get("default") or "").strip()
+        return ""
+
     def _workflow_prompt_refs(self, content: str) -> list[tuple[str, str]]:
         data = self._load_workflow_yaml(content)
         stages = data.get("stages") or {}
-        flow = data.get("flow") or []
         refs: list[tuple[str, str]] = []
         if not isinstance(stages, dict):
             return refs
@@ -900,28 +991,14 @@ class WorkflowStudioMixin:
             if not isinstance(config, dict):
                 continue
             stage_type = str(config.get("type") or "base")
-            if stage_type == "base" and not str(config.get("prompt") or "").strip():
+            effective_prompt = self._effective_stage_prompt_reference(config)
+            if stage_type == "base" and not effective_prompt:
                 refs.append((str(name), "<required>"))
-            for key in ("prompt", "continuation_prompt"):
-                value = config.get(key)
-                if isinstance(value, str) and value.strip():
-                    refs.append((str(name), value.strip()))
-            recover = config.get("recover")
-            if isinstance(recover, list):
-                for item in recover:
-                    if isinstance(item, dict):
-                        for key in ("prompt", "continuation_prompt"):
-                            value = item.get(key)
-                            if isinstance(value, str) and value.strip():
-                                refs.append((f"{name}.recover", value.strip()))
-        if isinstance(flow, list):
-            for index, item in enumerate(flow):
-                if isinstance(item, dict):
-                    name = str(item.get("stage") or f"flow[{index}]")
-                    for key in ("prompt", "continuation_prompt"):
-                        value = item.get(key)
-                        if isinstance(value, str) and value.strip():
-                            refs.append((name, value.strip()))
+            elif effective_prompt:
+                refs.append((str(name), effective_prompt))
+            continuation = config.get("continuation_prompt")
+            if isinstance(continuation, str) and continuation.strip():
+                refs.append((str(name), continuation.strip()))
         return refs
 
     def _validate_workflow_prompt_refs(self, workflow_path: Path, content: str) -> None:
@@ -935,32 +1012,30 @@ class WorkflowStudioMixin:
             raise ValueError("Workflow references missing Prompt(s): " + "; ".join(missing[:12]))
 
     def _known_workflow_paths(self, project: Path | None = None) -> list[Path]:
-        roots = [self.repo_root / "runner" / "workflow" / "system", self.repo_root / "runner" / "workflow" / "custom"]
-        paths: list[Path] = []
+        roots = [self._global_asset_root("workflow")]
+        known_projects = [
+            Path(row["path"]).absolute()
+            for row in self.projects()
+            if row.get("exists")
+        ]
+        if project is not None:
+            project_path = Path(project).absolute()
+            if all(path_key(project_path) != path_key(item) for item in known_projects):
+                known_projects.append(project_path)
+        roots.extend(project_asset_root(item, "workflow") for item in known_projects)
+
+        result: list[Path] = []
+        seen: set[str] = set()
         for root in roots:
             if not root.is_dir():
                 continue
-            for suffix in ("*.yaml", "*.yml"):
-                for path in root.rglob(suffix):
-                    if "prompts" not in path.parts:
-                        paths.append(path.resolve())
-        known_projects = [Path(row["path"]).absolute() for row in self.projects() if row.get("exists")]
-        if project is not None:
-            project_path = Path(project).absolute()
-            known_keys = {path_key(path) for path in known_projects}
-            if path_key(project_path) not in known_keys:
-                known_projects.append(project_path)
-        for root in known_projects:
-            for _folder, _package_root, workflow_dir, _prompt_dir in (iter_project_packages(root) or ()):
-                for suffix in ("*.yaml", "*.yml"):
-                    paths.extend(path.resolve() for path in workflow_dir.rglob(suffix))
-        result: list[Path] = []
-        seen: set[str] = set()
-        for path in paths:
-            key = path_key(path)
-            if key not in seen:
-                seen.add(key)
-                result.append(path)
+            for pattern in ("*.yaml", "*.yml"):
+                for path in root.glob(pattern):
+                    resolved = path.resolve()
+                    key = path_key(resolved)
+                    if key not in seen:
+                        seen.add(key)
+                        result.append(resolved)
         return result
 
     def _prompt_usages(self, prompt_path: Path, project: Path | None = None) -> list[str]:
@@ -977,50 +1052,29 @@ class WorkflowStudioMixin:
                     usages.append(f"{workflow.name} · {stage}")
         return sorted(set(usages))
 
-    def studio_prompt_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
+    def studio_prompt_create(
+        self,
+        name: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
-            self._require_editable()
-            raw = str(name or "").strip()
-            if not raw:
-                raise ValueError("Prompt name is required")
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Prompt name must be a file name, not a path")
-            if not raw.lower().endswith(".md"):
-                raw += ".md"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", raw, re.IGNORECASE):
-                raise ValueError("Prompt file name contains unsupported characters")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before creating a Project Prompt")
-                rel_folder = self._normalize_workflow_folder(folder)
-                if rel_folder not in project_package_folders(project):
-                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
-                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True); scope = "project"
-            elif destination == "custom":
-                root = self._custom_asset_root("prompt"); root.mkdir(parents=True, exist_ok=True); scope = "custom"
-                rel_folder = self._normalize_custom_folder(folder)
-                if rel_folder:
-                    root = (root / Path(rel_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root("prompt")):
-                        raise ValueError("Prompt folder is outside the Custom Prompt folder")
-                    root.mkdir(parents=True, exist_ok=True)
-            else:
-                raise ValueError("Prompt destination must be project or custom")
+            raw = self._normalize_studio_asset_name("prompt", name)
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root("prompt", scope, project)
+            root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Prompt path is outside the selected Prompt folder")
             if target.exists():
-                raise ValueError(f"Prompt already exists: {target.name}")
+                raise ValueError(f"Prompt already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                handle.write("# Prompt\n\n{{goal}}\n")
+                handle.write("# Prompt\n\n{{ goal }}\n")
             item = self._studio_item(target, scope, "prompt")
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
     def studio_delete(self, file_id: str, project: Path | None = None) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             usages = self._prompt_usages(path, project) if kind == "prompt" else []
@@ -1037,134 +1091,96 @@ class WorkflowStudioMixin:
         raw = str(name or "").strip()
         if not raw:
             raise ValueError(f"{kind.title()} name is required")
-        if "/" in raw or "\\" in raw or raw in {".", ".."}:
-            raise ValueError(f"{kind.title()} name must be a file name, not a path")
         if kind == "workflow":
+            if "/" in raw or "\\" in raw or raw in {".", ".."}:
+                raise ValueError("Workflow name must be a file name, not a path")
             if not raw.lower().endswith((".yaml", ".yml")):
                 raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
             if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
                 raise ValueError("Workflow file name contains unsupported characters")
         elif kind == "prompt":
+            raw = raw.replace("\\", "/")
             if not raw.lower().endswith(".md"):
                 raw += ".md"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", raw, re.IGNORECASE):
-                raise ValueError("Prompt file name contains unsupported characters")
+            prompt_path = Path(raw)
+            if len(prompt_path.parts) == 1:
+                prompt_path = Path("common") / prompt_path
+            if prompt_path.is_absolute() or any(part in {"", ".", ".."} for part in prompt_path.parts):
+                raise ValueError("Prompt name must be a safe relative path")
+            if any(
+                not re.fullmatch(r"[A-Za-z0-9_. -]+", part, re.IGNORECASE)
+                for part in prompt_path.parts[:-1]
+            ) or not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", prompt_path.name, re.IGNORECASE):
+                raise ValueError("Prompt path contains unsupported characters")
+            raw = prompt_path.as_posix()
         else:
             raise ValueError("Unsupported Studio asset kind")
         return raw
 
-    def _studio_scope_root(self, kind: str, scope: str, project: Path | None) -> Path:
-        if scope == "custom":
-            root = self.repo_root / "runner" / ("workflow" if kind == "workflow" else "prompts") / "custom"
-        elif scope == "project":
-            raise ValueError("Project asset root must be resolved from its Workflow-owned package")
-        else:
-            raise ValueError("System assets cannot be renamed in place")
-        root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
+    def _studio_scope_root(
+        self, kind: str, scope: str, project: Path | None
+    ) -> Path:
+        root = self._asset_root(kind, scope, project)
+        root.mkdir(parents=True, exist_ok=True)
         return root
 
-    def studio_rename(self, file_id: str, name: str, project: Path | None = None) -> dict:
-        """Rename one writable Studio asset without changing its scope or content."""
+    def studio_rename(
+        self,
+        file_id: str,
+        name: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
-            self._require_studio_writable(scope)
             if kind == "prompt":
                 usages = self._prompt_usages(path, project)
                 if usages:
-                    raise ValueError("Prompt is still referenced; update Workflow references before rename: " + "; ".join(usages[:12]))
+                    raise ValueError(
+                        "Prompt is still referenced; update Workflow references before rename: "
+                        + "; ".join(usages[:12])
+                    )
             raw = self._normalize_studio_asset_name(kind, name)
-            if scope == "project":
-                if project is None:
-                    raise ValueError("Select a Project before modifying a Project asset")
-                package = project_package_for_asset(project, path)
-                if package is None:
-                    raise ValueError("Project asset is outside a Workflow-owned package")
-                _folder, _package_root, workflow_dir, prompt_dir = package
-                root = workflow_dir if kind == "workflow" else prompt_dir
-            else:
-                root = self._studio_scope_root(kind, scope, project)
+            root = self._asset_root(kind, scope, project)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Renamed asset path is outside the allowed scope")
             if target == path:
                 item = self._studio_item(path, scope, kind)
                 return {"item": item, "file": self.studio_read(item["id"], project)}
             if target.exists():
-                raise ValueError(f"{kind.title()} already exists: {target.name}")
+                raise ValueError(f"{kind.title()} already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             content = path.read_text(encoding="utf-8")
             if kind == "workflow":
                 self._validate_workflow_before_write(target, content)
             else:
                 self._validate_prompt_before_write(target, content)
-            try:
-                path.rename(target)
-            except OSError as exc:
-                raise ValueError(f"Cannot rename {kind}: {exc}") from exc
+            path.rename(target)
             item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
-    def studio_duplicate(self, file_id: str, name: str, project: Path | None = None, folder: str = "") -> dict:
-        """Create an independent copy in an explicitly selected folder.
-
-        System assets still duplicate into Custom.  Custom assets may target any
-        Custom subfolder; Project assets may target any existing owned Workflow
-        package.  An empty folder keeps the previous/default location.
-        """
+    def studio_duplicate(
+        self,
+        file_id: str,
+        name: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
-            target_scope = "custom" if scope in SYSTEM_SCOPES else scope
             raw = self._normalize_studio_asset_name(kind, name)
-            if target_scope == "project":
-                if project is None:
-                    raise ValueError("Select a Project before duplicating a Project asset")
-                package = project_package_for_asset(project, path)
-                if package is None:
-                    raise ValueError("Project asset is outside a Workflow-owned package")
-                source_folder, _package_root, _workflow_dir, _prompt_dir = package
-                selected_folder = self._normalize_workflow_folder(folder or source_folder)
-                existing_folders = project_package_folders(project)
-                if kind == "prompt" and selected_folder not in existing_folders:
-                    raise ValueError("Project Prompt duplicates must use an existing Project Workflow folder")
-                root = project_package_workflow_dir(project, selected_folder) if kind == "workflow" else project_package_prompt_dir(project, selected_folder)
-                root.mkdir(parents=True, exist_ok=True)
-            else:
-                root = self._custom_asset_root(kind)
-                root.mkdir(parents=True, exist_ok=True)
-                # System assets default to Custom root.  Existing Custom assets
-                # default to their current folder, while the UI may override it.
-                default_folder = ""
-                if scope == "custom":
-                    try:
-                        default_folder = path.resolve().parent.relative_to(root).as_posix()
-                        if default_folder == ".":
-                            default_folder = ""
-                    except ValueError:
-                        default_folder = ""
-                selected_folder = self._normalize_custom_folder(folder if folder != "" else default_folder)
-                if selected_folder:
-                    root = (root / Path(selected_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root(kind)):
-                        raise ValueError("Duplicated asset folder is outside the Custom root")
-                    root.mkdir(parents=True, exist_ok=True)
+            root = self._asset_root(kind, scope, project)
+            root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Duplicated asset path is outside the allowed scope")
             if target.exists():
-                raise ValueError(f"{kind.title()} already exists: {target.name}")
+                raise ValueError(f"{kind.title()} already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             content = path.read_text(encoding="utf-8")
             if kind == "workflow":
                 self._validate_workflow_before_write(target, content)
             else:
                 self._validate_prompt_before_write(target, content)
-            try:
-                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-                with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                    handle.write(content)
-            except FileExistsError as exc:
-                raise ValueError(f"{kind.title()} already exists: {target.name}") from exc
-            item = self._studio_item(target, target_scope, kind)
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
+            item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
     @staticmethod
@@ -1173,22 +1189,32 @@ class WorkflowStudioMixin:
         if isinstance(value, dict):
             for key, child in value.items():
                 current = f"{path}.{key}"
-                if key in {"stage", "restart_at"} and isinstance(child, str) and child == stage_name:
+                if key == "stage" and isinstance(child, str) and child == stage_name:
                     refs.append(current)
-                if key in {"recover", "flow"} and isinstance(child, list):
-                    for index, item in enumerate(child):
-                        item_path = f"{current}[{index}]"
-                        if isinstance(item, str) and item == stage_name:
-                            refs.append(item_path)
-                        elif isinstance(item, (dict, list)):
-                            refs.extend(WorkflowStudioMixin._stage_reference_paths(item, stage_name, item_path))
                     continue
-                if isinstance(child, (dict, list)):
-                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, current))
+                if key == "routes" and isinstance(child, dict):
+                    for status, target in child.items():
+                        if isinstance(target, str) and target == stage_name:
+                            refs.append(f"{current}.{status}")
+                    continue
+                refs.extend(
+                    WorkflowStudioMixin._stage_reference_paths(
+                        child, stage_name, current
+                    )
+                    if isinstance(child, (dict, list))
+                    else []
+                )
         elif isinstance(value, list):
             for index, child in enumerate(value):
-                if isinstance(child, (dict, list)):
-                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, f"{path}[{index}]"))
+                current = f"{path}[{index}]"
+                if isinstance(child, str) and child == stage_name:
+                    refs.append(current)
+                elif isinstance(child, (dict, list)):
+                    refs.extend(
+                        WorkflowStudioMixin._stage_reference_paths(
+                            child, stage_name, current
+                        )
+                    )
         return refs
 
     @staticmethod
@@ -1218,14 +1244,20 @@ class WorkflowStudioMixin:
         del lines[start:end]
         return "".join(lines)
 
-    def studio_stage_delete(self, file_id: str, stage_name: str, expected_hash: str, project: Path | None = None, *, flow_index: int | None = None) -> dict:
-        """Atomically remove one Flow invocation and its Stage definition when no other references remain."""
+    def studio_stage_delete(
+        self,
+        file_id: str,
+        stage_name: str,
+        expected_hash: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Delete one Stage node after proving no result edge still targets it."""
         with self._edit_lock:
-            self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
                 raise ValueError("Stage definitions exist only in Workflow YAML")
+
             content = path.read_text(encoding="utf-8")
             self._require_hash(content, expected_hash)
             data = self._load_workflow_yaml(content)
@@ -1233,33 +1265,30 @@ class WorkflowStudioMixin:
             flow = data.get("flow") if isinstance(data, dict) else None
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
-            if not isinstance(flow, list):
-                flow = []
-            if flow_index is None or flow_index < 0 or flow_index >= len(flow):
-                raise ValueError("A valid Flow invocation is required to delete the Stage definition")
-            selected = flow[flow_index]
-            selected_name = selected if isinstance(selected, str) else str(selected.get("stage", "")) if isinstance(selected, dict) else ""
-            if selected_name != stage_name:
-                raise ValueError("Selected Flow invocation no longer matches the Stage")
-            next_flow = list(flow); del next_flow[flow_index]
-            next_data = dict(data); next_stages = dict(stages); next_stages.pop(stage_name, None); next_data["stages"] = next_stages; next_data["flow"] = next_flow
+            if not isinstance(flow, list) or stage_name not in flow:
+                raise ValueError("Stage is not present in Workflow flow")
+
+            next_flow = [name for name in flow if name != stage_name]
+            next_stages = dict(stages)
+            next_stages.pop(stage_name, None)
+            next_data = {**data, "stages": next_stages, "flow": next_flow}
             refs = self._stage_reference_paths(next_data, stage_name)
             if refs:
-                raise ValueError("Stage definition is still referenced by: " + ", ".join(refs[:8]))
+                raise ValueError(
+                    "Stage definition is still referenced by: " + ", ".join(refs[:8])
+                )
+
             without_stage = self._remove_stage_definition_block(content, stage_name)
             updated = self._replace_flow_block(without_stage, next_flow)
             self._validate_workflow_before_write(path, updated)
             self._atomic_write(path, updated)
-            return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
+            return {
+                "file": self.studio_read(file_id, project),
+                "visual": self.studio_visual(file_id, project),
+            }
 
     def studio_export(self, file_id: str, project: Path | None = None) -> dict:
         path, kind, scope = self._resolve_studio_file(file_id, project)
-        if kind == "workflow":
-            if scope != "custom":
-                raise ValueError("Workflow folder export is available only for Custom Workflows")
-            package = export_folder_package(path, self.repo_root)
-            package["scope"] = scope
-            return package
         return {
             "schema_version": 1,
             "kind": kind,
@@ -1275,71 +1304,155 @@ class WorkflowStudioMixin:
         data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
         return build_workflow_graph(data)
 
-    def studio_folder_inspect(self, content: str) -> dict:
-        return inspect_folder_package(content)
+    def studio_graph_save(
+        self,
+        file_id: str,
+        graph: dict,
+        expected_hash: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Validate and persist one complete Flow UI draft.
 
-    def studio_folder_import(self, content: str) -> dict:
+        YAML remains canonical. START/END are UI-only nodes and never enter the
+        Workflow file. The Designer may connect, retarget or delete PASS/FAIL/HANDOFF
+        edges freely. Flow order is only the compact representation for a connected
+        PASS-to-next edge; graph save validates the complete draft before writing YAML.
+        """
         with self._edit_lock:
-            self._require_editable()
-            folder, workflows = import_folder_package(content, self.repo_root, self._validate_workflow_before_write, self._validate_prompt_before_write)
-            if not workflows:
-                raise ValueError("Imported Workflow folder contains no Workflow YAML")
-            item = self._studio_item(workflows[0], "custom", "workflow")
-            return {"folder": folder, "item": item, "file": self.studio_read(item["id"], None)}
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            self._require_studio_writable(scope)
+            if kind != "workflow":
+                raise ValueError("Graph editing is available only for Workflow YAML")
 
-    def studio_import(self, kind: str, name: str, content: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
+            content = path.read_text(encoding="utf-8")
+            self._require_hash(content, expected_hash)
+            data = self._load_workflow_yaml(content)
+            stages = data.get("stages")
+            if not isinstance(stages, dict):
+                raise ValueError("Workflow stages must be a mapping")
+            if not isinstance(graph, dict):
+                raise ValueError("Graph must be an object")
+
+            draft_rows = graph.get("stages")
+            desired: dict[str, dict] | None = None
+            if draft_rows is not None:
+                if not isinstance(draft_rows, list):
+                    raise ValueError("Graph stages must be a list")
+                desired = {}
+                for row in draft_rows:
+                    if not isinstance(row, dict):
+                        raise ValueError("Each Graph Stage must be an object")
+                    name = str(row.get("name") or "").strip()
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
+                        raise ValueError(f"Invalid Stage key: {name}")
+                    if name in desired:
+                        raise ValueError(f"Duplicate Graph Stage: {name}")
+                    config = {key: value for key, value in row.items() if key != "name"}
+                    desired[name] = config
+                if not desired:
+                    raise ValueError("Workflow must contain at least one Stage")
+            stage_names = set(desired) if desired is not None else set(stages)
+
+            raw_flow = graph.get("flow")
+            if not isinstance(raw_flow, list):
+                raise ValueError("Graph flow must be a list")
+            flow = [str(name).strip() for name in raw_flow if str(name).strip()]
+            if len(flow) != len(set(flow)):
+                raise ValueError("Workflow flow cannot contain duplicate Stage names")
+            unknown_flow = [name for name in flow if name not in stage_names]
+            if unknown_flow:
+                raise ValueError("Workflow flow references unknown Stage: " + ", ".join(unknown_flow))
+
+            raw_routes = graph.get("routes") or {}
+            if not isinstance(raw_routes, dict):
+                raise ValueError("Graph routes must be an object")
+            normalized_routes: dict[str, dict[str, str]] = {}
+            targets = stage_names | {"next", "done", "stop"}
+            for stage_name, mapping in raw_routes.items():
+                stage_name = str(stage_name)
+                if stage_name not in stage_names:
+                    raise ValueError(f"Graph routes reference unknown Stage: {stage_name}")
+                if mapping in (None, {}):
+                    continue
+                if not isinstance(mapping, dict):
+                    raise ValueError(f"Graph routes for {stage_name} must be an object")
+                clean: dict[str, str] = {}
+                for status, target in mapping.items():
+                    status = str(status).lower().strip()
+                    target = str(target).strip()
+                    if status not in {"pass", "fail"}:
+                        raise ValueError(f"Unsupported result edge status: {status}")
+                    if target not in targets:
+                        raise ValueError(f"Graph route {stage_name}.{status} references unknown target: {target}")
+                    clean[status] = target
+                if clean:
+                    normalized_routes[stage_name] = clean
+
+            updated = content
+            if desired is not None:
+                for name in stages:
+                    if name not in desired:
+                        updated = self._remove_stage_definition_block(updated, name)
+                for name, config in desired.items():
+                    original = stages.get(name)
+                    if not isinstance(original, dict):
+                        clean = {key: value for key, value in config.items() if key != "routes" and value not in (None, "")}
+                        updated = self._insert_stage_block(updated, name, clean)
+                        continue
+                    changes = {}
+                    for key, value in config.items():
+                        if key in {"name", "routes"}:
+                            continue
+                        previous = original.get(key, "" if key in {"status", "prompt"} else None)
+                        if value != previous:
+                            changes[key] = None if key in {"status", "prompt", "label"} and value == "" else value
+                    if changes:
+                            updated = self._patch_stage_fields(updated, name, changes)
+            updated = self._replace_flow_block(updated, flow)
+            # Patch every Stage so deleting an Edge removes the YAML route too.
+            for stage_name in (desired if desired is not None else stages):
+                updated = self._patch_stage_fields(
+                    updated,
+                    str(stage_name),
+                    {"routes": normalized_routes.get(str(stage_name))},
+                )
+
+            self._validate_workflow_before_write(path, updated)
+            self._atomic_write(path, updated)
+            file = self.studio_read(file_id, project)
+            return {
+                "file": file,
+                "visual": self.studio_visual(file_id, project),
+                "graph": build_workflow_graph(self._load_workflow_yaml(file["content"])),
+            }
+
+    def studio_import(
+        self,
+        kind: str,
+        name: str,
+        content: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
-            self._require_editable()
             kind = str(kind or "").strip().lower()
             if kind not in {"workflow", "prompt"}:
                 raise ValueError("Import kind must be workflow or prompt")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before importing to Project")
-                if kind == "workflow":
-                    raise ValueError("Project Workflow import uses Workflow-owned folder packages")
-                rel_folder = self._normalize_workflow_folder(folder)
-                if rel_folder not in project_package_folders(project):
-                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
-                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True)
-                scope = "project"
-            elif destination == "custom":
-                root = self._custom_asset_root(kind)
-                root.mkdir(parents=True, exist_ok=True); scope = "custom"
-                rel_folder = self._normalize_custom_folder(folder)
-                if rel_folder:
-                    root = (root / Path(rel_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root(kind)):
-                        raise ValueError("Import folder is outside the Custom root")
-                    root.mkdir(parents=True, exist_ok=True)
-            else:
-                raise ValueError("Import destination must be project or custom")
-            raw = str(name or "").strip()
-            suffix = ".yaml" if kind == "workflow" else ".md"
-            if not raw:
-                raw = f"imported-{kind}{suffix}"
-            if kind == "workflow" and not raw.lower().endswith((".yaml", ".yml")):
-                raw += ".yaml"
-            if kind == "prompt" and not raw.lower().endswith(".md"):
-                raw += ".md"
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Imported asset name must be a file name")
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root(kind, scope, project)
+            root.mkdir(parents=True, exist_ok=True)
+            raw = self._normalize_studio_asset_name(kind, name or f"imported-{kind}")
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Import path is outside the destination folder")
             if target.exists():
-                raise ValueError(f"Asset already exists: {target.name}")
+                raise ValueError(f"Asset already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             text = str(content or "")
             if not text.strip():
                 raise ValueError("Imported content is empty")
             if kind == "workflow":
                 self._validate_workflow_before_write(target, text)
             else:
-                try:
-                    self._validate_prompt_before_write(target, text)
-                except ValueError as exc:
-                    raise ValueError("Invalid Prompt template: " + str(exc).removeprefix("Prompt validation failed: ")) from exc
+                self._validate_prompt_before_write(target, text)
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
                 handle.write(text)
@@ -1392,81 +1505,90 @@ class WorkflowStudioMixin:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    @classmethod
-    def _normalize_workflow_folder(cls, folder: str) -> str:
-        raw = str(folder or "").strip().replace("\\", "/")
-        if not raw:
-            raise ValueError("Workflow folder is required")
-        if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
-            raise ValueError("Workflow folder must be a relative path")
-        raw = raw.rstrip("/")
-        parts = Path(raw).parts
-        if ".." in parts or "." in parts or any(not part for part in parts):
-            raise ValueError("Workflow folder contains an invalid path segment")
-        if raw == "common" or raw.startswith("common/"):
-            raise ValueError("The common folder is reserved and cannot own a Workflow")
-        if any(cls._is_technical_folder_part(part) for part in parts):
-            raise ValueError("Workflow folder contains a reserved technical directory")
-        if not all(re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
-            raise ValueError("Workflow folder contains unsupported characters")
-        return "/".join(parts)
+    def _global_asset_root(self, kind: str) -> Path:
+        name = "workflows" if kind == "workflow" else "prompts" if kind == "prompt" else ""
+        if not name:
+            raise ValueError("asset kind must be workflow or prompt")
+        return (self.repo_root / "runner" / "assets" / name).resolve()
 
-    def _workflow_output_paths(self, project: Path | None, folder: str, filename: str, destination: str) -> tuple[str, str, str, Path, Path]:
-        folder = self._normalize_workflow_folder(folder)
-        raw = str(filename or "").strip()
-        if not raw:
-            raise ValueError("Workflow filename is required")
-        if "/" in raw or "\\" in raw or raw in {".", ".."}:
-            raise ValueError("Workflow filename must be a file name, not a path")
-        if not raw.lower().endswith((".yaml", ".yml")):
-            raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
-        if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
-            raise ValueError("Workflow filename contains unsupported characters")
-        destination = str(destination or "custom").strip().lower()
-        if destination == "custom":
-            output_workflow = (self.repo_root / "runner" / "workflow" / "custom" / folder / raw).resolve()
-            output_prompt_dir = (self.repo_root / "runner" / "prompts" / "custom" / folder).resolve()
-        elif destination == "project":
-            if project is None:
-                raise ValueError("Open a Project before saving to Current Project")
-            if "/" in folder:
-                raise ValueError("Project Workflow folder must be one folder name")
-            output_workflow = (project_package_workflow_dir(project, folder) / raw).resolve()
-            output_prompt_dir = project_package_prompt_dir(project, folder)
-        else:
-            raise ValueError("Workflow destination must be project or custom")
-        return raw, folder, destination, output_workflow, output_prompt_dir
-    def _studio_item(self, path: Path, scope: str, kind: str, workflow_visibility: dict[str, bool] | None = None) -> dict:
+    @staticmethod
+    def _normalize_asset_scope(value: str) -> str:
+        scope = str(value or "global").strip().lower()
+        if scope not in {"global", "project"}:
+            raise ValueError("Asset destination must be global or project")
+        return scope
+
+    def _asset_package_root(self, scope: str, project: Path | None) -> Path:
+        scope = self._normalize_asset_scope(scope)
+        if scope == "global":
+            return (self.repo_root / "runner" / "assets").resolve()
+        if project is None:
+            raise ValueError("Select a Project before using Project assets")
+        return (project.resolve() / ".ai-task-runner" / "assets").resolve()
+
+    def _asset_root(self, kind: str, scope: str, project: Path | None) -> Path:
+        package = self._asset_package_root(scope, project)
+        name = "workflows" if kind == "workflow" else "prompts" if kind == "prompt" else ""
+        if not name:
+            raise ValueError("asset kind must be workflow or prompt")
+        return (package / name).resolve()
+
+    def _workflow_output_paths(
+        self,
+        project: Path | None,
+        folder: str,
+        filename: str,
+        destination: str,
+    ) -> tuple[str, str, str, Path, Path]:
+        del folder
+        raw = self._normalize_studio_asset_name("workflow", filename)
+        scope = self._normalize_asset_scope(destination)
+        workflow_root = self._asset_root("workflow", scope, project)
+        workflow_root.mkdir(parents=True, exist_ok=True)
+        output = (workflow_root / raw).resolve()
+        return raw, "", scope, output, self._asset_package_root(scope, project)
+
+    def _studio_item(
+        self,
+        path: Path,
+        scope: str,
+        kind: str,
+        workflow_visibility: dict[str, bool] | None = None,
+    ) -> dict:
         resolved = path.resolve()
-        readonly = scope in SYSTEM_SCOPES
-        display_name = path.name
-        if scope == "custom":
-            root = self._custom_asset_root(kind)
-            try:
-                display_name = resolved.relative_to(root).as_posix()
-            except ValueError:
-                pass
+        prompt_key = ""
+        if kind == "prompt":
+            for parent in resolved.parents:
+                if parent.name == "prompts" and parent.parent.name == "assets":
+                    prompt_key = resolved.relative_to(parent).as_posix()
+                    break
         item = {
             "id": self._encode_file_id(resolved, kind, scope),
             "name": path.name,
-            "display_name": display_name,
+            "display_name": prompt_key or path.name,
+            "reference": prompt_key or path.name,
             "path": str(resolved),
             "scope": scope,
-            "group": "System" if readonly else ("Custom" if scope == "custom" else "Project"),
+            "group": "Global" if scope == "global" else "Project",
             "kind": kind,
-            "readonly": readonly,
-            "deletable": not readonly,
+            "readonly": False,
+            "deletable": True,
         }
         try:
             stat = resolved.stat()
             item["version"] = f"{stat.st_mtime_ns}:{stat.st_size}"
+            item["mtime"] = stat.st_mtime
         except OSError:
             item["version"] = ""
+            item["mtime"] = 0
         if kind == "workflow":
-            item["execution_mode"] = "linear"
             item.update(self._workflow_requirements(resolved))
             key = os.path.normcase(os.path.abspath(str(resolved)))
-            item["hidden"] = bool(workflow_visibility.get(key, False)) if workflow_visibility is not None else self.workflow_hidden(resolved)
+            item["hidden"] = (
+                bool(workflow_visibility.get(key, False))
+                if workflow_visibility is not None
+                else self.workflow_hidden(resolved)
+            )
         return item
 
     @staticmethod
@@ -1474,40 +1596,30 @@ class WorkflowStudioMixin:
         raw = json.dumps({"path": str(path), "kind": kind, "scope": scope}, separators=(",", ":"), ensure_ascii=False)
         return raw.encode("utf-8").hex()
 
-    def _resolve_studio_file(self, file_id: str, project: Path | None) -> tuple[Path, str, str]:
+    def _resolve_studio_file(
+        self, file_id: str, project: Path | None
+    ) -> tuple[Path, str, str]:
         try:
             payload = json.loads(bytes.fromhex(file_id).decode("utf-8"))
             path = Path(str(payload["path"])).resolve()
             kind = str(payload["kind"])
-            scope = str(payload["scope"])
+            scope = self._normalize_asset_scope(str(payload["scope"]))
         except Exception as exc:
             raise ValueError("Invalid workflow file id") from exc
+        if kind not in {"workflow", "prompt"}:
+            raise ValueError("Invalid Workflow asset kind")
         if not path.is_file() or path.suffix.lower() not in EDITABLE_SUFFIXES:
             raise ValueError("Workflow/prompt file does not exist")
-
-        valid = False
-        if scope == "system" and kind == "workflow":
-            valid = self._is_within(path, (self.repo_root / "runner" / "workflow" / "system").resolve())
-        elif scope == "custom" and kind == "workflow":
-            tool_root = (self.repo_root / "runner" / "workflow" / "custom").resolve()
-            prompt_root = (self.repo_root / "runner" / "prompts" / "custom").resolve()
-            valid = self._is_within(path, tool_root) and not self._is_within(path, prompt_root)
-        elif scope == "system" and kind == "prompt":
-            system_prompt_roots = (
-                (self.repo_root / "runner" / "prompts" / "stages").resolve(),
-                (self.repo_root / "runner" / "prompts" / "system").resolve(),
-            )
-            valid = any(self._is_within(path, root) for root in system_prompt_roots)
-        elif scope == "custom" and kind == "prompt":
-            valid = self._is_within(path, (self.repo_root / "runner" / "prompts" / "custom").resolve())
-        elif scope == "project" and project is not None:
-            package = project_package_for_asset(project, path)
-            if package is not None:
-                _folder, _package_root, workflow_dir, prompt_dir = package
-                valid = self._is_within(path, workflow_dir if kind == "workflow" else prompt_dir)
-
-        if not valid:
-            raise ValueError("File is outside allowed workflow/prompt roots")
+        root = self._asset_root(kind, scope, project).resolve()
+        if kind == "workflow":
+            if path.parent != root:
+                raise ValueError("Workflow must live directly in the Workflow asset root")
+        elif not self._is_within(path, root):
+            raise ValueError("Prompt is outside allowed Prompt asset root")
+        if kind == "workflow" and path.suffix.lower() not in {".yaml", ".yml"}:
+            raise ValueError("Workflow asset must be YAML")
+        if kind == "prompt" and path.suffix.lower() != ".md":
+            raise ValueError("Prompt asset must be Markdown")
         return path, kind, scope
 
     @staticmethod
@@ -1527,65 +1639,8 @@ class WorkflowStudioMixin:
     def _supported_stage_types(self) -> set[str]:
         tool = self.repo_root / "tool" / "workflow_catalog.py"
         if not tool.is_file():
-            return {"base", "task", "review", "ai_validator", "command", "plan"}
+            return {"base", "ai_validator", "command", "plan", "handoff"}
         return set(self.workflow_catalog().get("stage_types", {}))
-
-    def _custom_asset_root(self, kind: str) -> Path:
-        kind = str(kind or "").strip().lower()
-        if kind == "workflow":
-            return (self.repo_root / "runner" / "workflow" / "custom").resolve()
-        if kind == "prompt":
-            return (self.repo_root / "runner" / "prompts" / "custom").resolve()
-        raise ValueError("Custom asset kind must be workflow or prompt")
-
-    @staticmethod
-    def _is_technical_folder_part(part: str) -> bool:
-        value = str(part or "").strip().lower()
-        return (
-            not value
-            or value.startswith(".")
-            or value in {"__pycache__", "__pypackages__", "node_modules"}
-            or value.endswith(".egg-info")
-        )
-
-    @classmethod
-    def _normalize_custom_folder(cls, folder: str) -> str:
-        raw = str(folder or "").strip().replace("\\", "/")
-        if not raw or raw in {".", "/"}:
-            return ""
-        if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
-            raise ValueError("Custom folder must be relative to the Custom root")
-        parts = [part.strip() for part in raw.split("/") if part.strip()]
-        if not parts or any(part in {".", ".."} for part in parts):
-            raise ValueError("Custom folder cannot contain . or ..")
-        if any(cls._is_technical_folder_part(part) for part in parts):
-            raise ValueError("Custom folder contains a reserved technical directory")
-        if any(not re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
-            raise ValueError("Custom folder contains unsupported characters")
-        return "/".join(parts)
-
-    def studio_custom_folders(self, kind: str) -> list[str]:
-        root = self._custom_asset_root(kind)
-        root.mkdir(parents=True, exist_ok=True)
-        folders = [""]
-        for path in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: str(p).lower()):
-            rel = path.relative_to(root).as_posix()
-            if rel and not any(self._is_technical_folder_part(part) for part in Path(rel).parts):
-                folders.append(rel)
-        return folders
-
-    def studio_custom_folder_create(self, kind: str, folder: str) -> dict:
-        with self._edit_lock:
-            self._require_editable()
-            rel = self._normalize_custom_folder(folder)
-            if not rel:
-                raise ValueError("Folder name is required")
-            root = self._custom_asset_root(kind)
-            target = (root / Path(rel)).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Custom folder is outside the Custom root")
-            target.mkdir(parents=True, exist_ok=True)
-            return {"ok": True, "folder": rel, "folders": self.studio_custom_folders(kind)}
 
     def _workflow_visibility(self) -> dict[str, bool]:
         try:

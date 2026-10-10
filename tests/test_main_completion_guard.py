@@ -20,9 +20,3 @@ def test_main_delegates_completion_guard_to_shared_api(monkeypatch, tmp_path):
     assert calls == [request]
 
 
-def test_plan_only_uses_same_shared_entry(monkeypatch, tmp_path):
-    request = _request(tmp_path)
-    request.plan_only = True
-    monkeypatch.setattr(ai_task_runner.RunRequest, "from_namespace", classmethod(lambda cls, ns: request))
-    monkeypatch.setattr(ai_task_runner, "run", lambda current: SimpleNamespace(exit_code=0))
-    assert ai_task_runner.main([]) == 0

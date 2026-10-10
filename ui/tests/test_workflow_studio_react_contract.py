@@ -1,0 +1,852 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "ui" / "studio-src" / "src" / "main.tsx"
+STYLES = ROOT / "ui" / "studio-src" / "src" / "styles.css"
+
+
+def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "Stage Palette" in text
+    assert "workflowStudioUrl" in text
+    assert 'view: "workflow", studio: id' in text
+    assert 'back: "← Workflows"' in text
+    assert "Workflow Editor" in text
+    assert "history.back()" not in text
+    assert "application/x-ai-stage" in text
+    assert 'sourceHandle: "pass"' in text
+    assert 'id="pass"' in text
+    assert 'id="fail"' in text
+    assert 'id="pass" style={{ left: "25%" }}' in text
+    assert 'id="fail" style={{ left: "75%" }}' in text
+    assert 'id="error"' not in text
+    assert 'graph: graphDraft(nextVisual)' in text
+    assert '"/api/studio/stage/add"' not in text  # Palette additions stay in the draft until Save.
+
+
+
+def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flow():
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
+
+    assert "if (!nextFlow.includes(connection.source))" in draft
+    assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in draft
+    assert 'if (status === "pass" || status === "handoff")' in draft
+    assert 'if (status === "pass" && target === nextName) delete routes.pass' in draft
+    assert 'else routes[status] = target' in draft
+    assert "const index = nextFlow.indexOf(stage.name)" in draft
+
+
+def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'type StageTestMode = "stage" | "agent_ping" | "mock_error"' in text
+    assert "Real Stage" in text
+    assert "Agent Ping" in text
+    assert "Mock Technical Error" in text
+    assert "const backendUrl = query().project" in text
+    assert "void api<BackendCatalog>(backendUrl)" in text
+    core_load = text[text.index("const [v, file, c, files] = await Promise.all(["):text.index("const canonicalYaml")]
+    assert "/api/backends" not in core_load
+    assert '"/api/backends?models=1"' in text
+    assert '&models=1' in text
+    assert 'encodeURIComponent(query().project)' in text
+    assert 'probe_mode: testMode === "agent_ping" ? "agent_ping" : "stage"' in text
+    assert "backend: testBackend" in text
+    assert "AGENT_PING_PROMPT" in text
+    assert 'testMode === "mock_error" ? "error_mock"' in text
+    assert "test_retry_policy" in text
+
+def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "effectivePrompt" in text
+    assert "Default —" in text
+    assert "Effective:" in text
+    assert 'defaultOption(catalog, stage.type, "prompt")' in text
+    assert 'catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt' in text
+
+
+def test_workflow_builder_internal_prompts_are_not_user_assets():
+    assert (ROOT / "workflow_builder" / "prompt.md").is_file()
+    assert not (ROOT / "runner" / "assets" / "prompts" / "workflow" / "workflow_prompt.md").exists()
+    assert not (ROOT / "runner" / "assets" / "prompts" / "workflow" / "workflow_review.md").exists()
+
+
+def test_react_studio_exposes_common_stage_error_policy_controls():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "ERROR 重試次數" in text
+    assert "Skip Review" in text
+    assert "有限值耗盡後 Skip" in text
+    assert "draft.error_policy?.retries" in text
+    assert 'error_policy: { retries }' in text
+    assert 'profiles[profile]?.defaults || {}' in text
+    assert "Object.entries(previousDefaults)" in text
+    assert "Object.entries(nextDefaults)" in text
+    assert "Semantic FAIL 上限（max_failures）" in text
+    assert "FAIL×{Number(draft.max_failures)}" in text
+    assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
+    assert 'id="error"' not in text  # ERROR is not a runtime result edge; it is only a Stage Test scenario.
+
+
+def test_react_studio_has_searchable_palette_and_safe_stage_duplicate():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'placeholder={tx("search_stage")}' in text
+    assert "paletteQuery" in text
+    assert "duplicateStage" in text
+    assert "結果連線不會一起複製" in text
+
+
+def test_full_designer_generated_output_has_one_source_and_build_path():
+    vite = (ROOT / "ui" / "studio-src" / "vite.config.ts").read_text(encoding="utf-8")
+    build_tool = (ROOT / "tool" / "build_workflow_studio.py").read_text(encoding="utf-8")
+    guidelines = (ROOT / "DevFollow.txt").read_text(encoding="utf-8")
+
+    assert '../static/workflow-studio-app' in vite
+    assert 'npm", "run", "build"' in build_tool
+    assert "ui/studio-src/**" in guidelines
+    assert "ui/static/workflow-studio-app/**" in guidelines
+
+
+def test_react_studio_keeps_stage_type_immutable_after_creation():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "類型（建立後固定；要更換請刪除後重新拖入）" in text
+    assert '<select value={draft.type} disabled>' in text
+    assert 'editDraft({ ...draft, type:' not in text
+
+
+def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert 'option.section || "advanced"' in text
+    assert 'PARAMETER_SECTION_ORDER' in text
+    assert 'o.visible === false' in text
+
+
+def test_react_source_tracks_session_policy_ui_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "session_policy" in text
+    assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
+    assert "session_key" not in text
+
+
+def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert 'id="handoff"' in text
+    assert '"discussion_controller"' not in text
+    assert '"discussion"' not in text
+    assert '"dispatch"' not in text
+    assert "session_policy" in text
+    assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
+    assert "leaveStudio()" in text
+    assert "requestConfirm" in text
+    assert "autoPositions" in text
+    assert "branchTargets" in text
+    assert "branchColumnGap" in text
+    assert "rowStartCenter" in text
+    assert "cursorY" in text
+
+
+
+
+def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    stage_node = text.split("function StageNode", 1)[1].split("const nodeTypes", 1)[0]
+    assert 'className="wf-stage-meta"' in stage_node
+    assert "disconnected-chip" in stage_node
+    assert "dynamic-chip" in stage_node
+    assert "ERR×" not in stage_node
+    assert "FAIL×" not in stage_node
+    assert ".wf-stage.type-base.profile-review, .wf-stage.type-ai_validator" in styles
+    assert ".wf-stage-meta span" in styles
+
+def test_react_studio_has_stage_specific_test_prompt_presets():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "STAGE_TEST_PROMPTS" not in text
+    assert "填入簡易測試 Prompt" in text
+    assert "stageTestPrompt(draft, catalog, testScenario)" in text
+    assert "profile?.test_examples?.[scenario]" in text
+    assert "stageType?.test_examples?.[scenario]" in text
+    assert 'test_input_help:' in text
+    assert 'tx("test_input_help")' in text
+    assert "Stage Test API not found. Restart the local UI server" in text
+
+
+def test_react_studio_opens_stage_settings_as_modal_on_double_click_and_shares_language():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "onNodeClick" in text
+    assert "setSelected(n.id)" in text
+    assert "onNodeDoubleClick" in text
+    assert "openStageEditor(n.id)" in text
+    assert "stage-editor-backdrop" in text
+    assert "stage-editor-modal" in text
+    assert "editorOpen" in text
+    assert 'event.key === "Escape"' in text
+    assert 'DESIGNER_LANGUAGE_KEY = "ai-task-runner.language"' in text
+    assert '"zh-TW"' in text and '"en"' in text
+    assert "changeLanguage" not in text
+    assert "grid-template-columns: 220px minmax(0,1fr)" in styles
+
+
+def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'stage-editor-content ${inspectorTab === "yaml" ? "yaml-mode" : ""}' in text
+    assert 'className="palette-quick-add"' in text
+    assert "void addStage(type)" in text
+    assert "title={meta.description}" in text
+    assert "block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
+    assert ".stage-editor-content { min-width: 0; min-height: 0; height: 100%; overflow: auto;" in styles
+    assert ".palette-quick-add" in styles
+
+
+
+def test_node_library_is_small_catalog_driven_and_has_no_speculative_preferences():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'PALETTE_PREF_KEY = "workflow-designer.palette:v1"' not in text
+    assert "PalettePrefs" not in text
+    assert "toggleFavoriteStage" not in text
+    assert "togglePaletteSection" not in text
+    assert "rememberPaletteStage" not in text
+    assert "catalogStageMeta" in text
+    assert 'category !== "extensions"' in text
+    assert 'id: "stages", title: "Stages"' in text
+    assert 'id: "extensions", title: tx("extensions")' in text
+    assert 'className="palette-section-head static"' in text
+
+def test_designer_shortcuts_context_menu_and_command_add_are_workflow_aware():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'deleteKeyCode={null}' in text
+    assert 'event.key.toLowerCase() === "c"' in text
+    assert 'event.key.toLowerCase() === "v"' in text
+    assert 'event.key === "Delete" || event.key === "Backspace"' in text
+    assert "copyStageByName" in text
+    assert "pasteStage" in text
+    assert "deleteStage(selected)" in text
+    assert "onNodeContextMenu" in text
+    assert 'className="stage-context-menu"' in text
+    assert "contextMenu.stage" in text
+    assert 'className="add-stage-command-backdrop"' in text
+    assert 'className="palette-command-add"' in text
+    assert "addStageQuery" in text
+    assert ".stage-context-menu" in styles
+    assert ".add-stage-command" in styles
+
+
+
+def test_stage_test_separates_execution_mode_from_input_examples():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'type StageTestMode = "stage" | "agent_ping" | "mock_error"' in text
+    assert 'type StageTestScenario = "pass" | "fail"' in text
+    assert '(["pass", "fail"] as StageTestScenario[])' in text
+    assert "PASS 範例" in text
+    assert "FAIL 範例" in text
+    assert "Mock Technical Error" in text
+    assert 'testMode === "mock_error" ? "error_mock"' in text
+    assert "test_examples" in text
+    assert 'className="test-scenario-tabs"' in text
+
+def test_stage_editor_dialog_height_is_hard_locked_across_tabs():
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "min-block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "max-block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
+    assert ".stage-editor-content { min-width: 0; min-height: 0; height: 100%; overflow: auto;" in styles
+    assert ".inspector footer { margin:" in styles
+    assert "position: sticky" not in styles.split(".inspector footer", 1)[1].split("}", 1)[0]
+
+
+
+def test_designer_reuses_interface_language_and_has_fixed_add_stage_width():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'DESIGNER_LANGUAGE_KEY = "ai-task-runner.language"' in text
+    assert "changeLanguage" not in text
+    assert 'className="language-picker"' not in text
+    assert 'event.key !== DESIGNER_LANGUAGE_KEY' in text
+    assert 'className="palette-section-head static"' in text
+    assert "grid-template-columns: 220px minmax(0,1fr)" in styles
+    assert "width: 220px; min-width: 220px; max-width: 220px" in styles
+    assert "width: 520px; max-width: calc(100vw - 32px)" in styles
+
+def test_designer_uses_shared_confirmation_dialog_and_thin_visible_scrollbars():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "window.confirm" not in text
+    assert "DesignerConfirmDialog" in text
+    assert "requestConfirm" in text
+    assert 'className="designer-confirm-backdrop"' in text
+    assert "捨棄未儲存變更？" in text
+    assert "重新載入 Workflow？" in text
+    assert "移除 Stage" in text
+    assert ".designer-confirm-dialog" in styles
+    assert "overflow-y: scroll" in styles
+    assert "scrollbar-width: thin" in styles
+    assert ".add-stage-command-list::-webkit-scrollbar { width: 6px; }" in styles
+    assert ".palette::-webkit-scrollbar { width: 6px; }" in styles
+
+
+def test_workflow_editor_converges_designer_and_yaml_on_one_canonical_file():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'type WorkflowEditorView = "designer" | "yaml"' in text
+    assert 'setEditorView("designer")' in text
+    assert 'workflow-editor-view-switch' in text
+    assert 'workflow-yaml-editor' in text
+    assert '"/api/studio/save"' in text
+    assert '"/api/studio/graph/save"' in text
+    assert "function switchEditorView(next: WorkflowEditorView)" in text
+    assert "const saved = await saveCurrent()" in text
+    assert 'return editorView === "yaml" ? saveYaml() : saveGraph()' in text
+    assert "editorDirty" in text
+    assert ".workflow-yaml-view" in styles
+    assert ".workflow-editor-view-switch" in styles
+
+
+def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_editor():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="assetPageTitle">Workflows</h1>' in index
+    assert 'id="promptNav"' in index
+    assert 'id="settingsNav"' not in index
+    assert 'id="studioEditorModeSwitch"' not in index
+    assert "openWorkflowEditorItem" in app
+    assert 'if (item.kind !== "prompt") return openWorkflowEditorItem(item);' in app
+    assert 'assets.import_yaml' in (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    assert 'switchView("prompt")' in app
+    assert 'state.studioSourceKind = kind' in app
+
+
+def test_stage_prompt_can_open_the_shared_prompt_editor():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "promptEditorUrl" in text
+    assert 'view: "workflow", source: "prompt", studio: promptId' in text
+    assert "Edit Prompt" in text
+    assert 'className="inline-prompt-edit"' in text
+    assert ".inline-prompt-edit" in styles
+
+
+def test_workflow_settings_uses_full_width_workflow_manager_and_prompt_master_detail():
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'classList.toggle("workflow-manager-mode", workflowManager)' in app
+    assert 'classList.toggle("prompt-manager-mode", !workflowManager)' in app
+    assert 'studio-file-item-action' in app
+    assert 't("studio.open_editor", "Open Editor")' in app
+    assert ".studio-designer-body.workflow-manager-mode" in styles
+    assert ".workflow-manager-mode .studio-workflow-main" in styles
+    assert "display: none" in styles.split(".workflow-manager-mode .studio-workflow-main", 1)[1].split("}", 1)[0]
+    assert ".workflow-manager-mode .studio-file-item" in styles
+    assert '"studio.open_editor": "開啟 Editor"' in i18n
+    assert '"studio.open_editor": "Open Editor"' in i18n
+
+
+def test_workflow_editor_desktop_responsive_contract_prevents_1024_overflow():
+    source_styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+    browser_test = (ROOT / "ui" / "tests" / "test_full_designer_browser.py").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 1180px)" in source_styles
+    assert "@media (max-width: 1050px)" in source_styles
+    assert ".palette { width: 180px; min-width: 180px; max-width: 180px;" in source_styles
+    assert "window.innerWidth - menuWidth - 8" in SOURCE.read_text(encoding="utf-8")
+    for width in ("1024", "1280", "1366", "1440", "1920"):
+        assert f'"width": {width}' in browser_test
+    assert "document.documentElement.scrollWidth <= window.innerWidth" in browser_test
+    assert 'get_by_role("tab", name="YAML")' in browser_test
+
+
+def test_stage_dialog_has_shared_yaml_source_tab():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+    state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+    assert 'type InspectorTab = "form" | "yaml" | "routing" | "test"' in text
+    assert '"/api/studio/stage/source"' in text
+    assert "loadStageYaml" in text
+    assert "applyStageYaml" in text
+    assert 'className="stage-yaml-panel"' in text
+    assert ".stage-yaml-panel textarea" in styles
+    assert '"/api/studio/stage/source"' in server
+    assert "def studio_stage_source(" in state
+    assert "yaml.safe_load(source)" in state
+    assert "Stage type is immutable" in state
+
+
+def test_primary_navigation_separates_workflows_prompts_and_settings():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'id="workflowNav"' in index
+    assert 'id="promptNav"' in index
+    assert 'id="settingsNav"' not in index
+    assert 'id="studioSourceTabs"' not in index
+    assert 'switchView("workflow")' in app
+    assert 'switchView("prompt")' in app
+    assert '"nav.prompts": "Prompts"' in i18n
+
+
+
+def test_workflow_library_controls_chat_visibility_and_ralphy_default():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+
+    assert 'DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml"' in app
+    assert "workflowBasename" in app
+    assert 'id="workflowContextMenu"' in index
+    assert "openWorkflowContextMenu" in app
+    assert "setWorkflowVisibility" in app
+    assert 'assets.show_in_chat' in app
+    assert 'assets.hide_from_chat' in app
+    assert ".workflow-context-menu" in styles
+
+
+def test_stage_editor_converges_to_form_yaml_routing_test():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'type InspectorTab = "form" | "yaml" | "routing" | "test"' in text
+    assert '(["form", "yaml", "routing", "test"] as const)' in text
+    assert 'inspectorTab === "form"' in text
+    assert 'className="stage-form-section"' in text
+    assert 'inspectorTab === "parameters"' not in text
+    assert ".stage-form-section" in styles
+
+
+
+
+def test_designer_edge_delete_and_undo_keyboard_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
+
+    assert 'onEdgeContextMenu={(event, edge) =>' in text
+    assert 'onEdgeClick={() =>' in text
+    assert 'edge.data?.status && edge.source !== START' in text
+    assert 'deleteEdges([selectedResultEdge])' in text
+    assert 'if (status === "pass") routes.pass = "stop"' in draft
+    assert 'key === "z"' in text
+    assert 'key === "y"' in text
+    assert "undoVisualDraft()" in text
+    assert "redoVisualDraft()" in text
+    assert "redoStackRef" in text
+    assert "rememberUndoSnapshot" in text
+    assert "onReconnect={reconnectExplicitEdge}" not in text
+    assert 'reconnectable: "target"' not in text
+    assert "reconnectRadius={24}" not in text
+    assert "onConnect={connect}" in text
+    assert "undoStackRef.current = []" in text
+    assert 'deleteKeyCode={null}' in text
+    assert 'tx("delete_connection")' in text
+
+def test_ai_stage_profile_first_create_and_quick_shortcuts():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'createAIProfile' in text
+    assert 'Object.entries(catalog?.stage_types?.base?.profiles || {})' in text
+    assert "applyAIProfileDefaults" in text
+    assert 'profiles[profile]?.defaults || {}' in text
+    assert 'event.key === "/"' in text
+    assert 'event.key === "Enter" && selected' in text
+    assert 'title="Add Stage (/)"' in text
+
+
+def test_stage_form_sections_and_test_examples_are_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "STAGE_TEST_PROMPTS" not in text
+    assert "PARAMETER_SECTIONS" not in text
+    assert "PARAMETER_SECTION_ORDER" in text
+    assert "option.section || \"advanced\"" in text
+    assert "o.visible === false" in text
+    assert "Number(a.order || 0) - Number(b.order || 0)" in text
+    assert "profile?.test_examples?.[scenario]" in text
+    assert "stageType?.test_examples?.[scenario]" in text
+    assert "stageTestPrompt(draft, catalog, scenario)" in text
+
+
+
+def test_stage_palette_and_generic_field_use_catalog_metadata():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "CatalogStageType" in text
+    assert "catalogStageMeta" in text
+    assert "meta?.title" in text
+    assert "meta?.description" in text
+    assert "meta?.category" in text
+    assert "option.description" in text
+    assert 'category !== "extensions"' in text
+
+def test_prompt_deep_link_and_stage_yaml_fill_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'view: "workflow", source: "prompt", studio: promptId' in text
+    assert 'inspectorTab === "yaml" ? "yaml-mode" : ""' in text
+    assert ".stage-editor-content.yaml-mode" in styles
+    assert "grid-template-rows: minmax(0,1fr)" in styles
+    assert ".stage-yaml-panel {" in styles
+    assert "box-sizing: border-box" in styles
+
+
+
+def test_ai_profile_switching_is_fully_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const previousDefaults = profiles[previousProfile]?.defaults || {}" in text
+    assert "const nextDefaults = profiles[profile]?.defaults || {}" in text
+    assert "Object.entries(previousDefaults)" in text
+    assert "Object.entries(nextDefaults)" in text
+    assert '["prompt", "status", "max_failures", "error_policy"]' not in text
+
+
+
+def test_create_stage_prompt_setup_is_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'options?.some((option) => option.name === "prompt")' in text
+    assert 'Use Stage default' in text
+    assert 'defaultOption(catalog, pendingCreate.type, "prompt")' in text
+    assert 'catalogStageMeta(catalog, pendingCreate.type).description' in text
+    assert 'pendingCreate.type === "base"' in text
+    assert 'pendingCreate.type === "command"' in text
+
+
+
+def test_designer_dynamic_producer_ui_is_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "result_kind?: string" in text
+    assert "dynamic_output?: boolean" in text
+    assert 'catalog?.stage_types?.[s.type]?.result_kind' in text
+    assert "Dynamic child Workflow" in text
+    assert "dynamic-chip" in text
+    assert ".dynamic-stage-note" in styles
+
+
+
+def test_workflow_asset_workspace_has_no_legacy_workflow_editor():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    for legacy_id in (
+        "visualDesignerPanel", "yamlEditorPanel", "studioTextarea",
+        "addStageBackdrop", "flowMapBackdrop", "studioEditorModeSwitch",
+    ):
+        assert f'id="{legacy_id}"' not in index
+        assert legacy_id not in app
+    assert "workflow-flow-map.css" not in styles
+    assert "WorkflowFlowMap" not in app
+
+    # Prompt remains the only inline editor in the asset workspace.
+    assert 'id="promptEditorPanel"' in index
+    assert 'id="studioPromptTextarea"' in index
+    assert 'state.studioFile?.kind !== "prompt"' in app
+
+    # Workflow management is owned by the Library context menu.
+    for control in (
+        "workflowContextOpen", "workflowContextVisibility", "workflowContextRename",
+        "workflowContextDuplicate", "workflowContextExport", "workflowContextDelete",
+    ):
+        assert f'id="{control}"' in index
+    assert "renameWorkflowItem" in app
+    assert "duplicateWorkflowItem" in app
+    assert "exportWorkflowItem" in app
+    assert "deleteWorkflowItem" in app
+
+
+
+def test_designer_visible_chrome_uses_shared_i18n():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    for key in (
+        "undo_none", "undo_done", "redo_none", "redo_done",
+        "remove_title",
+        "discard_title", "reload_title", "route_intro",
+        "review_policy_help", "error_policy_help", "test_help",
+        "dynamic_child_note", "stage_yaml_hint",
+    ):
+        assert f'{key}:' in text
+        assert f'tx("{key}")' in text
+
+    # User-facing editor chrome after the i18n table must not regress to the
+    # previously hard-coded Chinese dialog/help strings.
+    body = text.split("const AGENT_PING_PROMPT", 1)[1]
+    for removed in (
+        "沒有可復原的 Workflow 修改。",
+        "已復原上一個 Workflow 草稿修改。",
+        "沒有可重做的 Workflow 修改。",
+        "已重做上一個 Workflow 草稿修改。",
+        "儲存並切換視圖？",
+        "捨棄未儲存變更？",
+        "重新載入 Workflow？",
+        "從積木下方的大接點拉到目標積木。",
+    ):
+        assert removed not in body
+
+
+def test_workflow_view_switch_saves_and_refreshes_without_confirmation():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    switch = text.split("function switchEditorView", 1)[1].split("const connect =", 1)[0]
+    assert "const saved = await saveCurrent()" in switch
+    assert 'api<Visual>(endpoint("/api/studio/visual"))' in switch
+    assert 'api<StudioFile>(endpoint("/api/studio/file"))' in switch
+    assert "requestConfirm({" not in switch
+    assert "if (!saved) return" in switch
+    assert "if (next === editorView || busy) return" in switch
+
+
+def test_workflow_draft_recovery_notice_is_compact():
+    styles = STYLES.read_text(encoding="utf-8")
+
+    recovery = styles.split(".workflow-draft-recovery {", 1)[1].split("}", 1)[0]
+    assert "min-height: 34px" in recovery
+    assert "padding: 5px 8px 5px 10px" in recovery
+    assert ".workflow-draft-recovery-actions button { padding: 4px 7px; font-size: 11px; }" in styles
+
+
+def test_workflow_editor_exposes_saved_unsaved_state_and_save_reason():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert 'editorDirty ? "unsaved-badge" : "saved-badge"' in text
+    assert 'editorDirty ? tx("unsaved") : tx("saved")' in text
+    assert 'title={!editorDirty ? tx("saved")' in text
+    assert ".studio-header .saved-badge" in styles
+
+
+def test_designer_has_save_boundary_problems_panel():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "function graphProblems(visual: Visual)" in text
+    assert 'message: "START has no connected Stage."' in text
+    assert 'message: "Stage is unreachable from START."' in text
+    assert 'message: "Handoff has no target."' in text
+    assert 'setMessage("Fix Workflow problems before saving.")' in text
+    assert 'aria-label="Workflow problems"' in text
+    assert ".workflow-problems" in styles
+
+
+
+def test_designer_modals_share_escape_and_close_accessibility_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'window.addEventListener("keydown", onKeyDown, true)' in text
+    assert 'if (event.key !== "Escape") return' in text
+    assert 'if (editorOpen) setEditorOpen(false)' in text
+    assert 'else if (confirmDialog) setConfirmDialog(null)' in text
+    assert 'else if (pendingCreate) { setPendingCreate(null); setPendingEdgeCreate(null); }' in text
+    assert 'else if (addStageOpen) closeAddStageCommand()' in text
+    assert 'aria-label={tx("close")} title={tx("close")}' in text
+
+
+
+def test_designer_confirm_keeps_cancel_before_danger_action():
+    text = SOURCE.read_text(encoding="utf-8")
+    cancel = text.index('<button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>')
+    confirm = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
+    assert cancel < confirm
+    assert 'aria-modal="true" aria-labelledby="designer-confirm-title"' in text
+
+
+
+def test_handles_stay_interactive_after_existing_edges():
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "z-index: 4 !important" in styles
+    assert "pointer-events: auto !important" in styles
+
+
+
+def test_designer_modal_focus_return_and_confirmation_order_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen" in text
+    assert "const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null" in text
+    assert "if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus())" in text
+    assert 'aria-label="Dismiss Workflow problems" title="Dismiss Workflow problems"' in text
+    assert 'aria-label={tx("close")} title={tx("close")}' in text
+    cancel_index = text.index('<button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>')
+    confirm_index = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
+    assert cancel_index < confirm_index
+
+
+
+def test_add_stage_focus_and_reusable_handle_layer_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "const addStageTriggerRef = useRef<HTMLButtonElement | null>(null)" in text
+    assert "ref={addStageTriggerRef}" in text
+    assert "requestAnimationFrame(() => addStageTriggerRef.current?.focus())" in text
+    assert ".react-flow__edges { z-index: 1 !important; }" in styles
+    assert ".react-flow__nodes { z-index: 2 !important; }" in styles
+    assert "pointer-events: auto !important" in styles
+
+
+
+def test_workflow_draft_recovery_is_local_hash_gated_and_save_cleared():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "workflow-studio-draft:v1:" in text
+    assert "localDraft.hash !== v.hash" in text
+    assert "clearWorkflowDraft(v.id)" in text
+    assert "writeWorkflowDraft({" in text
+    assert "if (!editorDirty || !visual) return" in text
+    assert 'draft_recovery_unchanged: "尚未寫入 Workflow"' in text
+    assert 'tx("discard_draft")' in text
+    assert 'tx("restore_draft")' in text
+    assert "clearWorkflowDraft(savedVisual.id)" in text
+    assert "clearWorkflowDraft(refreshed.id)" in text
+    assert ".workflow-draft-recovery" in styles
+
+
+
+def test_add_stage_escape_restores_focus_and_edges_stay_below_handles():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const closeAddStageCommand = useCallback(() => {" in text
+    assert "requestAnimationFrame(() => addStageTriggerRef.current?.focus())" in text
+    assert "else if (addStageOpen) closeAddStageCommand()" in text
+    assert "if (addStageOpen) closeAddStageCommand()" in text
+    assert "zIndex: 0" in text
+    assert "zIndex: 2" in text
+
+
+
+def test_designer_optional_snap_is_local_only_visible_and_nonsemantic():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert 'const SNAP_PREF_KEY = "workflow-designer.snap:v1"' in text
+    assert 'const [snapEnabled, setSnapEnabled] = useState(readSnapPreference())' in text
+    assert 'aria-pressed={snapEnabled}' in text
+    assert 'className={`snap-toggle ${snapEnabled ? "active" : ""}`}' in text
+    assert 'snapToGrid={snapEnabled}' in text
+    assert 'snapGrid={[20, 20]}' in text
+    assert '<Background gap={20} size={1} />' in text
+    assert 'writeSnapPreference(next)' in text
+    assert 'setMessage(next ? tx("snap_enabled") : tx("snap_disabled"))' in text
+    assert 'snap_grid: "網格吸附"' in text
+    assert ".studio-header .snap-toggle.active" in styles
+
+
+
+
+def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
+    text = SOURCE.read_text(encoding="utf-8")
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
+
+    assert "export function applyConnectionToVisual(" in draft
+    assert "const connectionStartRef = useRef" in text
+    assert "const [pendingEdgeCreate, setPendingEdgeCreate]" in text
+    assert "const connectStart: OnConnectStart = useCallback" in text
+    assert "const connectEnd: OnConnectEnd = useCallback" in text
+    assert "if (!start || state.isValid || start.source === END) return" in text
+    assert 'target?.closest(".react-flow__handle, .react-flow__node")' in text
+    assert "setPendingEdgeCreate({ ...start, position })" in text
+    assert "onConnectStart={connectStart}" in text
+    assert "onConnectEnd={connectEnd}" in text
+    assert "next = applyConnectionToVisual(next" in text
+    assert "data-stage-type={type}" in text
+    assert "setPendingEdgeCreate(null)" in text
+
+def test_stage_test_tab_supports_saved_path_dryrun_without_second_runtime():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert '"/api/studio/path/test"' in text
+    assert "async function testPathFromStage" in text
+    assert 'if (dirtyGraph)' in text
+    assert '"Save the Workflow before testing a path."' in text
+    assert "disabled={pathTesting || busy || dirtyGraph}" in text
+    assert "Test path to END" in text
+    assert "pathTestResult.transitions.map" in text
+
+
+
+def test_stage_test_actions_are_visually_separated():
+    styles = STYLES.read_text(encoding="utf-8")
+    source = SOURCE.read_text(encoding="utf-8")
+
+    assert 'className="test-action-row"' in source
+    assert ".test-action-row { display: flex;" in styles
+    assert "gap: 10px" in styles
+
+
+
+def test_stage_test_has_real_stop_control():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'stageTestIdRef = useRef("")' in text
+    assert 'test_id: testId' in text
+    assert '"/api/studio/stage/test/cancel"' in text
+    assert "async function stopStageTest()" in text
+    assert 'tx("stop_test")' in text
+    assert "result.cancelled" in text
+
+
+
+
+def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
+    text = SOURCE.read_text(encoding="utf-8")
+    state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+    assert 'stage_backend_help:' in text
+    assert 'stage_model_help:' in text
+    assert 'models: Record<string, string[]>;' in text
+    assert "constraints?.execution_target" in text
+    assert "const executionPair = executionConstraint?.paired_fields || []" in text
+    assert "const backendField = executionPair[0] ||" in text
+    assert "const modelField = executionPair[1] ||" in text
+    assert "executionTargetNames.has(o.name)" in text
+    assert 'className="stage-form-section stage-execution-target"' in text
+    assert 'disabled={!stageBackend || stageModels.length === 0}' in text
+    assert 'stageModels.map((value) => <option' in text
+    assert 'effective_backend?: string;' in text
+    assert 'effective_model?: string;' in text
+    assert 'testResult.effective_backend' in text
+    assert 'testResult.effective_model' in text
+    assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
+    assert "applyExecutionTargetConstraint" in text
+    assert 'executionTargetNames.has(o.name)' in text
+    assert 'const executionPair = executionConstraint?.paired_fields || []' in text
+    assert "structured_fresh_retries" not in state
+
+def test_stage_backend_model_fields_are_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+    registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
+
+    assert 'option.section || "advanced"' in text
+    assert '"backend": "execution"' in registry
+    assert '"model": "execution"' in registry
+    assert '"run_state": "execution"' in registry
+    assert '"qwen", "opencode"' not in text

@@ -25,12 +25,13 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--agent-timeout` | runtime AI-call seconds | 7200; 0 disables |
 | `--planning-timeout` | planning AI-call seconds | 600; 0 disables |
 | `--agent-idle-after-change-timeout` | idle seconds after changes/output stop | 900; 0 disables |
-| `--max-attempts` | same-session recovery limit | `-1` keeps recovering until PASS, `0` disables same-session retry, and a positive value switches to Fresh Session after that many retries. Default: `2`. |
-| `--review-retries` | AI Review recovery limit | `-1` retries until PASS, `0` disables retry, and a positive value skips Review after that many retries. Default: `1`; Final Validator remains authoritative. |
-| `--max-cycles` | workflow/replan cycle limit | `-1` keeps validating and repairing until PASS, `0` disables replan, and a positive value is a finite termination cap. Default: `-1`. |
-| `--retry-delay` | logical task retry delay | 2 seconds |
-| `--retry-wait` | initial model-call retry wait | 5 seconds |
-| `--retry-max-wait` | max model-call retry wait | 300 seconds |
+| `--watchdog-interval` | worker watchdog heartbeat interval | must be >0 |
+| `--worker-hang-timeout` | seconds without worker activity before hang handling | must be >=0 |
+| `--stage-retries` | technical Stage ERROR retries | `-1` keeps recovering and rotates to Fresh Session after bounded same-session attempts |
+| `--max-cycles` | Workflow backward-cycle limit | `-1` unlimited; non-negative integer sets the cap |
+| `--skip-on-max-cycles` | skip an exhausted YAML List item and continue with the next item | off by default; direct runs still terminate on exhaustion |
+| `--retry-delay` | technical failure retry delay | 5 seconds |
+| `--retry-max-delay` | maximum transient-service backoff delay | 300 seconds |
 | `--final-ai-validations`, `--ai-validator-count` | independent fresh-session Final AI votes | 1 |
 | `--final-ai-required-passes` | required PASS count | 0 = strict majority; otherwise <= runs |
 | `--ai-validator-yolo` | allow Final AI validation to run command/build/test/coverage checks and temporary verification scripts | run-level default off; bundled AI/mixed workflows set the stage option explicitly |
@@ -41,7 +42,6 @@ The work directory also contains display/diagnostic surfaces. `stream.log` is th
 | `--json-events` | emit JSON Lines progress | off |
 | `--resume` | resume state | off |
 | `--force-new` | create new run | off; conflicts with resume |
-| `--plan-only` | plan/save/exit before execution | off |
 
 ## Validator command construction
 For `--validator validation.py --validator-arg --fab --validator-arg FAB23`, Runner executes conceptually:

@@ -7,22 +7,19 @@ from types import SimpleNamespace
 import pytest
 
 from ai_task_runner import parser
-from runner.backends.opencode import OpenCodeBackend
-from runner.backends.qwen import QwenBackend
+from runner.agent.opencode import OpenCodeBackend
+from runner.agent.qwen import QwenBackend
 from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import (
-    DEFAULT_MAX_ATTEMPTS,
-    DEFAULT_REVIEW_RETRIES,
+    DEFAULT_STAGE_RETRIES,
     DEFAULT_WATCHDOG_INTERVAL,
     DEFAULT_WORKER_HANG_TIMEOUT,
 )
-from runner.errors import ConfigurationError, RunnerError
+from runner.errors import RunnerError
 from runner.plugins.console import LiveUI
-from runner.workflow.rules import invalidate_plan
-from runner.workflow.stages.contracts import StageContext, StageResult
-from runner.workflow.stages.executor import StageExecutor
-from runner.ai.contracts import BackendResult
-from runner.ai.client import AIClient
+from runner.workflow.stages import StageContext, StageResult
+from runner.workflow.execution import StageExecutor
+from runner.agent import AIClient, BackendResult
 from runner.runtime import events
 from runner.runtime.run_state import RunState
 
@@ -100,40 +97,13 @@ def test_plain_console_deduplicates_same_status(tmp_path, capsys):
     assert ui._thread is None
 
 
-def test_max_cycles_minus_one_is_unlimited_and_non_negative_is_enforced(tmp_path):
-    state = _state(tmp_path)
-    ctx = SimpleNamespace(state=state, config=SimpleNamespace(max_cycles=-1))
-    invalidate_plan(ctx)
-    assert state.cycle == 2
-
-    ctx.config.max_cycles = 2
-    with pytest.raises(ConfigurationError, match='max cycles reached: 2'):
-        invalidate_plan(ctx)
-
-    state.cycle = 0
-    ctx.config.max_cycles = 0
-    with pytest.raises(ConfigurationError, match='max cycles reached: 0'):
-        invalidate_plan(ctx)
-
-
-def test_retry_limits_accept_only_minus_one_or_non_negative_values():
+def test_stage_retry_limit_is_one_public_retry_setting():
     args = parser().parse_args(['--goal', 'x', '--validator', 'ai'])
-    assert args.max_attempts == DEFAULT_MAX_ATTEMPTS == -1
-    assert args.review_retries == DEFAULT_REVIEW_RETRIES == -1
+    assert args.stage_retries == DEFAULT_STAGE_RETRIES == -1
 
-    RuntimeConfig(
-        goal='x',
-        validator='ai',
-        same_session_retries=-1,
-        review_retries=-1,
-        max_cycles=-1,
-    ).validate()
+    RuntimeConfig(goal='x', validator='ai', stage_retries=-1).validate()
     with pytest.raises(ValueError, match='must be -1'):
-        RuntimeConfig(
-            goal='x',
-            validator='ai',
-            same_session_retries=-2,
-        ).validate()
+        RuntimeConfig(goal='x', validator='ai', stage_retries=-2).validate()
 
 
 class _Hooks:
@@ -152,7 +122,7 @@ class _SessionModel:
 
     def ask(self, prompt, **kwargs):
         self.calls.append(self.session_id)
-        if len(self.calls) == 1:
+        if len(self.calls) <= 2:
             raise RunnerError('Loop detection halted the run: consecutive_identical_tool_calls')
         self.session_id = 'session-B'
         return 'ok'
@@ -167,9 +137,7 @@ class _ModelStage:
     actor = 'model'
     status = 'understand'
     detail = ''
-    retry = 0
     run_state = 'planning'
-    skip_on_error = False
     tolerate_restored_changes = False
 
     def run(self, ctx, previous=None):
@@ -185,7 +153,7 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
     model = _SessionModel()
     saves = []
     ctx = StageContext(
-        config=RuntimeConfig(same_session_retries=0, stage_retry_delay=0),
+        config=RuntimeConfig(stage_retries=2, retry_delay=0),
         root=tmp_path,
         work=tmp_path / '.work',
         state=state,
@@ -200,9 +168,8 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
     result = StageExecutor(_Hooks()).run(_ModelStage(), ctx)
 
     assert result.status == 'pass'
-    assert model.calls == ['session-A', '']  # second call cannot resume A
+    assert model.calls == ['session-A', 'session-A', '']  # Fresh Session only after two same-session failures
     assert model.session_id == state.ai_session_id == 'session-B'
-    assert state.fresh_session_round == 0  # reset after successful recovery
 
 
 def test_model_result_event_contains_actual_new_session(tmp_path, monkeypatch):
@@ -269,7 +236,7 @@ def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
 
 
 def test_cleanup_stale_safety_snapshots(tmp_path):
-    from runner.project.files import cleanup_stale_artifacts
+    from runner.workspace import cleanup_stale_artifacts
 
     temp_root = tmp_path / "temp"
     temp_root.mkdir()

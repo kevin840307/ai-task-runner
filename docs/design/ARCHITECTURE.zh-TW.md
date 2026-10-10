@@ -1,82 +1,111 @@
-# 架構
+# Runtime 架構
 
-目錄本身就是架構圖：
+## 核心
 
-- `runner/api.py`、`bootstrap.py`、`task_runner.py`：共用 request/recovery 邊界、dependency 組裝、單次任務協調。
-- `runner/script_loader.py`、`script_runner.py`：YAML 結構/檔案解析，以及經驗證的 child config 執行。
-- `runner/workflow/`：Workflow 定義、路由規則、特殊 Prompt/Result adapter 與 Stage Engine。
-- `runner/workflow/stages/`：Stage contract、共用 executor、`BaseStage`、`PlanStage`、統一處理所有 subprocess execution 的 `CommandStage`。
-- `runner/ai/`：AI Client、Backend contract、Session 判斷、Structured Output、AI diagnostics。
-- `runner/backends/`：Qwen/OpenCode 實作與 Backend registry/configuration。
-- `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
-- `runner/prompts/`：Strict Jinja loader、穩定 Prompt Context contract、Prompt resources。
-- `runner/runtime/`：Durable state、subprocess lifecycle、worker crash supervisor、raw EventBus，以及 Workflow 使用的 semantic progress facade。
-- `runner/plugins/`：Safety、Console、History、Observability、Loop context 壓縮等橫切 Plugin/Hook。
-- `runner/config/`：Defaults 與唯一經驗證的 Runtime configuration contract。
-- `runner/extensions.py`、`resources.py`：Workflow 驗證前的 installed extension discovery，以及共用 atomic editable-resource I/O。
-- `runner/utils/`：只保留無狀態、通用的 file/text helper。
+```text
+RunRequest -> WorkflowRunner -> FlowEngine -> StageExecutor -> Stage
+                            \-> StateStore
+```
 
-## 依賴方向
+CLI、API、YAML List、UI 全部使用同一套 runtime。
 
-`CLI / Programmatic UI / Skill -> runner.api -> Bootstrap -> TaskRunner -> Workflow -> Stage -> bounded capability`
+### Stage
+只負責語意工作並回傳 `StageResult`。
 
-`Backends -> AI contracts`
+### Stage 模組責任
 
-`StageExecutor -> Project + Runtime semantic progress + generic hook contract`
+```text
+runner/workflow/
+  contracts.py           所有 Stage/plugin 共用的 protocol/context/result
+  stages/
+    base_stage.py         一般 AI Stage + profile 行為
+    plan_stage.py         Plan 特殊 Stage
+    ai_validator_stage.py AI Validator 特殊 Stage
+    command_stage.py      deterministic command Stage
+    handoff_stage.py      Dynamic Handoff 特殊 Stage
+  execution/
+    stage_executor.py     共用 retry/session/recovery 執行邊界
+```
 
-`Bootstrap -> runtime plugins`
+新增 plugin 或特殊 Stage 時，只依賴 `workflow/contracts.py` 與自身行為；retry/session/recovery 不放進 Stage。非 AI Stage 不應依賴 `BaseStage`。
 
-`Extension discovery -> Stage/backend registries -> Workflow validation`
+### StageExecutor
+只負責技術可靠性：
+- technical retry；
+- timeout；
+- Same Session retry；
+- Fresh Session rotation；
+- transient backend/API recovery；
+- safety/change tracking；
+- plugin hook/event。
 
-Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin、raw event schema 或 UI 行為；`runtime/progress.py` 是語意 facade，`runtime/events.py` 才負責 event transport/schema。AI subsystem 不得反向依賴 Workflow business stage。
+自訂 Stage 不應再實作自己的 retry/recovery framework。
 
-CLI parsing 在 `RunRequest.from_namespace()` 結束。`runner.api.run()` 對所有入口統一負責 logical retry、未完成 normal return 的 resume、unexpected runtime recovery，以及 Final Validator completion guard。CLI 額外只有 `runtime/supervisor.py` 的 process-level crash isolation，不再擁有第二套 retry loop。`RunRequest.normalized_config()` 只做一次檔案解析與公開欄位映射；`RuntimeConfig.validate()` 是一般 request 與 YAML child item 共用的執行驗證。Runner 不再保留反向或內部 Namespace 相容層。
+### FlowEngine
+只負責語意 navigation：
+- PASS 預設下一個 Stage；
+- FAIL 預設停止；
+- `routes.pass` / `routes.fail`；
+- Stage 結果（`tasks` / `stages`）的 durable dynamic child Workflow 展開；
+- Handoff one-of-many target routing。
 
-Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 Hook Chain 回報錯誤；只有 Plugin 讀取壓縮設定與 Backend 的可選 context capability。
+ERROR 不走 graph routing。
 
-## UI / Extension 邊界
+### StateStore
+持久化 workflow position、已展開 child Workflow、dynamic task groups、上一個 transition evidence、主 Session ID 與 durable role Session ID。
 
-UI 是 Adapter，不是 execution Plugin。Programmatic UI／CLI／Skill 可以依賴 `runner.api`、可編輯資源／catalog metadata 的 owner module 與 event callback；Pipeline、StageExecutor、Stage 不得 import UI。本機 detached UI 可以採更窄的 boundary，完全不 import Runner Python，只讀 configured work directory 的 runtime visibility files。整包移除 UI 時，Runner execution semantics 必須完全不變。
+## Dynamic child Workflow
 
-外部 Python package 可透過 `ai_task_runner.extensions` entry point 在 Runtime 建立前註冊 `register_stage()`、Backend 等 runtime-independent capability；Discovery 發生在 Workflow validation 之前。Cross-cutting Runtime Plugin 則使用獨立的 `ai_task_runner.plugins` entry-point group，只有 Runtime 建立後才 attach。如此可擴充但不讓 Workflow Core 反向依賴 Plugin。
+任意 Stage 都可以回傳 `tasks` 或 `stages`，但 child Stage 結構必須由該 Stage 自己產生；Runner 不猜測 child node type。
 
-`workflow.registry.stage_catalog()` 直接由已註冊 Stage 的 `spec_class` 產生，UI/Tooling 不得另外 hardcode 一份 Stage schema。使用者 Python automation 使用 `type: command`，一律透過共用 Python process helper 在 subprocess 執行；任意使用者 Python 不會 import 進 24H Runner process。
+執行語意：
 
-`workflow.loader.save_workflow()`、`prompts.loader.save_prompt()` 先使用真正 Runner parser/schema 驗證，再 atomic replace；`expected_hash` 提供 UI/IDE optimistic concurrency protection。這只是共用檔案資源能力，不建立第二套 Workflow service/storage model。
+```text
+A -> B -> C -> D
+          |
+          +-> child-1 -> child-2 -> ... -> child-N
+                                      |
+                                      +-> D
+```
 
-Runtime visibility 與 editable resource／execution control 分離。`state.json` 仍是 Runner-owned durable persistence；detached UI 只能唯讀自己需要的穩定欄位，不得修改。`stream.log` 是最近 subprocess stdout 的 bounded、可丟棄 snapshot，每個 subprocess 開始時重置，執行中持續更新。`log.txt` 與 `debug/` 維持 diagnostic/history 用途。這些 visibility files 都不是 command channel，也不是 PASS/FAIL/routing 的真相來源。
+child Workflow 會完整走同一套 StageExecutor / FlowEngine retry、recover、routing、resume，再回 parent 下一個 Stage。展開後的 Workflow 與 task binding 會持久化到 RunState，所以 Resume 不會只為了重建 child workflow 再跑一次 C。
 
-`runner.api.run()` 只會對 transient `RunnerError` 的 service/backend failure 自動 retry；deterministic workflow/state/invariant `RunnerError` 必須 fail-closed，不得變成無限 resume loop。
+`PlanStage` 是內建範例：它先解析合法 tasks，再由 PlanStage 自己產生交錯的 AI Execute -> AI Review child stages。未來特殊 Stage / plugin 可透過同一 contract 產生完全不同的 child 結構。
 
-`runner-process.json` 是 detached UI 使用的最小 Runtime identity marker，由最上層 Supervisor 管理，保存 `supervisor_pid`、目前 `worker_pid`、`started_at`、`project_root`、`work_dir`；Worker restart 時更新 `worker_pid`，Supervisor 正常結束時移除。在正式 marker 尚未出現前，detached UI 只允許持有短生命週期的 `.ai-task-runner/ui/launching.json` reservation，用來避免同一 Project 在 startup 空窗被重複 launch；它只是 UI metadata，不屬於 Workflow state，live Supervisor marker 接手後立即移除。既有 `active-process` 維持 Runner 內部 child/orphan cleanup 用途。PID/launch metadata 不得影響 PASS/FAIL、Retry、Session、routing 或 Resume。Runtime control 刻意維持最小：detached UI 可在 work directory 建立 `stop.request`；Supervisor 會輪詢並 consume request，終止目前 Worker 與其 owned child process，刪除 request，最後以 130 結束。Resume / Rerun 維持一般 CLI launch，分別使用 `--resume` / `--force-new`；不存在 `resume.request` / `rerun.request`。
+## Dynamic Handoff
 
-Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file` 持久化到該 Run work directory。Workflow Stage Prompt 維持 content-addressed；Run-level Goal／Final-AI Prompt 使用固定語意資源名稱。即使 UI/VS Code 修改或刪除來源檔，active Run 與 worker crash 後的 `--resume` 都沿用原本 Workflow／Goal／Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
+`type: handoff` 宣告 `targets`，structured result 每次只選一個允許的 target。Handoff 本身不執行角色工作，也沒有第二套 scheduler hierarchy。
 
-## Workflow 契約
+一般 AI specialist 統一使用 `base`（AI Stage）+ behavior profile。Profile 預設只放在 `runner/workflow/profiles.py`，YAML normalization、dynamic expansion 與 Studio 共用同一份 catalog；只有真正具有特殊 runtime 語意的能力才保留專用 Stage type，例如 `plan`、`ai_validator`、`command`、`handoff`。
 
-`Pipeline -> StageExecutor -> Stage.run() -> StageResult -> Stage.finish() -> next Stage`
+Session policy 與 routing 解耦：
+- `role`：durable Stage-owned Session；
+- `main`：Runner 主 Session；
+- `fresh`：每次 invocation 獨立 Session；
+- `auto`：built-in/default profile 行為。
 
-Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`StageResult` 只包含執行 facts；`recover`、`restart_at` 這類靜態 routing 屬於 YAML `FlowNode`，Pipeline 對兩者都只做通用解讀。
+因此可用同一 Handoff graph 表達動態 specialist routing，不需要新增另一套 runtime family。
 
-`workflow/system/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance 與 validation capability；`workflow/rules.py` 負責 durable state reducer；Pipeline 擁有 Resume 與 recovery routing。頂層 `PlanStage` 由 `workflow/loader.py` 在內部展開內建 `Task -> Review -> Repair（FAIL 時）-> Review` 逐 TODO SOP，因此一般 YAML 不需要重複寫；顯式 `scope: task` 只保留給非 Plan／自訂 Task Producer 的進階靜態 SOP。`PlanStage` 只保存 TODO 內容，不再有 generated-step queue、`expand`、`foreach` 或額外 subflow DSL。
+## Prompt / Session 契約
 
-每個 Stage instance 只負責一次 attempt，且可獨立建構／執行；Stage 不選擇或直接執行另一個 Stage。`PlanStage` 只是內建 AI Task Producer。Task 產生是通用 Stage effect（`produces: tasks`），因此 Python/command/extension 可回傳相同 Task JSON contract，Pipeline 不需要判斷 Stage class；組合與 recovery 留在 normalized `FlowNode`；標準 Plan task SOP 是 Loader 預設，不是 AI 產生的 topology。
+Stage template 定義語意行為。Runner 共用 control envelope 只補 retry/continue/recover 的新資訊與 bounded feedback。Same Session 已看過原始 Stage prompt 後，不重送沒有變化的完整 context。
 
-Durable state 會保存已完成的頂層 Workflow 位置與語意 fingerprint；缺少新欄位的舊 state 會相容 normalization。自訂 Workflow resume 時 fingerprint 必須一致，避免 Stage 調序後被靜默略過或重複。
+Dynamic 一般角色共用 worker template，再由每個 Stage 的 `instructions` 定義職責；只有 protocol 真正不同才拆專用 prompt。
 
-## Prompt 契約
+## UI 契約
 
-所有 bundled Prompt 統一使用 Jinja + `StrictUndefined`。Template 不直接取得 `RunState`、`RuntimeConfig` 或任意 dict。`prompts/context.py` 是唯一 Prompt Context 入口，固定 top-level variables：
+Studio 只是 YAML 的 editor projection，不是第二套 graph schema。
 
-`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `planning`, `previous`, `instructions`, `rules`, `always_instructions`。
+- START/END：UI virtual node。
+- Stage node：一個真實 YAML Stage；AI Stage 使用 `profile: generic | execute | review`。
+- PASS/FAIL edge：semantic route。
+- Handoff edge：allowed target。
+- ERROR：只設定 retry policy。
 
+UI backend 使用與 runtime loader 相同的 catalog/schema 驗證。
 
-`previous.data` 會暴露前一個 Stage 的 bounded structured facts，讓 YAML `recover` node 能直接使用具體 feedback，而不需要額外 data bus 或重送完整 Context。大小限制只套用在 Prompt transport；原始 `StageResult.data` 不會被修改。
+## 明確不做
 
-一般 AI Stage 直接指定 prompt path；沒有 prompt-builder registry。Planning / Repair Planning 的計算 context 直接由 `PlanStage` 管理。
+不恢復任何 pre-v3 compatibility runtime/schema。ERROR 維持 execution concern，不成為 graph edge。Discussion / Group Chat、generic AgentMessage/scheduler framework 與 generic parallel DAG engine 也不屬於目前 runtime。
 
-
-## OpenCode backend parity
-
-Qwen 與 OpenCode 共用 `BaseBackend` 的 stdin、timeout、idle-timeout、process-tree cleanup 與 stable recovery identity。Backend adapter 只擁有 transport/capability 差異：Qwen 使用 `--resume` + native `-s` sandbox；OpenCode 使用 `--session` + JSON event stream + `--auto`，並透過 `OPENCODE_CONFIG_CONTENT.permission` 套用 planning/no-tool/review 與 `--sandbox` 的 permission policy。Workflow、StageExecutor 與 Pipeline 不得依 backend 名稱分支。
-Local UI 採用自適應、非重疊輪詢：Runtime / Project status / Studio guard request 會序列化執行，瀏覽器分頁在背景時自動降頻，回到前景時立即 refresh。Runtime rendering 以 state signature 判斷，資料未變就不重畫 DOM。這只降低長時間 24H 執行時的 UI 負載，不改變 Runner state 或排程語意。
+Parallel 仍是 future work。

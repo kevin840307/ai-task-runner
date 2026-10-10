@@ -58,7 +58,7 @@ def test_spinner_redraw_does_not_accumulate_newlines(monkeypatch):
 def test_observer_events_keep_original_multiline_detail(tmp_path):
     from types import SimpleNamespace
 
-    from runner.plugins.observability import ObservabilityObserver
+    from runner.plugins.runtime import ObservabilityObserver
 
     events = []
     detail = "qwen exit 1:\nLoop detection halted"

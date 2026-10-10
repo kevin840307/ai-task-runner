@@ -404,6 +404,44 @@ body {
   color: #e5e7eb;
 }
 .cli-runtime-card .live-activity-head small { color: #98a2b3; }
+.runtime-activity {
+  display: grid;
+  gap: 6px;
+  padding: 10px 13px 8px;
+  border-bottom: 1px solid #e5eaf0;
+  background: color-mix(in srgb, var(--panel-2) 72%, transparent);
+}
+.runtime-activity[hidden] { display: none !important; }
+.runtime-activity-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.runtime-activity-list {
+  display: grid;
+  gap: 4px;
+}
+.runtime-activity-item {
+  position: relative;
+  min-width: 0;
+  padding-left: 14px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-activity-item::before {
+  content: "›";
+  position: absolute;
+  left: 2px;
+  color: var(--accent);
+  font-weight: 900;
+}
+
 .cli-runtime-output {
   min-height: 116px;
   max-height: 310px;
@@ -719,11 +757,17 @@ html[data-motion="reduced"] .project-row.runtime-running .project-mark::after { 
 }
 @media (max-width: 720px) {
   #composePanel .composer-left {
-    overflow-x: auto;
-    overflow-y: visible;
+    flex-wrap: wrap;
+    overflow: visible;
   }
   #composePanel .composer-workflow-picker {
-    max-width: min(260px, 62vw);
+    flex: 1 1 200px;
+    width: min(260px, 100%);
+    max-width: calc(100% - 78px);
+    overflow: hidden !important;
+  }
+  #composePanel .options-button {
+    flex: 0 0 auto;
   }
 }
 
@@ -881,9 +925,94 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
 .composer-validation-row .composer-validator-picker input {
   max-width: 112px;
 }
+/* Options validation resources are stacked and internally two-row.
+   Mixed File + AI validation must never compete for horizontal space. */
+#composePanel .options-panel {
+  width: min(380px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+  max-height: min(70dvh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.options-validation-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  justify-self: stretch;
+  gap: 8px;
+}
+.options-validation-row .composer-resource-picker {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 72px;
+  margin: 0;
+  box-sizing: border-box;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(18px, auto) minmax(32px, auto);
+  grid-template-areas:
+    "kind clear"
+    "name choose";
+  align-items: center;
+  row-gap: 6px;
+  column-gap: 10px;
+  border-radius: 10px;
+  padding: 9px 10px 9px 12px;
+  overflow: hidden;
+}
+/* The readonly input stores the canonical asset path; the visible value is
+   resource-name. Keep it out of Grid auto-placement so mixed validators cannot
+   overlap or create an implicit third cell. */
+.options-validation-row .composer-resource-picker > input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.options-validation-row .composer-resource-picker .resource-kind {
+  grid-area: kind;
+  min-width: 0;
+  line-height: 18px;
+  align-self: end;
+}
+.options-validation-row .composer-resource-picker .resource-name {
+  grid-area: name;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 22px;
+  align-self: center;
+}
+.options-validation-row .composer-resource-picker .resource-action {
+  grid-area: choose;
+  min-width: 70px;
+  min-height: 32px;
+  line-height: 30px;
+  align-self: center;
+}
+.options-validation-row .composer-resource-picker .resource-clear {
+  grid-area: clear;
+  justify-self: end;
+  align-self: center;
+}
 @media (max-width: 900px) {
-  .composer-validation-row { flex-wrap: wrap; }
-  .composer-validation-row .composer-validator-picker { max-width: 240px; }
+  .options-validation-row .composer-resource-picker { max-width: none; }
 }
 
 
@@ -1214,3 +1343,52 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   color: var(--text);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+
+.runtime-headline {
+  margin: 4px 0 0;
+  max-width: min(760px, 62vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.runtime-headline[hidden] { display: none !important; }
+
+
+/* Unified runtime vocabulary. */
+.project-mark.runtime-recovering { background: #0ea5e9 !important; box-shadow: 0 0 0 3px rgba(14,165,233,.14); }
+.project-mark.runtime-needs_attention { background: #f59e0b !important; }
+.project-runtime-label.runtime-recovering { color: #0369a1; background: #e0f2fe; }
+.project-runtime-label.runtime-needs_attention { color: #9a5b00; background: var(--warning-soft); }
+.project-runtime-label.runtime-recovering::before { content: "↻"; }
+.project-runtime-label.runtime-needs_attention::before { content: "!"; }
+.runtime-badge.recovering { color: #0369a1; background: #e0f2fe; border-color: #bae6fd; }
+.runtime-badge.needs-attention { color: #9a5b00; background: var(--warning-soft); border-color: color-mix(in srgb, #f59e0b 30%, var(--line)); }
+
+
+
+
+.runtime-guidance {
+  margin: 0 16px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+.runtime-guidance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 11px;
+}
+.runtime-guidance > div { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.runtime-guidance strong { white-space: nowrap; font-size: 11px; }
+.runtime-guidance span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+.runtime-guidance small { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.runtime-guidance.recovering { border-color: #f4c56a; background: var(--warning-soft); }
+.runtime-guidance.needs-attention { border-color: #f5a99e; background: #fff6f4; }
+.runtime-guidance-buttons { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.runtime-guidance-buttons .action-button { min-height: 26px; padding: 0 8px; font-size: 10px; }

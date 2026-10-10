@@ -1,0 +1,19 @@
+stages:
+  ralphy:
+    type: base
+    profile: execute
+    status: Ralphy 正在執行任務
+    prompt: ralphy/ralphy.md
+    session_policy: fresh
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    status: AI 正在獨立驗證結果
+    session_policy: fresh
+    routes:
+      fail: ralphy
+
+flow:
+  - ralphy
+  - validate_ai

@@ -1,52 +1,81 @@
 # Prompt and Session Contract
 
-## Prompt variables
+The runtime keeps prompt semantics small and shared across Stage types.
 
-Prompt variables are a public contract, not ad-hoc dictionaries. `runner/prompts/context.py` builds the supported Stage context. Templates may use these top-level names:
+## One Stage prompt, one shared control envelope
 
-- `goal`: original user goal.
-- `stage`: current Stage name.
-- `task`: current TODO data or `None`.
-- `tasks`: normalized TODO list.
-- `workflow`: current cycle and validator feedback needed by Stage templates.
-- `validation`: validator path, feedback, and optional validator instructions.
-- `project`: project root.
-- `previous`: bounded previous-Stage handoff (`stage`, `status`, bounded `output`, and bounded structured `data`). Recover prompts should consume only concrete new feedback such as `reason` / `missing_items`; they must not rebuild or resend unrelated context.
-- `planning`: planning-only normalized progress/inspection context.
-- `rules`, `always_instructions`: shared rendered instruction text.
+A Stage template defines only its semantic responsibility. Retry/continue/recover behavior is not maintained as separate prompt files.
 
+The effective AI input is:
 
-Example recover prompt:
-```jinja2
-{% if previous.data %}
-Review feedback: {{ previous.data | tojson }}
-{% endif %}
+```text
+Stage prompt
++ Runner-owned shared control envelope when needed
++ immutable structured output protocol when the Stage requires one
 ```
 
-Templates must not reference internal Python objects such as `state`, `args`, or `scratch`.
+The shared control envelope may contain:
+- current Stage name;
+- mode: continue / retry / recover;
+- attempt number;
+- whether the current call is using the same Session;
+- bounded previous error;
+- bounded Review/Validator feedback;
+- bounded current Task evidence.
 
-All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or misspelled variable fails immediately instead of silently rendering an empty value. `{% include %}` is supported for shared prompt fragments/output contracts.
+It must not duplicate large unchanged Goal/project context unnecessarily.
 
-## Stage prompt ownership
+## Initial vs same-session continuation vs fresh recovery
 
-Ordinary write work should normally use semantic `type: task`; read-only verdict work should use `type: review`. Use `type: base` only when a custom AI Stage intentionally needs BaseStage defaults.
+### Initial
+Render the complete Stage prompt.
 
-Planning-specific computed context is handled inside `PlanStage`. `TaskStage` and `ReviewStage` remain thin semantic profiles over the shared AI Stage implementation; Review owns readonly mode and structured verdict parsing by default. Review prompts must return a verdict from available evidence instead of repairing, searching for tools, or requesting unavailable tools. There is no prompt-builder registry.
+### Same Session continuation/retry
+When the Session has already seen this Stage prompt contract, send only new control/evidence context plus the immutable output protocol. Preserve valid prior work and do not restart unchanged discovery.
+
+### Fresh/rebuilt Session
+Render the complete Stage prompt again, prefixed only by a short recovery control envelope. The Stage prompt remains the single source of semantic role/goal instructions.
+
+## Dynamic Handoff prompts
+
+The coordinator uses `common/handoff.md` and returns one structured allowed target.
+
+Ordinary Dynamic specialist roles normally share `common/dynamic_worker.md`:
+
+```text
+Goal
++ Assigned responsibility (Stage instructions)
++ Handoff context
++ shared specialist rules
+```
+
+Role specialization belongs in the Stage's `instructions`. Use a dedicated prompt only when a role needs a materially different protocol, tool contract or output format.
+
+Independent final validation uses the normal AI Validator prompt and should normally use `session_policy: fresh`.
 
 ## Session policy
 
-- Initial call: render the full Stage prompt. When the same session later sees the same Stage prompt contract again, bundled Stages may use a configured `continuation_prompt` that sends only the new TODO/evidence instead of repeating Goal/rules already in that session.
-- Same-session recovery: send only a short stage-aware delta: current Stage identity, new failure evidence, readonly reminder when applicable, and the required next action/output contract. Read-only recovery explicitly forbids write/shell/edit/tool-discovery actions so repeated tool or timeout failures converge to the Stage output contract. Do not resend known full context.
-- Fresh/rebuilt session: prepend only a short recovery header, then resend the original complete Stage prompt. The Stage prompt itself owns goal/task/rules, so the wrapper never duplicates them.
-- Final AI validation runs use independent fresh sessions; three configured runs therefore use three different sessions.
-- Structured-output parse failure first uses a short same-session JSON-only correction containing only parser feedback; configured fresh fallback starts a new session and resends the full Stage prompt.
+Routing and Session lifetime are independent.
 
-Full AI task prompts are passed through stdin and never embedded in argv. Qwen `/context` and `/compress-fast` are short backend control commands, not task prompts, so they may use the CLI control-argument path.
+- `session_policy: role` — durable reusable Session owned by the Stage name. Dynamic specialist default.
+- `session_policy: main` — reuse the Runner primary Session.
+- `session_policy: fresh` — clear/start a new Session on every invocation.
+- `session_policy: auto` — built-in/default profile behavior.
 
-## Prompt size rules
+`RunState.stage_sessions` stores durable role Sessions. If a role repeatedly fails technically, StageExecutor may reset only that role Session and continue in a fresh Session. Other roles are not reset.
 
-- Global engineering/safety rules live in shared rules, not repeated in every TODO acceptance criterion.
-- Planning emits only task-specific, objectively checkable acceptance criteria for the TODO's resulting artifact or behavior, not future Stage/review/repair/validator outcomes.
-- When the Planner-visible Stage catalog contains a write Stage, every planned TODO must include at least one write Stage; read-only review-only TODOs are rejected.
-- Stage prompts prefer short scope/evidence/action/contract language over repeated prose or long example lists.
-- JSON output examples are intentionally retained because they materially improve structured-output reliability on smaller models.
+## Read-only Stages
+
+Review/validation/read-only roles must make a verdict from available evidence. They must not silently turn themselves into repair/implementation agents.
+
+If Review or Validator returns FAIL, FlowEngine follows the configured semantic FAIL route. Technical ERROR remains StageExecutor-owned and never becomes a graph edge.
+
+## Prompt maintenance rules
+
+- Keep one core prompt per semantic Stage behavior.
+- Put role-specific differences in `instructions` when the protocol is otherwise identical.
+- Do not create separate retry/recover/continue prompt files.
+- Keep global engineering/safety rules in shared rules.
+- Keep feedback bounded.
+- Keep immutable result protocols Runner-owned.
+- Do not introduce a prompt-builder hierarchy unless a real Stage protocol cannot be expressed by the existing template/context model.

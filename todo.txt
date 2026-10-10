@@ -1,725 +1,1660 @@
-AI Task Runner Refactor TODO
-===========================
+AI Task Runner - Current TODO
+=============================
 
-目標
+Branch: minimal-closed-loop-runtime
+Repository: kevin840307/ai-task-runner
+
+GOAL
 ----
-在不破壞目前 Linear Workflow、24H 無人值守、Resume、YAML List、UI/CLI 相容性的前提下，
-把核心整理成「Stage-centric + Single WorkflowRunner + Pluggable RoutingStrategy」。
-
-未來長期支援：
-1. Linear Workflow with Rollback / Loop
-2. Multi-Agent with Dynamic Handoff
-3. Multi-Agent Group Chat / Discussion
-
-共同產品入口維持不變：
-Chat / CLI / API -> 選 Workflow/Profile -> 輸入 Prompt -> Run
-
-使用者不需要另外選 execution mode。
-Workflow/Profile 自己描述 routing / execution semantics，UI 依 metadata 自動切換合適編輯方式。
-
-
-最終核心模型
-============
-
-只保留少量、容易理解的核心概念：
-
-1. Workflow
-   - 定義有哪些 Stage
-   - 定義 Edge / Routing 規則
-   - 指定 RoutingStrategy
-   - 保存 UI/editor metadata
-
-2. Stage
-   - 唯一執行單位
-   - Plan / Execute / Review / Validator / Command / Tool / Agent 本質上都是 Stage
-   - Agent 只是帶 role / prompt / session / tools 的 Stage
-   - Stage 只執行工作並回 StageResult，不直接修改流程目的地
-
-3. StageExecutor
-   - 負責如何可靠執行一個 Stage
-   - technical retry
-   - timeout
-   - watchdog
-   - API transient recovery
-   - same-session retry
-   - fresh-session escalation
-   - unexpected exception handling
-   - protected-path safety
-   - hooks / diagnostics
-
-4. FlowEngine
-   - 負責 StageResult 出來後下一步去哪裡
-   - 使用 RoutingStrategy
-   - 不執行 Agent 本身
-
-5. RoutingStrategy
-   - Linear
-   - Dynamic
-   - Discussion
-   - 只處理 routing semantics，不複製 Runner / retry / session / watchdog
-
-6. StateStore
-   - durable state
-   - checkpoint
-   - resume
-   - state migration
-   - 保持單一 authoritative commit point
-
-
-目標架構
-========
-
-Chat / CLI / API
-       |
-       v
-   Workflow/Profile
-       |
-       v
-   WorkflowRunner
-   |-- FlowEngine
-   |    '-- RoutingStrategy
-   |         |-- Linear
-   |         |-- Dynamic
-   |         '-- Discussion
-   |
-   |-- StageExecutor
-   |    |-- Retry / Recover
-   |    |-- Timeout / Watchdog
-   |    |-- Session handling
-   |    |-- API transient recovery
-   |    '-- Safety / Hooks
-   |
-   |-- StageRegistry
-   |    |-- AI Stage
-   |    |-- Review Stage
-   |    |-- Validator Stage
-   |    |-- Command Stage
-   |    '-- Tool Stage
-   |
-   '-- StateStore
-        |-- Run state
-        |-- Stage state
-        '-- routing_state
-
-
-重要原則
-========
-
-- Stage 是唯一執行單位。
-- Agent 不建立另一套平行 runtime；Agent 本質上就是 Stage。
-- Stage 不決定 destination。
-- Stage 可以回傳 routing intent / metadata，但 FlowEngine 最終決定是否允許及跳去哪裡。
-- Retry / technical recover / timeout / watchdog / session recovery 是共用 Runtime 能力。
-- Review FAIL / Validator FAIL / rollback / handoff / discussion round 是 Routing semantics。
-- 不為 Linear、Dynamic、Discussion 各複製一套 Runner。
-- 不建立 GenericEverything / UniversalGraph / UniversalAgent 等過度抽象。
-- 先用第二種模式驗證抽象，再抽真正重複的部分。
-- 優先讓人容易讀懂，再追求 pattern 漂亮。
-- 少量、責任清楚的模組，優於大量 20~50 行小 class / 小檔案。
-
-
-目前實作進度（2026-09-27）
-========================
-
-Linear 核心架構第一輪已完成；Windows + Ubuntu fast CI 已通過。real-Qwen / 24H 仍需本機驗證：
-- [x] 新增 canonical `WorkflowRunner`：`runner/workflow_runner.py`
-- [x] 舊 `TaskRunner` 保留 compatibility re-export，不再承載 runtime 實作
-- [x] 新增 canonical `FlowEngine`：`runner/workflow/flow_engine.py`
-- [x] 舊 `Pipeline` 保留 compatibility re-export
-- [x] 新增 `LinearRouting`，開始集中 `workflow_position/task_step` ownership
-- [x] reducers 不再直接重設 Linear routing cursor
-- [x] `RecoveryPolicy` canonical 名稱改為 `SemanticRoutingPolicy`，舊名保留 alias
-- [x] 新增 durable `transition_previous`，Resume 可恢復上一個 Stage context
-- [x] 舊 state.json 缺少 `transition_previous` 時保持 backward compatible
-- [x] 新增 `architecture.md`，固定主要閱讀路徑與 ownership
-- [x] `rules.py` canonical 實作移至 `reducers.py`，舊檔只保留 compatibility re-export
-- [x] `recovery.py` canonical 實作移至 `semantic_routing.py`，technical/semantic recovery 名詞分離
-- [x] durable transition output/data 加上 bounded persistence，避免長跑 state 膨脹
-- [x] 新增 compatibility / routing ownership / transition migration contract tests
-- [x] `routing.py` canonical 實作移至 `linear_routing.py`，為未來 RoutingStrategy 保留乾淨命名空間
-- [x] Review FAIL live probe 改成 deterministic one-shot seed，不再依賴模型第一次故意不完成
-- [x] 新增 Windows + Ubuntu fast CI：compileall + full pytest（不執行 real-Qwen live）
-- [x] Windows path identity 統一：State/UI 不再把 8.3 short path、long path、`\\?\\` I/O path 當不同 Project
-- [x] Windows command placeholder path 正規化，避免 `\\` / `/` 混用
-- [x] Workflow catalog JSON stdout 改成 ASCII-safe，避免 cp1252 UnicodeEncodeError
-- [x] CI 加入 concurrency，後續 push 自動取消舊 SHA 測試
-- [x] `execution_mode` 收斂為相容 metadata；production bootstrap 永遠進同一個 `WorkflowRunner`
-- [x] 移除 mode -> alternate Runner 註冊路徑；未來差異改由 `RoutingStrategy` 承擔
-- [x] deterministic Resume semantic-equivalence：每個 durable checkpoint 模擬 process death + reload
-- [x] static contract：`workflow_position/task_step` 寫入只允許 `linear_routing.py`
-- [x] complete closed-loop live probe 改為 deterministic Review FAIL + deterministic Validator FAIL
-- [x] Review/Validator probe control markers 移至 `.ai-task-runner` work area
-- [x] Windows long-path tree cleanup：短 root + >MAX_PATH descendants 透過 extended-length root 刪除
-- [x] Review routing live probe 移除 Planning/task-scope，只保留 top-level Execute -> Review rollback 閉環
-- [x] `restart_at + max_attempts`：支援 bounded rollback，耗盡可 fail closed
-- [x] bounded restart attempt 與 cursor/transition 一起 durable commit，避免 process restart 原子性問題
-- [x] semantic live probe 使用獨立 bounded timeout，超時附 state + console tail 診斷
-- [x] top-level structured Review/Validator feedback transport：即使 StageResult.output 為空，也會從 data 傳 reason/missing_items 回 rollback target
-- [x] Review routing probe root cause 修復：Execute 現在能收到 `Review missing_items`，不再連續無資訊 FAIL 到 max_attempts
-- [x] full closed-loop repair 改為 durable-state deterministic executor：Review gate/Validator FAIL 均透過 state feedback 驅動修正
-- [x] full closed-loop 保留真 Qwen `review_verify`，但不再把 rollback 成敗綁在模型是否服從 repair prompt
-- [x] dry-run matrix 覆蓋 bounded restart exhaustion
-- [x] `ui/server.py` 拆為 composition/HTTP transport；ProjectRuntime/WorkflowStudio 各自獨立 owner
-
-Fast gate 已完成：
-- [x] Windows Python 3.11 compile + full pytest：1054 passed / 1 skipped / 3 subtests passed
-- [x] Ubuntu Python 3.11 compile + full pytest：1054 passed / 1 skipped / 3 subtests passed
-- [x] deterministic workflow dry-run matrix（由 full pytest 覆蓋）
-- [x] compound recoverable FAILs -> closure（由 full pytest 覆蓋）
-- [x] Linear cursor ownership static contract
-- [x] Resume semantic equivalence deterministic checkpoint matrix
-
-仍需本機真實環境驗證：
-- [ ] real-Qwen resume / Review FAIL / Validator FAIL / full closed-loop probes（Review probe 已修 bounded routing；仍需本機真實 Qwen 重跑）
-- [ ] API 429/502/503 + 3-minute disconnect live probes
-- [ ] YAML List resume / multi-TODO resume live probes
-- [ ] 24H high-density soak
-
-刻意延後，不視為目前 Linear blocker：
-- [ ] RunState nested grouping / routing_state schema migration：維持單一 state.json，等第二種 RoutingStrategy 前再評估
-- [ ] Workflow/Profile routing_strategy/editor metadata：等第二種 RoutingStrategy 前實作
-- [x] `ui/server.py` domain split：完成第一刀，server 僅保留 composition + HTTP transport；ProjectRuntime/WorkflowStudio 已獨立
-- [ ] `qwen_live_reliability.py` probe module split：保留單一 CLI，後續按 probe category 拆
-
-P0 - 現在優先重構
-=================
-
-[x] 1. 收斂成 Single WorkflowRunner
-完成狀態：
-- canonical runtime 已是 `WorkflowRunner`。
-- `TaskRunner` 只剩 compatibility re-export。
-- `execution_modes.py` 只保留目前 `linear` 的相容 metadata，不再持有 runner callback。
-
-方向：
-- TaskRunner 逐步收斂/改名為 WorkflowRunner。
-- WorkflowRunner 共用：
-  resource binding
-  state load/save
-  AI client setup
-  StageContext
-  StageExecutor
-  FlowEngine
-- 不建立 LinearWorkflowOrchestrator / DynamicHandoffOrchestrator / DiscussionOrchestrator 三套厚 runtime。
-- mode 差異主要放在 RoutingStrategy。
-
-驗收：
-- 現有 Linear behavior 由跨平台 full pytest 保護。
-- production bootstrap 只有一條 `WorkflowRunner` runtime path。
-- 第二種 RoutingStrategy 尚未實作；未來不得複製 bootstrap / state / retry / session code。
-
-
-[x] 2. 集中 Flow / Cursor 修改權
-現況：
-- Pipeline、RecoveryPolicy、rules.py 都會不同程度影響 workflow_position / task_step / replan / restart。
-- 人讀 code 時需要在多個檔案拼出完整流程。
-
-方向：
-- 建立 FlowEngine（可從現有 Pipeline 漸進重構）。
-- FlowEngine / RoutingStrategy 是唯一能決定 workflow destination 的地方。
-- reducers 只更新 business/semantic state。
-- StageExecutor 不決定 semantic destination。
-- RecoveryPolicy 如果保留，只輸出 decision，不直接擁有 cursor。
-
-驗收：
-- workflow_position / task_step / next-stage mutation 只有 FlowEngine/RoutingStrategy owner。
-- Review FAIL -> Execute
-- Validator FAIL -> ordinary Stage
-- Validator FAIL -> Planning
-- recover edge
-- repeat
-- max_attempts
-全部可從 routing code 一路看懂。
-
-
-[x] 3. 明確區分 Technical Recovery 與 Semantic Routing
-Technical Recovery（所有 routing strategy 共用）：
-- API 429/502/503
-- timeout
-- Agent/CLI transient failure
-- same-session retry
-- fresh-session escalation
-- expired session
-- watchdog
-- unexpected Python exception recovery
-- bounded technical failure budget
-
-Semantic Routing（FlowEngine 負責）：
-- PASS / FAIL destination
-- restart_at
-- rollback
-- recover edge
-- replan
-- handoff target
-- discussion next speaker / next round
-
-驗收：
-- technical error 不會誤觸 Review/Validator semantic rollback。
-- semantic FAIL 不會被 technical retry 當作 API failure 重試。
-- tests/live 明確分成 technical fault 與 semantic FAIL。
-
-
-[x] 4. Durable Transition Context / Resume Semantic Equivalence
-現況：
-- workflow_position / task_step durable。
-- Pipeline 啟動時 previous StageResult 重新從 None 開始。
-- process restart 後的 context 可能與不中斷執行不完全等價。
-
-方向：
-- 保存最小必要 transition context：
-  source_stage
-  status
-  kind
-  bounded output
-  bounded structured data
-- 不永久保存無限大的 StageResult。
-- 定義 transition context clear rules，避免 stale feedback。
-
-驗收：
-- uninterrupted execution
-  ==
-  每個 Stage boundary kill + resume
-  在 routing / control prompt / final artifact 上語意等價。
-- real-Qwen resume probe 驗證。
-- state 不會無限膨脹。
-
-
-[ ] 5. 整理 RunState，但不要過度 class 化（刻意延後 schema migration）
-現況：
-- RunState 同時放：
-  lifecycle
-  tasks
-  linear cursor
-  validator feedback
-  flow counters
-  recovery counters
-  session data
-
-方向：
-- 保持一個 durable state commit point。
-- 邏輯上至少分成：
-  common run state
-  stage state
-  routing_state
-- routing_state 允許 strategy-specific data：
-  Linear: position / task_step / task cursor
-  Dynamic: current_stage / handoff counters
-  Discussion: round / speaker / discussion state
-- 不急著做三套大型 State class。
-- serialization shape 等 ownership 穩定後再 migration。
-
-驗收：
-- 人看 state schema 能清楚知道欄位 owner。
-- 舊 Linear state 可 migrate/resume。
-- execution/routing strategy mismatch fail closed。
-
-
-[x] 6. Stage Contract 統一
-方向：
-- Plan / Execute / Review / Validator / Agent 都遵守同一 Stage contract。
-- Stage.run/context -> StageResult。
-- Agent role/profile 不一定需要額外 subclass：
-  role
-  prompt
-  session_key
-  tools
-  readonly/safety
-可以由 AI Stage spec 配置。
-- 避免 CoderAgentStage / ReviewerAgentStage / ArchitectAgentStage 無限制增加 class。
-
-StageResult 原則：
-- status 保持少量、穩定：
-  pass / fail / error（必要時保留現有 replan 相容層）
-- dynamic handoff intent 放 structured result/data。
-- FlowEngine 驗證 routing intent 是否合法。
-
-驗收：
-- 新增一個新角色 Agent 通常只需要 config/spec，不需新增 runtime class。
-- Stage 不直接 mutate workflow_position。
-
-
-[ ] 7. Workflow Asset / UI Switching Contract（第二種 RoutingStrategy 前）
-目標：
-未來 UI 能簡單切換不同 Workflow 類型，但 Chat 操作仍只有「選 Workflow」。
-
-Workflow/Profile metadata 至少描述：
-- id
-- name
-- routing_strategy
-- editor_kind
-- schema_version
-- capabilities
-- source/location
-
-UI 行為：
-- 選 Linear workflow -> 開 Graph/Linear editor
-- 選 Dynamic workflow -> 同一 Graph editor + dynamic routing controls
-- 選 Discussion workflow -> Graph editor + discussion/group properties
-- Chat 本身不要增加 mode selector。
-
-重要：
-- UI 優先共用同一個 Graph Designer。
-- 差異透過 node/edge property panel 與 strategy-specific settings 呈現。
-- 不建立三套完全分離的 editor，除非未來 UI 證明真的需要。
-
-驗收：
-- workflow 切換只依 asset metadata。
-- UI 不 hardcode system workflow 名稱。
-- runtime/UI 使用同一 schema/catalog source。
-- 未來新增第四種 RoutingStrategy 時不需要改 Chat entry flow。
-
-
-[x] 8. 重新整理 execution_modes.py
-方向：
-- execution_mode/routing strategy 的角色重新確認。
-- 如果 mode 本質只剩 routing semantics，可逐步收斂：
-  WorkflowRunner + RoutingStrategyRegistry
-- 保留相容層，不一次破壞現有 CLI/UI。
-- execution_mode 可作舊 API alias / high-level metadata，內部真正使用 routing_strategy。
-
-驗收：
-- 不再需要 mode -> completely separate TaskRunner。
-- mock strategy 可由 registry 註冊。
-- 現有 linear config 正常載入。
-
-
-P0 - Human Maintainability / Code Readability
-============================================
-
-[x] 9. 過長檔案與過長函式瘦身（核心 + UI server 第一輪完成；live harness 模組化延後）
-目的：
-不是追求行數漂亮，而是降低閱讀時需要同時記住的事情。
-
-優先檢查：
-- runner/workflow/pipeline.py
-- runner/workflow/stages.py
-- runner/runtime/run_state.py
-- runner/task_runner.py
-- tool/qwen_live_reliability.py
-- UI 大型 component / API module
-
-拆分原則：
-- 一個檔案只有一個主要 domain responsibility。
-- 一個函式只做一段可命名流程。
-- 超長測試工具可以按 probe/category 拆 module，但保留單一 CLI entry。
-- 不要拆成大量只有 20~30 行、彼此跳來跳去的小檔案。
-
-建議警戒線（不是硬性 lint）：
-- production file > ~500 行：review 是否混了多個 responsibility。
-- function > ~80 行：review 是否能抽明確 helper。
-- class 同時處理 >=3 個 domain：優先檢查。
-- nested branch >3~4 層：優先 early return / decision object。
-- 相同 state mutation 出現在 >=2 modules：重新定義 owner。
-
-驗收：
-- 新人主要看 3~5 個核心檔案，可以理解：
-  normal flow
-  semantic rollback
-  technical retry
-  resume
-  state save
-- 不需要在 8~10 個 module 之間來回拼 execution flow。
-
-
-[x] 10. 命名與檔案 responsibility 清理
-重點：
-- rules.py 名稱過泛，評估改成更精準名稱或拆出 reducer responsibility。
-- RecoveryPolicy 名稱需避免 technical recovery / semantic recovery 混淆。
-- TaskRunner 名稱與實際 workflow responsibility 不一致。
-- Pipeline 最終若成為 FlowEngine，名稱應跟責任一致。
-
-命名原則：
-- technical retry/recovery 明確標 Technical。
-- semantic routing/rollback 明確標 Routing/Transition。
-- persistence 明確標 StateStore。
-- 不使用 manager/helper/utils 作為大型 domain class 名稱，除非真的只是 generic helper。
-
-
-[x] 11. 刪除 legacy / duplicate paths
-方向：
-- 每次新 abstraction 穩定後移除舊 path。
-- 不長期保留：
-  old + new routing
-  old + new state mutation
-  old + new prompt loading
-  old + new mode dispatch
-- compatibility layer 必須有 planned removal point。
-
-驗收：
-- 一件事情只有一條 production code path。
-- contract tests 防止 legacy path 被重新使用。
-
-
-[x] 12. 文件跟著 code structure 走
-新增簡短 architecture.md 或 README section：
-- 1 張核心資料流圖。
-- 4 個核心概念：
-  Workflow / Stage / StageExecutor / FlowEngine。
-- Technical failure vs Semantic failure。
-- Resume/checkpoint contract。
-- 如何新增 Stage。
-- 如何新增 RoutingStrategy。
-
-要求：
-- 文件能從程式碼 class/module 名稱直接對應。
-- 不寫與實際 code 分離的理想架構圖。
-
-
-P1 - 第二種 RoutingStrategy 前完成
-=================================
-
-[ ] 13. RoutingStrategy Protocol
-保持最小：
-- initial/current stage resolution
-- apply StageResult
-- next transition
-- completion/stop
-- serialize routing_state / validate resume
-
-不要加入尚未證明必要的：
-- GenericAgent
-- GenericConversation
-- UniversalGraph node inheritance
-- arbitrary expression engine
-
-
-[ ] 14. Mode/Strategy-owned Progress Contract
-共用 progress：
-- lifecycle
-- status
-- detail
-- progress_revision
-- workflow/profile id
-- routing strategy
-
-strategy_progress：
-- Linear: task/current/stage
-- Dynamic: active stage / latest handoff
-- Discussion: round / active speaker
-
-UI shell 只依賴共用欄位。
-
-
-[ ] 15. 共用 Runtime Resource / Resume Identity
-集中：
-- workflow/profile snapshot
-- goal resource
-- validator prompt resource
-- workflow fingerprint
-- routing strategy
-- schema version
-- resume compatibility
-
-Resume fail closed：
-- project_root 不同
-- workflow asset identity 不同
-- incompatible schema
-- routing strategy 改變
-
-
-[ ] 16. Dynamic Routing 最小 prototype
-不要先做完整 multi-agent platform。
-
-最小案例：
-Planner Stage
- -> Coder Stage
- -> Reviewer Stage
-Reviewer Stage 可回 routing intent：
-- coder
-- architect
-- validator
-
-FlowEngine 驗證 target 與 budget 後決定 next Stage。
-
-目的：
-用真實第二 strategy 驗證目前 abstraction 是否正確。
-
-
-P2 - Dynamic 實作後再決定
-=========================
-
-[ ] 17. 是否需要多 Session Registry
-只有真的需要多 Agent 各自 persistent session 才抽：
-- session_key -> session
-- expire
-- fresh
-- resume
-
-StageExecutor 仍是唯一 session execution owner。
-
-
-[ ] 18. Shared Handoff Envelope
-等 Dynamic 有真實需求後再決定最小欄位：
-- target
-- reason
-- evidence/context reference
-
-不要現在建立大型 AgentMessage model。
-
-
-[ ] 19. Discussion Routing
-在 Dynamic routing 穩定後，再加入：
-- speakers
-- round
-- moderator/judge
-- round budget
-- stop/consensus rule
-
-每個 participant 仍是 Stage。
-Discussion 不建立另一套 Agent execution runtime。
-
-
-[ ] 20. Generic Graph 能力
-只有 UI/runtime 真正需要時才增加：
-- forward conditional edge
-- dynamic edge
-- group/container node
-- parallel stage
-
-不要為了「看起來像 LangGraph」提前加入 arbitrary DAG complexity。
-
-
-目前不要大改
-============
-
-[ ] BaseStage / TaskStage / ReviewStage / AIValidatorStage 階層
-除非 Stage contract 統一過程證明有重複，否則不為漂亮重寫。
-
-[ ] 現有 Linear YAML stages + flow
-已有 UI / dry-run / system workflows / tests，先以 backward compatible 方式演進。
-
-[ ] YAML List
-維持現有穩定語意。
-先不要讓 Dynamic / Discussion 共用 Linear task cursor。
-
-[ ] 完全自由 condition expression / scripting in edges
-先使用 declarative routing。
-避免把 workflow YAML 變成另一套程式語言。
-
-
-測試 / Reliability 重構門檻
-=========================
-
-每個 P0 refactor 必須維持：
-
-[x] Full pytest（Windows + Ubuntu）
-[x] workflow_dryrun file/ai/mixed matrix closure
-[x] compound recoverable FAILs -> closure
-[ ] Review FAIL -> Execute deterministic/live
-[ ] Validator FAIL -> configurable Stage deterministic/live
-[ ] complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure
-[ ] process kill/resume
-[ ] stop.request/resume
-[ ] multi-TODO checkpoint resume
-[ ] YAML List resume + completed-item no replay
-[ ] API 429/502/503 transient recovery
-[ ] 3-minute API disconnect recovery
-[ ] timeout/recovery budget
-[ ] expired session -> fresh session
-[ ] loop detection -> bounded recovery
-[ ] protected-path safety
-[ ] >MAX_PATH state/resource/snapshot
-[ ] ownership lock + orphan cleanup
-[ ] Final AI quorum
-[ ] real example smoke matrix
-[ ] 24H high-density soak
-
-新增架構 Gate：
-
-[x] Resume semantic equivalence（deterministic checkpoint matrix）
-不中斷與每個 durable checkpoint crash/resume 的 Stage trace / routing / transition context 等價。
-real-Qwen process restart 仍保留在 live gate。
-
-[x] Routing ownership
-Stage / reducer / validator 不直接修改 workflow destination；cursor mutation 有 static contract。
-
-[x] Shared resilience（目前 Linear）
-technical retry/timeout/session recovery 全由同一 StageExecutor owner。
-
-[ ] Strategy isolation（第二種 RoutingStrategy 前）
-新增 Dynamic RoutingStrategy 時必須共用 WorkflowRunner/StageExecutor，不得註冊另一個 Runner。
-
-[ ] UI switching contract
-同一 workflow catalog 可依 metadata 載入不同 routing/editor capabilities。
-
-[x] Human readability（核心 runtime）
-核心正常流程可從：
-WorkflowRunner -> FlowEngine -> LinearRouting/SemanticRoutingPolicy -> StageExecutor -> StateStore
-順著讀完；canonical production core files 目前皆 < 400 lines。
-
-
-建議執行順序
-============
-
-Phase A - 鎖死現況
-1. Full pytest / dry-run / live closed-loop。
-2. 修完目前 resume probe。
-3. 取得乾淨 Linear baseline。
-4. 24H gate 保留為 regression baseline。
-
-Phase B - 先改善可讀性與 ownership
-5. 集中 routing/cursor mutation。
-6. Technical Recovery vs Semantic Routing 分離。
-7. Durable transition context。
-8. TaskRunner/Pipeline/RecoveryPolicy 命名與 responsibility 收斂。
-9. 拆過長 production function/file，但避免碎片化。
-
-Phase C - 收斂單一 runtime
-10. WorkflowRunner。
-11. FlowEngine。
-12. RoutingStrategy protocol。
-13. 整理 RunState/routing_state。
-14. 統一 asset/runtime metadata。
-
-Phase D - UI / extensibility contract
-15. workflow catalog 帶 routing_strategy/editor_kind/capabilities。
-16. UI Graph Designer 根據 metadata 切換 property panel / routing controls。
-17. Chat 維持只選 Workflow/Profile。
-
-Phase E - 用第二種模式驗證
-18. 最小 Dynamic Routing prototype。
-19. 共用同一 StageExecutor / WorkflowRunner。
-20. 發現真實重複後才抽 session/handoff primitives。
-
-Phase F - Discussion
-21. Discussion RoutingStrategy。
-22. participant 仍使用既有 Stage。
-23. 需要時才加入 round/speaker/group UI。
-
-
-最終完成定義
-============
-
-架構：
-- 只有一套 WorkflowRunner。
-- Stage 是唯一執行單位。
-- Agent 只是 Stage 的配置/角色。
-- StageExecutor 共用 retry/recover/timeout/session/watchdog。
-- FlowEngine + RoutingStrategy 決定下一步。
-- Linear / Dynamic / Discussion 不複製 runtime。
-
-可維護性：
-- 正常執行、rollback、technical retry、resume 都有單一清楚 owner。
-- production code 沒有長期 old/new 雙路徑。
-- 大型檔案只在確實需要時存在；超長函式被拆成有 domain 意義的步驟。
-- 新人看 3~5 個核心 module 能理解主要 runtime。
-- 名稱對應責任，不靠隱性 conventions。
-
-可擴充性：
-- 新增一般 Agent 角色，多數只需新增 Stage config/spec。
-- 新增 Stage type 不需要修改 FlowEngine。
-- 新增 RoutingStrategy 不需要複製 WorkflowRunner/StageExecutor。
-- 未來新增第四種 workflow interaction model 時，優先新增 strategy/capability，而不是新 runtime。
-
-UI：
-- Chat 永遠：選 Workflow/Profile -> Prompt -> Run。
-- Workflow/Profile metadata 決定 routing strategy 與 editor capability。
-- 優先使用同一 Graph Designer。
-- Linear / Dynamic / Discussion 透過 properties/edges/group settings 呈現差異。
-- 切換 Workflow 不需要切換另一套產品入口或手動 mode selector。
-
-Reliability：
-- deterministic closure tests PASS。
-- real-Qwen full-loop probes PASS。
-- resume semantic equivalence PASS。
-- 24H high-density soak PASS。
-- 所有新 strategy 直接繼承現有 technical resilience，而不是重寫。
+Keep the product small, understandable and reliable for 24H unattended runs.
+The architecture refactor is complete. Do not restart old architecture work unless
+a reproduced failure proves it is necessary.
+
+Current runtime capabilities:
+- Dynamic Handoff is supported and remains part of the current runtime.
+- Discussion / Group Chat remains intentionally removed.
+
+Core runtime ownership stays:
+- WorkflowRunner = composition / entry
+- FlowEngine = semantic PASS/FAIL/HANDOFF navigation + dynamic child Workflow
+- StageExecutor = technical retry/session/recovery/timeout/safety
+- Stage = semantic work only
+- StateStore / RunState = durable resume state
+- YAML = canonical Workflow contract
+- ERROR is not a graph edge
+
+Do not restore removed contracts:
+scope/task-level workflow, public type: task/review, repair Stage, routes.error,
+recover graph route, restart_at, repeat, max_attempts/on_exhausted,
+alternate TaskRunner/Pipeline runtimes, Discussion/Group Chat compatibility.
+No public scope / task_step / type: task / type: review compatibility contract remains.
+
+CURRENT PRIORITY
+----------------
+Do not add features just because they are possible.
+Prioritize by:
+1. impact on common usage,
+2. impact on 24H unattended reliability,
+3. reduction of user confusion / operator mistakes,
+4. implementation cost and regression risk.
+
+UI/UX reference direction:
+- n8n / Langflow / Flowise / Dify are references for interaction patterns, not feature targets.
+- Borrow only patterns that reduce mistakes or debugging time.
+- Keep this product centered on Tasks + Workflows + Prompts; do not copy platform-scale navigation.
+- Keep YAML canonical and explicit Save validation. Do NOT auto-save canonical Workflow YAML merely because other editors auto-save drafts.
+
+QUICK WINS - LOW COST / HIGH VALUE
+----------------------------------
+Do these before larger UI work when they can be implemented without widening runtime contracts.
+
+[x] Make project/runtime status text consistent everywhere
+    - Sidebar/header share Idle / Running / Recovering / Stopped / Completed / Needs Attention.
+    - Recovering is emitted by the technical retry loop and carries retry mode/count/wait/error evidence.
+    - Avoid showing the same state with different wording/colors in sidebar, header and task view.
+
+[x] Reduce filesystem-path visual weight
+    - Show Project name first.
+    - Move full path to secondary text / tooltip where possible.
+
+[x] Improve action-button hierarchy
+    - One obvious primary action per surface.
+    - Keep destructive actions visually separated.
+    - Stop / Reset / Delete should not compete visually with Run / Save.
+
+[x] Improve dirty / saved feedback
+    - Make UNSAVED / Saved / Saving states obvious.
+    - Keep Ctrl+S behavior consistent in Prompt and Workflow editing surfaces.
+
+[x] Improve empty states
+    - Each empty state should explain what is missing and expose the next useful action.
+    - Project: Open Project.
+    - Workflow: Create / Generate.
+    - Prompt: Create Prompt.
+
+[x] Improve no-result search states
+    - Workflow/Prompt search should show "No results" plus a clear reset/clear-search action.
+
+[x] Keep Project click behavior consistent across Tasks / Workflows / Prompts
+    - Selecting a Project should always establish context and return to Tasks/Chat.
+    - Preserve unsaved-change protection before navigation.
+
+[x] Improve hover/tooltips for icon-only controls
+    - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
+
+[x] Keyboard focus / accessibility pass
+    - Global focus-visible baseline is active; shared dialogs restore focus and close on Escape.
+    - Designer Add Stage/browser regression verifies Escape closes the modal and focus returns to the trigger.
+    - Context menus support Escape; icon-only controls use accessible names/tooltips on the main surfaces.
+    - aria-expanded/selected/disabled semantics are covered on the primary navigation/run-history/editor controls.
+
+[x] Clarify disabled controls
+    - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
+
+[x] Normalize confirmation dialogs
+    - Use the same wording/order for destructive actions.
+    - Primary safe action first; destructive confirmation visually distinct.
+
+[x] Preserve scroll/focus position on common navigation
+    - Project switch, Workflow/Prompt return, modal close and validation should not unexpectedly jump the page/canvas.
+
+[x] Improve long-name handling
+    - Project / Workflow / Prompt / Stage names should truncate gracefully with tooltip/full-name access.
+    - No horizontal page overflow at supported desktop widths.
+
+[x] Keep inline feedback close to the action
+    - Studio actions now use the local studioStatus row for persistent nearby feedback while retaining toast/details for visibility and debugging.
+    - Save/validate/import/generate failures do not rely only on a distant global message.
+
+[x] Use relative freshness text consistently
+    - Prefer concise "updated 12s ago / 3m ago" style for live status, with exact timestamp available on hover/details.
+
+[x] Make keyboard affordances discoverable
+    - Show shortcuts only where useful (Ctrl+S, Ctrl+Z/Y, Delete, Ctrl+C/V), preferably in menus/tooltips rather than permanent clutter.
+
+P0 - UI / UX HIGH VALUE
+------------------------
+[x] Chat / Tasks runtime header
+    - Make current runtime state obvious in one place:
+      running/recovering/stopped/completed, current Stage, Task, cycle,
+      progress, elapsed, last transition and retry state.
+    - Goal: answer "what is it doing now and does it need attention?" at a glance.
+
+[x] Last-run / run-history entry point
+    - Recent Runs is derived from existing messages.jsonl + run_id + current durable runtime state; no second history store was added.
+    - Shows status, prompt, freshness and duration for the selected Project.
+    - Completed rows can jump back to the matching existing assistant message when available.
+    - Unit/static/browser coverage protects the lightweight panel and empty state.
+    - No separate analytics Dashboard or background polling was introduced.
+
+[x] Error / recovery UX
+    - Visually distinguish:
+      technical ERROR / retry-recover,
+      semantic FAIL / graph routing,
+      user stop,
+      fail-closed / needs-attention.
+    - Show retry delay, attempt/session recovery mode and next action where useful.
+    - Do not render normal retry/recovery as a fatal red failure.
+
+[x] Workflow save Problems / Validation panel
+    - Designer remains freely editable.
+    - Validate complete graph only at Save boundary.
+    - Surface invalid route/target, unreachable Stage, disconnected Stage,
+      invalid Handoff targets, obvious dead ends and schema errors.
+    - Clicking a problem should focus/highlight the relevant Node/Edge.
+    - Save only when the graph passes canonical backend/schema validation.
+
+[x] Project sidebar clarity
+    - Keep Project as the global working context.
+    - Prefer name + runtime state + current Stage/progress.
+    - Reduce visual weight of full filesystem paths.
+    - Add a clear Needs Attention state only for action-required failures.
+
+[x] Composer simplification
+    - Keep Workflow + Run as the primary interaction.
+    - Backend / validator / AI validator / environment checks stay under Options.
+    - Avoid exposing rarely changed configuration in the normal run path.
+
+[x] Task validator visibility regression + compact active-run UI
+    - File Validator / AI Validator Prompt remain under Task Options and are shown only when the selected Workflow declares the matching capability.
+    - Capability is derived from Workflow Stage contracts, not Workflow filenames:
+      command stages that reference {validator} require File Validator; ai_validator / validator: ai exposes AI Validator Prompt.
+    - Built-in Chat behavior is regression-covered:
+      ralphy_ai_validate + ai => Prompt only; file => File only; mixed => File + Prompt; workflows without either => no validation controls.
+    - Removed the permanent Active Run details panel because it duplicated runtime information and consumed vertical space.
+      Canonical run_snapshot remains in the runtime projection/signature for frozen-run / resume correctness.
+    - Implementation-head CI 84eb37f5658fece0dad2fc08d44974c201dac506:
+      Browser E2E PASS, Ubuntu Python PASS, Windows Python PASS, Studio build/bundle verification PASS
+      in GitHub Actions run 37254375725.
+
+[x] Prompt impact visibility
+    - Prompt Editor shows real Workflow / Stage "Used by" evidence from the same backend scanner that guards rename/delete.
+    - Backend regression and browser E2E cover a real Workflow referencing a Prompt.
+    - Precise click-through navigation is intentionally deferred until usage entries carry structured Workflow id/scope + Stage key; do not guess from duplicate filenames.
+    - Goal: make Prompt edits safer and easier to understand.
+
+[x] Workflow Library layout
+    - Treat Workflows as an asset/library page, not a second inline editor.
+    - Improve scanability: name, scope, Chat visibility, modified/recent state.
+    - Clicking opens the single Workflow Editor.
+    - Keep right-click Show in Chat / Hide from Chat.
+
+P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
+-----------------------------------------------
+[x] Bound Prompt "Used By" height
+    - Used By must not steal most of the Available Params / Prompt editor height when references are numerous.
+    - Use a bounded/max-height scroll or collapsed summary with count; preserve access to all references.
+    - Keep the same backend usage scanner; UI-only presentation change.
+
+[x] Add Stop to Stage Test
+    - A running Real Stage test must expose Stop/Cancel.
+    - Stop must terminate the actual disposable Stage-test process, not merely hide the dialog/result.
+    - Reuse existing process ownership/control patterns; no second execution engine.
+    - Cover backend cancellation lifecycle, cleanup/orphan behavior and browser UX.
+
+[x] Separate Run Real Stage / Test path to END actions visually
+    - Add clear spacing/grouping so the two execution actions do not visually merge.
+    - Keep one primary action hierarchy and preserve supported desktop viewport checks.
+
+[x] Stage-level Backend + Model selection
+    - Latest contract: Stage override is an atomic Backend + Model pair. Setting only one is invalid and fails closed at Workflow load/save.
+    - Override is Stage-local only: it does not change the run-level backend/model and is not inherited by Plan-generated or producer-defined child Stages.
+    - Backend choices remain registry/catalog-driven; FlowEngine and Designer contain no Qwen/OpenCode provider branch.
+    - Backend model catalog now invokes the canonical discover_plugins() boundary before backend_names()/available_models(), so external plugin backends and their model catalogs appear without UI/Core changes; deterministic regression locks this order.
+    - Model is dropdown-only in Designer and is scoped to the selected Backend.
+    - An already-saved Stage model remains present as a dropdown option if live model discovery is temporarily unavailable; no free-text fallback is introduced and the saved value is not silently hidden.
+    - Backend adapters own model discovery: Qwen reads configured modelProviders/model/env ids with Qwen's real settings precedence (System defaults < User < Project < System settings; highest modelProviders catalog replaces lower ones); OpenCode uses `opencode models`; future backends may implement available_models().
+    - UI /api/backends now reuses one Runner-owned backend_catalog tool instead of maintaining a second AST-based backend registry in UI.
+    - Model discovery is opt-in (models=1) and used only by Workflow Studio; normal Chat backend refresh stays cheap and does not run opencode models.
+    - Removed the main UI's hardcoded qwen/opencode fallback; catalog failure no longer invents provider choices outside the registry/adapter owner.
+    - Qwen/OpenCode selected model values flow through configure_model_args() and command-level regression verifies the final CLI contains --model <selected>.
+    - Designer exposes Backend/Model/Session in the first-class Execution section; choosing a Backend filters the Model dropdown and clearing Backend clears Model.
+    - Backend/model + session_policy=main remains invalid; UI restores the Stage default session policy only after both Backend + Model are selected, because a Backend-only draft is not yet an active override.
+    - CI regressions were aligned to the atomic-pair contract: YAML/Studio main-session tests now provide both Backend + Model; Browser E2E verifies Backend-only keeps the current session policy and selecting Model activates the override/default-session reset.
+    - UI backend-catalog regression now mocks the Runner-owned backend_catalog tool instead of depending on the removed AST backend scanner; Studio URL contract tests assert model discovery semantics without binding exact string-concatenation syntax.
+    - Real Stage Test reports effective_backend/effective_model from the executed Stage client so fallback UI cannot mislabel the actual adapter/model.
+    - Chromium E2E now covers backend-scoped model dropdowns, Backend-only Save fail-closed, activation only after Model selection, Designer -> YAML -> Designer round-trip, invalid YAML fail-closed, and preservation of an already-saved model when live discovery temporarily returns no candidates.
+    - Dry Run verifies a Plan Stage backend/model pair stays on the Plan Stage and is absent from generated child Stages, reusing production PlanStage.finish() + FlowEngine.
+    - Resume/session deterministic coverage remains Stage-local; model override does not mutate global client/session configuration.
+    - Removed legacy Studio field structured_fresh_retries remains absent.
+    - Committed ui/static/workflow-studio-app bundle is synchronized from the CI-generated Studio build; final bundle verification is green.
+    - Real-Qwen Stage Probe discovers the active model and verifies production model events report the selected Stage backend/model.
+    - Cross-backend live selection is registry-driven: discover_plugins() -> backend_names() -> runnable command -> available_models(); the harness has no production Qwen/OpenCode branch and automatically exercises any available alternate backend/model through the same production Stage contract.
+    - Deterministic cross-backend regression executes the production Stage override path with an alternate registered backend and verifies effective backend/model events; selector regression forbids provider-specific names inside the generic live backend selector.
+    - A missing optional alternate backend on one Windows machine is therefore reported as SKIP evidence, not a permanent feature blocker; when any alternate registered backend is installed with models, the real live harness runs it automatically.
+    - Main runtime/UI surfaces remain provider-neutral: no Qwen/OpenCode branch exists in FlowEngine, WorkflowRunner, Runner API, UI server, or Workflow Studio; backend-specific command/model behavior remains adapter-owned.
+    - Exact code HEAD 784772eb4138f17181e047383e6abe85acfdb878 passed Ubuntu full Python, Windows full Python, Chromium Browser E2E and Studio committed-bundle verification.
+    - GitHub Actions run 37192014852 proves all four gates green on that exact code HEAD.
+    - CI-generated bundle contains models=1 backend/model discovery plus effective_backend/effective_model Stage Test result rendering.
+    - Feature is complete; real alternate-backend availability remains additional live evidence inside the broader 0.5H/24H acceptance gates, not a Stage Backend/Model implementation blocker.
+    - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
+
+
+P0.7 - HIGH-CP UX / 24H STABILITY WORK
+--------------------------------------
+Do these only if they stay projections/adapters over the existing runtime. Do not add another
+state machine, recovery engine, history store, or canonical Workflow representation.
+
+[x] Canonical Runtime View + allowed actions
+    - Add one Runner-owned/UI-consumable runtime projection for status, attention reason,
+      current Stage/Task/cycle/progress, recovery detail and allowed actions.
+    - Main UI/sidebar must render the projection instead of independently re-deriving
+      Running / Recovering / Stopped / Completed / Needs Attention from raw flags.
+    - Run / Stop / Resume / Reset / Rerun availability must come from the same projection so
+      polling races cannot make different surfaces briefly disagree.
+    - This is a projection only; RunState/Supervisor remain authoritative and no second state machine is allowed.
+    - Cover stale heartbeat, user stop, technical recovery, semantic fail-closed, completed and idle cases.
+
+[x] Server-side action guard for stale/double UI actions
+    - Treat browser button disabling as UX only; backend must fail closed if a stale tab or double click
+      attempts an invalid Run / Resume / Rerun / Reset transition.
+    - Reuse existing process ownership + durable runtime state; do not add a second lock/ownership layer.
+    - Stop should remain safe/idempotent where practical.
+    - Add deterministic concurrency/race regressions for duplicate launch, resume while already running,
+      rerun while active and reset while owned by a live worker.
+    - Goal: UI polling lag must never be able to create two active workers or corrupt resumable state.
+
+[x] Actionable Needs Attention / Recovery UX
+    - Runtime projection should provide a concise reason + recommended actions, not only a status label.
+    - Examples: semantic FAIL with no route -> Open Workflow / View Trace; stale worker -> Resume / Reset;
+      user stop -> Continue / Reset; technical retry -> show mode/count/wait without marking fatal.
+    - Reuse existing transition/recovery/ownership evidence; no new error/history store.
+    - Keep the common Running/Completed path compact and show details only when useful.
+
+[x] Active Run snapshot visibility
+    - Show the configuration the current Run actually started with: Workflow snapshot/name,
+      backend/model, readonly policy, run id/start time and current effective Stage backend/model where available.
+    - Values must come from the frozen/durable Run request/resources, never from the editor's current selection.
+    - Keep the summary compact with expandable details so users can answer "what is this 24H run actually using?"
+      without inspecting files/logs.
+    - Must not permit editing the active Run through this view; changes apply only to a future Run.
+
+[x] Make Stage Studio presentation metadata catalog-driven
+    - Remove frontend-owned Stage/profile knowledge where the canonical Stage catalog can provide it:
+      parameter section/order/visibility and isolated Stage-Test PASS/FAIL example metadata.
+    - Plugin/custom Stages should appear correctly without adding provider/Stage-name branches to Studio.
+    - Keep layout/rendering decisions in Studio; catalog provides metadata/semantics only, not UI HTML.
+    - Preserve YAML as canonical and keep backend/schema validation authoritative.
+    - Do not build a generic form framework beyond the fields already needed by Stage options.
+
+[x] Reduce long-running UI polling duplication
+    - Active Project runtime polling should also update that Project's sidebar status; project-status polling
+      should focus on non-active Projects instead of re-fetching the same active state.
+    - Poll Studio guard/catalog only while the relevant Workflows/Prompts/Studio surface is active where safe.
+    - Keep current non-overlapping polling and visibility throttling; do not introduce WebSocket/SSE solely for this.
+    - Add browser/backend regression proving project switches and hidden-tab wakeups do not apply stale responses
+      to the newly selected Project.
+    - Goal: lower 24H UI/server churn without weakening freshness or ownership detection.
+
+P0.7 completion evidence:
+    - Canonical runtime projection is a pure shared runtime_view.py adapter over existing durable/process evidence;
+      Main UI/sidebar consume status/actions/recovery/run_snapshot and no longer derive status from raw running/resumable/last_error flags.
+    - Run/Resume/Rerun/Reset/Stop guards reuse existing durable state, process ownership and launch reservation; no second lock/state machine was added.
+      Stop is idempotent for stale/duplicate actions, and runtime reads remain projection-only under action guards.
+    - Existing runner.recovery/model events are projected into bounded console-view evidence for retry mode/count/wait and effective Stage backend/model;
+      Needs Attention/Recovery now expose reason plus existing Open Workflow/View Trace/Resume/Reset actions without a new history store.
+    - Active Run details use the frozen durable Run request plus runtime evidence, not current editor dropdown values.
+    - Stage Studio sections/order/visibility/test examples are catalog-driven; old STAGE_TEST_PROMPTS and PARAMETER_SECTIONS frontend ownership is removed,
+      unknown/custom Stage options remain extensible and YAML/backend validation stays authoritative.
+    - Active Project sidebar polling reuses /api/project/runtime and excludes that Project from duplicate process probing;
+      hidden-tab/Studio polling is scoped, and Browser E2E covers a delayed Project-A response arriving after switching to Project B.
+    - Architecture cleanup discovered during review: UI remains independent from Runner package imports; the projection lives at the neutral shared boundary.
+    - Validation evidence before final exact-HEAD gate: Ubuntu full Python suite PASS; Windows full Test step PASS; Browser E2E PASS including stale-response race;
+      Studio TypeScript/Vite build PASS. Generated Studio bundle was rebuilt by npm run build and the one-shot sync workflow removed itself.
+    - Real-Qwen 0.5H/high-density/24H soak gates remain separate unchecked release evidence below; P0.7 does not claim those gates.
+
+
+P1 - UI / UX USEFUL AFTER P0
+-----------------------------
+[x] Runtime Trace
+    - FlowEngine stores a bounded semantic transition_history (max 40) with only stage/status/target/cycle/kind/timestamp.
+    - Tasks UI exposes only the most recent 20 transitions in a lightweight Trace panel.
+    - Trace and Runs are mutually exclusive and reuse the normal runtime refresh; no second API poller or append-only trace store exists.
+    - Core tests prove actual routing targets and hard boundedness during long loops; UI backend/static/browser coverage protects projection and rendering.
+
+[x] Unsaved draft recovery
+    - Prompt drafts are preserved in local browser storage, hash-gated against the saved asset, and offer Restore Draft / Discard Draft.
+    - Workflow Designer/YAML drafts are also local-only, hash-gated, and offer Restore Draft / Discard Draft after reload/crash.
+    - Workflow browser E2E and Prompt browser/static coverage verify restoration while canonical files remain unchanged before Save.
+    - Recovery chrome is compact and no longer consumes the Designer content row; Studio shell uses header + optional banners + flexing main content.
+    - Draft recovery never auto-writes canonical YAML or bypasses Save validation.
+
+[x] Workflow YAML / Designer view synchronization
+    - Designer and YAML remain two views of one canonical Workflow; no second parser/runtime/store was added.
+    - Switching views now immediately validates+saves a dirty current view through the existing canonical backend, then reloads the target representation.
+    - YAML -> Designer therefore shows newly edited Stages/flow immediately instead of silently rendering the previous graph.
+    - Invalid YAML remains in YAML view with line/column feedback and the canonical file stays unchanged.
+    - Chromium E2E covers YAML Stage creation -> immediate Designer node refresh and invalid-YAML fail-closed behavior.
+
+[x] Run from here / Test path
+    - Dry-run/mock path first; do not introduce a second runtime.
+    - Reuse production loader + FlowEngine.
+
+[x] Edge -> empty canvas -> Add Stage
+    - Create and connect in one interaction.
+
+[x] Canvas smart guides / optional snap
+    - Designer now has an optional local-only Snap toggle backed by React Flow snapToGrid.
+    - Preference is stored in localStorage; default remains off so existing layouts do not change.
+    - Uses a 20px grid and never writes YAML or changes Workflow semantics.
+    - React contract and Browser E2E verify toggle state and persistence.
+
+P2 - DEFER / LOW CURRENT VALUE
+-------------------------------
+Do not spend release time on these unless a real use case appears:
+- separate Dashboard/Home
+- automatic writes of canonical Workflow YAML while editing
+- platform-scale analytics/evaluation suite
+- another Workflow editing surface
+- Undo history panel
+- large version-history browser
+- minimap decoration
+- Workflow-level recent / favorites unless Workflow count materially slows navigation
+- heavy animation
+- mobile Workflow Designer
+- multi-user collaboration
+- generic parallel DAG engine
+- parallel writers without isolated worktrees
+- Discussion / Group Chat
+
+WORKFLOW DESIGNER CURRENT CONTRACT
+----------------------------------
+- PASS / FAIL / HANDOFF edges may be connected, deleted and retargeted freely.
+- Deleting PASS must not silently continue to next.
+- Flow order may compactly serialize PASS-to-next.
+- ERROR remains error_policy, never a graph edge.
+- START/END are UI-only.
+- Save backend validates flow/routes/targets/schema before writing YAML.
+- Unsaved editor recovery, if implemented, is a local draft only and never bypasses Save validation.
+- Runtime executes only canonical saved YAML.
+- Stage Test does not create a second execution model.
+
+RUNNER
+------
+Do not do another runner architecture rewrite now.
+
+Public entry-point regression protection completed:
+[x] UI -> CLI launch parity is now locked by the production ai_task_runner parser.
+    - Removed stale UI execution_mode / --execution-mode contract.
+    - UI launch regression asserts removed retry/attempt flags stay absent and the generated command parses with the real CLI parser.
+
+[x] CLI -> RunRequest -> RuntimeConfig max_cycles / skip_on_max_cycles parity restored.
+[x] YAML List max_cycles / skip_on_max_cycles remains supported and deterministically tested.
+[x] YAML List now rejects unknown item fields instead of silently ignoring typos.
+[x] Plugin top-level YAML convenience fields must be explicitly declared through plugin metadata.
+[x] CLI reference docs updated to current stage_retries / retry_delay / retry_max_delay contract.
+[x] External CLI/YAML runs still use the shared runtime/state surfaces consumed by the UI.
+
+LIVE REGRESSION NOTES
+---------------------
+[ ] Revalidate API-recovery soak semantic repair budget after soak-api-502-0454.
+    - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
+      timeout-recovery-budget PASS, then soak-api-502-0454 failed closed.
+    - Durable evidence: validate_file FAILed at cycle=4 with missing health.txt and
+      routes.fail=execute, but the probe was configured max_cycles=4.
+    - Because warmup -> arm -> execute -> validate_file already consumes cycles 1-4,
+      cycle 5 was max_cycles_exhausted before the routed execute repair could run.
+    - This is a live-harness contract bug, not evidence of Runner/Supervisor failure:
+      semantic stop correctly returned exit=1 and did not auto-resume forever.
+    - Fix: API recovery probe now uses API_RECOVERY_MAX_CYCLES=8, preserving a hard
+      bound while allowing two execute -> validate semantic repair rounds after the
+      initial validation attempt. Validator strictness and runtime retry/session logic
+      are unchanged.
+    - Deterministic regression locks the eight-cycle bounded repair budget.
+    - fail-start now resumes at probe 40 (soak) for the focused real-Qwen rerun.
+
+[ ] Revalidate true 24H soak after malformed Windows write-path recovery fix.
+    - 2026-10-08 true 24H gate progressed through [39/46] timeout-recovery-budget PASS, then soak run
+      soak-api-502-0028 failed closed at max_cycles_exhausted (cycle=5) instead of hanging forever.
+    - Uploaded project evidence proves HTTP/API recovery was not the final failure: every Execute invocation returned PASS,
+      but Python validation repeatedly reported missing health.txt.
+    - The project contained the requested bytes under one malformed filename instead of project_root/health.txt:
+      C<U+F03A><U+F05C>Users<U+F05C>...<U+F05C>soak-api-502-0028<U+F05C>health.txt.
+      runner.stage changed_files recorded the same malformed path.
+    - Root cause: agent/Windows path transport can flatten an absolute Windows write target into a single filename by
+      replacing ':' and '\\' with private-use glyphs. The model then reports success while the requested relative artifact is absent.
+    - Production Runner fix, not live-only:
+      * managed Qwen rules now require project-relative write paths and explicitly forbid constructing/flattening absolute paths;
+      * already-generated QWEN.md files migrate away from the legacy absolute-write-root wording;
+      * protected-path instructions are slash-normalized to avoid feeding backslash-heavy Windows paths to the agent;
+      * StageExecutor detects the observed flattened-drive filename signature, deletes the malformed artifact, converts that
+        apparent PASS into a technical ERROR, and uses the existing Fresh recovery envelope before semantic routing can advance.
+    - Deterministic regressions cover legacy QWEN.md migration and malformed-write cleanup/retry -> correct relative artifact.
+    - The earlier semantic-stop fix behaved correctly here: max_cycles_exhausted returned exit=1 and did not enter Supervisor
+      infinite --resume. This 24H attempt is a valid release-blocking functional failure, not a hang.
+    - Full deterministic CI plus real-Qwen short gate/high-density soak should be revalidated before restarting the true 24H gate.
+
+[x] 2026-10-07 full real-Qwen short confidence gate revalidated all soak-driven fixes.
+    - Source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False.
+    - Full [01/46] through [46/46] gate PASS.
+    - Revalidates the semantic-stop/Supervisor no-resume fix, probe 24 session-policy evidence,
+      probe 25 custom Dynamic Producer fixture scope, probe 28 validator-routing evidence oracle,
+      and probe 33 long-HTTP semantic closed loop.
+    - 0.5H high-density soak completed 10 runs in 1942.813s.
+    - Transient recovery coverage: 5 soak recoveries with 429=2, 502=2, 503=1; long HTTP recovery PASS;
+      180s long raw-disconnect recovery PASS.
+    - Resource gate ended with active_process_markers=0 and completed-run technical maps/history metrics at zero.
+    - This is strong short-duration unattended evidence; it does not replace the separate true 24H Windows soak gate.
+
+[x] Revalidated semantic-stop / Supervisor no-resume loop protection.
+    - 2026-10-07 soak-api-503 evidence showed a real runtime infinite-resume bug, not only a live-harness issue.
+    - FlowEngine max_cycles exhaustion set stage=max_cycles_exhausted but returned exit code 2.
+    - Supervisor treats only 0/1/130 as terminal and auto-resumes other codes when durable state exists.
+    - Result: max_cycles_exhausted -> worker exit 2 -> Supervisor --resume -> same exhausted checkpoint -> exit 2 forever,
+      with exponential retry delay eventually reaching 30s; observed log became repeated runner.progress/bind heartbeats.
+    - Runtime fix: max_cycles exhaustion is an intentional semantic fail-closed stop and now returns code 1.
+      Supervisor therefore stops naturally without gaining Workflow-specific knowledge or another terminal-state table.
+    - Deterministic FlowEngine test locks max_cycles_exhausted => code 1; Supervisor test locks code 1 + saved state => no --resume.
+    - Existing probe 14 loop-detection now also runs a real CLI/Supervisor semantic-loop preflight:
+      * one command Stage intentionally FAIL-routes to itself with max_cycles=1;
+      * expected process exit is 1 and durable stage is max_cycles_exhausted;
+      * loop Stage must start exactly once before exhaustion;
+      * no Supervisor runner.retry is allowed;
+      * runner-process.json, run.lock and worker-heartbeat must all be cleaned.
+    - This keeps 24H crash recovery enabled for real abnormal worker exits while preventing deterministic semantic terminal states
+      from becoming infinite Supervisor resume loops.
+    - Real live probe 14 / soak rerun is still required before checking this item.
+[x] Revalidated probe 28 validator-failure-routing after evidence-oracle fix.
+    - 2026-10-07 live rerun: [23/46] workflow-mixed PASS, [24/46] dynamic-handoff-session-policy PASS,
+      [25/46] custom-dynamic-producer PASS, [26/46] review-failure-routing PASS and [27/46] complete-closed-loop PASS.
+    - Probe 28 completed the requested RECOVERED artifact but failed its post-check because it required the bounded
+      transition_history to still contain validate_file FAIL -> planning.
+    - transition_history is intentionally capped at MAX_TRANSITION_HISTORY and is a UI/runtime trace, not an unbounded audit log.
+    - Replaced that live oracle with durable event ordering: validate_file runner.stage finish(result=fail) must occur before
+      a later planning runner.stage start; the existing second Planning prompt must also contain shared Validator failure feedback.
+    - Strict artifact/result checks remain unchanged. FlowEngine routing behavior is unchanged.
+    - Deterministic regression now forbids probe 28 from depending on transition_history. Real-Qwen probe 28 rerun required.
+
+[x] Revalidated probe 25 custom Dynamic Producer after fixture-scope regression fix.
+    - 2026-10-07 live rerun: [24/46] dynamic-handoff-session-policy PASS, then probe 25 failed before execution.
+    - Root cause was a harness-only regression from the API-recovery closed-loop patch: CUSTOM_DYNAMIC_WORKFLOW.validate_file
+      was accidentally given routes.fail=execute even though execute exists only inside the dynamically produced child Workflow,
+      not the static parent Workflow. The canonical loader correctly rejected that dangling static route.
+    - Restored CUSTOM_DYNAMIC_WORKFLOW to discover -> validate_file with no static fail route.
+    - Kept routes.fail=execute only inside API_RECOVERY_WORKFLOW, where execute is a real static Stage.
+    - Added deterministic regressions that load both fixtures and assert the route is scoped only to API recovery.
+    - Runner loader/FlowEngine behavior was correct and unchanged. Real-Qwen probe 25 rerun required.
+
+[x] Revalidated probe 24 Dynamic Handoff session-policy evidence.
+    - 2026-10-07 full live rerun reached [23/46] workflow-mixed PASS, then probe 24 failed because
+      main_role's two successful model.result session ids were not identical.
+    - Runtime session_policy=main still reuses the primary AIClient; AIClient preserves the existing session id on normal resume.
+    - A different second id is therefore acceptable only when the run proves controlled technical recovery:
+      the old session was actually resumed, runner.recovery used retry_mode=recover, and runner.session/fresh records the old id.
+    - Updated probe 24 to accept identical ids directly or this strictly evidenced controlled rotation only.
+    - Unproven session changes still FAIL; role-session policy uses the same rule.
+    - Deterministic positive/negative regressions added. Real-Qwen probe 24 rerun required before checking this item.
+
+[x] Revalidated api-long-http after semantic closed-loop fixture fix.
+    - 2026-10-07 full live rerun: [30/46] api-502 PASS, [31/46] api-429 PASS, [32/46] api-503 PASS.
+    - Probe 33 api-long-http failed in the 429 case after transport recovery because execute returned a normal AI result
+      without actually creating health.txt; validate_file correctly reported "missing health.txt" and the fixture stopped.
+    - StageExecutor did not misclassify a technical ERROR: the failure was semantic incompleteness after the outage cleared.
+    - Fixed the shared API recovery Workflow so validate_file FAIL routes back to execute, preserving strict health.txt validation.
+    - Added max_cycles=4 to the API recovery probe so semantic recovery is bounded and cannot loop indefinitely.
+    - Runner technical retry/session ownership is unchanged; this is a live closed-loop fixture correction.
+    - Rerun from probe 33 is required before marking this item PASS.
+
+[x] Kept the controlled backoff agent faithful to Same Session/Fresh Session identity.
+    - When Qwen-style --resume <session> is present, the fake agent now returns that same session id.
+    - Only a Fresh invocation without --resume creates a new synthetic session id.
+    - This prevents the backoff proof itself from accidentally resetting per-session failure identity on every attempt.
+
+[x] Strengthened the controlled long-failure backoff proof.
+    - transient_backoff_agent keeps its default one-failure behavior for existing tests but accepts
+      BACKOFF_TEST_FAILURES for the dedicated live preflight.
+    - api-long-http preflight now injects 5 consecutive 503 failures through the production CLI/StageExecutor
+      with retry_delay=2 and retry_max_delay=30, and requires the durable retry wait prefix 2/4/8/16/30.
+    - This proves the actual sleep path is exponential, outage-scoped and capped before real-Qwen long outages run;
+      it is stronger than the previous single 30s sleep check and directly protects against retry spin/backoff reset.
+
+[x] Fixed long HTTP backoff evidence ownership.
+    - Real Qwen may absorb 429/502/503 transport retries internally, so a successful 180s outage can legitimately
+      produce zero StageExecutor runner.recovery events; requiring each Qwen outage to hit Runner's 30s cap mixed
+      backend-internal retry behavior with the Runner backoff contract.
+    - api-long-http now first runs a production-CLI controlled transient agent through the real StageExecutor and
+      real sleep path, requiring durable wait_seconds=30 at retry_max_delay=30, then runs the real-Qwen long
+      429/502/503 outage recovery probes.
+    - The real-Qwen gate still requires outage observation, clean recovery, controlled session rotation when used,
+      no stale last_error and bounded waits whenever Runner recovery events are present.
+    - Updated fail-start default to index 33 (api-long-http).
+
+[x] Simplified live reliability restart/output UX to stable numeric probe indices.
+    - --start-probe now accepts only the 1-based PROBE_ORDER index; --list-probes remains the name/index lookup.
+    - Every top-level successful probe prints [index/total] PASS <probe-name> · <detail>, so the next restart
+      coordinate is visible directly in the console without translating a probe name.
+    - START_PROBE is always printed, including the default index 01.
+    - run_qwen_live_reliability_fail_start.bat now defaults to --start-probe 33 (api-long-http).
+
+[x] Fixed API outage Fresh Session evidence race in the real-Qwen live harness.
+    - The 100ms durable-state poll can observe a stale pre-outage session while Qwen/StageExecutor crosses
+      a fast retry/rotation boundary, so requiring runner.session.previous_session to match only that sampled
+      state value produced a false failure even when controlled Fresh Session evidence existed.
+    - The gate remains fail-closed: exact sampled-session matches pass; otherwise runner.session.previous_session
+      must be independently proven by model.prompt/model.result session_mode=resume evidence from the same run,
+      and runner.recovery retry_mode=recover is still mandatory.
+    - Added positive lagged-poll coverage plus a negative unproven-session regression.
+    - Updated run_qwen_live_reliability_fail_start.bat to resume at api-502, the current failed probe.
+
+[x] Fixed real-Qwen expired-session classification for current Qwen output.
+    - Real Windows probe completed the resume path but failed its evidence assertion because Qwen reports
+      a missing durable chat as "No saved session found"; the generic SESSION_INVALID_MARKERS did not include
+      that already-known Qwen message, so AIClient never emitted session_recovery_action=reset_session.
+    - Added the generic "no saved session found" invalid-session marker; AIClient now clears only the unavailable
+      session and lets the existing StageExecutor recovery envelope continue in a Fresh Session.
+    - The live probe remains fail-closed and now includes the relevant model prompt/result diagnostics when
+      reset_session evidence is missing, so future backend wording changes are actionable instead of opaque.
+    - Added deterministic classifier coverage; no FlowEngine routing or retry ownership changed.
+
+[x] Hardened all API outage probes with a deterministic arm/active handshake.
+    - Root cause found before another live failure: the prior 0.5s short outage could expire during the
+      fixed 2s arm delay before the execute AI Stage issued its request.
+    - All 429/502/503/raw-disconnect probes now share one Workflow fixture:
+      warmup(main session) -> arm command -> execute(main session) -> validate_file.
+    - arm writes api-outage-armed and waits for api-outage-active; the harness enables the proxy outage
+      first, then writes the active acknowledgement so the next AI Stage starts only after the outage is live.
+    - Short HTTP outages use one shared 5s constant and are not released until the proxy has observed at
+      least one real failed request. Long disconnect still uses the configured long outage duration.
+    - Runner retry/session semantics were intentionally unchanged.
+    - Mock regressions protect fixture topology, handshake markers, shared timeout constant and the
+      observed-failure-before-release requirement.
+
+[x] Fixed API raw-disconnect live outage-boundary race.
+    - The disconnect probe now uses a deterministic explicit Workflow:
+      warmup(main session) -> arm command -> execute(main session) -> validate_file.
+    - The arm command writes a marker before the execute AI call; the harness injects the disconnect
+      only after that marker exists, so the outage is guaranteed to target the next model call instead
+      of racing an already-completed warmup request.
+    - Runner retry/session semantics were intentionally unchanged.
+    - Mock regressions verify fixture topology, main-session reuse and marker-gated outage injection.
+
+[x] Fixed Stage-local backend/model override being erased at runtime.
+    - Root cause: BaseStage correctly created a Stage-local AI client with backend/model override,
+      but _run_once() then called global configure_ai_client() for every client. That rebuilt
+      extra_args from run-level config and stripped the Stage model/backend arguments.
+    - Only the primary Runner client now uses global configure_ai_client(). Stage-local clients
+      preserve adapter-built args and update runtime mode/read/sandbox state without rebuilding
+      provider arguments.
+    - Stage-local create_ai_client() now receives allow_project_read at construction time.
+    - Added deterministic regression that fails if Stage-local execution is ever reconfigured
+      from global backend args. FlowEngine/StageExecutor remain unchanged.
+
+[x] Removed O(N²)-style soak harness run-root scanning from every iteration.
+    - resource_snapshot no longer recursively scans the accumulated run root on each soak run.
+    - Total run-root bytes are sampled only at baseline/final; per-run checks still track RSS,
+      threads, handles, active process markers and current Project state/debug metrics.
+    - Added deterministic coverage proving the default snapshot performs no full-tree scan.
+
+[x] Reviewed recent Runner changes against DevFollow ownership rules.
+    - StageExecutor remains the sole owner of technical retry/backoff/session rotation.
+    - FlowEngine remains semantic PASS/FAIL/HANDOFF + bounded transition history only.
+    - Stage backend/model override stays adapter/AI-Stage owned; no provider branch was added to FlowEngine.
+    - Shared transition-history/model-name bounds were moved to runner.config.defaults to remove cross-layer magic numbers.
+    - No removed routes.error/repair/restart_at/repeat/task-scope compatibility contract was reintroduced.
+
+[x] Fixed API raw-disconnect live probe injection race at the actual request boundary.
+    - Repeated Windows evidence showed failures=3 with successes_before=5 and successes_after=5:
+      the harness armed the outage as soon as durable ai_session_id appeared, which can be after
+      the only required model call has already completed. The run could therefore finish correctly
+      without any post-outage upstream success, making recovered=False a harness false failure.
+    - Raw disconnect now uses a deterministic live-only fixture:
+      main-session warmup -> arm marker/gate -> required Execute AI call -> file validator.
+    - The harness injects disconnect only after the arm marker exists and the warmup session is durable,
+      so completion necessarily requires another real upstream request after the outage clears.
+    - Runner retry/backoff/session semantics are unchanged; this is intentionally a harness-only fix.
+    - Added deterministic regressions for fixture topology, main-session reuse, arm marker placement,
+      and the requirement that disconnect injection waits for the marker.
+
+[x] Fixed long raw-disconnect live recovery final-poll race.
+    - Runner completed cleanly, but api_recovery_probe only updated its recovered flag while the
+      child process was still alive. A final successful upstream request could finish the run
+      between two 100ms polling iterations, leaving recovered=False even though proxy counters
+      and durable state proved success.
+    - Proxy recovery evidence is now one shared helper used both during polling and once more
+      after process exit. Failure diagnostics include session/failure/success counters.
+    - Added deterministic coverage for the final-poll gap; Runner retry/session semantics were
+      intentionally unchanged.
+
+[x] Simplified review_failure_routing live probe to the routing contract it owns.
+    - Removed redundant Qwen review_verify from this probe.
+    - The probe now proves deterministic Review FAIL -> Execute shared-feedback -> repair -> Review PASS -> validator PASS.
+    - Real Qwen Review semantics remain covered independently by the isolated Review Stage preflight and complete closed-loop probe.
+    - Added production-loader + FlowEngine dry-run coverage for the exact live fixture.
+    - This follows DevFollow: one probe/owner per contract, no extra AI behavior coupled into semantic routing verification.
+
+[x] Fixed long raw-disconnect session recovery contract.
+    - Root cause: StageExecutor bounded same-session rotation existed for non-transient ERROR,
+      but transient transport errors (502/429/503/raw disconnect) bypassed the per-session
+      failure counter and could retry the same session indefinitely. That violated the current
+      design rule: Same Session is bounded, then Fresh Session recovery continues unattended.
+    - StageExecutor now applies DEFAULT_PER_SESSION_ATTEMPTS=2 to transient errors too:
+      first transient failure retries the current session, the next failure rotates only that
+      Stage to a Fresh Session, resets the per-session counter, and continues recovery.
+    - This remains technical reliability inside StageExecutor; FlowEngine semantic routing is unchanged.
+    - 429/502/503/raw-disconnect outages prefer Same Session, but may legitimately consume the
+      shared per-session failure budget and rotate only that Stage to Fresh Session.
+    - Every outage probe accepts rotation only when matching runner.session/fresh(previous_session)
+      plus runner.recovery retry_mode=recover evidence proves Runner-owned bounded recovery.
+      An unexplained backend/session swap still fails closed.
+    - Added deterministic StageExecutor regression proving retry -> recover + Fresh Session rotation.
+
+[x] Fixed short API outage live false failure after bounded transient-session rotation.
+    - Reproduced failure: api_recovery_probe rejected a successful 5s outage because StageExecutor
+      legitimately reached DEFAULT_PER_SESSION_ATTEMPTS=2 and rotated the Stage session to Fresh.
+    - Root cause was stale live-harness policy, not Runner: DevFollow requires per-session failures
+      to be bounded, including transient 429/502/503/raw-disconnect recovery.
+    - Short and long outages now share one controlled rotation contract: Same Session is preferred;
+      Fresh is accepted only with runner.session/fresh(previous_session=<pre-outage session>) and
+      runner.recovery retry_mode=recover evidence. Silent/backend-owned swaps still fail closed.
+    - Removed the racy polling-time assertion; polling only records a possible rotation and the final
+      decision uses durable console + production events after process exit.
+    - Removed dead recovery_event_seen state left from the older mandatory-event contract.
+    - Deterministic regressions cover same-session recovery, bounded Fresh rotation, missing fresh
+      evidence, missing recover evidence, wrong previous_session, and the real polling-miss case.
+    - Exact code HEAD 699348a8f19dd9c53050f282322938f4171d52c8 passed Ubuntu full Python,
+      Windows full Python and Chromium Browser E2E; Studio source build passed and only the known
+      committed generated-bundle equality check remained red.
+    - Runner/FlowEngine semantics were intentionally unchanged.
+
+[x] Fixed timeout/recovery-budget live probe before the next 24H run.
+    - Root cause: timeout_probe configured stage_retries=1 while DEFAULT_PER_SESSION_ATTEMPTS=2,
+      but still required runner.session fresh evidence. The second timeout exhausted the finite
+      retry budget before StageExecutor could rotate to Fresh Session, so the probe contract was impossible.
+    - timeout_probe now uses stage_retries=2:
+      attempt 1 -> same-session retry, attempt 2 -> Fresh Session rotation, attempt 3 -> bounded exhaustion.
+    - Runner retry/session semantics were not changed.
+    - Added deterministic harness coverage locking timeout=1s, retry_delay=0, retries=2 and the
+      DEFAULT_PER_SESSION_ATTEMPTS=2 relationship.
+
+[x] Fixed Review failure-routing live fixture stopping at validate_file FAIL.
+    - Root cause: Review FAIL and Qwen Review FAIL both had routes.fail -> execute, but the final
+      validate_file Stage had no fail route. Under the current runtime contract FAIL correctly
+      defaults to stop, so FlowEngine stopped at validator_failed exactly as designed.
+    - The live fixture now declares validate_file.routes.fail -> execute so the probe actually tests
+      the closure it claims to test.
+    - Added production-loader + dry-run coverage for:
+      Review FAIL -> Execute -> Review PASS -> Validator FAIL -> Execute -> Review PASS -> Validator PASS.
+    - Runner was intentionally not changed; validation FAIL remains semantic routing owned by FlowEngine,
+      and no hidden/default validator rollback behavior was introduced.
+
+[x] Hardened raw API-disconnect live injection with a deterministic handshake.
+    - Previous session-only trigger could arm the outage after useful AI work had already completed,
+      producing failures>0 but no required post-outage upstream success (successes_before == successes_after).
+    - The fixture now runs warmup(main session) -> arm(command) -> execute(main session) -> validator.
+    - arm writes api-outage-armed and blocks until the harness writes api-outage-active, so Execute cannot
+      start until the proxy outage is actually active.
+    - The probe fails closed if no request reaches the outage; it does not release an unobserved outage.
+    - Runner retry/routing semantics were intentionally unchanged.
+
+[x] Removed stale structured-output Fresh Session test contracts.
+    - structured_call remains parser/schema correction only and stays in the current Stage session.
+    - Removed tests that still passed fresh_ask / structured_fresh_retries after those contracts were deleted.
+    - Recovery coverage now reflects current ownership: structured repair exhausts -> StageExecutor performs
+      bounded Same Session retry -> Fresh Session rotation after the shared per-session budget.
+    - Production structured.py was not widened to satisfy stale tests.
+
+RUNNER PRINCIPLE REVIEW (2026-10-04)
+------------------------------------
+[x] StageExecutor changes remain technical only:
+    retry/backoff, same/fresh session recovery, partial-write recovery, structured runner.recovery evidence.
+    No PASS/FAIL/HANDOFF routing was added there.
+[x] FlowEngine remains semantic only:
+    PASS/FAIL/HANDOFF target resolution, max_cycles, review fail-soft/max_failures and dynamic child continuation.
+[x] Dynamic re-expansion cleanup remains bounded:
+    obsolete dynamic child stage_sessions/review_failures and process-local stage_session caches are purged.
+[x] Session policies remain isolated:
+    main uses primary Runner session, role uses durable per-Stage session, fresh never persists role session.
+[x] Removed public contracts remain absent from current runtime path:
+    no scope/task_step/public task/review Stage types/routes.error/execution_mode/max_attempts repair compatibility.
+[x] No runner semantic behavior was loosened merely to satisfy a live probe; fixture bugs are fixed in fixtures/tests.
+
+[x] Recovery observability is split by layer instead of forcing one mechanism.
+    - StageExecutor owns technical Stage retry/backoff/session recovery and emits
+      runner.recovery/retry with stage, retry_mode, retry number, wait_seconds and error.
+    - runner.api owns process-level resume after a transient failure escapes the Stage run
+      and emits runner.retry/retry with layer=runner_api.
+    - Both structured event types are persisted to bounded production logs / JSON events.
+
+[x] Production CLI recovery proof is deterministic and must cross the Runner boundary.
+    - session_expiry_recovery_preflight first injects a real HTTP 503-style technical failure
+      through the production CLI/fake-Qwen backend.
+    - It now fails unless runner.recovery/retry is observed before the later expired-session
+      Fresh Session recovery.
+    - This protects the StageExecutor event path independently from real Qwen transport behavior.
+
+[x] Real-Qwen 429/502/503/raw-disconnect probes own end-to-end outage resilience.
+    - They require the proxy outage to actually occur, the run to recover, session continuity to be
+      either unchanged or a Runner-owned bounded Fresh rotation, no RESET_SESSION verdict,
+      final completion and final last_error cleanup.
+    - A structured Runner recovery event is useful extra evidence when the failure escapes Qwen,
+      but it is not mandatory because Qwen CLI / transport may absorb and retry below StageExecutor.
+    - This prevents false failures where the outage genuinely recovers before Runner retry is needed.
+
+[x] Fixed Dynamic Handoff session-policy live probes.
+    - Explicit Dynamic Handoff workflows no longer receive a stale file-validator CLI option.
+    - main/role/fresh reuse/isolation is verified from real model session ids, not from final-state
+      retention or LLM wording.
+    - Deterministic command gates force repeated main/role visits; Dynamic Handoff itself still
+      performs a real model-selected target decision.
+    - Completed runs must clear the primary session per finish_run; role-session durability and
+      fresh-session non-persistence remain independently verified.
+
+[x] Fixed real Review Stage Probe false failure.
+    - Isolated Review tests now receive concrete deliverable + executor evidence instead of an
+      empty Task.
+    - The real-Qwen PASS preflight therefore tests Review semantics rather than asking the model
+      to approve unverifiable input.
+    - FAIL->stop remains the correct default Review routing when evidence is incomplete.
+
+[x] Fixed detached-UI stop.request/resume live false failure.
+    - The detached stop probe verifies clean Supervisor exit=130, control-file cleanup, durable
+      checkpoint preservation, non-regressing cursor/cycle position, and successful --resume.
+    - Same-session model transport remains owned by the dedicated deterministic-checkpoint
+      resume/process-restart probe, avoiding a race-prone duplicate assertion.
+
+[x] Live startup failures now include useful diagnostics.
+    - assert_state_completed includes the newest harness console tail when state.json was never
+      created, so schema/CLI/config startup failures no longer appear only as stage=None/cycle=None.
+
+[x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
+[x] API outage live probes require a real outage, bounded-session recovery and final durable last_error cleanup; controlled Fresh rotation requires durable Runner evidence, while Runner recovery events remain mandatory in the production CLI recovery preflight instead of every Qwen transport outage.
+[x] Fixed Dynamic Handoff live startup failure caused by stale harness validator injection.
+    - Root cause: runner_command() unconditionally added --validator validation.py to every direct run.
+      Explicit Dynamic Handoff workflows without validate_file are correctly valid, but RuntimeConfig
+      rejects a supplied file validator when the workflow has no validate_file Stage, so startup failed
+      before state.json existed.
+    - Explicit Workflow live commands now add --validator only when the loaded Workflow actually contains
+      validate_file. Default runs keep their validator contract; file/mixed explicit workflows still receive it.
+    - Added deterministic coverage for both sides of this contract.
+    - Dynamic Session live fixture now preloads through the production Workflow loader and verifies local
+      prompt resolution before touching Qwen.
+    - assert_state_completed now includes the newest harness console tail when startup fails, eliminating
+      low-information stage=None/cycle=None failures.
+
+[x] Fixed detached-UI stop.request/resume live false failure.
+    - Root cause: the probe required model.prompt(session_mode=resume) after every detached stop.
+      stop.request can legitimately arrive after the AI Stage already checkpointed, while a
+      command/validator is active, so Resume may complete without another model prompt.
+    - stop_request_resume_probe now verifies the contract it owns:
+      clean Supervisor exit=130, control-file cleanup, durable run/checkpoint preservation,
+      no backward progress, durable AI session not erased, then successful --resume completion.
+    - resume_probe remains the dedicated real-Qwen same-session transport proof at a
+      deterministic checkpoint guaranteed to require another AI call.
+    - Deterministic coverage proves Supervisor stop.request does not mutate state.json and
+      the live harness accepts a valid detached Resume that needs no redundant model prompt.
+
+[x] Two-day Runner architecture review after live fixes.
+    - StageExecutor changes remain limited to retry/backoff/session rotation/recovery observability.
+    - FlowEngine still exclusively owns PASS/FAIL/HANDOFF semantic navigation and cycle accounting.
+    - No routes.error/recover edge/repair/task-scope/execution_mode compatibility was restored.
+    - New recovery evidence uses existing durable last_error/events and bounded state; no unbounded
+      retry history or second runtime store was introduced.
+    - Dynamic re-expansion cleanup still purges stale durable stage_sessions/review_failures and
+      process-local stage_session caches.
+
+[x] Live reliability can resume from a selected probe.
+    - --list-probes prints stable 1-based probe indices and names without requiring Qwen.
+    - --start-probe accepts either the numeric index or stable probe name and skips only earlier probes.
+    - Partial-run summaries record the selected starting probe and do not claim skipped probes passed.
+    - qwen_live_reliability_24h.bat and qwen_live_reliability_0_5h.bat forward extra arguments through %*.
+    - Deterministic coverage protects numeric/name parsing, skip ordering, list-only behavior and batch passthrough.
+    - Generic fast re-run entry point: run_qwen_live_reliability_fail_start.bat.
+      It defaults to the currently reproduced api-long-http failure (index 33) and forwards %*, so a later
+      failure can override with --start-probe <index> without creating another one-off batch file.
+    - Removed the old run_qwen_live_reliability_from_api_disconnect.bat one-off launcher.
+    - Example for the current Review routing area:
+      tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
+
+[x] Fixed structured parser-error retry resending full static Stage context.
+    - Root cause: BaseStage remembered prompt/session transport only after structured parsing succeeded.
+      A model could successfully receive/respond to the original prompt, exhaust structured correction,
+      then StageExecutor same-session retry would incorrectly resend the full static Stage prompt.
+    - BaseStage now checkpoints prompt/session immediately after every successful model response,
+      before parser/schema validation.
+    - Same-session technical retry therefore sends only Runner shared recovery control/new evidence;
+      Fresh Session recovery still receives the full original Stage contract.
+    - This also keeps role/main session checkpoints durable across structured parser errors without
+      moving session rotation ownership out of StageExecutor.
+
+[x] Reviewed structured-output repair ownership against DevFollow.
+    - structured_call repairs only parser/schema-invalid model output after a successful model response.
+    - Removed unused structured_fresh_retries / fresh_ask / fresh_retries dead contract.
+    - BaseStage no longer clears or rotates sessions for structured-output repair.
+    - Exhausted structured repair raises StructuredOutputError; StageExecutor remains the only technical retry/Fresh Session owner.
+    - Backend/API errors raised by ask still escape unchanged to StageExecutor.
+    - Architecture regression forbids structured repair from regaining Fresh Session ownership.
+
+High-value runner work remaining:
+[x] Finish mixed File Validator + AI Validator Prompt Run options layout.
+    - Root cause was two-layer Chat popover layout ownership:
+      * a later generic .options-panel rule could not override the earlier scoped #composePanel .options-panel rule because of selector specificity;
+      * the scoped popover max-width was relative to the narrow composer content box, shrinking the 720px viewport case to an 88px client width and creating a 23px internal horizontal scroll.
+    - The Run options popover now has one scoped #composePanel owner for width/overflow, sizes against the viewport,
+      resets stale horizontal scroll when opened, and keeps both validation resources vertically stacked.
+    - Browser E2E now verifies at 720x720:
+      * no File/AI resource overlap,
+      * both cards fully inside Run options,
+      * no panel-internal horizontal scroll/overflow,
+      * no viewport overflow,
+      * readable kind/name/Choose/clear controls.
+    - The fix stayed inside Chat Run options; no picker framework or Runner/runtime behavior changed.
+    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed Chromium Browser E2E in run 37328277877.
+
+[x] Re-establish exact-HEAD deterministic CI after the mixed picker fix.
+    - Exact implementation HEAD 5e3d92f7d6d5097c2544e70ea46a48b9fb4bcac0 passed all required deterministic gates
+      in GitHub Actions run 37328277877:
+      * Windows Python: PASS.
+      * Ubuntu Python: PASS.
+      * Chromium Browser E2E: PASS.
+      * Studio build + committed-bundle verification: PASS.
+    - This replaces the stale pre-fix exact-HEAD evidence.
+
+[x] Fixed validator-failure-routing live harness false failure at probe 28.
+    - Real run evidence reached a correct completed deliverable (route.txt=RECOVERED) after Validator FAIL,
+      while the harness rejected it only because it treated state.cycle >= 2 as the primary semantic proof.
+    - Bundled file.yaml still owns validate_file FAIL -> planning; Runner routing semantics were not changed.
+    - The probe now verifies the durable semantic transition directly:
+      validate_file / fail / target=planning in transition_history.
+    - It still independently requires a second Planning model prompt carrying RUNNER_SHARED_STAGE_CONTROL,
+      mode: continue, Validator feedback and VALIDATION_FAILED, so the check was not weakened.
+    - state.cycle is no longer treated as semantic truth by this live probe.
+    - run_qwen_live_reliability_fail_start.bat now defaults to probe 28 so the currently reproduced failure
+      can be rerun directly; explicit --start-probe still overrides it.
+    - Exact implementation HEAD c3e94904999c6b8bd6d29f8f8e5293df060d456f passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37448808129.
+    - Real-Qwen rerun on source revision c3e94904999c6b8bd6d29f8f8e5293df060d456f with DIRTY=False:
+      * [28/41] PASS validator-failure-routing · validator FAIL -> Planning shared-feedback routing probe.
+      * [29/41] PASS file-protection · protected-file policy probe.
+    - This closes the validator-failure-routing live regression; continue the same run through probes 30-41 for API/recovery/soak evidence.
+
+[x] Re-run real-Qwen API recovery path from probe 34 after deterministic gates are green.
+    - Root cause of the previous api-disconnect false failure was duplicate acceptance ownership inside the live harness,
+      not Runner retry/backoff/session behavior.
+    - API_RECOVERY_ALLOWED_BYTES is the single recovery-specific byte contract used by both the generated
+      API_RECOVERY_VALIDATOR and the api_recovery_probe post-completion assert_completed() check.
+    - The recovery-specific contract remains narrow: optional UTF-8 BOM x exact / LF / CRLF only.
+    - Default assert_completed() and the strict general validator remain byte-exact.
+    - Real-Qwen rerun on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194 with DIRTY=False:
+      * [34/41] PASS api-disconnect · API disconnect/180s bounded-session recovery probe.
+      * [35/41] PASS multi-todo-resume · multi-TODO/checkpoint resume probe.
+      * [36/41] PASS yaml-list-resume · YAML List/resume + validator_args + per-item Final AI 3/2 probe.
+      * [37/41] PASS yaml-list-endurance · single-process YAML endurance (4 items).
+      * [38/41] PASS final-ai-quorum · Final AI 3/2 quorum probe.
+      * [39/41] PASS timeout-recovery-budget · timeout/recovery-budget probe.
+    - This closes the api-disconnect/recovery regression and materially increases confidence in resume/YAML/final-AI/timeout paths.
+
+
+[x] Improved Chat validation resource picker UX for file / AI / mixed workflows.
+    - File Validator and AI Validator Prompt share one context-aware browse flow and compact resource-row presentation.
+    - Single-resource workflows remain compact; mixed workflows stack the two resource rows vertically instead of forcing
+      two full pickers side-by-side.
+    - Browser E2E verifies the densest mixed case at 1024x640: File Validator and AI Validator Prompt are both visible,
+      File appears above AI Prompt, both remain fully inside the Options panel, and the panel stays inside the viewport.
+    - Each row preserves readable kind/name/Choose/clear controls without horizontal overlap.
+    - Exact implementation HEAD 2e5fbbbf84f93de914137ab0901150ee839dfea8 passed Windows Python, Ubuntu Python,
+      Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37307541655.
+
+[x] Kept API recovery live acceptance narrow while removing duplicate harness acceptance ownership.
+    - Earlier api-disconnect evidence showed exact expected content with only LF/CRLF variation.
+    - A later real-Qwen long-HTTP run exposed UTF-8 BOM as another harmless serialization variant; after that fix,
+      source revision d6916005f8083c505e5b3105b4e53d42e01e0507, DIRTY=False, passed [33/41] api-long-http.
+    - The following [34/41] api-disconnect run proved the generated validator accepted the artifact, but the generic
+      assert_completed() post-check still re-applied a stricter duplicate rule and produced a false failure.
+    - API_RECOVERY_ALLOWED_BYTES now owns the six allowed recovery-specific byte forms once, and both the generated
+      API_RECOVERY_VALIDATOR and api_recovery_probe post-check consume that same contract.
+    - Wrong content still fails closed; default assert_completed() plus strict VALIDATOR still reject BOM/newline.
+    - Runner StageExecutor/session/backoff semantics were intentionally unchanged.
+    - Exact implementation HEAD b8ccd34ad1973450d259f45ec1d0cc30185d3194 passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37456259179.
+
+[x] Fix the currently reproduced live/backend failure before continuing.
+    - Reproduced short API outage false failure: a 5s outage can legitimately consume the shared
+      two-attempt per-session budget and rotate the Stage to Fresh Session.
+    - Live harness now validates bounded-session continuity from durable runner.session/fresh +
+      runner.recovery mode=recover evidence instead of assuming short outage == immutable session id.
+    - Polling-miss + durable Fresh evidence, same-session success, controlled Fresh, missing Fresh,
+      missing recover evidence and wrong previous_session all have deterministic regressions.
+    - Runner retry/session semantics were not loosened to satisfy the harness.
+    - Latest exact HEAD deterministic gates are green; reopen this item only for a newly reproduced failure.
+
+[x] Verify state/log/history growth during soak.
+    - Implemented: resource-observation.jsonl plus require_resource_bounds() safety rails.
+    - Soak now fails on leftover active process markers, large harness thread/handle/RSS leakage,
+      catastrophic per-project state/session/dynamic/review growth, oversized expanded workflows,
+      or excessive per-project debug history.
+    - Completed-run technical state is now cleaned centrally by finish_run(): stage_sessions,
+      review_failures, dynamic_groups and dynamic_task_groups are cleared only after all tasks are
+      completed; semantic transition history and expanded workflow remain available for debugging.
+    - Soak now fail-fast checks every completed Project for retained stale technical maps instead of
+      waiting for an end-of-run state-size symptom.
+    - append_bounded_log now enforces max_bytes even when one single model/error diagnostic write is
+      larger than the whole budget; UTF-8 oversized-write and rotate-previous regressions are covered.
+    - Per-iteration soak sampling no longer recursively scans the entire accumulated run-root for
+      active-process markers. Each iteration checks only its current Project; full run-root orphan
+      marker and byte scans remain baseline/final checks, avoiding O(N^2)-style harness slowdown.
+    - Dynamic Plan -> child Execute/Review Dry Run completion also asserts all active-only maps are
+      empty, so cleanup is covered through the real FlowEngine expansion path, not only a synthetic state.
+    - Deterministic ceiling coverage now explicitly includes dynamic_task_groups in addition to
+      state size, stage_sessions, dynamic_groups, review_failures, transition history, expanded Workflow and debug history.
+    - run_root_bytes is intentionally observation-only because each soak iteration retains a new Project.
+    - Real 0.5H high-density soak on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
+      DIRTY=False, completed 12 runs in 1871.5s with all safety rails green:
+      * max state.json: 6402 bytes
+      * max transition_history: 8
+      * max expanded Workflow stages: 5
+      * max debug history: 38110 bytes
+      * max stage_sessions/dynamic_groups/dynamic_task_groups/review_failures: 0
+      * active_process_markers: 0 throughout baseline/max/end
+      * harness threads stayed at 1
+      * run-root growth was expected retained-project growth only.
+    - 24H evidence is still required for the final release gate, but this parent high-density growth check is now green.
+    - No unbounded state.json growth.
+    - No unbounded warning/debug/history growth.
+    - No repeated stale dynamic/session entries after completion/resume.
+
+[x] Verify retry/backoff behavior under long failure windows.
+    - [x] Deterministic long-transient regression covers 7 consecutive transient failures:
+      bounded two-failure session budget, repeated Fresh Session rotation, 1s unlimited-retry safety floor,
+      successful completion, structured recovery/session events and final last_error cleanup.
+    - [x] Transient service backoff is outage-scoped rather than session-scoped.
+      Fresh Session rotation no longer resets retry_delay; deterministic coverage locks
+      2s -> 4s -> 8s -> 10s -> 10s when retry_max_delay=10.
+    - [x] Deterministic partial-write regression proves changed maintained source survives a technical ERROR,
+      StageExecutor immediately rotates only that Stage to Fresh Session, the next attempt sees the preserved
+      on-disk evidence and completes without blind same-session replay.
+    - [x] No deterministic busy loop; unlimited retry always has a positive safety floor.
+    - [x] Same Session remains bounded before Fresh Session rotation.
+    - [x] Live harness now records bounded StageExecutor backoff evidence in summary.json (count/min/max/configured cap/cap_reached) and fails closed if observed runner.recovery wait_seconds is non-positive or exceeds the configured cap; deterministic tests cover normal stats and invalid waits.
+    - [x] Long HTTP live coverage separates recovery ownership correctly: one controlled production-CLI StageExecutor probe
+      now exercises the real 2s -> 4s -> 8s -> 16s -> 30s sleep/backoff path to the configured cap, then the same
+      api_recovery_probe runs real-Qwen 429/502/503 long outages without adding a second recovery engine.
+    - [x] High-density soak transient probes rotate 429 -> 502 -> 503 through one shared status-code tuple instead of repeatedly testing only 502.
+    - [x] High-density acceptance now fails closed unless each of 429, 502 and 503 was actually observed at least once;
+      a single generic transient recovery can no longer satisfy the dense gate.
+    - [x] High-density default transient cadence is every 2 soak runs, so 429/502/503 are covered by run 6.
+      This keeps transient coverage inside the existing dense minimum window; Final AI every 8 remains the slowest default coverage cadence.
+    - [x] Soak summary records bounded per-status recovery counts for 429/502/503, so 0.5H/24H evidence can prove actual coverage rather than only a total transient count.
+    - [x] 0.5H and 24H batch files already run the full probe order plus --high-density, so the new long HTTP probe and soak rotation are wired into both gates.
+    - [x] Long-failure acceptance is fail-closed at the correct layer: the controlled production-CLI probe must
+      emit the exact exponential wait prefix 2/4/8/16/30 and reach retry_max_delay=30 before real-Qwen long HTTP
+      probes start. Real-Qwen 429/502/503 must independently observe the outage, recover cleanly, preserve bounded
+      session continuity/controlled Fresh rotation, clear last_error, and keep any Runner waits within bounds.
+    - [x] Real-Qwen expired-session injection is wired into the normal full probe order. It reuses
+      the same deterministic resume checkpoint fixture, replaces only the durable primary ai_session_id
+      with a missing but format-valid session id, then requires reset_session -> Fresh prompt/result ->
+      completed run evidence. Deterministic tests cover injection scope and reset/Fresh ordering.
+    - [x] Dynamic Handoff real-live session validation now uses model event identities to prove
+      main/role reuse and fresh isolation, while completed state is required to have no active-only
+      ai_session_id/stage_sessions. The harness no longer depends on stale completed session maps.
+    - [x] Real 429/502/503/raw disconnect/expired session continue unattended under long failure windows.
+      Evidence now includes short 429/502/503 probes, [33/41] long HTTP 429/502/503/45s PASS,
+      [34/41] raw disconnect/180s PASS, plus the earlier real session-expiry/Fresh Session live probe.
+    - [x] Real high-density / 0.5H evidence shows no retry spin and reaches configured max backoff.
+      Recovery observation: 15 retry waits, min 0.0s, max 30.0s, configured cap 30s, cap_reached=true.
+      24H still remains a separate final-duration acceptance gate.
+    - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
+
+[x] Do not optimize save/write frequency without soak evidence.
+    - Current save points are intentionally conservative for durable resume.
+    - No reproduced excessive-I/O evidence exists, so changing persistence frequency now would add risk without value.
+    - Reopen only if 0.5H/24H measurements show excessive I/O; never trade Resume correctness for speculative micro-optimization.
+
+[x] Keep FlowEngine semantic and StageExecutor technical.
+    - Reviewed current two-day Runner changes: no semantic routing moved into StageExecutor and no
+      retry/backoff/session-reset logic moved into FlowEngine.
+    - Architecture regression now forbids retry/sleep/session tokens in FlowEngine and
+      route/workflow-position/max-cycle ownership in StageExecutor.
+    - Removed public contracts remain absent repo-wide: scope/task_step/type: task/type: review,
+      routes.error, restart_at, max_attempts, execution_mode, Discussion/Group Chat.
+    - transition_history is bounded to 40 entries; dynamic re-expansion cleans stale durable
+      stage_sessions/review_failures and process-local stage_session caches.
+    - Do not merge FlowEngine and StageExecutor for code-count reduction.
+
+FINAL OPTIMIZATION PASS - FREEZE AFTER THIS
+==========================================
+This is the final proactive architecture/UI optimization pass before release acceptance.
+After these items are completed, do not continue refactoring merely because another abstraction,
+cleanup or UI idea is possible. Reopen architecture work only for a reproduced reliability bug,
+a clear user-facing usability failure, or a proven extension requirement.
+
+Priority order:
+1. 24H unattended completion/recovery correctness.
+2. UI/UX clarity, low operator error and easy understanding of current Run state.
+3. One canonical owner for domain behavior; lower coupling and fewer unnecessary hardcodes.
+4. Maintainability / production-code simplification where it does not weaken clarity or reliability.
+
+Production-code size notes below intentionally exclude test code. Tests are still mandatory and must
+follow the production contract rather than reimplementing it.
+
+Final-pass rules:
+- Prefer deleting duplicate state/policy before adding abstractions.
+- A new abstraction is justified only when it clearly lowers ownership count, coupling, failure risk,
+  or repeated production logic.
+- Domain capabilities/semantics have one canonical production owner. UI may project them, but must not
+  independently redefine Stage/Profile/Backend/Session behavior.
+- Presentation choices remain UI-owned; do not build a metadata-driven generic UI framework for colors,
+  layout, spacing, keyboard shortcuts or other purely visual decisions.
+- Do not add another state machine, recovery engine, Workflow representation, history store or generic DAG runtime.
+- Do not merge FlowEngine and StageExecutor merely to reduce LOC.
+- Do not split files/components merely to make files smaller; split only at a real responsibility boundary.
+- Keep YAML canonical, StageExecutor technical, FlowEngine semantic, StateStore durable, and Stage work-only.
+
+P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
+---------------------------------------------------
+
+[x] Simplify StageExecutor recovery branches without changing semantics
+    - Remove duplicate Same Session / Fresh Session decision code shared by transient and normal technical errors.
+    - Keep partial-write recovery explicit: preserve maintained-source changes and rotate only the affected Stage session.
+    - Keep outage-scoped exponential backoff for transient service failures; Fresh Session rotation must not reset outage backoff.
+    - Keep unlimited retry positive-delay safety floor and bounded per-session attempts.
+    - Prefer one small helper/pure calculation over RecoveryManager/Strategy/Factory class hierarchies.
+    - StageExecutor must remain readable as one obvious attempt -> classify -> recover -> wait loop.
+    - Production-code target: normally net reduction (~20-50 lines), but correctness/readability wins over the target.
+    - Regression/live contracts for 429/502/503/raw disconnect/partial write/session rotation must remain unchanged.
+
+[x] Audit deterministic-vs-recoverable technical error boundary
+    - No unknown programming/config/state/snapshot corruption should silently enter infinite retry.
+    - Known service/backend/session/timeout failures that are actually recoverable remain unattended-retry capable.
+    - ConfigurationError and equivalent deterministic failures stay fail-closed.
+    - KeyboardInterrupt/SystemExit behavior must remain unchanged.
+    - Reuse the existing error boundary; do not create a large error taxonomy/framework.
+    - Add only the smallest production classification change needed for ambiguous current cases.
+
+[x] Centralize active Run lifecycle cleanup ownership
+    - Audit every production mutation/cleanup of ai_session_id, stage_sessions, review_failures,
+      dynamic_groups, dynamic_task_groups, task bindings, active process/control ownership and completion flags.
+    - Prefer lifecycle owners such as start_run / finish_task / finish_run / reset over scattered cleanup.
+    - Supervisor remains process-level only and must not duplicate Stage/session policy.
+    - Completed state may retain bounded semantic/debug evidence but must not retain active-only technical state.
+    - Remove duplicate cleanup code when an existing lifecycle owner can own it.
+    - Goal: fewer stale-session/dynamic/ownership leaks across stop/crash/resume/complete.
+
+[x] Add a small Resume integrity fail-closed check only where current state validation is insufficient
+    - Before continuing a durable Resume, verify only invariants required for safe continuation:
+      current Workflow position/Stage, frozen Workflow/resources, dynamic child references/task binding,
+      and live ownership consistency.
+    - Corrupt/deterministically inconsistent state becomes Needs Attention instead of retrying forever
+      or continuing from an ambiguous position.
+    - Reuse existing Workflow loader/state/process ownership evidence.
+    - Do not create a second StateStore schema, migration framework or generic invariant engine.
+    - This item may intentionally add production code (~30-70 lines) because preventing corrupt Resume
+      has direct 24H value.
+    - If current code already proves every listed invariant centrally, document the evidence and do not add code.
+
+[x] Confirm dynamic child expansion has one generic production path
+    - Any Stage may return tasks/stages; Plan remains only one producer.
+    - Plan/custom/plugin/command producers must converge on the same StageResult -> expand_stage_result ->
+      FlowEngine execution path.
+    - Remove producer-type branches from Core if they duplicate generic expansion behavior.
+    - Child cleanup/resume must remain generic and bounded.
+    - Do not create Plan-specific Runner semantics merely for convenience.
+
+[x] Reduce BaseStage/Profile double ownership
+    - Review Loader/profile normalization versus BaseStage.__init__ profile interpretation.
+    - Profile defaults/semantics should have one canonical owner; BaseStage should execute a normalized AI Stage
+      rather than redundantly re-derive Execute/Review defaults where practical.
+    - Do not restore separate ExecuteStage/ReviewStage public runtime types.
+    - Preserve genuine runtime-only differences where normalization cannot own them cleanly.
+    - Accept small production-code growth when it removes duplicated ownership; avoid abstraction layers with no caller benefit.
+
+
+FINAL OPTIMIZATION RUNTIME EVIDENCE (2026-10-04)
+------------------------------------------------
+- Exact implementation HEAD 965c4ab40b0a5a794cc12299e9ab25a6733bf073 passed GitHub Actions PR run 37203987530:
+  Ubuntu Python PASS, Windows Python PASS, Chromium Browser E2E PASS, Studio build + committed-bundle verification PASS.
+- StageExecutor Same/Fresh Session selection is now one small helper shared by transient/non-transient technical errors.
+  Partial-write recovery remains explicit; transient outage backoff still survives Fresh Session rotation; retry safety floor remains unchanged.
+- Technical error boundary now retries declared RunnerError and OS-level technical failures while unexpected programming exceptions
+  fail closed as ConfigurationError. KeyboardInterrupt/SystemExit propagation remains unchanged.
+- Resume now requires the frozen Workflow snapshot and validates workflow_position, unique Stage names/routes,
+  dynamic task bindings and durable Stage-session references before continuing. Deterministic corruption fails closed.
+- Lifecycle audit found the existing owners are already correctly separated, so no LifecycleManager was added:
+  StageContext.reset_sessions owns global session reset; dynamic expansion owns replaced-child cleanup;
+  finish_task owns completed-task Review cleanup; finish_run owns active-only completion cleanup;
+  Supervisor/ProcessRunner continue to own process/orphan/lock/heartbeat cleanup only.
+- Dynamic child audit confirmed one production path: StageResult(kind=tasks/stages) -> reduce_result ->
+  expand_stage_result -> FlowEngine. Plan is only one producer; generic/nested/custom producer dry-run coverage already uses the same path.
+  No Plan-specific Core branch was added.
+- BaseStage no longer reapplies Loader/Profile defaults for Execute/Review. Normalization owns profile defaults;
+  BaseStage retains only runtime-only behavior such as parser/result-kind/backend-mode/session behavior.
+  This removed roughly 30 lines of duplicated production logic from BaseStage.
+- Profile identity is now registry metadata/helpers instead of repeated generic/execute/review literals in Schema/FlowEngine/BaseStage/result-kind logic.
+- Generic-provider final audit: FlowEngine, WorkflowRunner, UI server, project runtime projection and Full Designer source contain no
+  Qwen/OpenCode provider branch; provider-specific behavior remains adapter-owned.
+- Tasks/Chat compact Runtime Console and lightweight Workflow/Prompt libraries were already present and canonical-Runtime-View driven;
+  these TODOs were closed by audit instead of adding another dashboard/library layer.
+- Real-Qwen soak gates remain intentionally open: this deterministic pass does not substitute for 0.5H/high-density/24H evidence.
+
+P0.5 - FINAL UI/UX SIMPLIFICATION
+---------------------------------
+Goal: a new user should understand what is running, whether action is required, and how to edit/test a
+Workflow without understanding Runner internals.
+
+[x] Make Tasks/Chat the single compact Run Console
+    - Keep one primary runtime summary instead of adding Dashboard/Monitoring pages.
+    - At a glance show human-readable state + current Stage/Task/progress/elapsed/recovery when relevant.
+    - Common examples:
+        Running · Execute · Task 3/8
+        Recovering · HTTP 503 · retry 3 · next attempt 8s · No action required
+        Needs Attention · Review FAIL has no route
+    - Detailed run id/session/backend/model/cycle/snapshot remains available behind compact details.
+    - Continue consuming the canonical Runtime View; do not re-derive runtime state in UI.
+
+[x] Make active Run snapshot vs editor state unmistakable
+    - Clearly distinguish the frozen Workflow/config used by the active Run from current editor/draft changes.
+    - Edits during an active Run must visibly say they apply to the next Run.
+    - Reuse existing frozen/durable run snapshot evidence; no second snapshot store.
+    - This is primarily presentation/guard UX, not new runtime behavior.
+
+[x] Simplify Workflow canvas Nodes to topology-first information
+    - Default Node should emphasize Stage type/name and PASS/FAIL/HANDOFF topology.
+    - Runtime status may appear while a Run is active.
+    - Move verbose retry/backend/model/session/dynamic configuration details to Stage Settings/details.
+    - Keep only high-value semantic badges such as Dynamic / Fail-soft / disconnected when they prevent confusion.
+    - Goal: users read the Workflow graph as a process, not as a configuration dump.
+    - Prefer deleting JSX/CSS/state over adding decorative UI.
+
+[x] Make Stage Settings progressively disclose advanced options
+    - Common AI Stage path should fit into a simple Content + Execution experience.
+    - Review-specific semantic FAIL / technical ERROR policy appears only when relevant.
+    - Rare/internal fields stay under Advanced instead of competing with Prompt/Backend/Model/Session.
+    - Preserve Form/YAML/Routing/Test as views of the same Stage draft.
+    - Visibility/order should come from canonical catalog metadata where it is domain-specific;
+      presentation/layout remains Studio-owned.
+
+[x] Simplify Stage Test mental model
+    - Present execution method and input scenario as separate concepts.
+    - Preferred model:
+        Mode: Real Stage / Agent Ping / Mock Technical Error
+        Input
+        PASS / FAIL examples as input-fill shortcuts
+        Run / Stop
+    - Do not make PASS/FAIL look like separate execution engines.
+    - Continue using the existing disposable Stage-test execution path; no second runtime.
+
+[x] Re-evaluate Stage Palette complexity against current Stage count
+    - If Favorites/Recent/multiple built-in groups add more navigation than value for the current small Stage set,
+      simplify to Search + core Stages + Extensions.
+    - Keep category/favorites/recent only if they materially improve use with installed plugin Stage counts.
+    - Avoid maintaining localStorage/UI machinery for speculative future scale.
+    - This is a UX/code-reduction decision based on current usage, not a requirement to delete features blindly.
+
+[x] Keep Workflow/Prompt libraries task-focused and visually light
+    - Workflow high-frequency actions: open, new, Show/Hide in Chat; secondary actions stay in context menus.
+    - Prompt high-frequency actions: edit, Used By impact, save; variable insertion/large usage detail should not dominate.
+    - Do not add Dashboard, analytics, tags/collections, activity feed or platform-scale navigation.
+    - Preserve current unsaved protection, search, keyboard accessibility and project context.
+
+P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
+----------------------------------------------------
+
+[x] Make Stage Catalog the canonical Studio domain metadata source
+    - Remove frontend-owned STAGE_META / built-in Stage type/category fallback knowledge where the backend
+      Stage catalog already provides title/description/category/options/defaults/profile/test/dynamic metadata.
+    - Plugin/custom Stage should appear without editing Studio Stage-name/type branches.
+    - Studio owns rendering/layout only.
+    - Do not make the UI unusable when catalog loading fails: fail visibly/closed rather than inventing provider/Stage semantics.
+    - Production code should normally shrink because duplicate frontend metadata is removed.
+
+[x] Canonicalize Profile/Stage semantic knowledge
+    - Remove repeated production definitions such as hardcoded generic/execute/review lists when profile_names()
+      or equivalent canonical metadata already exists.
+    - Centralize the minimum semantic identity needed for Review/Execute behavior instead of repeatedly testing
+      type=base + profile=review across unrelated modules.
+    - FlowEngine may still own Review fail-soft routing semantics; Stage/Profile metadata owns what a Review profile is.
+    - Do not introduce ReviewStrategy/Policy/Handler class stacks.
+
+[x] Remove unnecessary generic-layer backend/provider hardcodes
+    - Generic Runner/UI/Studio code must not branch on qwen/opencode or hardcode model ids.
+    - Backend adapters/registry own command construction, model discovery and provider-specific behavior.
+    - Generic catalog/UI should consume registry capabilities.
+    - Keep adapter-local provider hardcodes where they are the correct owner.
+
+[x] Project Backend/Model/Session constraints instead of reimplementing them in Studio
+    - Runtime/schema remains authoritative for backend+model atomic pair and session incompatibilities.
+    - If UI currently duplicates these rules, expose the smallest catalog constraint metadata necessary
+      for disable/help behavior.
+    - Do not invent a generic validation DSL.
+    - Small production-code growth is acceptable if it removes duplicate runtime policy from frontend.
+
+[x] Audit React state ownership and remove duplicate derived state
+    - Classify Studio state as Server / Canonical draft / Ephemeral UI / Derived.
+    - A value derivable from the canonical Workflow draft should not also become an independently authoritative state.
+    - Focus especially on visual/nodes/edges/YAML/selected Stage/dirty/saved representations.
+    - Remove bidirectional synchronization paths that can create stale Designer/YAML/Undo/selection behavior.
+    - Async Project/Workflow responses must remain guarded against stale application after navigation.
+    - This is a correctness/UX cleanup, not merely a LOC exercise.
+
+[x] Centralize Workflow graph mutations as pure model operations where currently scattered
+    - Add/remove/duplicate/paste/connect/disconnect/retarget/flow ordering/Handoff target changes should use
+      one small group of pure Workflow-draft transformations.
+    - React event handlers should not independently understand YAML routing semantics.
+    - Reuse canonical backend validation at Save; pure UI graph mutations do not replace schema validation.
+    - Accept small production-code growth if it materially reduces mutation entry points/coupling.
+
+[x] Split Workflow Studio source only at real responsibility boundaries
+    - main.tsx may move pure responsibilities such as graphModel, draftStorage, studioApi/catalog helpers and i18n
+      into focused modules if that reduces unrelated-change coupling.
+    - Do not fragment tiny visual components merely to reduce file length.
+    - Do not create wrapper modules that only rename one function call.
+    - Success is fewer responsibilities in main.tsx, not a specific file count or LOC target.
+
+[x] Repo-wide canonical-data / legacy / dead-code audit
+    - Search production source, UI, docs, examples, fixtures and maintained scripts for removed contracts and stale names:
+      scope/task_step/public task-review types/routes.error/recover/restart_at/repeat/max_attempts/
+      execution_mode/repair runtime/Discussion compatibility and obsolete structured-session contracts.
+    - Distinguish harmless historical/example wording from an active compatibility contract, but rename misleading
+      maintained examples when their names imply a removed runtime feature.
+    - Remove unused wrappers/helpers/flags/fallbacks with no active caller.
+    - Do not keep compatibility layers "just in case".
+
+P1.5 - FINAL PRODUCTION-CODE SIMPLIFICATION CHECK
+-------------------------------------------------
+[x] Review production code for simple deletion opportunities after the ownership work
+    - Pass-through wrappers with no policy.
+    - Duplicate catalog/schema/profile defaults.
+    - Duplicate UI state/formatting paths.
+    - Dead API routes or server helpers with no maintained caller.
+    - Repeated lifecycle/session/recovery cleanup.
+    - Speculative UI machinery with no current use.
+    - Keep code when an explicit boundary improves testability, plugin isolation or 24H reliability.
+    - Production LOC is an observation, not the success metric; tests are excluded from this size assessment.
+
+FINAL OPTIMIZATION UI / ARCHITECTURE EVIDENCE (2026-10-04)
+---------------------------------------------------------
+- Exact clean HEAD 69f32dea573e6993fbda6b8bd88a54ee1bc45de8 passed GitHub Actions run 37213037113:
+  Windows Python PASS, Ubuntu Python PASS, Chromium Browser E2E PASS, Studio build + committed-bundle verification PASS.
+- Active-run editor UX now explicitly distinguishes frozen active snapshots from current drafts; edits stay allowed and are labeled for the next Run.
+- Canvas Nodes are topology-first. Retry/failure-policy detail was removed from default cards; disconnected/dynamic information remains where it prevents ambiguity.
+- Stage Settings already used progressive disclosure; review/error-only controls remain contextual and high-volume parameter sets use section tabs.
+  No additional settings framework was added.
+- Stage Test now separates execution mode from input examples:
+  Real Stage / Agent Ping / Mock Technical Error are modes; PASS/FAIL are only Real Stage input-fill shortcuts.
+- Palette was reduced to Search + Stages + Extensions; Favorites/Recent/collapsed localStorage machinery and related dead CSS/i18n were removed.
+- Studio Stage metadata is catalog-driven; frontend STAGE_META/built-in type ownership was removed.
+- Backend/model/session UI behavior consumes catalog execution-target constraints while runtime/schema remains authoritative.
+  No generic frontend validation DSL was introduced.
+- React state audit confirmed the semantic Workflow draft remains canonical; ReactFlow nodes/edges are derived interaction/layout state.
+  Graph routing mutations live in pure ui/studio-src/src/workflow-draft.ts helpers, keeping YAML routing semantics out of event handlers.
+- main.tsx was split only at the real pure-draft responsibility boundary. No tiny wrapper/component fragmentation was introduced.
+- UI validation continues through the existing Workflow tool/production-loader boundary; UI does not import Runner Core.
+- Repo-wide removed-contract scan found no maintained source references for scope/task_step/routes.error/restart_at/max_attempts/Discussion,
+  or old 02_repair_cycle / 05_ai_quality_repair names. Misleading examples were renamed and their run_example.bat targets corrected.
+- Final production-code simplification observation, excluding tests/generated Studio bundle:
+  approximately +553 / -654 lines versus the start of this pass (net -101 lines).
+  Notable reductions: main.tsx +188/-331, workflow_studio_state.py +13/-206; workflow-draft.ts adds a focused 165-line pure-model boundary.
+- No second retry/recovery/state/workflow engine, LifecycleManager, generic validation DSL, Dashboard, or provider branch was added.
+- Real-Qwen 0.5H/high-density/24H release gates remain intentionally open and are not substituted by deterministic CI.
+
+FINAL OPTIMIZATION ACCEPTANCE
+-----------------------------
+Do not mark this pass complete until:
+- StageExecutor/FlowEngine/StateStore/Supervisor ownership remains unchanged in principle.
+- No second retry/recovery/state/workflow engine exists.
+- Resume cannot knowingly continue from a deterministically inconsistent durable state.
+- Dynamic child producers share the generic expansion path.
+- Active-only session/dynamic/process state is cleaned by clear lifecycle owners.
+- Studio does not redeclare canonical Stage/Profile/Backend domain capabilities that the catalog/registry owns.
+- Workflow editor has one clear canonical draft ownership model; derived graph state does not become a second source of truth.
+- Canvas and Stage Settings are simpler to read/use than before at supported desktop resolutions.
+- Stage Test semantics are obvious without understanding Runner internals.
+- No removed public contract/compatibility layer is restored.
+- Ubuntu + Windows deterministic suites, Browser E2E and Studio build/bundle checks are green on the final exact HEAD.
+- Real-Qwen 0.5H/high-density/24H gates below still pass after this optimization work.
+
+FINAL CODE REVIEW (2026-10-04)
+------------------------------
+- Final implementation HEAD 69f32dea573e6993fbda6b8bd88a54ee1bc45de8 passed all deterministic gates in run 37213037113.
+  Current HEAD differs from that implementation HEAD only by todo.txt evidence maintenance.
+- Runner ownership review:
+  * StageExecutor owns Stage-local technical retry/session rotation/backoff/partial-write recovery.
+  * FlowEngine owns semantic PASS/FAIL/HANDOFF navigation and dynamic child expansion.
+  * RunState/StateStore owns durable state validation + atomic primary/backup persistence.
+  * Supervisor owns process crash/hang restart, run lock, heartbeat and orphan cleanup.
+  No duplicate recovery/state/lifecycle engine was found.
+- 24H-oriented review:
+  * deterministic/programming failures fail closed instead of entering infinite technical retry;
+  * declared RunnerError/OSError technical failures remain recoverable;
+  * state/history/output/log structures have explicit bounds/safety rails;
+  * resume validates durable Workflow position/snapshot/session references before continuing.
+- UI/UX review:
+  * Tasks/Chat remains the compact Run Console; no extra dashboard layer.
+  * Active Run frozen snapshot vs next-Run edits is explicit.
+  * Designer Nodes are topology-first and no longer configuration dumps.
+  * Palette is Search + Stages + Extensions; speculative Favorites/Recent/collapse state was removed.
+  * Stage Settings uses existing progressive disclosure rather than another settings framework.
+  * Stage Test modes are Real Stage / Agent Ping / Mock Technical Error; PASS/FAIL are input examples only.
+  * Backend/Model/Session UX consumes catalog constraints instead of owning runtime policy.
+  * Browser E2E passed after the simplification, including CRUD/save, graph operations, edge-drop, Stage Test and backend/model flows.
+- Maintainability/code-size review:
+  * No qwen/opencode provider branch remains in generic Workflow/Studio code.
+  * UI does not import Runner Core; validation crosses the existing workflow tool/production-loader boundary.
+  * Graph mutation semantics are centralized in workflow-draft.ts pure operations.
+  * main.tsx remains large but further splitting has no demonstrated responsibility/coupling benefit; do not split for LOC alone.
+  * Production-like code for this pass is net smaller (about -101 lines excluding tests/generated bundle).
+  * Removed-contract scan found no maintained scope/task_step/routes.error/restart_at/max_attempts/Discussion/old repair-example compatibility.
+- Review decision: no further proactive architecture/UI refactor is justified before the remaining real-Qwen soak/release gates.
+  Any new source change should be driven by reproduced reliability/UX evidence, not cleanup preference.
+
+OPTIMIZATION FREEZE
+-------------------
+[ ] Freeze proactive architecture/UI optimization after this pass
+    - Once FINAL OPTIMIZATION ACCEPTANCE and the release gates are green, do not continue cleanup/refactor work
+      solely to reduce LOC, split files, generalize abstractions or copy features from n8n/Langflow/Flowise/Dify.
+    - Future changes require one of:
+        1. reproduced reliability/24H failure,
+        2. clear repeated user/operator UX failure,
+        3. concrete plugin/backend/Stage extension need,
+        4. measured performance/resource problem.
+    - Prefer shipping/stabilizing the current small product over perpetual architecture churn.
+
+
+REAL BACKEND GATE
+-----------------
+The release is not complete until real-Qwen gates below are green. Deterministic CI alone is insufficient.
+
+24H ACCEPTANCE
+--------------
+The 24H soak below is the final unattended-runtime acceptance gate.
+
+RELEASE GATES
+-------------
+[x] Current deterministic CI green:
+    - Exact implementation HEAD 443d173f81a5ff586c54293d928f9addf57eaf92 passed all required deterministic gates
+      in GitHub Actions run 37471026044.
+    - Ubuntu Python: PASS.
+    - Windows Python: PASS.
+    - Playwright/Chromium Browser E2E: PASS.
+    - Studio build + committed-bundle verification: PASS.
+    - This exact-HEAD evidence includes probes 42-46 contracts, shipped dynamic_handoff.yaml lean-role contract,
+      focused coordinator/worker prompts, Dynamic Handoff role/final-recovery/API-recovery/stop-resume live harness wiring,
+      plus all prior recovery/resource/YAML/runtime regressions.
+    - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
+
+[x] Original 41-probe live matrix is fully green across soak + example smoke.
+    - Probes 33-40 are green on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194, DIRTY=False.
+    - Probe 41 example-smoke later ran all 6 canonical cases and all 6 PASS on source revision
+      1ae72ce9f37d81271625d46a7f0ba2ce1fd38af5, DIRTY=False.
+    - The original Real-Qwen 0.5H/high-density release gate is therefore complete.
+    - New probe 42 bundled-dynamic-handoff was added after this evidence and still requires its own real-Qwen PASS.
+
+
+[x] Real-Qwen 0.5H gate green:
+    tool\qwen_live_reliability_0_5h.bat
+    - Real-Qwen example-smoke rerun on source revision 1ae72ce9f37d81271625d46a7f0ba2ce1fd38af5,
+      DIRTY=False, START_PROBE=41 correctly executed the canonical 2-project x 3-workflow smoke matrix.
+    - All 6/6 example-smoke cases PASS:
+      * example-smoke-01-basic-command-validator-file
+      * example-smoke-01-basic-command-validator-mixed
+      * example-smoke-01-basic-command-validator-ralphy-ai-validate
+      * example-smoke-10-skill-prompt-review-workflow-file
+      * example-smoke-10-skill-prompt-review-workflow-mixed
+      * example-smoke-10-skill-prompt-review-workflow-ralphy-ai-validate
+    - This closes the original 41-probe Real-Qwen 0.5H gate together with the previously green [40/41] high-density soak.
+    - Probe 42 was added afterwards for shipped dynamic_handoff.yaml optimization and remains a separate new live-validation item.
+    - Real-Qwen high-density run on source revision b8ccd34ad1973450d259f45ec1d0cc30185d3194,
+      DIRTY=False, completed [40/41] soak PASS with 12 runs over 1871.5s.
+    - Full 0.5H gate is NOT green yet because the fail-start launcher omitted the opt-in example-smoke matrix,
+      so [41/41] did not execute (summary: example_smoke=false, example_smoke_runs=0).
+    - Coverage inside soak:
+      * transient API every 2 runs: 6 total, 429=2 / 502=2 / 503=2
+      * timeout every 6 runs: 2
+      * YAML every 7 runs: 1
+      * sandbox every 7 runs: 1
+      * mixed + Final AI every 8 runs: 1
+      * recovery backoff reached 30s configured cap
+      * no active-process marker leak or active-only state-map retention.
+
+    Must cover at least:
+    - file / ai / mixed topologies
+    - shipped dynamic_handoff.yaml end-to-end real-Qwen probe (42)
+    - Plan dynamic children
+    - Review FAIL rollback/closure
+    - Validator FAIL routing/closure
+    - Dynamic Handoff
+    - main / role / fresh sessions
+    - HTTP 429 / 502 / 503 short + long outage windows
+    - raw disconnect
+    - expired Session -> Fresh Session
+    - process restart / detached UI resume
+    - YAML List resume
+    - custom Stage / producer-defined child Workflow
+    - complete closed-loop probe
+
+[x] Fixed fail-start launcher drift that skipped probe 41.
+    - qwen_live_reliability.py runs example-smoke only for explicit example cases.
+    - Canonical tool\qwen_live_reliability_0_5h.bat supplies the 2-project x 3-workflow smoke matrix.
+    - The root fail-start launcher previously duplicated 0.5H flags but omitted those smoke arguments, so probe 41 had zero cases.
+    - fail-start now delegates to the canonical 0.5H gate and only adds --start-probe 34; %* still permits operator override.
+    - This removes duplicated gate configuration and prevents future coverage drift.
+    - Re-run is still required before marking the full Real-Qwen 0.5H gate green.
+
+[x] Added probe 42 for the shipped dynamic_handoff.yaml and simplified the bundled role design.
+    - PROBE_ORDER now has 42 entries; probe 42 is bundled-dynamic-handoff and runs after example-smoke.
+    - Probe 42 runs the actual runner/assets/workflows/dynamic_handoff.yaml with real Qwen; it does not use
+      the smaller inline Dynamic Handoff session-policy fixture.
+    - The live task requires a concrete artifact, must start at coordinator, use a write-capable role,
+      reach final_validate, complete cleanly, and leave no active-only AI/session state.
+    - Summary records actual stage starts, coordinator run count, roles used, writer roles and final_validate count
+      so the real run can inform whether role count/prompt routing should be simplified further.
+    - Bundled workflow was reduced from 6 worker roles to 5 worker roles:
+      requirements_analyst, solution_architect, implementer, debugger, verifier.
+    - Removed risk_reviewer because its reliability/security/maintainability responsibility substantially overlapped verifier;
+      verifier now owns independent behavior/test/evidence plus material reliability/security/maintainability risk review.
+    - final_validate remains independent with session_policy=fresh; it was not merged into verifier.
+    - coordinator now uses common/dynamic_handoff.md and explicitly prefers action when the Goal is clear,
+      avoids unnecessary analysis roles/repeated specialists, and chooses final validation as soon as evidence is sufficient.
+    - dynamic_worker.md now tells each specialist to reuse existing evidence, avoid repeated reads/analysis,
+      make the smallest useful change/assessment and return concise outcome/evidence/blocker information.
+    - Existing dedicated dynamic-handoff-session-policy probe remains unchanged to cover main/role/fresh identity semantics.
+    - Exact implementation HEAD bb4ed85025f7673ea2a076264ea7eccdf40011f5 passed all four CI gates
+      in GitHub Actions run 37466898305.
+    - [x] Real-Qwen probe 42 PASS on source revision 29cf8af95cf513ad26d6465b2dd0986c9203d4d2, DIRTY=False.
+      Actual route: coordinator -> implementer -> coordinator -> final_validate.
+      Evidence: total_stage_starts=4, coordinator_runs=2, roles_used=[implementer], role_runs=1,
+      writer_roles=[implementer], final_validate_runs=1.
+      This proves the focused coordinator prompt skips unnecessary analysis/review roles for a clear implementation Goal
+      while still reaching independent fresh-session final validation.
+
+[x] Dynamic Handoff extended live matrix 43-46.
+    - 2026-10-09 real-Qwen rerun on source revision 37eee687e620c05c3115099efd572676a176c1c3, DIRTY=False:
+      * [44/46] PASS dynamic-handoff-final-recovery.
+        stage_starts=[coordinator, verifier, coordinator, implementer, coordinator,
+        approval_gate, coordinator, implementer, coordinator, verifier, coordinator,
+        approval_gate, final_validate]; coordinator_runs=6; approval_gate_runs=2;
+        final_validate_runs=1.
+      * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503;
+        proxy_failures=2, proxy_successes_before_outage=1, proxy_successes=17.
+      * [46/46] PASS dynamic-handoff-stop-resume;
+        checkpoint_role=implementer, checkpoint_stage=workflow_route,
+        checkpoint_position=3; resumed run reached final_validate.
+      * This closes the reopened probe-44 fixture issue: deterministic approval FAIL
+        routed through coordinator and a write-capable specialist, then the unchanged
+        fresh Final AI Validator completed successfully.
+      * Current fail-start launcher defaults to --start-probe 44 for focused reruns.
+    - Final real-Qwen evidence on source revision f8f1e83ffde5eada91d270ced0aa12539cb995fe, DIRTY=False:
+      * [43/46] PASS dynamic-handoff-role-matrix.
+      * [44/46] PASS dynamic-handoff-final-recovery.
+      * [45/46] PASS dynamic-handoff-api-recovery; proxy_failures=2, proxy_successes_before_outage=1, proxy_successes=14.
+      * [46/46] PASS dynamic-handoff-stop-resume; checkpoint_role=implementer and the resumed run completed final validation.
+      * Bundled probe 42 also PASS with coordinator -> implementer -> coordinator -> final_validate.
+    - 2026-10-06 real-Qwen rerun on source revision b1feeef229d8987410396d54a2f5d3550d3937a1, DIRTY=False:
+      * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503 and successful recovery.
+      * 46 failed before exercising stop/resume because the harness required polling state.stage to equal a worker role
+        AND ai_session_id to be durably visible at the same instant; fast worker transitions can skip that observation window.
+      * This is a probe timing race, not evidence that stop/resume failed.
+      * Fixed 46 to trigger stop.request from durable runner.stage/start evidence for any real worker role while the Supervisor
+        marker is active; the checkpoint keeps the current durable state/run_id but no longer depends on transient state.stage/session timing.
+      * Poll interval tightened to 50ms only for observing the durable role-start event; runtime behavior is unchanged.
+      * Real-Qwen 46 rerun is required before marking PASS.
+    - 2026-10-06 uploaded dynamic-api-recovery-probe evidence exposed a second 45 harness-fixture issue:
+      * the run had progressed through coordinator -> final_validate FAIL -> coordinator -> implementer.
+      * final_validate inspected the default protected validation.py, which still validated health.txt / the generic live-probe text,
+        while the Dynamic Handoff Goal required dynamic_api_recovery.txt=RECOVERED.
+      * coordinator therefore told implementer to update validation.py; every attempted edit was correctly restored by protected-file safety,
+        producing repeated runner.recovery retries with "protected file modified and restored: ...validation.py".
+      * durable state remained coherent; this is fixture contract pollution, not evidence of Dynamic Handoff state corruption.
+      * Fixed 45 to generate a goal-matching protected validator for dynamic_api_recovery.txt=RECOVERED and explicitly tell the agent
+        not to modify validation.py.
+      * Real-Qwen 45 must be rerun after this fixture fix; the uploaded stuck run is not a valid API-recovery verdict.
+    - 2026-10-06 real-Qwen rerun on source revision 986325f541e96704aed7944580e4028184a68585, DIRTY=False:
+      * [43/46] PASS dynamic-handoff-role-matrix.
+      * [44/46] PASS dynamic-handoff-final-recovery.
+      * 45 failed before exercising recovery because the harness armed HTTP 503 by polling ai_session_id; the run completed
+        without any proxied request observing the injected failure.
+      * This is an injection-timing race in the probe, not evidence that Dynamic Handoff recovery failed.
+      * Fixed 45 to wait for durable coordinator PASS, then arm HTTP 503 so the next worker/model request crosses the outage.
+      * Probe now also requires at least one 503 failure and a later successful upstream request after recovery.
+      * Real-Qwen 45-46 rerun is required before marking them PASS.
+    - 2026-10-06 third real-Qwen 43 rerun on source revision 21ee90d5fa1c65042aa03d130ff5f7b0cb346abc, DIRTY=False:
+      * ambiguous-requirement completed successfully after the cross-stage source_evidence runtime fix; the probe advanced to the next case.
+      * existing-failure completed via coordinator -> implementer -> coordinator -> final_validate, but the harness incorrectly required debugger.
+      * This is a harness contract bug, not a runtime failure: implementer is a valid role for repairing an existing broken file.
+      * Role-matrix assertions are now outcome-driven: artifact correctness + completed final validation are hard requirements;
+        reasonable role alternatives are accepted and preferred-role usage is recorded for optimization analysis.
+      * verify-only still rejects unnecessary write-capable implementer/debugger selection.
+      * Real-Qwen 43 must be rerun after the harness expectation fix before marking the full role matrix PASS.
+    - 2026-10-06 second real-Qwen 43 ambiguous-requirement rerun used concrete TAIWAN_MATRIX_7F4C
+      and correctly stopped at max_cycles=12 instead of looping indefinitely, but still exposed a real runtime handoff-context gap.
+      * requirements_analyst repeatedly reported the authoritative value and remaining blocker: none.
+      * coordinator same-session continuation received source_stage=requirements_analyst but NOT that Stage's output/evidence.
+      * coordinator therefore kept selecting requirements_analyst from stale session context until cycle limit exhaustion.
+      * Root cause is global shared-control transport, not the bundled Dynamic Handoff YAML itself.
+      * Runtime fix: cross-stage same-session continuation now includes bounded source_evidence from previous Stage output/data
+        (max 2500 chars); same-Stage retry/continue does not echo its own previous output.
+      * This preserves the design rule: Same Session only receives new information, with bounded prompts.
+      * Real-Qwen 43 must be rerun after this runtime fix before marking PASS.
+    - 2026-10-06 first real-Qwen 43 ambiguous-requirement attempt exposed a harness semantic-loop case:
+      * REQUIREMENTS.md contained literal REQUIRED_VALUE; Final Validator interpreted that as placeholder text and FAILed.
+      * requirements_analyst had already produced/verified matrix_requirement.txt=REQUIRED_VALUE, but coordinator kept following
+        the stale validator concern back to requirements_analyst.
+      * captured state reached cycle=37, workflow_position=0, completed=false with repeated
+        coordinator -> requirements_analyst transitions; project retained active runtime markers because the run was still active.
+      * This is not evidence of state corruption; it is a bad test token plus an unbounded live semantic loop.
+      * Fixed harness value to concrete TAIWAN_MATRIX_7F4C and bounded bundled Dynamic Handoff live probes 42-46 with max_cycles=12.
+      * Real-Qwen rerun of 43 is required; do not mark 43 PASS from the failed/stuck attempt.
+    - [x] 43 dynamic-handoff-role-matrix:
+      real bundled dynamic_handoff.yaml across ambiguous requirement, existing failure/debug and verify-only scenarios;
+      assert the expected specialist participates and record coordinator/role usage.
+    - 2026-10-09 newly reproduced probe 44 failure: the first final_validate FAIL
+      was only encouraged by prompt text, not guaranteed by fixture state.
+      The run may legitimately finish with an immediate PASS; that does not prove
+      the FAIL -> coordinator recovery contract. Reopened probe 44 for live retest.
+    - New live-only fixture inserts approval_gate ahead of the original fresh
+      AI final_validate. First gate call deterministically FAILs and removes any
+      premature approval; FAIL routes to coordinator, a writer must recreate
+      final_approval.txt, second gate must PASS, then real fresh Final AI must PASS.
+      Strict event ordering and artifact checks retained; shipped workflow unchanged.
+    - Fail-start launcher now defaults to --start-probe 44 and supports %* overrides.
+    - [x] 44 dynamic-handoff-final-recovery:
+      real bundled Final Validator must FAIL once, route back through coordinator, repair missing approval evidence,
+      then PASS and complete.
+    - [x] 45 dynamic-handoff-api-recovery:
+      run shipped dynamic_handoff.yaml through the real transient proxy, inject HTTP 503 while an AI session is active,
+      recover without stale last_error and still reach final validation.
+    - [x] 46 dynamic-handoff-stop-resume:
+      stop.request only after an actual Dynamic worker role is active, verify clean Supervisor stop/no stale control files,
+      resume the same durable run and finish through final validation.
+    - All four reuse the current Runner/StageExecutor/FlowEngine/StateStore and shipped workflow path;
+      no second orchestrator/recovery/session implementation was added.
+    - Deterministic regressions lock probe order 43-46 and verify the live implementations reuse the shipped workflow
+      plus existing transient-proxy and stop/resume primitives.
+    - Exact implementation HEAD 443d173f81a5ff586c54293d928f9addf57eaf92 passed Windows Python,
+      Ubuntu Python, Chromium Browser E2E and Studio build/bundle verification in GitHub Actions run 37471026044.
+    - Real-Qwen PASS evidence requirement satisfied by the 2026-10-09 44-46 rerun above.
+
+
+[x] High-density soak green
+    - [40/41] PASS soak · 0.5H soak completed (12 runs).
+    - state/log/history growth: PASS within configured safety rails.
+    - retry/backoff spin: PASS; 15 observed waits, max 30s cap reached.
+    - ownership/orphan leak: PASS; active_process_markers stayed 0 and completed-run technical maps stayed empty.
+
+[ ] Full 24H Windows soak green:
+    tool\qwen_live_reliability_24h.bat
+
+    Acceptance:
+    - full wall-clock duration
+    - no stuck ownership lock
+    - no orphan worker/process after stop/crash/resume
+    - no lost workflow position
+    - no dynamic child Workflow corruption
+    - no role-session corruption
+    - no unbounded state/log/history growth
+    - frozen Workflow/Prompt resources stable across Resume
+
+[ ] Current HEAD deterministic CI green
+    - HEAD 1d46986eca94df83dc2c107f55dae797509bba3d.
+    - GitHub Actions runs 37939807355 and 37939813893 completed successfully.
+    - This includes the probe-44 deterministic fixture/oracle regression and the explicit shipped-workflow dependency check.
+
+[ ] Final release cleanup
+    - rerun deterministic CI after any soak-driven fix
+    - rebuild/commit Studio bundle after final Studio source changes
+    - regenerate project.bundle.txt only after gates stabilize
+    - bundle excludes runtime artifacts and keeps source/tests/docs
+    - update this file with final live/24H evidence
+
+DONE
+----
+Release is complete when:
+- current HEAD deterministic CI is green,
+- real-Qwen 0.5H is green,
+- high-density soak is green,
+- full 24H Windows soak is green,
+- no removed contract has returned,
+- UI / CLI / API / YAML List still share the same runtime,
+- no ownership/orphan/state-growth issue remains,
+- final Studio bundle and project.bundle.txt are synchronized.
+
+CURRENT IMPLEMENTATION NOTES
+----------------------------
+- Newly added Designer Stages are draft-first: Form/YAML/Routing/Test must work before Workflow Save.
+- Stage YAML regression now covers a newly-created unsaved AI Stage; it must not query only saved YAML and report "Stage not found".
+- Workflow/Prompt empty/search states now provide an actionable next step.
+- Project rows show runtime detail instead of repeating full filesystem paths; full path remains available via tooltip/title.
+- Saved/Saving/Unsaved feedback is explicit in Prompt and Workflow editors.
+- Current deterministic/live strategy: UI-only changes require static/browser regression; runtime contract changes require deterministic runtime/API/YAML tests; Qwen live probes are added only when behavior depends on the real backend/session/process boundary.
+
+- Chat runtime header now projects durable cycle / workflow position / last semantic transition from the same state.json used by CLI/YAML runs; no second monitoring state was introduced.
+- Shared confirmation/input/choice dialogs now restore focus to their trigger after close and support Escape consistently.
+
+- Problems panel was already present in current source and Browser E2E: duplicate keys, missing START/route/target, Handoff without target and unreachable Stages are surfaced before Save; error blocks Save and warning remains visible.
+- Composer already follows the compact contract: Workflow + Run primary; backend/validator/AI validator/environment checks live under Options.
+- Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
+
+- Workflow Problems panel already validates duplicate/missing flow targets, empty Handoff targets and unreachable Stages at Save boundary, blocks errors, keeps warnings visible, and focuses the affected Stage.
+- Composer already keeps Workflow + Run primary while Backend/validators/environment checks stay under Options.
+- Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
+
+- Designer output handles are now explicitly kept above existing edges with pointer hit priority so PASS/FAIL/HANDOFF can be re-used for additional connections after an edge already exists. Browser Handoff multi-target E2E remains the verification gate before this is considered closed.
+
+P1 IMPLEMENTATION EVIDENCE
+--------------------------
+[x] Edge-to-empty Browser E2E:
+    drag PASS handle to empty canvas -> choose Stage type -> create Stage -> Save -> canonical YAML -> production workflow_dryrun PASS.
+[x] Test-path Browser E2E:
+    start from selected Stage -> /api/studio/path/test -> saved canonical Workflow + workflow_dryrun/FlowEngine;
+    prior Stages are not executed and no second runtime is introduced.
+
+
+BROWSER E2E CONTRACT NOTES
+--------------------------
+[x] Browser E2E selectors now follow stable product contracts:
+    - Prompts and Workflows share the same asset workspace (#workflowView); tests no longer wait for removed #promptView.
+    - Stage Editor tabs expose data-inspector-tab so browser tests are locale-independent and do not depend on English labels.
+    - This is test-contract hardening only; production navigation semantics were not changed.
+
+
+RESOURCE BOUND EVIDENCE
+-----------------------
+[x] Bounded debug-history retention is now deterministic:
+    HistoryObserver trims to <=100 model call pairs and <=50 MiB; tests cover both count and byte budget.
+[x] Soak resource sampling records start/max/end and merges each iteration's project state metrics.
+[x] Dynamic child replacement cleanup has deterministic regression for durable and process-local session state.
+
+ARTIFACT REFRESH EVIDENCE (2026-10-05)
+--------------------------------------
+[x] Rebuilt Workflow Studio from ui/studio-src/** using npm ci + npm run build; generated JS/CSS was not hand-edited.
+[x] Refreshed project.bundle.txt using tool/bundle.py pack + verify after removing node_modules and transient TypeScript build-info.
+[x] The one-shot artifact-refresh workflow removes itself before packing/committing, so it is not retained in the repository or canonical bundle.

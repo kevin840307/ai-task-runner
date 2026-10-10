@@ -103,3 +103,38 @@ def test_console_observer_creates_outer_runtime_for_first_yaml_item(tmp_path):
     assert payload["script_index"] == 1
     assert payload["script_total"] == 6
     assert payload["script_status"] == "running"
+
+
+def test_console_snapshot_carries_structured_recovery_and_effective_model(tmp_path):
+    runtime = SimpleNamespace(config=SimpleNamespace(human_output=False), work=tmp_path)
+    observer = ConsoleObserver(runtime)
+    state = _state(tmp_path)
+
+    observer({"type": "runner.progress", "action": "bind", "state": state})
+    observer({
+        "type": "model.prompt",
+        "backend": "qwen",
+        "model": "stage-model",
+    })
+    observer({
+        "type": "runner.recovery",
+        "action": "retry",
+        "retry_mode": "recover",
+        "retry": 2,
+        "wait_seconds": 4,
+        "error": "HTTP 503",
+    })
+
+    payload = json.loads((tmp_path / "console-view.json").read_text(encoding="utf-8"))
+    assert payload["effective_backend"] == "qwen"
+    assert payload["effective_model"] == "stage-model"
+    assert payload["recovery"] == {
+        "retry_mode": "recover",
+        "retry": 2,
+        "wait_seconds": 4.0,
+        "error": "HTTP 503",
+    }
+
+    observer({"type": "runner.stage", "action": "finish", "state": state})
+    payload = json.loads((tmp_path / "console-view.json").read_text(encoding="utf-8"))
+    assert payload["recovery"] == {}

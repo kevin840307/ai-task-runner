@@ -1,14 +1,20 @@
 from dataclasses import dataclass
 
+from runner.errors import RunnerError
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
-from runner.workflow.stages import AIValidatorStage, BaseStage, CommandStage, PlanStage, ReviewStage, TaskStage
+from runner.workflow.stages import (
+    AIValidatorStage,
+    BaseStage,
+    CommandStage,
+    HandoffStage,
+    PlanStage,
+)
 
 
 def test_registry_contains_only_behavior_types():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
-        "task": TaskStage,
-        "review": ReviewStage,
+        "handoff": HandoffStage,
         "ai_validator": AIValidatorStage,
         "command": CommandStage,
         "plan": PlanStage,
@@ -40,18 +46,24 @@ def test_custom_stage_registration_is_type_to_class_only():
     assert stage.spec.value == 7
 
 
-def test_routing_metadata_is_not_copied_to_stage():
-    stage = create_stage({"name": "write", "status": "Write", "recover": [{"name": "execute"}], "restart_at": "write", "label": "Concrete work"})
-    assert not hasattr(stage, "recover")
-    assert not hasattr(stage, "workflow")
-    assert not hasattr(stage, "restart_at")
+def test_graph_metadata_is_not_copied_to_stage_behavior():
+    stage = create_stage({
+        "name": "write",
+        "status": "Write",
+        "label": "Concrete work",
+        "routes": {"fail": "stop"},
+    })
     assert not hasattr(stage, "label")
+    assert not hasattr(stage, "routes")
 
 
 def test_yaml_references_expose_only_structured_parsers():
-    from runner.workflow.result_parsers import PARSERS
-    import runner.workflow.rules as rules
+    from runner.workflow.results import PARSERS
     assert set(PARSERS) == {"review", "validation"}
-    assert not hasattr(rules, "RESULT_HANDLERS")
-    assert not hasattr(rules, "STATUS_RESOLVERS")
-    assert not hasattr(rules, "CONDITIONS")
+
+
+def test_scope_is_rejected_as_removed_contract():
+    import pytest
+    from runner.errors import ConfigurationError
+    with pytest.raises((RunnerError, ConfigurationError, TypeError, ValueError)):
+        create_stage({"name": "legacy", "type": "base", "scope": "task"})

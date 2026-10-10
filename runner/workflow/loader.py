@@ -1,4 +1,4 @@
-"""Load declarative Workflow YAML into normalized flow nodes."""
+"""Load declarative Workflow YAML into normalized Stage nodes."""
 
 from __future__ import annotations
 
@@ -8,39 +8,37 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from ..assets import PROMPT_DIR, WORKFLOW_DIR
 from ..errors import RunnerError
-from ..utils.files import io_path
 from ..resources import write_text
+from ..utils import io_path
+from .profiles import apply_ai_profile_defaults
 from .schema import (
-    validate_restart_targets,
+    validate_routes,
     validate_stage,
-    validate_topology,
-    workflow_has_task_producer,
     workflow_validators,
 )
-SYSTEM_WORKFLOW_DIR = Path(__file__).with_name("system")
-CUSTOM_WORKFLOW_DIR = Path(__file__).with_name("custom")
-SYSTEM_WORKFLOWS = {
-    "mixed": SYSTEM_WORKFLOW_DIR / "mixed.yaml",
-    "file": SYSTEM_WORKFLOW_DIR / "file.yaml",
-    "ai": SYSTEM_WORKFLOW_DIR / "ai.yaml",
-    "workflow_builder": SYSTEM_WORKFLOW_DIR / "workflow_builder.yaml",
+
+WORKFLOWS = {
+    "mixed": WORKFLOW_DIR / "mixed.yaml",
+    "file": WORKFLOW_DIR / "file.yaml",
+    "ai": WORKFLOW_DIR / "ai.yaml",
+    "dynamic_handoff": WORKFLOW_DIR / "dynamic_handoff.yaml",
+    "ralphy_ai_validate": WORKFLOW_DIR / "ralphy_ai_validate.yaml",
 }
-DEFAULT_WORKFLOW = SYSTEM_WORKFLOWS["mixed"]
+DEFAULT_WORKFLOW = WORKFLOWS["mixed"]
 
 
 def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
     source = Path(path).expanduser() if path else DEFAULT_WORKFLOW
     try:
         import yaml
+        data = yaml.safe_load(io_path(source).read_text(encoding="utf-8"))
     except ImportError as error:
         raise RunnerError("Workflow YAML requires PyYAML: pip install PyYAML") from error
-    try:
-        data = yaml.safe_load(io_path(source).read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError(f"invalid workflow YAML: {error}") from error
     return normalize_workflow(data, source.resolve())
-
 
 
 def save_workflow(
@@ -49,28 +47,28 @@ def save_workflow(
     *,
     expected_hash: str | None = None,
 ) -> str:
-    """Validate Workflow text with the real loader contract, then atomically save it."""
     target = Path(path).expanduser().resolve()
 
     def validate(source_text: str) -> None:
         try:
             import yaml
+            data = yaml.safe_load(source_text)
         except ImportError as error:
             raise RunnerError("Workflow YAML requires PyYAML: pip install PyYAML") from error
-        try:
-            data = yaml.safe_load(source_text)
         except yaml.YAMLError as error:
             raise RunnerError(f"invalid workflow YAML: {error}") from error
         normalize_workflow(data, target)
 
     return write_text(target, text, expected_hash=expected_hash, validate=validate)
 
+
 def load_default_workflow(
-    validator: str | None, ai_validator_prompt: str = ""
+    validator: str | None,
+    ai_validator_prompt: str = "",
 ) -> list[dict[str, Any]]:
-    return load_workflow(SYSTEM_WORKFLOWS[
-        default_workflow_name(validator, ai_validator_prompt)
-    ])
+    return load_workflow(
+        WORKFLOWS[default_workflow_name(validator, ai_validator_prompt)]
+    )
 
 
 def default_workflow_name(
@@ -79,9 +77,7 @@ def default_workflow_name(
 ) -> str:
     if isinstance(validator, str) and validator.lower() == "ai":
         return "ai"
-    if ai_validator_prompt.strip():
-        return "mixed"
-    return "file"
+    return "mixed" if ai_validator_prompt.strip() else "file"
 
 
 def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
@@ -90,175 +86,62 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
     unknown = sorted(str(key) for key in data if key not in {"stages", "flow"})
     if unknown:
         raise RunnerError(
-            f"workflow supports only stages and flow; unknown keys: {', '.join(unknown)}"
+            "workflow supports only stages and flow; unknown keys: "
+            + ", ".join(unknown)
         )
-    raw_stages, raw_flow = data.get("stages", {}), data.get("flow")
-    if not isinstance(raw_stages, dict):
-        raise RunnerError("workflow.stages must be an object")
+
+    raw_stages = data.get("stages")
+    raw_flow = data.get("flow")
+    if not isinstance(raw_stages, dict) or not raw_stages:
+        raise RunnerError("workflow.stages must be a non-empty object")
+    if not isinstance(raw_flow, list) or not raw_flow:
+        raise RunnerError("workflow.flow must be a non-empty array")
 
     stages = {
         str(name): _normalize_stage(name, definition, source)
         for name, definition in raw_stages.items()
     }
-    result = _normalize_sequence(raw_flow, stages, top_level=True, source=source)
-    result = _expand_plan_task_flow(result, stages, source)
+
+    names: list[str] = []
+    for item in raw_flow:
+        if not isinstance(item, str) or not item.strip():
+            raise RunnerError("workflow.flow must contain only Stage names")
+        name = item.strip()
+        if name not in stages:
+            raise RunnerError(f"unknown workflow stage: {name}")
+        names.append(name)
+
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise RunnerError(
+            "workflow.flow Stage names must be unique; use routes for loops: "
+            + ", ".join(duplicates)
+        )
+
+    result = [deepcopy(stages[name]) for name in names]
     for index, node in enumerate(result):
         node["_workflow_index"] = index
-    validate_restart_targets(result, True)
-    validate_topology(result)
+
+    validate_routes(result)
     return result
 
-
-
-def _expand_plan_task_flow(
-    flow: list[dict[str, Any]],
-    stages: dict[str, dict[str, Any]],
-    source: Path,
-) -> list[dict[str, Any]]:
-    """Attach Plan's built-in per-TODO task/review lifecycle.
-
-    A normal PlanStage is intentionally self-contained: it produces TODOs and
-    every TODO runs through built-in Task -> Review. Review failure routes
-    directly back to Task; there is no separate repair Stage.
-
-    Advanced/custom task producers can still declare an explicit contiguous
-    ``scope: task`` SOP immediately after the producer; in that case the
-    explicit YAML SOP wins and no built-in block is injected.
-    """
-    result: list[dict[str, Any]] = []
-    for index, node in enumerate(flow):
-        result.append(node)
-        if node.get("type") != "plan":
-            continue
-        if index + 1 < len(flow) and flow[index + 1].get("scope") == "task":
-            continue
-        result.extend(_builtin_plan_task_flow(source))
-    return result
-
-
-def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
-    """Return the reserved, YAML-independent TODO execution lifecycle."""
-    task = _normalize_stage(
-        "__plan_task__",
-        {
-            "type": "task",
-            "status": "AI 正在處理目前任務",
-            "routes": {"error": "next"},
-        },
-        source,
-    )
-    task["scope"] = "task"
-
-    review = _normalize_stage(
-        "__plan_review__",
-        {
-            "type": "review",
-            "status": "AI 正在確認任務是否完成",
-            "readonly_safety": "observe",
-        },
-        source,
-    )
-    review["scope"] = "task"
-    review["routes"] = {"fail": "__plan_task__"}
-    return [task, review]
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:
     if not isinstance(name, str) or not name.strip():
         raise RunnerError("workflow stage name must be a non-empty string")
     if not isinstance(definition, dict):
         raise RunnerError(f"workflow stage {name} must be an object")
-    if "label" in definition:
-        raise RunnerError(f"workflow stage {name} label belongs to flow nodes")
-    if "scope" in definition:
-        raise RunnerError(f"workflow stage {name} scope belongs to flow nodes")
     values = deepcopy(definition)
-    _upgrade_legacy_stage(values)
     values.setdefault("type", "base")
     values["name"] = name
+    apply_ai_profile_defaults(values)
     instructions_file = values.pop("instructions_file", None)
     if instructions_file is not None:
         values["instructions"] = _read_text(instructions_file, source, name)
-    _resolve_local_prompts(values, source)
+    _resolve_local_prompt(values, source)
     validate_stage(name, values)
     return values
 
-
-
-def _upgrade_legacy_stage(values: dict[str, Any]) -> None:
-    """Normalize pre-1.2.56 implementation knobs into semantic Stage types."""
-    if "max_results" in values and "repeat" not in values:
-        values["repeat"] = values.pop("max_results")
-
-    handler = values.pop("result_handler", None)
-    status = values.pop("result_status", None)
-    condition = values.pop("condition", None)
-    stage_type = values.get("type")
-    validator = values.get("validator")
-
-    if not stage_type:
-        if handler == "plan":
-            stage_type = "plan"
-        elif handler == "task":
-            stage_type = "task"
-        elif handler == "review" or status == "completed":
-            stage_type = "review"
-        elif validator == "ai" or (handler == "validation" and status == "validation"):
-            stage_type = "ai_validator"
-        else:
-            stage_type = "base"
-    elif stage_type == "base" and validator == "ai":
-        stage_type = "ai_validator"
-    values["type"] = stage_type
-
-    if status not in (None, "completed", "validation"):
-        raise RunnerError(f"unsupported legacy result_status: {status}")
-    if handler not in (None, "plan", "task", "review", "validation"):
-        raise RunnerError(f"unsupported legacy result_handler: {handler}")
-    if condition not in (None, "ai_validation"):
-        raise RunnerError(f"unsupported legacy condition: {condition}")
-    if condition == "ai_validation" and stage_type != "ai_validator":
-        raise RunnerError("condition: ai_validation requires an AI validator Stage")
-
-    session_key = values.pop("client_cache_key", None)
-    if session_key:
-        values.setdefault("session_key", session_key)
-
-    expected_backend = {
-        "plan": "planning",
-        "review": "review",
-        "ai_validator": "review",
-    }.get(stage_type, "runtime")
-    backend = values.pop("backend_mode", None)
-    if backend not in (None, expected_backend):
-        raise RunnerError(
-            f"legacy backend_mode {backend!r} does not match type: {stage_type}"
-        )
-
-    expected_timeout = {
-        "plan": "planning_timeout",
-        "review": "planning_timeout",
-    }.get(stage_type, "agent_timeout")
-    timeout_attr = values.pop("timeout_attr", None)
-    if timeout_attr not in (None, expected_timeout):
-        raise RunnerError(
-            f"legacy timeout_attr {timeout_attr!r} is no longer configurable; use timeout"
-        )
-
-    expected_retry = "review_retries" if stage_type == "review" else ""
-    retry_attr = values.pop("retry_attr", None)
-    if retry_attr not in (None, "", expected_retry):
-        raise RunnerError(
-            f"legacy retry_attr {retry_attr!r} is no longer configurable; use retry"
-        )
-
-    runs_field = values.pop("runs_field", None)
-    required_field = values.pop("required_passes_field", None)
-    if runs_field not in (None, "", "final_ai_validations"):
-        raise RunnerError("legacy runs_field is no longer configurable; use runs")
-    if required_field not in (None, "", "final_ai_required_passes"):
-        raise RunnerError(
-            "legacy required_passes_field is no longer configurable; use required_passes"
-        )
 
 def _read_text(value: Any, source: Path, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
@@ -275,73 +158,21 @@ def _read_text(value: Any, source: Path, name: str) -> str:
     return text
 
 
-def _resolve_local_prompts(values: dict[str, Any], source: Path) -> None:
-    for key in ("prompt",):
-        value = values.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        path = Path(value).expanduser()
-        if path.is_absolute():
-            continue
-        local = source.parent / path
-        if local.is_file():
-            values[key] = str(local.resolve())
-
-
-def _normalize_sequence(
-    data: Any,
-    stages: dict[str, dict[str, Any]],
-    *,
-    top_level: bool = False,
-    stack: tuple[str, ...] = (),
-    source: Path,
-) -> list[dict[str, Any]]:
-    if isinstance(data, str):
-        data = [data]
-    if not isinstance(data, (list, tuple)) or not data:
-        raise RunnerError("workflow flow must be a non-empty YAML array")
-
-    result = []
-    for index, item in enumerate(data):
-        node = _normalize_invocation(item, stages, stack, source)
-        if top_level:
-            node["_workflow_index"] = index
-        result.append(node)
-    validate_restart_targets(result, top_level)
-    return result
-
-
-def _normalize_invocation(
-    item: Any,
-    stages: dict[str, dict[str, Any]],
-    stack: tuple[str, ...],
-    source: Path,
-) -> dict[str, Any]:
-    if isinstance(item, str):
-        ref, overrides = item, {}
-    elif isinstance(item, dict):
-        ref = item.get("stage")
-        overrides = {key: value for key, value in item.items() if key != "stage"}
-    else:
-        raise RunnerError("workflow flow item must be a stage name or object")
-    if not isinstance(ref, str) or ref not in stages:
-        raise RunnerError(f"unknown workflow stage instance: {ref}")
-
-    node = deepcopy(stages[ref])
-    if "skip" in overrides and "skip_on_error" not in overrides:
-        overrides["skip_on_error"] = bool(overrides.pop("skip"))
-    if "max_results" in overrides and "repeat" not in overrides:
-        overrides["repeat"] = overrides.pop("max_results")
-    node.update(overrides)
-    _resolve_local_prompts(node, source)
-    validate_stage(str(node.get("name", ref)), node)
-    if node.get("recover"):
-        if ref in stack:
-            raise RunnerError(f"cyclic workflow routing: {' -> '.join((*stack, ref))}")
-        node["recover"] = _normalize_sequence(
-            node["recover"], stages, stack=(*stack, ref), source=source
-        )
-    return node
+def _resolve_local_prompt(values: dict[str, Any], source: Path) -> None:
+    value = values.get("prompt")
+    if not isinstance(value, str) or not value.strip():
+        return
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return
+    candidates = [source.parent / path]
+    if source.parent.name == "workflows":
+        candidates.append(source.parent.parent / "prompts" / path)
+    candidates.append(PROMPT_DIR / path)
+    for candidate in candidates:
+        if candidate.is_file():
+            values["prompt"] = str(candidate.resolve())
+            return
 
 
 def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
@@ -352,16 +183,14 @@ def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
 
 
 __all__ = [
-    "SYSTEM_WORKFLOW_DIR",
-    "CUSTOM_WORKFLOW_DIR",
-    "SYSTEM_WORKFLOWS",
     "DEFAULT_WORKFLOW",
+    "WORKFLOW_DIR",
+    "WORKFLOWS",
     "default_workflow_name",
     "load_default_workflow",
     "load_workflow",
     "normalize_workflow",
     "save_workflow",
     "workflow_fingerprint",
-    "workflow_has_task_producer",
     "workflow_validators",
 ]

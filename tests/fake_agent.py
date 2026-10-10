@@ -25,7 +25,8 @@ elif stage == "plan_judge":
 elif stage == "execute":
     (root/'done.txt').write_text('done'); answer='created done.txt'
 elif stage == "review":
-    answer=json.dumps({'completed':(root/'done.txt').exists(),'reason':'checked','missing_items':[]})
+    completed = (root/'done.txt').exists()
+    answer=json.dumps({'completed':completed,'reason':'checked','missing_items':[] if completed else ['done.txt is missing']})
 elif stage == "validator":
     answer=json.dumps({'passed':(root/'done.txt').exists(),'reason':'independent check','missing_items':[]})
 else:

@@ -1,14 +1,15 @@
-# Default autonomous AI workflow.
-# Planning creates TODOs and owns the built-in Task -> Review lifecycle.
 stages:
   planning:
     type: plan
 
+
+
   validate_ai:
     type: ai_validator
     validator: ai
+    routes:
+      fail: planning
 
 flow:
   - planning
-  - stage: validate_ai
-    restart_at: planning
+  - validate_ai

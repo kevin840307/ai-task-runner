@@ -85,7 +85,7 @@ def test_live_cross_process_project_registration_preserves_all_projects(tmp_path
 
     code = (
         "from pathlib import Path; "
-        "from runner.ui_projects import register_ui_project; "
+        "from runner.workspace import register_ui_project; "
         "import sys; "
         "register_ui_project(Path(sys.argv[2]), project_name=sys.argv[3], repo_root=Path(sys.argv[1]))"
     )
@@ -120,7 +120,7 @@ from pathlib import Path
 import sys
 from ai_task_runner import parser
 from runner.api import RunRequest
-from runner.ui_projects import register_ui_project
+from runner.workspace import register_ui_project
 args = parser().parse_args([
     "--goal", "x",
     "--project-root", sys.argv[2],
@@ -156,8 +156,7 @@ def test_live_yaml_project_name_overrides_outer_default(tmp_path: Path) -> None:
 from pathlib import Path
 import sys
 from runner.api import RunRequest
-from runner.script_loader import load_yaml_script
-from runner.script_runner import build_script_item_config
+from runner.script import build_script_item_config, load_yaml_script
 outer = RunRequest(project_root=sys.argv[2], project_name="Outer Name", script=sys.argv[1], validator="ai").normalized_config()
 item = load_yaml_script(Path(sys.argv[1]))[0]
 child = build_script_item_config(outer, item, 1)

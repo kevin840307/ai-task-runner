@@ -1,59 +1,76 @@
 from pathlib import Path
 
 from runner.workflow.registry import STAGE_REGISTRY
-from runner.workflow.stages import AIValidatorStage, BaseStage, CommandStage, PlanStage, ReviewStage, TaskStage
+from runner.workflow.stages import (
+    AIValidatorStage,
+    BaseStage,
+    CommandStage,
+    HandoffStage,
+    PlanStage,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_stage_ownership_is_inside_workflow():
-    assert not (ROOT / "runner/stages").exists()
-    stages = ROOT / "runner/workflow/stages"
-    assert stages.is_dir()
-    for name in ("contracts.py", "executor.py", "base_stage.py", "ai_stage.py", "plan_stage.py", "command.py"):
-        assert (stages / name).is_file()
-    assert not (stages / "factory.py").exists()
+def test_stage_implementation_files_are_small_in_number():
+    stages = ROOT / "runner" / "workflow" / "stages"
+    assert {
+        "base_stage.py",
+        "plan_stage.py",
+        "ai_validator_stage.py",
+        "command_stage.py",
+        "handoff_stage.py",
+        "__init__.py",
+    } == {path.name for path in stages.glob("*.py")}
 
 
 def test_workflow_has_one_minimal_type_registry():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
-        "task": TaskStage,
-        "review": ReviewStage,
+        "handoff": HandoffStage,
         "ai_validator": AIValidatorStage,
         "command": CommandStage,
         "plan": PlanStage,
     }
 
 
-def test_workflow_runtime_has_clear_canonical_modules():
+def test_workflow_runtime_has_only_current_canonical_modules():
     workflow = ROOT / "runner" / "workflow"
-    for name in (
-        "flow_engine.py",
+    for name in ("contracts.py", "flow_engine.py", "dynamic_expansion.py", "results.py", "loader.py", "schema.py", "registry.py"):
+        assert (workflow / name).is_file()
+    assert (workflow / "execution" / "stage_executor.py").is_file()
+    assert not (workflow / "stage_executor.py").exists()
+
+    for removed in (
+        "lifecycle.py",
+        "reducers.py",
         "linear_routing.py",
         "semantic_routing.py",
-        "reducers.py",
+        "pipeline.py",
+        "routing.py",
+        "recovery.py",
+        "rules.py",
     ):
-        assert (workflow / name).is_file()
-
-    # Compatibility shims may remain, but canonical runtime behavior belongs in
-    # the responsibility-matched modules above.
-    assert (ROOT / "runner" / "workflow_runner.py").is_file()
-    assert (ROOT / "runner" / "task_runner.py").is_file()
-    assert (workflow / "pipeline.py").is_file()
-    assert (workflow / "routing.py").is_file()
-    assert (workflow / "recovery.py").is_file()
-    assert (workflow / "rules.py").is_file()
+        assert not (workflow / removed).exists()
 
 
 def test_ui_workflow_studio_domain_is_not_implemented_in_server():
     server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
     studio = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
-
     assert "class WorkflowStudioMixin:" in studio
     assert "class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):" in server
-    assert "    def studio_files(" not in server
-    assert "    def studio_save(" not in server
-    assert "    def studio_visual_save(" not in server
-    assert "    def studio_stage_save(" not in server
-    assert "    def studio_validate(" not in server
+    for method in (
+        "studio_files",
+        "studio_save",
+        "studio_visual_save",
+        "studio_stage_save",
+        "studio_validate",
+    ):
+        assert f"    def {method}(" not in server
+
+
+def test_dead_execution_mode_endpoint_is_removed():
+    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+    runtime = (ROOT / "ui" / "project_runtime_state.py").read_text(encoding="utf-8")
+    assert "/api/execution-modes" not in server
+    assert "def execution_mode_catalog(" not in runtime

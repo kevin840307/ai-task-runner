@@ -3,22 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .ai.client import create_ai_client
+from .agent import create_ai_client
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
-from .project.files import cleanup_stale_artifacts
-from .runtime import progress
+from .workspace import cleanup_stale_artifacts, register_ui_project
+from .runtime import events as progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
-from .ui_projects import register_ui_project
 from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
-from .workflow.snapshot import (
-    freeze_run_resource,
-    freeze_workflow,
-    load_run_resource,
-    load_snapshot,
-)
-from .workflow.stages import StageContext, StageExecutor
+from .resources import freeze_run_resource, freeze_workflow, load_run_resource, load_snapshot
+from .workflow.execution import StageExecutor
+from .workflow.stages import StageContext
 
 
 class WorkflowRunner:
@@ -36,8 +31,6 @@ class WorkflowRunner:
         self.context = self._build_context()
         self.flow_engine = build_flow_engine(self.context)
 
-        # Compatibility attribute for older extensions/tests.
-        self.pipeline = self.flow_engine
         self.stage_executor = StageExecutor()
 
     def _validate_request(self) -> None:
@@ -70,8 +63,9 @@ class WorkflowRunner:
     def _bind_workflow_snapshot(self) -> None:
         if self.config.resume and not self.config.force_new:
             frozen = load_snapshot(self.root, self.config.work_dir)
-            if frozen is not None:
-                self.config.workflow = frozen
+            if frozen is None:
+                raise ConfigurationError("resume workflow snapshot not found")
+            self.config.workflow = frozen
             return
 
         self.config.workflow = freeze_workflow(
@@ -85,7 +79,6 @@ class WorkflowRunner:
             self.config.goal,
             resume=self.config.resume,
             force_new=self.config.force_new,
-            execution_mode=self.config.execution_mode,
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
@@ -94,6 +87,47 @@ class WorkflowRunner:
             )
         self._new_workflow_fingerprint = not self.state.workflow_fingerprint
         self.state.workflow_fingerprint = fingerprint
+        if self.config.resume and not self.config.force_new:
+            self._validate_resume_state()
+
+    def _validate_resume_state(self) -> None:
+        """Fail closed when durable execution state cannot safely map to its frozen Workflow."""
+        from .workflow.schema import validate_routes
+
+        workflow = self.state.expanded_workflow or self.config.workflow
+        if not workflow:
+            raise ConfigurationError("resume workflow is empty")
+        if self.state.workflow_position > len(workflow):
+            raise ConfigurationError("resume workflow_position is outside the saved Workflow")
+
+        names = [
+            str(item.get("name", "") or "")
+            for item in workflow
+            if isinstance(item, dict)
+        ]
+        if len(names) != len(workflow) or any(not name for name in names):
+            raise ConfigurationError("resume Workflow contains an invalid Stage")
+        if len(set(names)) != len(names):
+            raise ConfigurationError("resume Workflow contains duplicate Stage names")
+        try:
+            validate_routes(workflow)
+        except RunnerError as error:
+            raise ConfigurationError(f"invalid resume Workflow: {error}") from error
+
+        name_set = set(names)
+        task_ids = {task.id for task in self.state.tasks}
+        for item in workflow:
+            task_id = str(item.get("_dynamic_task_id", "") or "")
+            if task_id and task_id not in task_ids:
+                raise ConfigurationError(
+                    f"resume dynamic Stage references unknown task: {task_id}"
+                )
+        unknown_sessions = sorted(set(self.state.stage_sessions) - name_set)
+        if unknown_sessions:
+            raise ConfigurationError(
+                "resume state has sessions for unknown Stages: "
+                + ", ".join(unknown_sessions)
+            )
 
     def _prepare_ai_client(self) -> None:
         self.ai_client = create_ai_client(
@@ -154,16 +188,7 @@ class WorkflowRunner:
             setattr(self.config, content_attr, text)
 
     def run(self) -> int:
-        if self.config.plan_only and self.state.tasks:
-            progress.set_status(
-                "Plan ready",
-                "plan-only completed without execution",
-            )
-            return 0
-        return self.flow_engine.run(
-            self.stage_executor,
-            plan_only=self.config.plan_only,
-        )
+        return self.flow_engine.run(self.stage_executor)
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir() or (

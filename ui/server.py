@@ -37,7 +37,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._builder_lock = threading.RLock()
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
-        self._projects_payload_cache: tuple[int, float, dict] | None = None
+        self._workflow_catalog_cache: dict | None = None
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
@@ -62,13 +62,21 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/projects":
-                return self._json(self.state.projects_payload())
+                query = parse_qs(parsed.query)
+                return self._json(
+                    self.state.projects_payload(
+                        exclude_runtime_path=query.get("exclude_runtime", [""])[0]
+                    )
+                )
             if parsed.path == "/api/backends":
-                return self._json(self.state.backend_catalog())
+                query = parse_qs(parsed.query)
+                project = self._optional_project(query.get("project", [""])[0])
+                include_models = query.get("models", ["0"])[0] == "1"
+                return self._json(
+                    self.state.backend_catalog(project, include_models=include_models)
+                )
             if parsed.path == "/api/workflow/catalog":
                 return self._json(self.state.workflow_catalog())
-            if parsed.path == "/api/execution-modes":
-                return self._json(self.state.execution_mode_catalog())
             if parsed.path == "/api/environment/check":
                 return self._json(self.state.environment_check())
             if parsed.path == "/api/studio/files":
@@ -126,7 +134,11 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/projects/pick":
                 return self._pick_folder()
             if parsed.path == "/api/files/pick":
-                return self._pick_file(str(body.get("kind", "file")))
+                return self._pick_file(
+                    str(body.get("kind", "file")),
+                    project=str(body.get("project", "")),
+                    current=str(body.get("current", "")),
+                )
             if parsed.path == "/api/project/message":
                 project = self._project(body)
                 text = str(body.get("message", "")).strip()
@@ -149,22 +161,9 @@ class Handler(SimpleHTTPRequestHandler):
                     reset_stopped=bool(body.get("reset_stopped")),
                 ))
             if parsed.path == "/api/project/stop":
-                self.state.stop(self._project(body))
-                return self._json({"ok": True})
+                return self._json(self.state.stop(self._project(body)))
             if parsed.path == "/api/project/resume":
-                project = self._project(body)
-                request = self.state._latest_run_request(project)
-                self.state.launch(
-                    project,
-                    None,
-                    mode="resume",
-                    backend=str(request.get("backend") or ""),
-                    model=str(request.get("model") or ""),
-                    validator=str(request.get("validator") or ""),
-                    workflow=str(request.get("workflow") or ""),
-                    execution_mode=str(request.get("execution_mode") or "linear"),
-                    readonly_safety=str(request.get("readonly_safety") or "restore"),
-                )
+                self.state.resume(self._project(body))
                 return self._json({"ok": True})
             if parsed.path == "/api/project/reset":
                 return self._json(self.state.reset_runtime(self._project(body)))
@@ -180,24 +179,22 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/studio/generate":
-                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", "")), str(body.get("folder", "")), str(body.get("filename", ""))))
+                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", "")), str(body.get("filename", ""))))
             if parsed.path == "/api/studio/generate/validate":
                 return self._json(self.state.studio_generate_validate(str(body.get("job_id", "")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/save":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("folder", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "custom")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
+                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "global")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/cancel":
                 return self._json(self.state.studio_generate_cancel(str(body.get("job_id", ""))))
             if parsed.path == "/api/studio/generate/discard":
                 return self._json(self.state.studio_generate_discard(str(body.get("job_id", ""))))
-            if parsed.path == "/api/studio/custom-folder/create":
-                return self._json(self.state.studio_custom_folder_create(str(body.get("kind", "")), str(body.get("folder", ""))))
             if parsed.path == "/api/studio/workflow/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/prompt/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/delete":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_delete(str(body.get("id", "")), project))
@@ -206,14 +203,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_rename(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/duplicate":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project, str(body.get("folder", ""))))
-            if parsed.path == "/api/studio/import/inspect":
-                return self._json(self.state.studio_folder_inspect(str(body.get("content", ""))))
+                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/import":
-                if str(body.get("kind", "")).strip().lower() == "workflow_folder":
-                    return self._json(self.state.studio_folder_import(str(body.get("content", ""))))
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/prompt/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_prompt_check(str(body.get("id", "")), str(body.get("content", "")), project))
@@ -231,25 +224,76 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/visual/save":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_visual_save(str(body.get("id", "")), body.get("flow", []), str(body.get("hash", "")), project))
+            if parsed.path == "/api/studio/graph/save":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_graph_save(
+                    str(body.get("id", "")),
+                    body.get("graph", {}),
+                    str(body.get("hash", "")),
+                    project,
+                ))
+            if parsed.path == "/api/studio/stage/source":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_stage_source(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("mode", "")),
+                    project,
+                    fields=body.get("fields"),
+                    source=str(body.get("source", "")),
+                ))
             if parsed.path == "/api/studio/stage/validate":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_save(
-                    str(body.get("id", "")), str(body.get("stage", "")), body.get("fields", {}), str(body.get("hash", "")), project,
-                    flow_index=body.get("flow_index"), scope=str(body.get("scope", "")), flow_fields=body.get("flow_fields", {}), validate_only=True,
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    body.get("fields", {}),
+                    str(body.get("hash", "")),
+                    project,
+                    validate_only=True,
                 ))
             if parsed.path == "/api/studio/stage/save":
                 project = self._optional_project(str(body.get("project", "")))
-                flow_index = body.get("flow_index")
-                flow_index = int(flow_index) if flow_index is not None else None
-                return self._json(self.state.studio_stage_save(str(body.get("id", "")), str(body.get("stage", "")), body.get("fields", {}), str(body.get("hash", "")), project, flow_index=flow_index, scope=str(body.get("scope", "")), flow_fields=body.get("flow_fields", {})))
+                return self._json(self.state.studio_stage_save(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    body.get("fields", {}),
+                    str(body.get("hash", "")),
+                    project,
+                ))
+            if parsed.path == "/api/studio/path/test":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_path_test(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    project,
+                ))
+            if parsed.path == "/api/studio/stage/test":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_stage_test(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("input", "")),
+                    project,
+                    backend=str(body.get("backend", "")),
+                    probe_mode=str(body.get("probe_mode", "stage")),
+                    test_scenario=str(body.get("test_scenario", "pass")),
+                    graph=body.get("graph"),
+                    test_id=str(body.get("test_id", "")),
+                ))
+            if parsed.path == "/api/studio/stage/test/cancel":
+                return self._json(self.state.studio_stage_test_cancel(str(body.get("test_id", ""))))
             if parsed.path == "/api/studio/stage/add":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_add(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("type", "base")), str(body.get("hash", "")), project, status=str(body.get("status", "")), prompt=str(body.get("prompt", "")), command=str(body.get("command", "")), add_to_flow=bool(body.get("add_to_flow", True))))
             if parsed.path == "/api/studio/stage/delete":
                 project = self._optional_project(str(body.get("project", "")))
-                flow_index = body.get("flow_index")
-                flow_index = int(flow_index) if flow_index is not None else None
-                return self._json(self.state.studio_stage_delete(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("hash", "")), project, flow_index=flow_index))
+                return self._json(self.state.studio_stage_delete(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("hash", "")),
+                    project,
+                ))
             if parsed.path == "/api/studio/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_check(str(body.get("id", "")), str(body.get("content", "")), project))
@@ -283,23 +327,47 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"cancelled": True})
         return self._json({"cancelled": False, "path": str(Path(path).expanduser().resolve())})
 
-    def _pick_file(self, kind: str = "file") -> None:
+    def _pick_file(
+        self,
+        kind: str = "file",
+        *,
+        project: str = "",
+        current: str = "",
+    ) -> None:
         try:
             import tkinter as tk
             from tkinter import filedialog
+
+            initialdir = ""
+            current_path = Path(str(current or "")).expanduser()
+            if current_path.is_file():
+                initialdir = str(current_path.resolve().parent)
+            else:
+                project_path = Path(str(project or "")).expanduser()
+                if project_path.is_dir():
+                    project_path = project_path.resolve()
+                    prompt_root = project_path / ".ai-task-runner" / "assets" / "prompts"
+                    initialdir = str(
+                        prompt_root if kind == "markdown" and prompt_root.is_dir()
+                        else project_path
+                    )
+
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
             if kind == "python":
                 filetypes = [("Python validation", "*.py"), ("All files", "*.*")]
-                title = "Choose Python validation"
+                title = "Choose File Validator"
             elif kind == "markdown":
                 filetypes = [("Markdown prompt", "*.md"), ("Text prompt", "*.txt"), ("All files", "*.*")]
-                title = "Choose AI validation prompt"
+                title = "Choose AI Validator Prompt"
             else:
                 filetypes = [("All files", "*.*")]
                 title = "Choose file"
-            path = filedialog.askopenfilename(title=title, filetypes=filetypes)
+            options = {"title": title, "filetypes": filetypes}
+            if initialdir:
+                options["initialdir"] = initialdir
+            path = filedialog.askopenfilename(**options)
             root.destroy()
         except Exception as exc:
             raise ValueError(f"File picker unavailable: {exc}") from exc

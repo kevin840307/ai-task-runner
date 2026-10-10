@@ -1,30 +1,26 @@
 """Composable Stage primitives."""
 
 from .base_stage import BaseStage, BaseStageSpec
-from .ai_stage import AIValidatorStage, AIValidatorStageSpec, ReviewStage, ReviewStageSpec, TaskStage, TaskStageSpec
-from .command import CommandStage, CommandStageSpec
-from .contracts import Stage, StageContext, StageExecution, StageResult, StageStatus
-from .executor import StageAction, StageExecutor
+from .ai_validator_stage import AIValidatorStage, AIValidatorStageSpec
+from .handoff_stage import HandoffStage, HandoffStageSpec
 from .plan_stage import PlanStage, PlanStageSpec
+from .command_stage import CommandStage, CommandStageSpec
+from ..contracts import Stage, StageContext, StageExecution, StageResult, StageStatus
 
 __all__ = [
     "BaseStage",
     "BaseStageSpec",
-    "TaskStage",
-    "TaskStageSpec",
-    "ReviewStage",
-    "ReviewStageSpec",
     "AIValidatorStage",
     "AIValidatorStageSpec",
     "CommandStage",
     "CommandStageSpec",
+    "HandoffStage",
+    "HandoffStageSpec",
     "PlanStage",
     "PlanStageSpec",
     "Stage",
-    "StageAction",
     "StageContext",
     "StageExecution",
-    "StageExecutor",
     "StageResult",
     "StageStatus",
 ]

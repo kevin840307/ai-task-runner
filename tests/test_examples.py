@@ -7,17 +7,17 @@ from pathlib import Path
 import yaml
 
 from runner.config.runtime import RuntimeConfig
-from runner.script_loader import load_yaml_script
-from runner.script_runner import build_script_item_config
+from runner.script import load_yaml_script
+from runner.script import build_script_item_config
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXPECTED = {
     "01_basic_command_validator",
-    "02_repair_cycle",
+    "02_validator_reroute_cycle",
     "03_ai_validator_voting",
     "04_mixed_validation",
-    "05_ai_quality_repair",
+    "05_ai_quality_gate",
     "06_yaml_driven_tool",
     "07_blackbox_medium",
     "08_config_driven_data_pipeline",
@@ -75,59 +75,78 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
-    assert data[9]["workflow_file"] == "../runner/workflow/custom/common/ralphy_ai_validate.yaml"
+    assert data[9]["workflow_file"] == "../runner/assets/workflows/ralphy_ai_validate.yaml"
     assert (EXAMPLES / data[9]["workflow_file"]).is_file()
 
     items = load_yaml_script(script)
     config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
     workflow = build_script_item_config(config, items[9], 10).workflow
     assert [stage["name"] for stage in workflow] == ["ralphy", "validate_ai"]
-    assert workflow[0]["fresh_session_on_start"] is True
-    assert workflow[1]["fresh_session_on_start"] is True
+    assert workflow[0]["session_policy"] == "fresh"
+    assert workflow[1]["session_policy"] == "fresh"
     assert workflow[1]["routes"] == {"fail": "ralphy"}
     assert data[10]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
     assert data[10]["validator"] == "ai"
     assert (EXAMPLES / data[10]["workflow_file"]).is_file()
     regression = build_script_item_config(config, items[10], 11).workflow
     assert [stage["name"] for stage in regression] == [
-        "run_prompt", "review", "run_prompt", "grill_ai", "review",
-        "run_prompt", "grill_ai", "review", "run_prompt", "review",
-        "run_prompt", "review", "run_prompt", "review", "final_validate",
+        "project_discovery",
+        "review_project_discovery",
+        "project_documentation",
+        "challenge_review_project_documentation",
+        "review_project_documentation",
+        "e2e_spec_generation",
+        "challenge_review_e2e_spec",
+        "review_e2e_spec",
+        "verification_design",
+        "review_verification_design",
+        "regression_dsl_generation",
+        "review_regression_dsl",
+        "execution_qualification",
+        "review_execution_qualification",
+        "final_ai_validation",
     ]
     assert [stage.get("label", "") for stage in regression] == [
         "Project Discovery", "Review Project Discovery",
-        "Project Documentation", "Grill Project Documentation", "Review Project Documentation",
-        "E2E SPEC Generation", "Grill E2E SPEC", "Review E2E SPEC",
+        "Project Documentation", "Challenge Review Project Documentation", "Review Project Documentation",
+        "E2E SPEC Generation", "Challenge Review E2E SPEC", "Review E2E SPEC",
         "Verification Design", "Review Verification Design",
         "Regression DSL Generation", "Review Regression DSL",
         "Regression Execution & Qualification", "Review Execution & Qualification",
         "Final AI Validation",
     ]
-    reviews = [stage for stage in regression if stage["name"] == "review"]
-    grills = [stage for stage in regression if stage["name"] == "grill_ai"]
-    assert reviews and all(stage["skip_on_error"] is False for stage in reviews)
-    assert all("fresh_after_same_failures" not in stage for stage in reviews)
-    assert len(grills) == 2
-    assert all(stage["skip_on_error"] is False for stage in grills)
-    assert all(stage["repeat"] == 3 for stage in grills)
+    routed = {
+        stage["name"]: stage.get("routes", {})
+        for stage in regression
+        if stage.get("routes")
+    }
+    assert routed["review_project_discovery"] == {"fail": "project_discovery"}
+    assert routed["challenge_review_project_documentation"] == {"fail": "project_documentation"}
+    assert routed["review_project_documentation"] == {"fail": "project_documentation"}
+    assert routed["challenge_review_e2e_spec"] == {"fail": "e2e_spec_generation"}
+    assert routed["review_e2e_spec"] == {"fail": "e2e_spec_generation"}
+    assert routed["review_verification_design"] == {"fail": "verification_design"}
+    assert routed["review_regression_dsl"] == {"fail": "regression_dsl_generation"}
+    assert routed["review_execution_qualification"] == {"fail": "execution_qualification"}
+    assert routed["final_ai_validation"] == {"fail": "execution_qualification"}
 
 
 def test_latest_custom_workflow_uses_python_task_producer():
     from runner.workflow.loader import load_workflow
 
     workflow = load_workflow(EXAMPLES / "custom_workflow_latest.yaml")
-    assert [stage["name"] for stage in workflow] == [
-        "discover_tasks", "execute", "review", "done"
-    ]
+    assert [stage["name"] for stage in workflow] == ["discover_tasks", "done"]
     assert workflow[0]["type"] == "command"
     assert workflow[0]["produces"] == "tasks"
-    assert workflow[1]["scope"] == "task"
-    assert workflow[2]["scope"] == "task"
-    assert workflow[2]["type"] == "review"
-    assert workflow[3]["type"] == "command"
+    assert workflow[1]["type"] == "command"
+    producer = (EXAMPLES / "custom_task_producer.py").read_text(encoding="utf-8")
+    assert '"stages"' in producer
+    assert '"profile": "execute"' in producer
+    assert '"profile": "review"' in producer
+    assert '"task_complete": True' in producer
 
 
-def test_validation_modes_example_maps_to_system_workflows():
+def test_validation_modes_example_maps_to_builtin_workflows():
     script = EXAMPLES / "validation_modes.yaml"
     items = load_yaml_script(script)
     config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
@@ -138,9 +157,9 @@ def test_validation_modes_example_maps_to_system_workflows():
     ]
 
     assert workflows == [
-        ["planning", "__plan_task__", "__plan_review__", "validate_file"],
-        ["planning", "__plan_task__", "__plan_review__", "validate_ai"],
-        ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"],
+        ["planning", "validate_file"],
+        ["planning", "validate_ai"],
+        ["planning", "validate_file", "validate_ai"],
     ]
     assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 
@@ -167,7 +186,7 @@ def test_starter_states_match_example_purpose():
     # These cases intentionally start incomplete or broken so the Runner has work to do.
     for name in (
         "01_basic_command_validator",
-        "02_repair_cycle",
+        "02_validator_reroute_cycle",
         "04_mixed_validation",
         "06_yaml_driven_tool",
         "07_blackbox_medium",
@@ -180,13 +199,13 @@ def test_starter_states_match_example_purpose():
         assert "VALIDATION_FAILED" in result.stdout
 
     # Example 05 deliberately hard-passes first; its AI semantic gate should catch the sample-specific starter.
-    result = run_validator("05_ai_quality_repair")
+    result = run_validator("05_ai_quality_gate")
     assert result.returncode == 0, result.stdout
     assert "VALIDATION_PASSED" in result.stdout
 
 
 def test_ai_examples_have_visible_custom_prompts():
-    for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_repair"):
+    for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_gate"):
         text = (EXAMPLES / name / "project" / "ai_validation.md").read_text(encoding="utf-8")
         assert len(text.splitlines()) >= 3
 
@@ -255,6 +274,29 @@ def test_example_project_policies_protect_control_files():
             assert "ai_validation.md" in protected
 
 
+def test_executable_example_batches_do_not_use_deleted_runner_contracts():
+    batch_files = [
+        ROOT / "dryrunexample" / "run_dryrun.bat",
+        *sorted((EXAMPLES).glob("**/*.bat")),
+    ]
+    forbidden = (
+        "runner\\workflows\\",
+        "--execution-mode",
+        "--max-cycles",
+        "--max-attempts",
+        "--retry-wait",
+        "--retry-max-wait",
+        "--plan-only",
+    )
+    offenders = {}
+    for path in batch_files:
+        text = path.read_text(encoding="utf-8")
+        hits = [token for token in forbidden if token in text]
+        if hits:
+            offenders[path.relative_to(ROOT).as_posix()] = hits
+    assert offenders == {}
+
+
 def test_regression_workflow_demo_mock_contract():
     result = subprocess.run(
         [sys.executable, str(EXAMPLES / "11_regression_workflow_demo" / "test_demo.py")],
@@ -318,7 +360,7 @@ def test_example_temp_runner_external_workflow_stays_on_source_repo(tmp_path, mo
     data = yaml.safe_load(script.read_text(encoding="utf-8"))
     workflow = Path(data[0]["workflow_file"])
     assert workflow.is_absolute()
-    assert workflow == (ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml").resolve()
+    assert workflow == (ROOT / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml").resolve()
     assert not (workspace / "tool").exists()
 
 

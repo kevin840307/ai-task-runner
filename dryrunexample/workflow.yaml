@@ -1,18 +1,19 @@
 stages:
   work:
-    mode: write
+    type: base
+    profile: execute
 
   check:
-    fresh_after_same_failures: 2
-    repeat: 3
-    recover: [fix]
-
-  fix:
-    mode: write
+    type: base
+    profile: review
+    routes:
+      fail: work
 
   final:
     type: ai_validator
     validator: ai
+    routes:
+      fail: work
 
 flow:
   - work

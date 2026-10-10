@@ -3,11 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from runner.ai.errors import AIError
+from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
 from runner.runtime import events
 from runner.runtime.events import EventBus
-from runner.workflow.stages import StageExecutor, StageResult
+from runner.runtime.run_state import RunState
+from runner.workflow.execution import StageExecutor
+from runner.workflow.stages import StageResult
+from runner.workflow.stages import StageContext
 
 
 class Hooks:
@@ -30,11 +33,12 @@ class Stage:
     name = "sample"
     status = "Sample"
     detail = ""
-    run_state = "sample"
+    run_state = ""
     mode = "readonly"
     actor = "test"
     tolerate_restored_changes = False
-    retry = 0
+    track_changes = False
+    fresh_session_on_start = False
 
     def run(self, ctx, previous=None):
         return StageResult(self.name, "pass", output="ok")
@@ -43,60 +47,30 @@ class Stage:
         return result
 
 
-def context():
+def context(tmp_path=Path(".")):
+    state = RunState("run", "goal", str(tmp_path))
     model = SimpleNamespace(session_id="")
-    return SimpleNamespace(
-        root=Path("."),
-        work=Path("."),
-        execution=SimpleNamespace(change_detected=None),
-        set_stage=lambda *args: None,
-        config=SimpleNamespace(stage_retry_delay=0, same_session_retries=2),
-        task=None,
+    def set_stage(stage_name, detail=""):
+        state.stage = stage_name
+        state.last_error = detail
+
+    return StageContext(
+        config=RuntimeConfig(stage_retries=0, retry_delay=0, retry_max_delay=0),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
         ai_client=model,
-        scratch={},
-        state=SimpleNamespace(
-            ai_session_id="",
-            failure_scope="",
-            failure_key="",
-            same_failures=0,
-            fresh_session_round=0,
-        ),
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
         save_state=lambda: None,
-        reset_sessions=lambda: setattr(model, "session_id", ""),
+        set_stage=set_stage,
     )
 
-
-
-
-def test_timeout_recovery_key_ignores_dynamic_backend_output():
-    executor = StageExecutor(Hooks())
-    ctx = context()
-    first = AIError(
-        "qwen timed out after 1 seconds:\nContainerName (regular): qwen-code-0.21.0-20",
-        recovery_key="qwen:timeout:1",
-    )
-    second = AIError(
-        "qwen timed out after 1 seconds:\nContainerName (regular): qwen-code-0.21.0-51",
-        recovery_key="qwen:timeout:1",
-    )
-    assert executor._failure_key(Stage(), ctx, first) == executor._failure_key(
-        Stage(), ctx, second
-    )
-
-
-def test_different_semantic_recovery_keys_stay_different():
-    executor = StageExecutor(Hooks())
-    ctx = context()
-    one = AIError("timeout", recovery_key="qwen:timeout:1")
-    two = AIError("timeout", recovery_key="qwen:timeout:2")
-    assert executor._failure_key(Stage(), ctx, one) != executor._failure_key(
-        Stage(), ctx, two
-    )
 
 def test_executor_wraps_one_stage_once_with_hooks():
     hooks = Hooks()
-    executor = StageExecutor(hooks)
-    result = executor.run(Stage(), context())
+    result = StageExecutor(hooks).run(Stage(), context())
     assert result.status == "pass"
     assert hooks.calls == [("before", "sample"), ("after", "sample")]
 
@@ -132,98 +106,56 @@ def test_executor_converts_stage_exception_to_result():
     assert "boom" in str(result.error)
 
 
+def test_executor_does_not_retry_configuration_error():
+    class Broken(Stage):
+        def run(self, ctx, previous=None):
+            raise ConfigurationError("bad config")
 
-def test_executor_does_not_retry_deterministic_configuration_error():
-    class BrokenConfig(Stage):
-        retry = 5
+    with pytest.raises(ConfigurationError, match="bad config"):
+        StageExecutor(Hooks()).run(Broken(), context())
 
+
+
+
+def test_executor_fails_closed_on_unexpected_programming_error():
+    class Broken(Stage):
+        def run(self, ctx, previous=None):
+            raise TypeError("programming bug")
+
+    with pytest.raises(ConfigurationError, match="unexpected TypeError"):
+        StageExecutor(Hooks()).run(Broken(), context())
+
+
+def test_executor_keeps_oserror_recoverable(monkeypatch):
+    class RetryOnce(Stage):
         def __init__(self):
             self.calls = 0
 
         def run(self, ctx, previous=None):
             self.calls += 1
-            raise ConfigurationError("fixed validator is missing")
-
-    stage = BrokenConfig()
-    with pytest.raises(ConfigurationError, match="fixed validator is missing"):
-        StageExecutor(Hooks()).run(stage, context())
-    assert stage.calls == 1
-
-
-def test_unlimited_retry_rotates_fresh_session_and_eventually_passes():
-    class Recovering(Stage):
-        retry = -1
-
-        def __init__(self):
-            self.calls = 0
-
-        def run(self, ctx, previous=None):
-            self.calls += 1
-            if self.calls < 5:
-                return StageResult.error_result(self.name, RunnerError("temporary"))
-            return StageResult(self.name, "pass", output="recovered")
+            if self.calls == 1:
+                raise PermissionError("temporary file lock")
+            return StageResult(self.name, "pass")
 
     ctx = context()
-    resets = 0
+    ctx.config.stage_retries = 1
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
 
-    def reset_sessions():
-        nonlocal resets
-        resets += 1
-        ctx.ai_client.session_id = ""
-
-    ctx.ai_client.session_id = "session-1"
-    ctx.reset_sessions = reset_sessions
-    stage = Recovering()
-
+    stage = RetryOnce()
     result = StageExecutor(Hooks()).run(stage, ctx)
 
     assert result.status == "pass"
-    assert stage.calls == 5
-    assert resets >= 1
+    assert stage.calls == 2
+    assert sleeps == [0.0]
 
 
-def test_executor_preserves_stage_lifecycle_events():
-    records = []
-    bus = EventBus()
-    bus.subscribe(records.append)
-    events.configure(bus)
-    StageExecutor(Hooks()).run(Stage(), context())
-    lifecycle = [
-        (event["type"], event["action"], event.get("stage"))
-        for event in records
-        if event["type"] == "runner.stage"
-    ]
-    assert lifecycle == [
-        ("runner.stage", "start", "sample"),
-        ("runner.stage", "finish", "sample"),
-    ]
-
-
-def test_executor_exposes_flow_label_as_event_detail_without_changing_stage_status():
-    records = []
-    bus = EventBus()
-    bus.subscribe(records.append)
-    events.configure(bus)
-    StageExecutor(Hooks()).run(Stage(), context(), label="Project Documentation")
-
-    start = next(
-        event for event in records
-        if event["type"] == "runner.stage" and event["action"] == "start"
-    )
-    status = next(
-        event for event in records
-        if event["type"] == "runner.status" and event["action"] == "start"
-    )
-    assert start["stage"] == "sample"
-    assert start["label"] == "Project Documentation"
-    assert status["status"] == "Sample"
-    assert status["detail"] == "Project Documentation"
-
-
-def test_executor_does_not_restart_stage_lifecycle_for_retries():
+def test_executor_preserves_one_lifecycle_for_internal_retries():
     class RetryOnce(Stage):
-        retry = 1
-
         def __init__(self):
             self.calls = 0
 
@@ -233,75 +165,435 @@ def test_executor_does_not_restart_stage_lifecycle_for_retries():
                 return StageResult.error_result(self.name, RunnerError("retry"))
             return StageResult(self.name, "pass")
 
+    ctx = context()
+    ctx.config.stage_retries = 1
     records = []
     bus = EventBus()
     bus.subscribe(records.append)
     events.configure(bus)
-    StageExecutor(Hooks()).run(RetryOnce(), context())
+    stage = RetryOnce()
+
+    StageExecutor(Hooks()).run(stage, ctx)
+
     lifecycle = [
         (event["action"], event.get("stage"))
         for event in records
         if event["type"] == "runner.stage"
     ]
+    assert stage.calls == 2
     assert lifecycle == [("start", "sample"), ("finish", "sample")]
 
 
-def test_hook_chain_rolls_back_completed_before_hooks_when_later_before_fails():
-    from runner.plugins.contracts import HookChain
+def test_executor_persists_recovery_error_and_clears_it_after_success():
+    class RetryOnce(Stage):
+        def __init__(self):
+            self.calls = 0
 
-    calls = []
-
-    class First:
-        def before_execution(self, action):
-            calls.append("first.before")
-            return "token"
-
-        def after_execution(self, action, token):
-            calls.append(("first.after", token))
-            return []
-
-    class Second:
-        def before_execution(self, action):
-            calls.append("second.before")
-            raise RunnerError("blocked")
-
-        def after_execution(self, action, token):
-            calls.append("second.after")
-            return []
-
-    chain = HookChain()
-    chain.add(First())
-    chain.add(Second())
-    try:
-        chain.before(SimpleNamespace())
-    except RunnerError:
-        pass
-    assert calls == ["first.before", "second.before", ("first.after", "token")]
-
-
-def test_base_stage_fresh_session_resets_only_its_cached_client():
-    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return StageResult.error_result(self.name, RunnerError("HTTP 503"))
+            return StageResult(self.name, "pass")
 
     ctx = context()
-    ctx.ai_client.session_id = "writer-session"
-    review = SimpleNamespace(session_id="review-session")
-    ctx.scratch["review_client"] = review
-    ctx.scratch["prompt_contracts"] = {
-        ("review.md", "review-session"),
-        ("execution.md", "writer-session"),
-    }
-    stage = BaseStage(
-        BaseStageSpec(
-            name="review",
-            status="Review",
-            prompt="review.md",
-            session_key="review_client",
-        )
+    ctx.config.stage_retries = 1
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+
+    result = StageExecutor(Hooks()).run(RetryOnce(), ctx)
+
+    assert result.status == "pass"
+    assert ctx.state.last_error == ""
+    assert any(
+        event["type"] == "runner.status"
+        and event["action"] == "set"
+        and event["status"] == "Recovering"
+        and "retry 1" in event["detail"]
+        and "wait 0s" in event["detail"]
+        and "HTTP 503" in event["detail"]
+        for event in records
+    )
+    recovery = next(
+        event
+        for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    )
+    assert recovery["stage"] == "sample"
+    assert recovery["retry_mode"] in {"retry", "recover"}
+    assert recovery["retry"] == 1
+    assert recovery["wait_seconds"] == 0
+    assert "HTTP 503" in recovery["error"]
+
+
+def test_executor_keeps_final_technical_error_for_detached_ui():
+    class Broken(Stage):
+        def run(self, ctx, previous=None):
+            return StageResult.error_result(self.name, RunnerError("permanent transport error"))
+
+    ctx = context()
+    ctx.config.stage_retries = 0
+
+    result = StageExecutor(Hooks()).run(Broken(), ctx)
+
+    assert result.status == "error"
+    assert "permanent transport error" in ctx.state.last_error
+
+
+def test_executor_uses_node_label_only_as_event_detail():
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    StageExecutor(Hooks()).run(Stage(), context(), label="Project Documentation")
+    start = next(
+        event for event in records
+        if event["type"] == "runner.stage" and event["action"] == "start"
+    )
+    assert start["stage"] == "sample"
+    assert start["label"] == "Project Documentation"
+
+
+def test_executor_preserves_explicit_dynamic_result_kind():
+    class Dynamic(Stage):
+        result_kind = "generic"
+
+        def run(self, ctx, previous=None):
+            return StageResult(
+                self.name,
+                "pass",
+                data={"stages": [{"name": "child", "type": "base", "profile": "generic"}]},
+                kind="stages",
+            )
+
+    result = StageExecutor(Hooks()).run(Dynamic(), context())
+    assert result.kind == "stages"
+
+
+def test_executor_fills_declared_kind_only_for_generic_result():
+    class ReviewLike(Stage):
+        result_kind = "review"
+
+        def run(self, ctx, previous=None):
+            return StageResult(self.name, "pass", data={"completed": True})
+
+    result = StageExecutor(Hooks()).run(ReviewLike(), context())
+    assert result.kind == "review"
+
+
+
+def test_unlimited_retry_with_zero_configured_delay_uses_safety_floor(monkeypatch):
+    class RetryTwice(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 2:
+                return StageResult.error_result(self.name, RunnerError("temporary failure"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    monkeypatch.setattr(StageExecutor, "_sleep", staticmethod(lambda _ctx, seconds: sleeps.append(seconds)))
+
+    result = StageExecutor(Hooks()).run(RetryTwice(), ctx)
+
+    assert result.status == "pass"
+    assert sleeps == [1.0, 1.0]
+
+
+def test_finite_retry_may_still_use_zero_delay(monkeypatch):
+    class RetryOnce(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return StageResult.error_result(self.name, RunnerError("retry immediately"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = 1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    monkeypatch.setattr(StageExecutor, "_sleep", staticmethod(lambda _ctx, seconds: sleeps.append(seconds)))
+
+    result = StageExecutor(Hooks()).run(RetryOnce(), ctx)
+
+    assert result.status == "pass"
+    assert sleeps == [0.0]
+
+
+
+def test_transient_errors_rotate_fresh_after_same_session_budget(monkeypatch):
+    class Transient(RunnerError):
+        transient = True
+
+    class RetryTwice(Stage):
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return "session-A"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 2:
+                return StageResult.error_result(self.name, Transient("temporary outage"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    monkeypatch.setattr(StageExecutor, "_sleep", staticmethod(lambda _ctx, seconds: sleeps.append(seconds)))
+
+    stage = RetryTwice()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 3
+    assert stage.resets == 1
+    recoveries = [
+        event for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    ]
+    assert [event["retry_mode"] for event in recoveries] == ["retry", "recover"]
+    assert any(
+        event["type"] == "runner.session"
+        and event["action"] == "fresh"
+        and event["previous_session"] == "session-A"
+        for event in records
+    )
+    assert sleeps == [1.0, 1.0]
+
+
+
+def test_long_transient_window_remains_bounded_and_recovers(monkeypatch):
+    class Transient(RunnerError):
+        transient = True
+
+    class LongOutage(Stage):
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return f"session-{self.resets}"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 7:
+                return StageResult.error_result(self.name, Transient(f"outage-{self.calls}"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
     )
 
-    StageExecutor(Hooks()).fresh_session(stage, ctx)
+    stage = LongOutage()
+    result = StageExecutor(Hooks()).run(stage, ctx)
 
-    assert review.session_id == ""
-    assert ctx.ai_client.session_id == "writer-session"
-    assert ("review.md", "review-session") not in ctx.scratch["prompt_contracts"]
-    assert ("execution.md", "writer-session") in ctx.scratch["prompt_contracts"]
+    assert result.status == "pass"
+    assert stage.calls == 8
+    assert stage.resets == 3
+    assert sleeps == [1.0] * 7
+    assert ctx.state.last_error == ""
+
+    recoveries = [
+        event for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    ]
+    assert [event["retry_mode"] for event in recoveries] == [
+        "retry", "recover", "retry", "recover", "retry", "recover", "retry"
+    ]
+    fresh = [
+        event for event in records
+        if event["type"] == "runner.session" and event["action"] == "fresh"
+    ]
+    assert len(fresh) == 3
+
+
+
+def test_transient_backoff_survives_fresh_session_rotation(monkeypatch):
+    class Transient(RunnerError):
+        transient = True
+
+    class LongOutage(Stage):
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return f"session-{self.resets}"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 5:
+                return StageResult.error_result(
+                    self.name,
+                    Transient(f"temporary outage {self.calls}"),
+                )
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 2
+    ctx.config.retry_max_delay = 10
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = LongOutage()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.resets == 2
+    assert sleeps == [2.0, 4.0, 8.0, 10.0, 10.0]
+
+
+def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path, monkeypatch):
+    class PartialWrite(Stage):
+        track_changes = True
+
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+            self.seen = []
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return "session-before-partial-write"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            target = ctx.root / "result.txt"
+            self.seen.append(target.read_text(encoding="utf-8") if target.exists() else "")
+            if self.calls == 1:
+                target.write_text("PARTIAL_VALID_WORK\n", encoding="utf-8")
+                raise RunnerError("transport failed after write")
+            assert target.read_text(encoding="utf-8") == "PARTIAL_VALID_WORK\n"
+            target.write_text("PARTIAL_VALID_WORK\nRECOVERED\n", encoding="utf-8")
+            return StageResult(self.name, "pass")
+
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = PartialWrite()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 2
+    assert stage.resets == 1
+    assert stage.seen == ["", "PARTIAL_VALID_WORK\n"]
+    assert (tmp_path / "result.txt").read_text(encoding="utf-8") == (
+        "PARTIAL_VALID_WORK\nRECOVERED\n"
+    )
+    assert sleeps == [1.0]
+    assert ctx.state.last_error == ""
+
+    recovery = next(
+        event for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    )
+    assert recovery["retry_mode"] == "recover"
+    assert "transport failed after write" in recovery["error"]
+    assert any(
+        event["type"] == "runner.session"
+        and event["action"] == "fresh"
+        and event["previous_session"] == "session-before-partial-write"
+        for event in records
+    )
+
+
+def test_executor_recovers_from_flattened_windows_absolute_path_filename(
+    tmp_path,
+    monkeypatch,
+):
+    malformed = "C\uf03a\uf05cUsers\uf05ckevin\uf05cproject\uf05chealth.txt"
+
+    class WritesMalformedThenCorrect(Stage):
+        mode = "write"
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                (ctx.root / malformed).write_text("wrong path", encoding="utf-8")
+                return StageResult(self.name, "pass", output="created")
+            (ctx.root / "health.txt").write_text("ok", encoding="utf-8")
+            return StageResult(self.name, "pass", output="created")
+
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = 1
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = WritesMalformedThenCorrect()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 2
+    assert not (tmp_path / malformed).exists()
+    assert (tmp_path / "health.txt").read_text(encoding="utf-8") == "ok"
+    assert sleeps == [0.0]

@@ -1,9 +1,8 @@
-"""Canonical public entry point for CLI, UIs, skills, and Python callers."""
+"""Canonical public entry point for CLI, UI and Python callers."""
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 import traceback
 from collections.abc import Mapping
@@ -12,45 +11,36 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import execute
-from .config.runtime import EventHandler, RuntimeConfig
 from .config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
-    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-    DEFAULT_MAX_ATTEMPTS,
-    DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
-    DEFAULT_REVIEW_RETRIES,
+    DEFAULT_STAGE_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
     DEFAULT_WORKER_HANG_TIMEOUT,
 )
+from .config.runtime import EventHandler, RuntimeConfig
 from .errors import ConfigurationError, RunnerError, is_transient_error
-from .extensions import discover_extensions
 from .plugins.registry import (
+    discover_plugins,
     merge_plugin_config,
     plugin_config_from_namespace,
     plugin_config_from_request,
 )
 from .runtime.events import retry_event
-from .runtime.heartbeat import sleep_with_heartbeat
-from .script_loader import load_yaml_script
-from .script_runner import _valid_skip_marker
-from .utils.logs import append_bounded_log
+from .runtime.events import sleep_with_heartbeat
+from .utils import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
-from .workflow.snapshot import load_run_resource, load_snapshot
+from .resources import load_run_resource, load_snapshot
 
 
 @dataclass
 class RunRequest:
-    """Serializable request shared by every integration surface."""
-
     goal: str | None = None
     goal_file: str | None = None
     project_root: str = "."
@@ -61,50 +51,46 @@ class RunRequest:
     ai_validator_prompt: str = ""
     ai_validator_prompt_file: str | None = None
     workflow_file: str | None = None
+
     backend: str = DEFAULT_BACKEND
     command: str | None = None
     sandbox: bool = False
     agent_args: list[str] = field(default_factory=list)
     validator_args: list[str] = field(default_factory=list)
     protect_files: list[str] = field(default_factory=list)
+
     validator_timeout: int = DEFAULT_VALIDATOR_TIMEOUT
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
-    api_wait_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS
-    review_retries: int = DEFAULT_REVIEW_RETRIES
-    max_cycles: int = DEFAULT_MAX_CYCLES
-    retry_delay: float = 2
-    retry_wait: float = 5
-    retry_max_wait: float = 300
+    stage_retries: int = DEFAULT_STAGE_RETRIES
+    max_cycles: int = -1
+    skip_on_max_cycles: bool = False
+    retry_delay: float = 5
+    retry_max_delay: float = 300
+
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     ai_validator_yolo: bool = False
     readonly_safety: str = "restore"
-    loop_context_compress: bool = DEFAULT_LOOP_CONTEXT_COMPRESS
-    loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
-    plan_only: bool = False
     human_output: bool = False
     json_events: bool = False
     auto_register_ui_project: bool = False
-    execution_mode: str = "linear"
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> RunRequest:
-        """Convert CLI arguments into the canonical request model."""
+    def from_namespace(cls, args: argparse.Namespace) -> "RunRequest":
         return cls(
             goal=args.goal,
             goal_file=args.goal_file,
             project_root=args.project_root,
             project_name=getattr(args, "project_name", ""),
-            execution_mode=getattr(args, "execution_mode", "linear"),
             script=args.script,
             validator=args.validator,
             validator_prompt=args.validator_prompt,
@@ -121,102 +107,82 @@ class RunRequest:
             agent_timeout=args.agent_timeout,
             planning_timeout=args.planning_timeout,
             agent_idle_after_change_timeout=args.agent_idle_after_change_timeout,
-            api_wait_timeout=getattr(args, "api_wait_timeout", DEFAULT_API_WAIT_TIMEOUT),
-            watchdog_interval=getattr(args, "watchdog_interval", DEFAULT_WATCHDOG_INTERVAL),
-            worker_hang_timeout=getattr(args, "worker_hang_timeout", DEFAULT_WORKER_HANG_TIMEOUT),
-            max_attempts=args.max_attempts,
-            review_retries=getattr(args, "review_retries", DEFAULT_REVIEW_RETRIES),
-            max_cycles=args.max_cycles,
+            watchdog_interval=args.watchdog_interval,
+            worker_hang_timeout=args.worker_hang_timeout,
+            stage_retries=args.stage_retries,
+            max_cycles=getattr(args, "max_cycles", -1),
+            skip_on_max_cycles=getattr(args, "skip_on_max_cycles", False),
             retry_delay=args.retry_delay,
-            retry_wait=args.retry_wait,
-            retry_max_wait=args.retry_max_wait,
-            final_ai_validations=getattr(
-                args, "final_ai_validations", DEFAULT_FINAL_AI_VALIDATIONS
-            ),
-            final_ai_required_passes=getattr(
-                args, "final_ai_required_passes", DEFAULT_FINAL_AI_REQUIRED_PASSES
-            ),
-            ai_validator_yolo=getattr(args, "ai_validator_yolo", False),
-            readonly_safety=getattr(args, "readonly_safety", "restore"),
-            loop_context_compress=getattr(args, "loop_context_compress", False),
-            loop_context_compress_threshold=getattr(
-                args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
-            ),
+            retry_max_delay=args.retry_max_delay,
+            final_ai_validations=args.final_ai_validations,
+            final_ai_required_passes=args.final_ai_required_passes,
+            ai_validator_yolo=args.ai_validator_yolo,
+            readonly_safety=args.readonly_safety,
             plugins=plugin_config_from_namespace(args),
             work_dir=args.work_dir,
             resume=args.resume,
             force_new=args.force_new,
-            plan_only=args.plan_only,
             human_output=not args.json_events,
             json_events=args.json_events,
             auto_register_ui_project=getattr(args, "auto_register_ui_project", True),
         )
 
     @classmethod
-    def from_mapping(cls, values: Mapping[str, Any]) -> RunRequest:
-        """Build a request from JSON-like data while rejecting unknown keys."""
+    def from_mapping(cls, values: Mapping[str, Any]) -> "RunRequest":
         allowed = {item.name for item in fields(cls)}
         unknown = sorted(set(values) - allowed)
         if unknown:
             raise ValueError("unknown request fields: " + ", ".join(unknown))
         return cls(**dict(values))
 
-    def to_runtime_config(
+    def normalized_config(
         self,
         on_event: EventHandler | None = None,
     ) -> RuntimeConfig:
-        """Resolve public request inputs into the typed execution contract."""
-        discover_extensions()
+        self._validate_source()
+        if self.ai_validator_prompt and self.ai_validator_prompt_file:
+            raise ValueError(
+                "use either ai_validator_prompt or ai_validator_prompt_file, not both"
+            )
+
+        discover_plugins()
         frozen_run = self.resume and not self.script and not self.force_new
         frozen_goal = (
             load_run_resource(self.project_root, self.work_dir, "goal")
             if frozen_run
             else None
         )
-        frozen_ai_prompt = (
+        frozen_ai = (
             load_run_resource(self.project_root, self.work_dir, "ai_validator_prompt")
             if frozen_run
             else None
         )
-        goal = frozen_goal[1] if frozen_goal is not None else self._effective_goal()
-        goal_file = frozen_goal[0] if frozen_goal is not None else self.goal_file
-        ai_validator_prompt = (
-            frozen_ai_prompt[1]
-            if frozen_ai_prompt is not None
-            else self._effective_ai_validator_prompt()
-        )
-        ai_validator_prompt_file = (
-            frozen_ai_prompt[0]
-            if frozen_ai_prompt is not None
-            else self.ai_validator_prompt_file
-        )
-        frozen = (
+
+        goal = frozen_goal[1] if frozen_goal else self._effective_goal()
+        goal_file = frozen_goal[0] if frozen_goal else self.goal_file
+        ai_prompt = frozen_ai[1] if frozen_ai else self._effective_ai_validator_prompt()
+        ai_prompt_file = frozen_ai[0] if frozen_ai else self.ai_validator_prompt_file
+        frozen_workflow = (
             load_snapshot(self.project_root, self.work_dir)
             if frozen_run
             else None
         )
-        from .execution_modes import execution_mode_spec
-        mode_spec = execution_mode_spec(self.execution_mode)
-        workflow = frozen or (
+        workflow = frozen_workflow or (
             load_workflow(self.workflow_file)
             if self.workflow_file
-            else (
-                load_default_workflow(self.validator, ai_validator_prompt)
-                if mode_spec.requires_workflow
-                else []
-            )
+            else load_default_workflow(self.validator, ai_prompt)
         )
-        return RuntimeConfig(
+
+        config = RuntimeConfig(
             goal=goal,
             goal_file=goal_file,
             project_root=self.project_root,
             project_name=self.project_name,
-            execution_mode=self.execution_mode,
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
-            ai_validator_prompt=ai_validator_prompt,
-            ai_validator_prompt_file=ai_validator_prompt_file,
+            ai_validator_prompt=ai_prompt,
+            ai_validator_prompt_file=ai_prompt_file,
             workflow=workflow,
             workflow_explicit=bool(self.workflow_file),
             backend=self.backend,
@@ -229,15 +195,13 @@ class RunRequest:
             agent_timeout=self.agent_timeout,
             planning_timeout=self.planning_timeout,
             agent_idle_after_change_timeout=self.agent_idle_after_change_timeout,
-            api_retry_timeout=self.api_wait_timeout,
             watchdog_interval=self.watchdog_interval,
             worker_hang_timeout=self.worker_hang_timeout,
-            same_session_retries=self.max_attempts,
-            review_retries=self.review_retries,
+            stage_retries=self.stage_retries,
             max_cycles=self.max_cycles,
-            stage_retry_delay=self.retry_delay,
-            api_retry_wait=self.retry_wait,
-            api_retry_max_wait=self.retry_max_wait,
+            skip_on_max_cycles=self.skip_on_max_cycles,
+            retry_delay=self.retry_delay,
+            retry_max_delay=self.retry_max_delay,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
             ai_validator_yolo=self.ai_validator_yolo,
@@ -246,79 +210,48 @@ class RunRequest:
             work_dir=self.work_dir,
             resume=self.resume,
             force_new=self.force_new,
-            plan_only=self.plan_only,
             json_events=self.json_events,
             human_output=self.human_output,
             auto_register_ui_project=self.auto_register_ui_project,
             event_callback=on_event,
         )
-
-    def validate(self) -> None:
-        """Fail fast with clear errors for every integration surface."""
-        self.normalized_config()
-
-    def normalized_config(
-        self,
-        on_event: EventHandler | None = None,
-    ) -> RuntimeConfig:
-        """Resolve public inputs and return the validated execution contract."""
-        self._validate_request_source()
-        if self.ai_validator_prompt and self.ai_validator_prompt_file:
-            raise ValueError("use either ai_validator_prompt or ai_validator_prompt_file, not both")
-        for name in ("validator_prompt", "ai_validator_prompt"):
-            if not isinstance(getattr(self, name), str):
-                raise ValueError(f"{name} must be a string")  # noqa: TRY004
-        config = self.to_runtime_config(on_event)
         config.validate()
         return config
 
-    def _validate_request_source(self) -> None:
+    def validate(self) -> None:
+        self.normalized_config()
+
+    def _validate_source(self) -> None:
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
         if not isinstance(self.project_name, str):
             raise ValueError("project_name must be a string")
-        if not isinstance(self.execution_mode, str):
-            raise ValueError("execution_mode must be a string")
-        if len(" ".join(self.project_name.split())) > 120:
-            raise ValueError("project_name is too long")
         if self.goal and self.goal_file:
             raise ValueError("use either goal or goal_file, not both")
         if self.script and (self.goal or self.goal_file):
             raise ValueError("use either goal/goal_file or script, not both")
+        if not self.script and not self.resume and not self._effective_goal().strip():
+            raise ValueError("goal or goal_file is required unless script or resume is used")
         if (
             not self.script
-            and not self.resume
-            and not self._effective_goal().strip()
-        ):
-            raise ValueError("goal or goal_file is required unless script or resume is used")
-        if self.execution_mode == "linear" and not self.script and not self.workflow_file and not (
-            isinstance(self.validator, str) and self.validator.strip()
+            and not self.workflow_file
+            and not isinstance(self.validator, str)
         ):
             raise ValueError("validator is required unless script or workflow_file is used")
 
     def _effective_goal(self) -> str:
         if isinstance(self.goal, str):
             return self.goal
-        if not self.goal_file:
-            return ""
-        return _read_text_file(self.goal_file, "goal_file")
+        return _read_text_file(self.goal_file, "goal_file") if self.goal_file else ""
 
     def _effective_ai_validator_prompt(self) -> str:
         if self.ai_validator_prompt:
             return self.ai_validator_prompt
-        if not self.ai_validator_prompt_file:
-            return ""
-        return _read_text_file(
-            self.ai_validator_prompt_file,
-            "ai_validator_prompt_file",
+        return (
+            _read_text_file(self.ai_validator_prompt_file, "ai_validator_prompt_file")
+            if self.ai_validator_prompt_file
+            else ""
         )
-
-
-def _read_text_file(filename: str, field_name: str) -> str:
-    path = Path(filename).expanduser()
-    if not path.is_file():
-        raise ValueError(f"{field_name} not found: {filename}")
-    return path.read_text(encoding="utf-8-sig")
 
 
 @dataclass(frozen=True)
@@ -329,10 +262,13 @@ class RunResult:
 
     @property
     def completed(self) -> bool:
-        return self.exit_code == 0 and bool(self.states) and all(
-            state.get("completed") is True
-            and state.get("stage") in {"completed", "skipped"}
-            for state in self.states
+        return (
+            self.exit_code == 0
+            and bool(self.states)
+            and all(
+                state.get("completed") is True and state.get("stage") == "completed"
+                for state in self.states
+            )
         )
 
 
@@ -340,7 +276,7 @@ def run(
     request: RunRequest | Mapping[str, Any],
     on_event: EventHandler | None = None,
 ) -> RunResult:
-    """Run until the selected Workflow completes (or plan-only)."""
+    """Run until the Workflow completes or fails closed."""
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
 
@@ -349,23 +285,23 @@ def run(
     unexpected_repeats = 0
     incomplete_key = ""
     incomplete_repeats = 0
+
     while True:
         try:
-            exit_code = execute(config)
+            result = _result(request, execute(config))
             unexpected_key = None
             unexpected_repeats = 0
-            result = _result(request, exit_code)
-            if request.plan_only or result.completed:
+            if result.completed or result.exit_code != 0:
                 return result
-            if exit_code != 0:
-                return result
+
             progress_key = _incomplete_progress_key(result)
-            incomplete_repeats = incomplete_repeats + 1 if progress_key == incomplete_key else 1
+            incomplete_repeats = (
+                incomplete_repeats + 1 if progress_key == incomplete_key else 1
+            )
             incomplete_key = progress_key
             if incomplete_repeats >= 3:
-                raise RunnerError(
-                    "run returned repeatedly without Workflow progress"
-                )
+                raise RunnerError("run returned repeatedly without Workflow progress")
+
             config = _resume_config(request, config, result.state_files)
             _report_retry(
                 request,
@@ -377,10 +313,6 @@ def run(
         except ConfigurationError:
             raise
         except RunnerError as error:
-            # Only transient service/backend failures are safe to retry here.
-            # Deterministic workflow/state/invariant RunnerErrors will not heal by
-            # sleeping and resuming, and retrying them forever can make a 24H run
-            # look alive while doing no useful work.
             if not is_transient_error(error):
                 raise
             config = _resume_config(request, config)
@@ -399,47 +331,42 @@ def run(
                 f"{type(error).__name__}: {error}; retrying "
                 f"({unexpected_repeats}/2 automatic recoveries)",
             )
-        if config.stage_retry_delay:
-            sleep_with_heartbeat(config.stage_retry_delay)
+
+        if config.retry_delay:
+            sleep_with_heartbeat(config.retry_delay)
+
+
+def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
+    if not isinstance(request, RunRequest):
+        request = RunRequest.from_mapping(request)
+    return tuple(str(path) for path in _state_files(request))
 
 
 def _result(request: RunRequest, exit_code: int) -> RunResult:
-    state_files = _state_files(request)
-    script_items = _script_items(request) if request.script else []
-    states_list: list[dict[str, Any]] = []
-    for index, path in enumerate(state_files):
-        skip_marker = path.parent / "script-item-skipped.json"
-        item = script_items[index] if index < len(script_items) else None
-        if (
-            request.script
-            and isinstance(item, dict)
-            and item.get("skip_on_max_cycles") is True
-            and _valid_skip_marker(skip_marker, item)
-        ):
-            states_list.append({
-                "completed": True,
-                "stage": "skipped",
-                "skipped": True,
-                "skip_reason": _read_skip_reason(skip_marker),
-            })
-        elif path.is_file():
-            states_list.append(_read_state(path))
-    states = tuple(states_list)
+    paths = _state_files(request)
+    states = tuple(_read_state(path) for path in paths if path.is_file())
     return RunResult(
         exit_code=exit_code,
-        state_files=tuple(str(path) for path in state_files),
+        state_files=tuple(str(path) for path in paths),
         states=states,
     )
 
 
-def _unexpected_error_key(error: BaseException) -> tuple[type[BaseException], str]:
-    frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else []
-    if frames:
-        frame = frames[-1]
-        location = f"{frame.filename}:{frame.lineno}:{frame.name}"
-    else:
-        location = str(error)
-    return type(error), location
+def _resume_config(
+    request: RunRequest,
+    config: RuntimeConfig,
+    state_paths: tuple[str, ...] | list[str] | None = None,
+) -> RuntimeConfig:
+    paths = (
+        [Path(path) for path in state_paths]
+        if state_paths is not None
+        else _state_files(request)
+    )
+    return replace(
+        config,
+        resume=any(path.is_file() for path in paths),
+        force_new=False,
+    )
 
 
 def _incomplete_progress_key(result: RunResult) -> str:
@@ -452,7 +379,6 @@ def _incomplete_progress_key(result: RunResult) -> str:
             "current": state.get("current"),
             "cycle": state.get("cycle"),
             "workflow_position": state.get("workflow_position"),
-            "task_step": state.get("task_step"),
             "completed": state.get("completed"),
             "tasks": [
                 {
@@ -467,80 +393,14 @@ def _incomplete_progress_key(result: RunResult) -> str:
     return json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _resume_config(
-    request: RunRequest,
-    config: RuntimeConfig,
-    state_files: tuple[str, ...] | list[str] | None = None,
-) -> RuntimeConfig:
-    paths = (
-        [Path(path) for path in state_files]
-        if state_files is not None
-        else _state_files(request)
-    )
-    return replace(
-        config,
-        resume=any(path.is_file() for path in paths),
-        force_new=False,
-    )
-
-
-def _log_unexpected(request: RunRequest, error: BaseException) -> None:
-    log = Path(request.project_root, request.work_dir, "exception.log").resolve()
-    append_bounded_log(
-        log,
-        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-        f"{type(error).__name__}: {error}\n{traceback.format_exc()}",
-    )
-
-
-def _report_retry(
-    request: RunRequest,
-    callback: EventHandler | None,
-    message: str,
-) -> None:
-    event = retry_event(message)
-    if callback is not None:
-        try:
-            callback(event)
-        except Exception:
-            pass
-    if request.json_events:
-        try:
-            print(json.dumps(event), flush=True)
-        except (BrokenPipeError, OSError):
-            pass
-    elif request.human_output:
-        print(f"ERROR: {message}", file=sys.stderr)
-
-
-def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
-    """Return durable state locations without loading Workflow or runtime plugins."""
-    if not isinstance(request, RunRequest):
-        request = RunRequest.from_mapping(request)
-    return tuple(str(path) for path in _state_files(request))
-
-
-def _script_items(request: RunRequest) -> list[dict[str, Any]]:
-    if not request.script:
-        return []
-    try:
-        return load_yaml_script(
-            Path(request.script).expanduser().resolve(),
-            allow_missing_files=True,
-        )
-    except RunnerError:
-        return []
-
-
 def _state_files(request: RunRequest) -> list[Path]:
     root = Path(request.project_root).resolve()
     if not request.script:
         return [root / request.work_dir / "state.json"]
 
-    script = Path(request.script).expanduser().resolve()
     try:
         import yaml
-        data = yaml.safe_load(script.read_text(encoding="utf-8"))
+        data = yaml.safe_load(Path(request.script).expanduser().resolve().read_text())
     except Exception:
         return []
     if not isinstance(data, list):
@@ -552,21 +412,67 @@ def _state_files(request: RunRequest) -> list[Path]:
         if isinstance(item, dict) and isinstance(item.get("project_root"), str):
             value = Path(item["project_root"]).expanduser()
             child_root = (value if value.is_absolute() else root / value).resolve()
-        child_work = Path(request.work_dir) / "script" / f"{index:03d}"
-        result.append(child_root / child_work / "state.json")
+        result.append(
+            child_root
+            / Path(request.work_dir)
+            / "script"
+            / f"{index:03d}"
+            / "state.json"
+        )
     return result
+
+
+def _read_text_file(filename: str, field_name: str) -> str:
+    path = Path(filename).expanduser()
+    if not path.is_file():
+        raise ValueError(f"{field_name} not found: {filename}")
+    return path.read_text(encoding="utf-8-sig")
 
 
 def _read_state(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _read_skip_reason(path: Path) -> str:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return "max cycles reached"
-    return str(data.get("reason") or "max cycles reached") if isinstance(data, dict) else "max cycles reached"
+def _unexpected_error_key(error: BaseException) -> tuple[type[BaseException], str]:
+    frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else []
+    location = (
+        f"{frames[-1].filename}:{frames[-1].lineno}:{frames[-1].name}"
+        if frames
+        else str(error)
+    )
+    return type(error), location
+
+
+def _log_unexpected(request: RunRequest, error: BaseException) -> None:
+    append_bounded_log(
+        Path(request.project_root, request.work_dir, "exception.log").resolve(),
+        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+        f"{type(error).__name__}: {error}\n{traceback.format_exc()}",
+    )
+
+
+def _report_retry(
+    request: RunRequest,
+    callback: EventHandler | None,
+    message: str,
+) -> None:
+    event = retry_event(message, layer="runner_api")
+    append_bounded_log(
+        Path(request.project_root, request.work_dir, "log.txt").resolve(),
+        json.dumps(event, ensure_ascii=False) + "\n",
+    )
+    if callback is not None:
+        try:
+            callback(event)
+        except Exception:
+            pass
+    if request.json_events:
+        try:
+            print(json.dumps(event), flush=True)
+        except (BrokenPipeError, OSError):
+            pass
+    elif request.human_output:
+        print(f"ERROR: {message}")
 
 
 __all__ = [

@@ -1,60 +1,70 @@
-# Workflow 範例
+# Workflow 工具範例
 
-這些檔案是參考 YAML，不是 system workflow。可以複製到 custom workflow 區後再依需求調整。
+這些 YAML 是目前 Workflow runtime 的 deterministic 範例，也會被 dry-run / live reliability preflight 使用。
 
-- `01_default_ai.yaml`：一般自動化 Plan，使用內建 Task/Review/Repair lifecycle，再進 AI Validation。
-- `02_ai_with_grill.yaml`：Final AI Validation 前增加一次獨立 Grill。
-- `03_file_validation.yaml`：固定 Python/File Validator。
-- `04_mixed_with_grill.yaml`：Grill + File Validation + Final AI Validation。
-- `05_grill_vote_3_choose_2.yaml`：3 個 Fresh Grill Session，至少 2/3 PASS。
-- `06_custom_task_producer.yaml`：Command 產生 Task[]，搭配明確 `scope: task`。
-- `07_minimal_plan_only.yaml`：最小 Plan workflow，不含 final validator。
-- `08_bounded_grill_continue.yaml`：Grill 最多 3 次；前兩次 FAIL 會修復，第 3 次仍 FAIL 就放行。
-- `09_bounded_grill_fail_closed.yaml`：同樣最多 3 次，但耗盡後停止。
-- `10_bounded_gate_reentry_reset.yaml`：bounded recovery 是通用 FlowNode 能力；往下後若再 restart 回 gate，重新從第 1 次計算。
-- `11_multi_validators_anywhere.yaml`：多個 File + AI Validator 可和一般 Stage 交錯，Validator 後面也可以繼續放普通 Stage。
+## 範例
 
-## 通用 Grill
+- `01_default_ai.yaml` — Plan 在 runtime 自己展開 Execute -> Review child Workflow，完成後進 Final AI Validator。
+- `02_ai_with_review_gate.yaml` — Plan children 後再加一個獨立 fresh AI Review profile 與 final validation。
+- `03_file_validation.yaml` — Plan children 後執行 command/File Validator。
+- `04_mixed_with_review_gate.yaml` — Plan children + 獨立 Review + File Validator + Final AI Validator。
+- `05_review_vote_3_choose_2.yaml` — AI Review profile 執行三次，2/3 PASS 才通過。
+- `06_custom_task_producer.yaml` — command-backed 自訂 Task producer，由腳本自己定義 Tasks 與 child Stages。
+- `11_multi_validators_anywhere.yaml` — Validator 與一般 Stage 可交錯。
 
-Grill 不新增 Stage type，直接重用 `type: review`、既有 parser/output contract 與 recovery feedback：
+## 目前 Workflow 契約
+
+一般 AI 行為統一使用 `type: base` + profile：
 
 ```yaml
-grill:
-  type: review
-  prompt: ../../runner/prompts/stages/grill.md
-  fresh_session_on_start: true
-  retry: 0
-  recover: [repair_plan]
+stages:
+  execute:
+    type: base
+    profile: execute
+
+  verify:
+    type: base
+    profile: review
+    session_policy: fresh
+    routes:
+      fail: execute
+
+flow:
+  - execute
+  - verify
 ```
 
-## Bounded semantic recovery
+舊的 `type: task`、`type: review`、`scope` 已移除。
 
-```yaml
-grill:
-  type: review
-  recover: [repair_plan]
-  max_attempts: 3
-  on_exhausted: continue
-```
+Graph edge 只有 `routes.pass` / `routes.fail`。技術 exception、timeout、API/backend error 由 `runner/workflow/execution/stage_executor.py` 的 StageExecutor 負責，使用 `error_policy.retries` 或全域 `stage_retries`。
 
-語意：
+## Dynamic child Workflow
+
+任意 producer 都可以回傳 `tasks` 或 `stages`，但 child Stage definitions 必須由 producer 自己提供。Runner 只負責驗證、namespace、持久化、執行，完成全部 children 後才回 parent 下一個 Stage；Runner 不推測 child 結構。
+
+目前 PlanStage 自己固定產生：
 
 ```text
-Grill #1 FAIL -> Repair -> Grill #2
-Grill #2 FAIL -> Repair -> Grill #3
-Grill #3 FAIL -> 不再 Repair -> Continue
+Execute -> Review -> Execute -> Review -> ...
 ```
 
-若任一次 PASS 就直接往下並清除計數。只要已經往下，之後流程若又回到 Grill，會重新從 #1 計算。Technical `ERROR` 不算在這個 semantic FAIL 次數內。
+自訂 producer 範例則示範其他 producer 可以產生自己的 child graph。
 
-`max_attempts` / `on_exhausted` 都是 optional；沒有 `max_attempts` 時完全維持原本行為。`on_exhausted` 可用 `continue` 或 `fail`；省略時預設為 `fail`。`max_attempts` 必須搭配 `recover`，也不能和 `repeat` 同時使用。
+## Dynamic Handoff
 
-注意：這裡是 **Workflow FlowNode 層級**的 `max_attempts`；CLI/API 同名參數是 Same Session backend recovery budget，兩者用途不同。
+```yaml
+coordinator:
+  type: handoff
+  targets: [implementer, verifier, final_validate]
+```
 
-## Plan 內建 TODO lifecycle
+每次 Handoff 只選一個允許 target。
 
-一般 `type: plan` 會在 Runner 內部執行 Task -> Review -> Repair（FAIL 時）-> Review，不依賴 YAML 裡叫做 `execute`、`review`、`repair` 的 Stage。若要自訂逐 TODO SOP，請在 Task Producer 後明確宣告連續的 `scope: task` nodes。
+## 驗證與測試
 
-## 多 Validator
+```powershell
+python tool/workflow_dryrun.py tool/workflow/11_multi_validators_anywhere.yaml --matrix --json
+tool\qwen_live_reliability_0_5h.bat
+```
 
-`result_kind: validation` 的 command Stage 與 `type: ai_validator` 都是一般 top-level gate；可以在 `flow` 任意位置放多個、和一般 Stage 交錯，每個 Validator 也可以有自己的 `recover`。
+短 gate PASS 後再執行 `tool\qwen_live_reliability_24h.bat`。

@@ -38,7 +38,8 @@ def test_supervisor_resumes_after_abnormal_worker_exit(tmp_path, monkeypatch):
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
-    state.write_text("{}", encoding="utf-8")
+    durable = '{"run_id":"stop-preserve","stage":"executing","current":1,"cycle":2,"workflow_position":3,"ai_session_id":"session-A"}'
+    state.write_text(durable, encoding="utf-8")
     request = _request(tmp_path)
     workers = iter([FakeWorker(3221225477, 101), FakeWorker(0, 102)])
     calls = []
@@ -328,9 +329,9 @@ def test_supervisor_runtime_marker_tracks_restarted_worker(tmp_path, monkeypatch
 
     monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
     monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
     monkeypatch.setattr(supervisor_module, "cleanup_orphans", lambda *args: None)
     monkeypatch.setattr(supervisor_module, "_report_retry", lambda *args: None)
+    monkeypatch.setattr(supervisor_module, "_sleep_until_retry", lambda *args: False)
 
     result = supervisor_module.supervise_cli(
         [],
@@ -349,7 +350,8 @@ def test_supervisor_stop_request_terminates_worker_and_cleans_children(tmp_path,
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
-    state.write_text("{}", encoding="utf-8")
+    durable = '{"run_id":"stop-preserve","stage":"executing","current":1,"cycle":2,"workflow_position":3,"ai_session_id":"session-A"}'
+    state.write_text(durable, encoding="utf-8")
     request = _request(tmp_path)
     stop_request = work / supervisor_module.STOP_REQUEST_FILE
     calls = []
@@ -388,6 +390,7 @@ def test_supervisor_stop_request_terminates_worker_and_cleans_children(tmp_path,
     assert calls == [((state,), 31337)]
     assert not stop_request.exists()
     assert not (work / supervisor_module.RUNNER_PROCESS_FILE).exists()
+    assert state.read_text(encoding="utf-8") == durable
 
 
 def test_supervisor_clears_stale_stop_request_before_new_run(tmp_path, monkeypatch):
@@ -580,7 +583,7 @@ def test_supervisor_worker_marker_failure_terminates_worker_before_unlock(tmp_pa
     assert not lock.exists()
 
 
-def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_path, monkeypatch):
+def test_supervisor_keeps_restarting_after_same_state_crashes_until_success(tmp_path, monkeypatch):
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
@@ -594,6 +597,7 @@ def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_pa
         FakeWorker(9, 101),
         FakeWorker(9, 102),
         FakeWorker(9, 103),
+        FakeWorker(0, 104),
     ])
     calls = []
 
@@ -615,8 +619,20 @@ def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_pa
         state_locator=lambda current: [state],
     )
 
-    assert result == 9
-    assert len(calls) == 3
+    assert result == 0
+    assert len(calls) == 4
+
+
+def test_worker_retry_delay_uses_capped_exponential_backoff(tmp_path):
+    request = _request(tmp_path)
+    request.retry_delay = 2
+    request.retry_max_delay = 10
+
+    assert supervisor_module._worker_retry_delay(request, 1) == 2
+    assert supervisor_module._worker_retry_delay(request, 2) == 4
+    assert supervisor_module._worker_retry_delay(request, 3) == 8
+    assert supervisor_module._worker_retry_delay(request, 4) == 10
+    assert supervisor_module._worker_retry_delay(request, 1000) == 10
 
 
 def test_clear_stop_request_can_fail_closed(monkeypatch, tmp_path):
@@ -775,3 +791,34 @@ def test_supervisor_recovers_hung_worker_from_durable_state(tmp_path, monkeypatc
     assert len(commands) == 2
     assert "--resume" not in commands[0]
     assert "--resume" in commands[1]
+
+
+def test_supervisor_does_not_resume_semantic_stop_with_saved_state(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text(
+        '{"run_id":"semantic-stop","stage":"max_cycles_exhausted","cycle":5}',
+        encoding="utf-8",
+    )
+    request = _request(tmp_path)
+    calls = []
+
+    def fake_popen(command, env):
+        calls.append(list(command))
+        return FakeWorker(1, 101)
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 1
+    assert len(calls) == 1
+    assert "--resume" not in calls[0]

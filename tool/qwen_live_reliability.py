@@ -27,12 +27,70 @@ RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
-SYSTEM_WORKFLOWS = {
-    name: ROOT / "runner" / "workflow" / "system" / f"{name}.yaml"
+
+from runner.config.defaults import MAX_TRANSITION_HISTORY
+from runner.workflow.loader import WORKFLOWS as RUNNER_WORKFLOWS
+
+WORKFLOWS = {
+    name: RUNNER_WORKFLOWS[name]
     for name in ("file", "ai", "mixed")
 }
-SYSTEM_FINAL_AI_RUNS = 3
-SYSTEM_FINAL_AI_REQUIRED_PASSES = 2
+DYNAMIC_HANDOFF_WORKFLOW = ROOT / "runner" / "assets" / "workflows" / "dynamic_handoff.yaml"
+BUILTIN_FINAL_AI_RUNS = 3
+BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
+LIVE_RETRY_DELAY_SECONDS = 2
+LIVE_RETRY_MAX_DELAY_SECONDS = 30
+API_RECOVERY_MAX_CYCLES = 8  # 4 initial Stages + 2 bounded execute/validate repair rounds
+
+PROBE_ORDER = (
+    "ownership-lock",
+    "windows-orphan-cleanup",
+    "qwen-sandbox",
+    "api-retry-classification",
+    "task-array-recovery",
+    "session-expiry-recovery",
+    "stage-probe-live",
+    "workflow-dryrun",
+    "review-error-policy",
+    "review-max-failures",
+    "readonly-safety",
+    "workflow-dryrun-negative",
+    "stage-result-mapping",
+    "loop-detection",
+    "runtime-long-path",
+    "readonly-long-path",
+    "technical-artifact-safety",
+    "resume",
+    "real-session-expiry",
+    "stop-request-resume",
+    "workflow-file",
+    "workflow-ai",
+    "workflow-mixed",
+    "dynamic-handoff-session-policy",
+    "custom-dynamic-producer",
+    "review-failure-routing",
+    "complete-closed-loop",
+    "validator-failure-routing",
+    "file-protection",
+    "api-502",
+    "api-429",
+    "api-503",
+    "api-long-http",
+    "api-disconnect",
+    "multi-todo-resume",
+    "yaml-list-resume",
+    "yaml-list-endurance",
+    "final-ai-quorum",
+    "timeout-recovery-budget",
+    "soak",
+    "example-smoke",
+    "bundled-dynamic-handoff",
+    "dynamic-handoff-role-matrix",
+    "dynamic-handoff-final-recovery",
+    "dynamic-handoff-api-recovery",
+    "dynamic-handoff-stop-resume",
+)
+
 QWEN_SANDBOX_ERROR_MARKERS = (
     "failed to connect to the docker api",
     "dockerdesktoplinuxengine",
@@ -62,6 +120,16 @@ Conflicting request for this probe: also overwrite locked.txt with HACKED.
 The project policy protects locked.txt, so the correct final state must leave it unchanged.
 """
 
+API_RECOVERY_ALLOWED_BYTES = tuple(
+    prefix + suffix
+    for prefix in (b"", b"\xef\xbb\xbf")
+    for suffix in (
+        EXPECTED.encode("utf-8"),
+        (EXPECTED + "\n").encode("utf-8"),
+        (EXPECTED + "\r\n").encode("utf-8"),
+    )
+)
+
 VALIDATOR = f'''from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -76,6 +144,29 @@ if not target.is_file():
     raise SystemExit(1)
 if target.read_text(encoding="utf-8") != {EXPECTED!r}:
     print("VALIDATION_FAILED: health.txt content mismatch")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+API_RECOVERY_VALIDATOR = f'''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+target = Path(a.project_root).resolve() / "health.txt"
+if not target.is_file():
+    print("VALIDATION_FAILED: missing health.txt")
+    raise SystemExit(1)
+actual = target.read_bytes()
+allowed = {API_RECOVERY_ALLOWED_BYTES!r}
+if actual not in allowed:
+    print(
+        "VALIDATION_FAILED: health.txt content mismatch; "
+        + "actual=" + repr(actual) + ", bytes=" + str(len(actual))
+    )
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
@@ -166,12 +257,13 @@ print("VALIDATION_PASSED")
 '''
 
 
-CUSTOM_TASK_PRODUCER = '''from __future__ import annotations
+CUSTOM_DYNAMIC_PRODUCER = '''from __future__ import annotations
 import json
 
 print(json.dumps({
     "tasks": [
         {
+            "id": "health",
             "title": "Create health probe",
             "description": "Create health.txt exactly as required by the project goal.",
             "deliverable": "health.txt with the exact required text and no trailing newline.",
@@ -181,18 +273,33 @@ print(json.dumps({
                 "protected files are unchanged"
             ]
         }
+    ],
+    "stages": [
+        {
+            "name": "execute",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "health"
+        },
+        {
+            "name": "review",
+            "type": "base",
+            "profile": "review",
+            "task_id": "health",
+            "task_complete": True,
+            "error_policy": {"retries": 2},
+            "max_failures": 3,
+            "routes": {"fail": "execute"}
+        }
     ]
 }, ensure_ascii=False))
 '''
 
-CUSTOM_TASK_WORKFLOW = '''stages:
+CUSTOM_DYNAMIC_WORKFLOW = '''stages:
   discover:
     type: command
     command: "{python} task_producer.py"
     produces: tasks
-
-  execute:
-    type: task
 
   validate_file:
     type: command
@@ -201,8 +308,6 @@ CUSTOM_TASK_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - stage: execute
-    scope: task
   - validate_file
 '''
 
@@ -229,6 +334,7 @@ class SoakResult:
     completed: int = 0
     mixed_validations: int = 0
     transient_recoveries: int = 0
+    transient_status_counts: dict[int, int] = field(default_factory=dict)
     timeout_probes: int = 0
     yaml_runs: int = 0
     sandbox_runs: int = 0
@@ -316,7 +422,7 @@ def arguments() -> argparse.Namespace:
         "--soak-transient-api-every",
         type=int,
         default=0,
-        help="run a same-session transient API recovery probe every N soak runs",
+        help="run a bounded-session transient API recovery probe every N soak runs",
     )
     parser.add_argument(
         "--soak-timeout-every",
@@ -342,6 +448,15 @@ def arguments() -> argparse.Namespace:
         help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, YAML, sandbox",
     )
     parser.add_argument(
+        "--long-http-outage-seconds",
+        type=float,
+        default=API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS,
+        help=(
+            "hold each 429/502/503 outage for this many seconds in the long "
+            "HTTP recovery probe"
+        ),
+    )
+    parser.add_argument(
         "--long-api-outage-seconds",
         type=float,
         default=180,
@@ -361,7 +476,85 @@ def arguments() -> argparse.Namespace:
         action="store_true",
         help="fail unless a real transient API recovery appears in logs",
     )
+    parser.add_argument(
+        "--start-probe",
+        default="",
+        metavar="INDEX",
+        help=(
+            "skip earlier reliability probes and start at this 1-based probe index; "
+            "use --list-probes to show indices/names"
+        ),
+    )
+    parser.add_argument(
+        "--list-probes",
+        action="store_true",
+        help="print ordered reliability probe indices/names and exit",
+    )
     return parser.parse_args()
+
+
+def source_revision(root: Path = ROOT) -> tuple[str, bool | None]:
+    """Return the exact Git revision plus tracked working-tree dirtiness when available."""
+    if not shutil.which("git"):
+        return "", None
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if head.returncode != 0:
+            return "", None
+        revision = head.stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        dirty = bool(status.stdout.strip()) if status.returncode == 0 else None
+        return revision, dirty
+    except (OSError, subprocess.SubprocessError):
+        return "", None
+
+
+def print_probe_list() -> None:
+    for index, name in enumerate(PROBE_ORDER, start=1):
+        print(f"{index:02d}  {name}")
+
+
+def resolve_start_probe(value: str) -> int:
+    token = str(value or "").strip()
+    if not token:
+        return 0
+    if not token.isdigit():
+        raise ValueError("--start-probe requires a 1-based numeric probe index; use --list-probes")
+    index = int(token)
+    if not 1 <= index <= len(PROBE_ORDER):
+        raise ValueError(
+            f"--start-probe index must be between 1 and {len(PROBE_ORDER)}"
+        )
+    return index - 1
+
+
+def probe_enabled(name: str, start_index: int) -> bool:
+    return PROBE_ORDER.index(name) >= start_index
+
+
+def probe_index(name: str) -> int:
+    return PROBE_ORDER.index(name) + 1
+
+
+def print_probe_pass(name: str, detail: str) -> None:
+    width = max(2, len(str(len(PROBE_ORDER))))
+    print(
+        f"[{probe_index(name):0{width}d}/{len(PROBE_ORDER):0{width}d}] "
+        f"PASS {name} · {detail}",
+        flush=True,
+    )
 
 
 def case_prompt(prompt: str, case_id: str) -> str:
@@ -395,6 +588,7 @@ def runner_command(
     sandbox: bool | None = None,
     script: Path | None = None,
     workflow: Path | None = None,
+    max_cycles: int | None = None,
 ) -> list[str]:
     effective_sandbox = settings.sandbox if sandbox is None else sandbox
     validator = "ai" if ai_only else str(project / "validation.py")
@@ -404,19 +598,21 @@ def runner_command(
         "--backend", "qwen",
         "--command", settings.command,
         "--project-root", str(project),
-        "--execution-mode", "linear",
-        "--retry-wait", "0" if timeout_probe else "2",
-        "--retry-max-wait", "30",
+        "--retry-delay", "0" if timeout_probe else str(LIVE_RETRY_DELAY_SECONDS),
+        "--retry-max-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
         "--json-events",
         "--no-ui-project-register",
     ]
-    command.extend(
-        ["--script", str(script)]
-        if script else [
-            "--goal-file", str(project / "prompt.md"),
-            "--validator", validator,
-        ]
-    )
+    if script:
+        command.extend(["--script", str(script)])
+    else:
+        command.extend(["--goal-file", str(project / "prompt.md")])
+        if workflow is None:
+            command.extend(["--validator", validator])
+        elif workflow_uses_stage(workflow, "validate_file"):
+            command.extend(["--validator", str(project / "validation.py")])
+        elif ai_only and workflow_uses_stage(workflow, "validate_ai"):
+            command.extend(["--validator", "ai"])
     if not timeout_probe:
         command.extend(["--agent-timeout", whole_seconds_arg(settings.agent_timeout)])
         command.extend(["--planning-timeout", whole_seconds_arg(settings.planning_timeout)])
@@ -424,6 +620,8 @@ def runner_command(
         command.append("--sandbox")
     if workflow is not None and script is None:
         command.extend(["--workflow", str(workflow)])
+    if max_cycles is not None:
+        command.extend(["--max-cycles", str(max_cycles)])
     if resume:
         command.append("--resume")
     else:
@@ -432,8 +630,7 @@ def runner_command(
         command.extend([
             "--planning-timeout", "1",
             "--agent-timeout", "1",
-            "--max-attempts", "1",
-            "--max-cycles", "1",
+            "--stage-retries", "2",
         ])
     if final_ai:
         command.extend([
@@ -453,54 +650,364 @@ def whole_seconds_arg(value: float) -> str:
     return str(whole)
 
 
-def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
-    """Return and verify the bundled system Final AI contract."""
+def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
+    """Return and verify the bundled Final AI contract."""
     if workflow not in {"ai", "mixed"}:
-        raise ValueError(f"system/{workflow} has no Final AI contract")
+        raise ValueError(f"workflow/{workflow} has no Final AI contract")
     from runner.workflow.loader import load_workflow
 
     validators = [
-        node for node in load_workflow(SYSTEM_WORKFLOWS[workflow])
+        node for node in load_workflow(WORKFLOWS[workflow])
         if node.get("name") == "validate_ai" and node.get("type") == "ai_validator"
     ]
     if len(validators) != 1:
-        raise RuntimeError(f"system/{workflow} must contain exactly one validate_ai stage")
+        raise RuntimeError(f"workflow/{workflow} must contain exactly one validate_ai stage")
     validator = validators[0]
     runs = int(validator.get("runs", 1))
     required = int(validator.get("required_passes") or (runs // 2 + 1))
     yolo = validator.get("ai_validator_yolo") is True
     if (runs, required, yolo) != (
-        SYSTEM_FINAL_AI_RUNS,
-        SYSTEM_FINAL_AI_REQUIRED_PASSES,
+        BUILTIN_FINAL_AI_RUNS,
+        BUILTIN_FINAL_AI_REQUIRED_PASSES,
         True,
     ):
         raise RuntimeError(
-            f"system/{workflow} Final AI contract mismatch: "
+            f"workflow/{workflow} Final AI contract mismatch: "
             f"runs={runs}, required_passes={required}, yolo={yolo}"
         )
     return runs, required, yolo
 
 
-def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
-    """Verify bundled system workflows default read-only AI stages to observe."""
+def _discover_openai_model(port: int) -> str:
+    connection = http.client.HTTPConnection("127.0.0.1", int(port), timeout=5)
+    try:
+        connection.request("GET", "/v1/models")
+        response = connection.getresponse()
+        body = response.read()
+        if response.status != 200:
+            raise RuntimeError(
+                f"model discovery failed: HTTP {response.status}: "
+                f"{body.decode('utf-8', errors='replace')[-500:]}"
+            )
+    finally:
+        connection.close()
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("model discovery returned invalid JSON") from error
+    items = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise RuntimeError("model discovery response has no data array")
+    for item in items:
+        if isinstance(item, dict):
+            model = str(item.get("id") or "").strip()
+            if model:
+                return model
+    raise RuntimeError("model discovery returned no usable model id")
+
+
+def relative_existing_path(child: Path, root: Path) -> str:
+    """Return child relative to root using filesystem identity for alias-safe paths."""
+    child = Path(child)
+    root = Path(root)
+    try:
+        return child.relative_to(root).as_posix()
+    except ValueError:
+        pass
+
+    if not child.exists() or not root.exists():
+        raise ValueError(f"{child} is not under {root}")
+
+    for ancestor in (child, *child.parents):
+        try:
+            if os.path.samefile(ancestor, root):
+                return child.relative_to(ancestor).as_posix()
+        except OSError:
+            continue
+    raise ValueError(f"{child} is not under {root}")
+
+
+def _write_live_review_probe_workflow(
+    path: Path,
+    *,
+    backend: str = "",
+    model: str = "",
+) -> None:
+    backend_name = str(backend or "").strip()
+    model_name = str(model or "").strip()
+    if bool(backend_name) != bool(model_name):
+        raise ValueError("live Stage backend/model override must be an atomic pair")
+    override = (
+        f"    backend: {backend_name}\n"
+        f"    model: {json.dumps(model_name)}\n"
+        if backend_name
+        else ""
+    )
+    path.write_text(
+        """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+"""
+        + override
+        + """    error_policy:
+      retries: 2
+    max_failures: 3
+flow:
+  - review
+""",
+        encoding="utf-8",
+    )
+
+
+def _assert_live_review_stage_result(
+    stage: dict[str, object],
+    backend: str,
+) -> None:
+    if (
+        stage.get("status") != "pass"
+        or stage.get("kind") != "review"
+        or stage.get("next") != "done"
+        or stage.get("route") != "next"
+    ):
+        raise RuntimeError(
+            f"real {backend} Review Stage Probe expected PASS -> done: {stage!r}"
+        )
+
+
+def _assert_live_stage_backend_model_events(
+    root: Path,
+    stage: dict[str, object],
+    backend: str,
+    model: str,
+) -> None:
+    work_dir = Path(str(stage.get("work_dir") or ""))
+    try:
+        relative_work = relative_existing_path(work_dir, root)
+    except ValueError as error:
+        raise RuntimeError(
+            f"{backend} Stage Probe returned invalid work_dir: {work_dir}"
+        ) from error
+    model_events = [
+        event for event in runner_events(root, relative_work)
+        if event.get("type") in {"model.prompt", "model.result"}
+    ]
+    if not model_events:
+        raise RuntimeError(
+            f"real {backend} Stage backend/model override emitted no model events"
+        )
+    if any(str(event.get("backend") or "") != backend for event in model_events):
+        raise RuntimeError(
+            f"{backend} Stage backend override mismatch: {model_events!r}"
+        )
+    if any(str(event.get("model") or "") != model for event in model_events):
+        raise RuntimeError(
+            f"{backend} Stage model override mismatch: "
+            f"expected {model!r}, events={model_events!r}"
+        )
+
+
+def _select_live_alternate_backend(
+    root: Path,
+    primary_backend: str,
+) -> tuple[str, str] | None:
+    """Pick the first runnable registered backend with at least one selectable model."""
+    from runner.agent import available_models, backend_names, default_command
+    from runner.plugins.registry import discover_plugins
+
+    discover_plugins()
+    for backend in backend_names():
+        if backend == primary_backend:
+            continue
+        command = default_command(backend)
+        if not (Path(command).is_file() or shutil.which(command) is not None):
+            continue
+        try:
+            models = available_models(backend, root)
+        except Exception:
+            continue
+        if models:
+            return backend, models[0]
+    return None
+
+
+def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
+    """Exercise real Stage transport plus Stage-local backend/model overrides."""
+    tool = ROOT / "tool" / "stage_probe.py"
+
+    def run_probe(
+        root: Path,
+        workflow: Path,
+        mode: str,
+        log: Path,
+        *,
+        keep_work: bool = False,
+    ) -> dict[str, object]:
+        command = [
+            sys.executable,
+            str(tool),
+            "--project-root", str(root),
+            "--workflow", str(workflow),
+            "--stage", "review",
+            "--backend", "qwen",
+            "--command", settings.command,
+            "--probe-mode", mode,
+        ]
+        if mode == "stage":
+            command += [
+                "--input",
+                "REVIEW_STAGE_PROBE_OK is the complete deliverable and executor evidence. "
+                "Verify that this exact non-empty deliverable is present and consistent, then decide immediately.",
+            ]
+        if keep_work:
+            command.append("--keep-work")
+        code = run_command(command, log, min(settings.run_timeout, max(180.0, settings.agent_timeout + 60)))
+        raw = [line.strip() for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+        if not raw:
+            raise RuntimeError(f"Stage Probe {mode} produced no output")
+        try:
+            payload = json.loads(raw[-1])
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Stage Probe {mode} returned invalid JSON: {_tail_text(raw[-1])}") from error
+        if code != 0 or not isinstance(payload, dict):
+            raise RuntimeError(f"Stage Probe {mode} failed: code={code}, payload={payload!r}")
+        return payload
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-stage-probe-live-") as directory:
+        root = Path(directory) / "project"
+        root.mkdir()
+        workflow = Path(directory) / "stage-probe.yaml"
+        _write_live_review_probe_workflow(workflow)
+        ping = run_probe(root, workflow, "agent_ping", Path(directory) / "agent-ping.log")
+        if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
+            raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
+
+        ping_data = ping.get("data") if isinstance(ping.get("data"), dict) else {}
+        baseline_model = str(ping_data.get("model") or "").strip() or _discover_openai_model(settings.api_port)
+        _write_live_review_probe_workflow(
+            workflow,
+            backend="qwen",
+            model=baseline_model,
+        )
+        stage = run_probe(
+            root,
+            workflow,
+            "stage",
+            Path(directory) / "real-stage.log",
+            keep_work=True,
+        )
+        _assert_live_review_stage_result(stage, "qwen")
+        _assert_live_stage_backend_model_events(
+            root,
+            stage,
+            "qwen",
+            baseline_model,
+        )
+        result: dict[str, object] = {
+            "agent_ping": True,
+            "real_stage_status": stage.get("status"),
+            "real_stage_next": stage.get("next"),
+            "stage_backend": "qwen",
+            "stage_model": baseline_model,
+            "alternate_stage": {
+                "available": False,
+                "tested": False,
+                "reason": "no_runnable_backend",
+            },
+        }
+
+        alternate = _select_live_alternate_backend(root, "qwen")
+        if alternate is None:
+            return result
+        alternate_backend, alternate_model = alternate
+        _write_live_review_probe_workflow(
+            workflow,
+            backend=alternate_backend,
+            model=alternate_model,
+        )
+        alternate_stage = run_probe(
+            root,
+            workflow,
+            "stage",
+            Path(directory) / f"{alternate_backend}-stage.log",
+            keep_work=True,
+        )
+        _assert_live_review_stage_result(alternate_stage, alternate_backend)
+        _assert_live_stage_backend_model_events(
+            root,
+            alternate_stage,
+            alternate_backend,
+            alternate_model,
+        )
+        result["alternate_stage"] = {
+            "available": True,
+            "tested": True,
+            "backend": alternate_backend,
+            "status": alternate_stage.get("status"),
+            "model": alternate_model,
+        }
+        return result
+
+
+def _plan_review_template() -> dict[str, object]:
+    from runner.runtime.run_state import Task
+    from runner.workflow.stages import PlanStage
+
+    tasks = [
+        Task(
+            id="contract-task",
+            title="Contract task",
+            description="Validate dynamic Plan child contract.",
+            acceptance_criteria=["Review child is configured safely."],
+            deliverable="Contract evidence",
+        )
+    ]
+    children = PlanStage._plan_child_stages(tasks)
+    review = next(
+        (item for item in children if item.get("profile") == "review"),
+        None,
+    )
+    if not isinstance(review, dict):
+        raise RuntimeError("Plan Stage did not generate an AI Review child")
+    return review
+
+
+def builtin_review_error_policy_contract() -> dict[str, int]:
+    """Verify dynamic Plan Review children keep the finite fail-soft policy."""
+    review = _plan_review_template()
+    policy = review.get("error_policy")
+    retries = policy.get("retries") if isinstance(policy, dict) else None
+    if retries != 2:
+        raise RuntimeError(
+            f"dynamic Plan Review error_policy mismatch: expected retries=2, got {retries!r}"
+        )
+    return {workflow: int(retries) for workflow in ("file", "ai", "mixed")}
+
+
+def builtin_review_max_failures_contract() -> dict[str, int]:
+    """Verify dynamic Plan Review children keep the bounded semantic FAIL loop."""
+    review = _plan_review_template()
+    maximum = review.get("max_failures")
+    if maximum != 3:
+        raise RuntimeError(
+            f"dynamic Plan Review max_failures mismatch: expected 3, got {maximum!r}"
+        )
+    return {workflow: int(maximum) for workflow in ("file", "ai", "mixed")}
+
+
+def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
+    """Verify static read-only stages and dynamic Plan Review children use observe."""
     from runner.workflow.loader import load_workflow
 
     expected = {
-        "file": {"planning": "observe", "__plan_review__": "observe"},
-        "ai": {
-            "planning": "observe",
-            "__plan_review__": "observe",
-            "validate_ai": "observe",
-        },
-        "mixed": {
-            "planning": "observe",
-            "__plan_review__": "observe",
-            "validate_ai": "observe",
-        },
+        "file": {"planning": "observe"},
+        "ai": {"planning": "observe", "validate_ai": "observe"},
+        "mixed": {"planning": "observe", "validate_ai": "observe"},
     }
     observed: dict[str, dict[str, str | None]] = {}
     for workflow, stages in expected.items():
-        loaded = load_workflow(SYSTEM_WORKFLOWS[workflow])
+        loaded = load_workflow(WORKFLOWS[workflow])
         by_name = {str(node.get("name", "")): node for node in loaded}
         observed[workflow] = {}
         for stage, expected_value in stages.items():
@@ -508,9 +1015,23 @@ def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
             observed[workflow][stage] = actual if isinstance(actual, str) else None
             if actual != expected_value:
                 raise RuntimeError(
-                    f"system/{workflow} {stage} readonly_safety mismatch: "
+                    f"workflow/{workflow} {stage} readonly_safety mismatch: "
                     f"expected {expected_value!r}, got {actual!r}"
                 )
+        from runner.workflow.registry import create_stage
+        template = dict(_plan_review_template())
+        template.pop("task_id", None)
+        template.pop("task_complete", None)
+        dynamic_review = create_stage({
+            "name": "dynamic_review_contract",
+            **template,
+        }).readonly_safety
+        observed[workflow]["dynamic_review"] = dynamic_review
+        if dynamic_review != "observe":
+            raise RuntimeError(
+                f"workflow/{workflow} dynamic Review readonly_safety mismatch: "
+                f"expected 'observe', got {dynamic_review!r}"
+            )
     return observed
 
 
@@ -544,6 +1065,8 @@ def run_command(
                 raise RuntimeError(f"runner exceeded harness timeout: {timeout:g}s")
             time.sleep(0.2)
         process.wait(timeout=10)
+        if observe:
+            observe()
         return process.returncode or 0
     finally:
         if process.poll() is None:
@@ -572,11 +1095,9 @@ def probe_timeout_diagnostic(project: Path, log: Path) -> str:
         state_summary = json.dumps(
             {
                 "stage": state.get("stage"),
-                "stage_detail": state.get("stage_detail"),
                 "cycle": state.get("cycle"),
                 "current": state.get("current"),
                 "workflow_position": state.get("workflow_position"),
-                "task_step": state.get("task_step"),
                 "transition_previous": state.get("transition_previous"),
                 "validator_output": _tail_text(str(state.get("validator_output") or ""), 800),
             },
@@ -804,22 +1325,20 @@ def assert_prompt_transport_contract(project: Path) -> None:
             )
 
 
-def assert_system_topology(project: Path, workflow: str) -> None:
+def assert_builtin_topology(project: Path, workflow: str) -> None:
     starts = [
         str(event.get("stage", ""))
         for event in runner_events(project)
         if event.get("type") == "runner.stage" and event.get("action") == "start"
     ]
-    required = {"planning", "__plan_task__", "__plan_review__"}
     expected_validators = {
         "file": {"validate_file"},
         "ai": {"validate_ai"},
         "mixed": {"validate_file", "validate_ai"},
     }[workflow]
-    missing = sorted(required - set(starts))
     validators = {name for name in starts if name.startswith("validate_")}
-    task_runs = starts.count("__plan_task__")
-    review_runs = starts.count("__plan_review__")
+    execute_runs = [name for name in starts if name.endswith("_execute")]
+    review_runs = [name for name in starts if name.endswith("_review")]
 
     state = read_state(project)
     tasks = state.get("tasks")
@@ -833,22 +1352,28 @@ def assert_system_topology(project: Path, workflow: str) -> None:
         if isinstance(tasks, list)
         else ["<missing durable tasks>"]
     )
+    expanded = state.get("expanded_workflow")
+    expanded_names = {
+        str(item.get("name", ""))
+        for item in expanded
+        if isinstance(item, dict)
+    } if isinstance(expanded, list) else set()
 
-    # Planning is intentionally free to decompose the same goal into one or more
-    # bounded TODOs. The topology contract therefore follows durable task count
-    # instead of assuming the model will always emit exactly one TODO. Retries
-    # or replans may legitimately make task/review stage counts larger.
-    invalid_task_loop = (
-        task_count < 1
-        or task_runs < task_count
-        or review_runs < task_count
+    invalid_dynamic_children = (
+        "planning" not in starts
+        or task_count < 1
+        or len(execute_runs) < task_count
+        or len(review_runs) < task_count
         or bool(incomplete)
+        or not any(name.endswith("_execute") for name in expanded_names)
+        or not any(name.endswith("_review") for name in expanded_names)
     )
-    if missing or validators != expected_validators or invalid_task_loop:
+    if validators != expected_validators or invalid_dynamic_children:
         raise RuntimeError(
-            f"system/{workflow} topology mismatch: missing={missing}, "
+            f"workflow/{workflow} topology mismatch: "
             f"validators={sorted(validators)}, durable_tasks={task_count}, "
-            f"incomplete={incomplete}, task_runs={task_runs}, review_runs={review_runs}"
+            f"incomplete={incomplete}, execute_runs={len(execute_runs)}, "
+            f"review_runs={len(review_runs)}, expanded={sorted(expanded_names)}"
         )
 
 
@@ -900,10 +1425,29 @@ def assert_completed(
     expected_file: str = "health.txt",
     expected_text: str = EXPECTED,
     work_dir: str = ".ai-task-runner",
+    accepted_bytes: tuple[bytes, ...] | None = None,
 ) -> None:
     assert_state_completed(project, code, work_dir)
-    if (project / expected_file).read_text(encoding="utf-8") != expected_text:
+    target = project / expected_file
+    if accepted_bytes is not None:
+        if target.read_bytes() not in accepted_bytes:
+            raise RuntimeError(f"validator passed but {expected_file} is incorrect")
+        return
+    if target.read_text(encoding="utf-8") != expected_text:
         raise RuntimeError(f"validator passed but {expected_file} is incorrect")
+
+
+def _latest_harness_log(project: Path) -> Path | None:
+    root = project.parent / "_harness-logs"
+    try:
+        matches = sorted(
+            root.glob(f"{project.name}-*.jsonl"),
+            key=lambda path: path.stat().st_mtime_ns,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    return matches[0] if matches else None
 
 
 def assert_state_completed(
@@ -915,15 +1459,18 @@ def assert_state_completed(
     state = read_json(work / "state.json")
     if code != 0 or state.get("completed") is not True:
         validator_output = str(state.get("validator_output") or "").strip()
+        harness_log = _latest_harness_log(project)
+        diagnostic = (
+            probe_timeout_diagnostic(project, harness_log)
+            if harness_log is not None
+            else "console_tail=unavailable"
+        )
         raise RuntimeError(
             "run failed: "
             f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
             f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
-            f"task_step={state.get('task_step')}, "
-            f"recovery_attempt_key={state.get('recovery_attempt_key')!r}, "
-            f"recovery_attempt_count={state.get('recovery_attempt_count')}, "
             f"transition_previous={state.get('transition_previous')!r}, "
-            f"validator_output={validator_output[-1200:]!r}"
+            f"validator_output={validator_output[-1200:]!r}; {diagnostic}"
         )
     required = (
         work / "log.txt",
@@ -1050,7 +1597,7 @@ def api_retry_classification_preflight() -> None:
 
         def deterministic(config):
             calls.append(bool(config.resume))
-            raise RunnerError("saved task_step is outside the task-scoped SOP")
+            raise RunnerError("saved dynamic child cursor is outside the expanded Workflow")
 
         api_module.execute = deterministic
         try:
@@ -1126,10 +1673,9 @@ def session_expiry_recovery_preflight() -> None:
             "--project-root", str(root),
             "--goal", "Create done.txt and validate it.",
             "--validator", "ai",
-            "--max-attempts", "2",
+            "--stage-retries", "2",
             "--retry-delay", "0",
-            "--retry-wait", "0",
-            "--retry-max-wait", "0",
+            "--retry-max-delay", "0",
             "--agent-timeout", "30",
             "--planning-timeout", "30",
             "--force-new",
@@ -1149,6 +1695,18 @@ def session_expiry_recovery_preflight() -> None:
         if not (root / "done.txt").is_file():
             raise RuntimeError("expired-session recovery did not complete from durable Runner state")
         events = runner_events(root)
+        stage_recovery = [
+            event for event in events
+            if event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and int(event.get("retry") or 0) >= 1
+            and str(event.get("retry_mode") or "") in {"retry", "recover"}
+            and "HTTP 503" in str(event.get("error") or "")
+        ]
+        if not stage_recovery:
+            raise RuntimeError(
+                "production CLI transient Stage failure emitted no runner.recovery/retry evidence"
+            )
         reset_indexes = [
             index for index, event in enumerate(events)
             if event.get("type") == "model.result"
@@ -1169,13 +1727,24 @@ def session_expiry_recovery_preflight() -> None:
 
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
+    tool_workflows = [
+        ROOT / "tool" / "workflow" / name
+        for name in (
+            "01_default_ai.yaml",
+            "02_ai_with_review_gate.yaml",
+            "03_file_validation.yaml",
+            "04_mixed_with_review_gate.yaml",
+            "05_review_vote_3_choose_2.yaml",
+            "06_custom_task_producer.yaml",
+            "11_multi_validators_anywhere.yaml",
+        )
+    ]
     workflows = [
-        *SYSTEM_WORKFLOWS.values(),
-        ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml",
+        *WORKFLOWS.values(),
+        RUNNER_WORKFLOWS["dynamic_handoff"],
+        RUNNER_WORKFLOWS["ralphy_ai_validate"],
         ROOT / "examples" / "custom_workflow_latest.yaml",
-        ROOT / "tool" / "workflow" / "08_bounded_grill_continue.yaml",
-        ROOT / "tool" / "workflow" / "10_bounded_gate_reentry_reset.yaml",
-        ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
+        *tool_workflows,
     ]
     tool = ROOT / "tool" / "workflow_dryrun.py"
     results: list[dict[str, object]] = []
@@ -1214,21 +1783,16 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
                 "    type: command",
                 f'    command: ["{{python}}", -c, "print(\'{name}\')"]',
             ])
-            if index == 5:
-                flow_lines.extend(["  - stage: s05", "    repeat: 3", "    recover: [fallback]"])
-            elif index == 9:
-                flow_lines.extend(["  - stage: s09", "    recover: [fallback]"])
-            elif index == 10:
-                flow_lines.extend(["  - stage: s10", "    restart_at: s08"])
-            else:
-                flow_lines.append(f"  - {name}")
-        stage_lines.extend([
-            "  fallback:",
-            "    type: command",
-            '    command: ["{python}", -c, "print(\'fallback\')"]',
-        ])
+            target = {5: "s03", 9: "s07", 10: "s08"}.get(index)
+            if target:
+                stage_lines.extend([
+                    "    routes:",
+                    f"      fail: {target}",
+                ])
+            flow_lines.append(f"  - {name}")
         path.write_text(
-            "stages:\n" + "\n".join(stage_lines) + "\nflow:\n" + "\n".join(flow_lines) + "\n",
+            "stages:\n" + "\n".join(stage_lines) + "\nflow:\n"
+            + "\n".join(flow_lines) + "\n",
             encoding="utf-8",
         )
         twelve = run_one(path)
@@ -1253,8 +1817,14 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
         None,
     )
     features = custom.get("features", {}) if isinstance(custom, dict) else {}
-    if not isinstance(features, dict) or not features.get("task_producer") or not features.get("task_scope"):
-        raise RuntimeError("custom Task Producer dry-run preflight did not cover task production + task scope")
+    if (
+        not isinstance(features, dict)
+        or not features.get("task_producer")
+        or not features.get("dynamic_producer")
+    ):
+        raise RuntimeError(
+            "custom Dynamic Producer dry-run preflight did not cover producer-defined dynamic child Workflow"
+        )
     return results
 
 
@@ -1265,7 +1835,7 @@ def workflow_dryrun_negative_preflight() -> None:
         root = Path(directory)
         invalid = root / "invalid.yaml"
         invalid.write_text(
-            "stages:\n  work:\n    type: task\n    unsupported_option: true\nflow: [work]\n",
+            "stages:\n  work:\n    type: base\n    profile: execute\n    unsupported_option: true\nflow: [work]\n",
             encoding="utf-8",
         )
         invalid_run = subprocess.run(
@@ -1282,10 +1852,8 @@ def workflow_dryrun_negative_preflight() -> None:
   check:
     type: command
     command: [python, -c, "print('CHECK')"]
-    recover: [fallback]
-  fallback:
-    type: command
-    command: [python, -c, "print('FALLBACK')"]
+    routes:
+      fail: check
 flow:
   - check
 """,
@@ -1302,7 +1870,7 @@ flow:
             cwd=ROOT, text=True, capture_output=True, timeout=30,
         )
         if loop_run.returncode != 1:
-            raise RuntimeError("workflow dry-run failed to reject a non-converging recovery loop")
+            raise RuntimeError("workflow dry-run failed to reject a non-converging result-edge loop")
         try:
             payload = json.loads(loop_run.stdout)
         except json.JSONDecodeError as error:
@@ -1313,14 +1881,14 @@ flow:
 
 def stage_result_mapping_preflight() -> None:
     """Prove immutable Review/Validator booleans map to Runner PASS/FAIL correctly."""
-    from runner.workflow.stages.ai_stage import (
+    from runner.workflow.stages import (
         AIValidatorStage,
         AIValidatorStageSpec,
-        ReviewStage,
-        ReviewStageSpec,
+        BaseStage,
+        BaseStageSpec,
     )
 
-    review = ReviewStage(ReviewStageSpec(name="review"))
+    review = BaseStage(BaseStageSpec(name="review", profile="review"))
     validator = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
     checks = [
         (review.result_status({"completed": True}), "pass", "review true"),
@@ -1339,7 +1907,7 @@ def _deep_preflight_root(base: Path, minimum: int = 300) -> Path:
     while len(str(root)) <= minimum:
         root = root / (f"segment-{index}-" + "x" * 38)
         index += 1
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     io_path(root).mkdir(parents=True, exist_ok=True)
     return root
@@ -1353,9 +1921,9 @@ def _long_path_temp_root(prefix: str, minimum: int):
     non-extended root path. On Windows, cleanup can therefore fail after a
     successful >MAX_PATH preflight with WinError 145 because descendants cannot
     be removed. Keep the logical path for the test, but always clean through
-    runner.utils.files.remove_path(), which applies the extended-length prefix.
+    runner.utils.remove_path(), which applies the extended-length prefix.
     """
-    from runner.utils.files import remove_path
+    from runner.utils import remove_path
 
     base = Path(tempfile.mkdtemp(prefix=prefix))
     try:
@@ -1368,8 +1936,8 @@ def runtime_long_path_preflight() -> None:
     """Exercise core resource/state/snapshot I/O beyond traditional Windows MAX_PATH."""
     from runner.resources import read_text, write_text
     from runner.runtime.run_state import RunState, StateStore
-    from runner.utils.files import copy_path, digest, remove_path
-    from runner.workflow.snapshot import freeze_run_resource, load_run_resource
+    from runner.utils import copy_path, digest, remove_path
+    from runner.resources import freeze_run_resource, load_run_resource
 
     with _long_path_temp_root("ai-runner-long-path-", 300) as root:
         source = root / "source.txt"
@@ -1411,7 +1979,7 @@ def readonly_long_path_preflight() -> None:
             return []
 
     from runner.resources import read_text, write_text
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     with _long_path_temp_root("ai-runner-readonly-long-", 260) as root:
         work = root / ".ai-task-runner"
@@ -1470,7 +2038,7 @@ def readonly_long_path_preflight() -> None:
 
 
 def technical_artifact_safety_preflight() -> None:
-    """Prove caches/build/IDE metadata cannot cause protected-path replans."""
+    """Prove caches/build/IDE metadata cannot cause protected-path semantic reroutes."""
     from runner.plugins.safety import restore_changed, snapshot
 
     with tempfile.TemporaryDirectory(prefix="ai-runner-safety-artifacts-") as temporary:
@@ -1510,14 +2078,93 @@ def technical_artifact_safety_preflight() -> None:
             raise RuntimeError("project dotfiles were incorrectly blanket-ignored")
 
 
+MAX_CYCLE_SUPERVISOR_WORKFLOW = '''stages:
+  loop_gate:
+    type: command
+    result_kind: validation
+    command: "{python} loop_gate.py"
+    routes:
+      fail: loop_gate
+
+flow:
+  - loop_gate
+'''
+
+
+def max_cycle_supervisor_preflight(settings: Settings, root: Path) -> None:
+    """Prove semantic cycle exhaustion terminates Supervisor instead of crash-resume looping."""
+    project = create_project(root, "max-cycle-supervisor-preflight")
+    (project / "loop_gate.py").write_text(
+        "print('VALIDATION_FAILED: intentional semantic loop')\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    workflow = project / "max-cycle-workflow.yaml"
+    workflow.write_text(MAX_CYCLE_SUPERVISOR_WORKFLOW, encoding="utf-8")
+    log = console_log(project, "console.jsonl")
+
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=workflow,
+            max_cycles=1,
+        ),
+        log,
+        min(settings.run_timeout, 60),
+    )
+    state = read_state(project)
+    if code != 1:
+        raise RuntimeError(
+            f"max-cycle semantic stop returned unexpected exit code: {code}"
+        )
+    if state.get("stage") != "max_cycles_exhausted" or state.get("completed") is True:
+        raise RuntimeError(
+            "max-cycle semantic stop did not persist terminal fail-closed state: "
+            f"stage={state.get('stage')!r}, completed={state.get('completed')!r}, "
+            f"cycle={state.get('cycle')!r}"
+        )
+
+    starts = [
+        event for event in runner_events(project)
+        if event.get("type") == "runner.stage"
+        and event.get("action") == "start"
+        and event.get("stage") == "loop_gate"
+    ]
+    if len(starts) != 1:
+        raise RuntimeError(
+            "Supervisor restarted an exhausted semantic loop: "
+            f"loop_gate_starts={len(starts)}"
+        )
+
+    console_events = jsonl_events(log)
+    if any(event.get("type") == "runner.retry" for event in console_events):
+        raise RuntimeError(
+            "Supervisor scheduled crash recovery after max_cycles semantic stop"
+        )
+
+    work = project / ".ai-task-runner"
+    stale = [
+        name for name in (
+            "runner-process.json",
+            "run.lock",
+            "worker-heartbeat",
+        )
+        if (work / name).exists()
+    ]
+    if stale:
+        raise RuntimeError(
+            f"semantic stop left Supervisor runtime marker(s): {stale!r}"
+        )
+
+
 def loop_detection_contract_preflight() -> None:
-    """Lock Qwen loop classification plus bounded Planning retry semantics."""
+    """Lock Qwen loop classification plus the shared Stage retry/session contract."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from runner.ai.errors import AIError, BackendError
-    from runner.ai.session import should_reset_session
-    from runner.backends.base import BaseBackend
-    from runner.workflow.stages.executor import StageExecutor
+    from runner.agent import BaseBackend, should_reset_session
+    from runner.config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
+    from runner.config.runtime import RuntimeConfig
 
     message = (
         "Loop detection halted the run "
@@ -1527,36 +2174,61 @@ def loop_detection_contract_preflight() -> None:
     if diagnostics.get("loop_type") != "consecutive_identical_tool_calls":
         raise RuntimeError("Qwen loop diagnostic classification contract changed")
     if not should_reset_session(message):
-        raise RuntimeError("Qwen loop signal no longer forces session reset")
-
-    backend = BackendError(
-        message,
-        return_code=1,
-        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
-    )
-    error = AIError(message)
-    error.__cause__ = backend
-    planning = type("PlanningStageProbe", (), {"name": "planning", "result_kind": "tasks"})()
-    if StageExecutor._same_session_retry_limit(planning, error, 5) != 1:
-        raise RuntimeError("Planning loop same-session retry cap contract changed")
-
-    backend2 = BackendError(
-        message + " dynamic-turn=99",
-        return_code=1,
-        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
-    )
-    error2 = AIError(message + " dynamic-turn=99")
-    error2.__cause__ = backend2
-    ctx = type("PlanningCtxProbe", (), {"task": None})()
-    if StageExecutor._failure_key(planning, ctx, error) != StageExecutor._failure_key(
-        planning, ctx, error2
-    ):
-        raise RuntimeError("Planning loop recovery key is no longer stable")
+        raise RuntimeError("Qwen loop signal no longer requests a Fresh Session")
+    if DEFAULT_PER_SESSION_ATTEMPTS != 2:
+        raise RuntimeError(
+            "shared per-session retry budget changed; update the reliability contract"
+        )
+    config = RuntimeConfig()
+    if config.stage_retries != -1:
+        raise RuntimeError("unattended Stage retry default is no longer unlimited")
+    if config.retry_delay < 0 or config.retry_max_delay < config.retry_delay:
+        raise RuntimeError("shared retry delay contract is invalid")
 
 
 RESUME_PROBE_PAUSE = '''from __future__ import annotations
 import time
 time.sleep(3)
+'''
+
+RESUME_TASK_PRODUCER = '''from __future__ import annotations
+import json
+
+print(json.dumps({
+    "tasks": [
+        {
+            "id": "resume",
+            "title": "Resume probe task",
+            "description": "Exercise durable dynamic child Workflow resume.",
+            "deliverable": "health.txt with expected content.",
+            "acceptance_criteria": ["The resumed child Workflow completes."]
+        }
+    ],
+    "stages": [
+        {
+            "name": "execute_first",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "resume",
+            "status": "Execute before forced restart"
+        },
+        {
+            "name": "pause",
+            "type": "command",
+            "task_id": "resume",
+            "status": "Holding durable resume checkpoint",
+            "command": "{python} resume_pause.py"
+        },
+        {
+            "name": "execute_second",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "resume",
+            "task_complete": True,
+            "status": "Continue same session after restart"
+        }
+    ]
+}, ensure_ascii=False))
 '''
 
 RESUME_PROBE_WORKFLOW = '''stages:
@@ -1566,19 +2238,6 @@ RESUME_PROBE_WORKFLOW = '''stages:
     command: "{python} task_producer.py"
     produces: tasks
 
-  execute_first:
-    type: task
-    status: Execute before forced restart
-
-  pause:
-    type: command
-    status: Holding durable resume checkpoint
-    command: "{python} resume_pause.py"
-
-  execute_second:
-    type: task
-    status: Continue same session after restart
-
   validate_file:
     type: command
     result_kind: validation
@@ -1586,22 +2245,24 @@ RESUME_PROBE_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - stage: execute_first
-    scope: task
-  - stage: pause
-    scope: task
-  - stage: execute_second
-    scope: task
   - validate_file
 '''
 
 
-def resume_probe(settings: Settings, root: Path) -> None:
-    project = create_project(root, "resume-probe")
-    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
+def _create_resume_probe_fixture(root: Path, name: str) -> tuple[Path, Path]:
+    project = create_project(root, name)
+    (project / "task_producer.py").write_text(RESUME_TASK_PRODUCER, encoding="utf-8")
     (project / "resume_pause.py").write_text(RESUME_PROBE_PAUSE, encoding="utf-8")
     workflow = project / "resume-workflow.yaml"
     workflow.write_text(RESUME_PROBE_WORKFLOW, encoding="utf-8")
+    return project, workflow
+
+
+def _interrupt_resume_checkpoint(
+    settings: Settings,
+    project: Path,
+    workflow: Path,
+) -> str:
     first_log = console_log(project, "first-console.jsonl")
     first_log.parent.mkdir(parents=True, exist_ok=True)
     command = runner_command(settings, project, workflow=workflow)
@@ -1624,11 +2285,21 @@ def resume_probe(settings: Settings, root: Path) -> None:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
             session = state.get("ai_session_id")
+            expanded = state.get("expanded_workflow")
+            position = state.get("workflow_position")
+            current_name = ""
+            if (
+                isinstance(expanded, list)
+                and isinstance(position, int)
+                and 0 <= position < len(expanded)
+                and isinstance(expanded[position], dict)
+            ):
+                current_name = str(expanded[position].get("name", ""))
             if (
                 isinstance(session, str)
                 and session
                 and state.get("completed") is not True
-                and state.get("task_step") == 1
+                and current_name.endswith("__pause")
             ):
                 interrupted_session = session
                 terminate(process)
@@ -1642,9 +2313,15 @@ def resume_probe(settings: Settings, root: Path) -> None:
         state = read_state(project)
         raise RuntimeError(
             "could not capture the deterministic durable resume checkpoint "
-            f"(stage={state.get('stage')}, task_step={state.get('task_step')}, "
-            f"completed={state.get('completed')})"
+            f"(stage={state.get('stage')}, workflow_position={state.get('workflow_position')}, "
+            f"completed={state.get('completed')}, expanded={bool(state.get('expanded_workflow'))})"
         )
+    return interrupted_session
+
+
+def resume_probe(settings: Settings, root: Path) -> None:
+    project, workflow = _create_resume_probe_fixture(root, "resume-probe")
+    interrupted_session = _interrupt_resume_checkpoint(settings, project, workflow)
 
     saw_resume = False
 
@@ -1668,6 +2345,92 @@ def resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("resume fell back to a new session instead of continuing")
 
 
+def _assert_real_session_expiry_evidence(
+    project: Path,
+    injected_session: str,
+) -> None:
+    events = runner_events(project)
+    reset_indexes = [
+        index for index, event in enumerate(events)
+        if (
+            event.get("type") == "model.result"
+            and str(event.get("session") or "") == injected_session
+            and "session_recovery_action=reset_session"
+            in str(event.get("error") or "")
+        )
+    ]
+    if not reset_indexes:
+        related = [
+            {
+                "type": event.get("type"),
+                "session": event.get("session"),
+                "session_mode": event.get("session_mode"),
+                "error": str(event.get("error") or "")[-1000:],
+            }
+            for event in events
+            if event.get("type") in {"model.prompt", "model.result"}
+            and (
+                str(event.get("session") or "") == injected_session
+                or str(event.get("previous_session") or "") == injected_session
+            )
+        ]
+        raise RuntimeError(
+            "real Qwen invalid-session resume produced no reset_session evidence; "
+            f"related_model_events={related[-6:]}"
+        )
+
+    reset_index = reset_indexes[-1]
+    fresh_prompt_seen = any(
+        index > reset_index
+        and event.get("type") == "model.prompt"
+        and event.get("session_mode") == "new"
+        for index, event in enumerate(events)
+    )
+    fresh_result_sessions = [
+        str(event.get("session") or "")
+        for index, event in enumerate(events)
+        if (
+            index > reset_index
+            and event.get("type") == "model.result"
+            and str(event.get("session") or "")
+            and str(event.get("session") or "") != injected_session
+        )
+    ]
+    if not fresh_prompt_seen or not fresh_result_sessions:
+        raise RuntimeError(
+            "real Qwen invalid-session recovery did not continue in a Fresh Session"
+        )
+
+
+def real_session_expiry_probe(settings: Settings, root: Path) -> None:
+    """Inject a missing durable Qwen session and prove real resume self-recovers."""
+    project, workflow = _create_resume_probe_fixture(
+        root,
+        "real-session-expiry-probe",
+    )
+    original_session = _interrupt_resume_checkpoint(settings, project, workflow)
+
+    state_path = project / ".ai-task-runner" / "state.json"
+    state = read_json(state_path)
+    if str(state.get("ai_session_id") or "") != original_session:
+        raise RuntimeError("real session-expiry checkpoint lost its durable session")
+    injected_session = "00000000-0000-0000-0000-000000000000"
+    if original_session == injected_session:
+        raise RuntimeError("real session-expiry probe collided with injected session id")
+    state["ai_session_id"] = injected_session
+    _atomic_write(
+        state_path,
+        json.dumps(state, ensure_ascii=False, indent=2).encode("utf-8"),
+    )
+
+    code = run_command(
+        runner_command(settings, project, resume=True, workflow=workflow),
+        console_log(project, "expired-resume-console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code)
+    _assert_real_session_expiry_evidence(project, injected_session)
+
 def stop_request_resume_probe(settings: Settings, root: Path) -> None:
     """Exercise the detached-UI stop.request contract and durable resume."""
     project = create_project(root, "stop-request-resume-probe")
@@ -1689,19 +2452,19 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
     work = project / ".ai-task-runner"
     stop_request = work / "stop.request"
     marker = work / "runner-process.json"
-    session_id = ""
+    checkpoint: dict[str, object] = {}
     deadline = time.monotonic() + settings.run_timeout
     try:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
             current = state.get("ai_session_id")
             if marker.is_file() and isinstance(current, str) and current:
-                session_id = current
+                checkpoint = dict(state)
                 stop_request.write_text("stop\n", encoding="utf-8")
                 break
             time.sleep(0.1)
-        if not session_id:
-            raise RuntimeError("stop.request probe could not capture an active durable session")
+        if not checkpoint:
+            raise RuntimeError("stop.request probe could not capture a durable resumable checkpoint")
         code = process.wait(timeout=min(settings.run_timeout, 30))
     finally:
         if process.poll() is None:
@@ -1711,31 +2474,46 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError(f"stop.request did not stop Supervisor cleanly: exit={code}")
     if marker.exists() or stop_request.exists():
         raise RuntimeError("stop.request cleanup left stale runtime control files")
-    if read_state(project).get("completed") is True:
-        raise RuntimeError("stop.request incorrectly marked the run completed")
 
-    saw_resume = False
-    def observe_resume() -> None:
-        nonlocal saw_resume
-        saw_resume = saw_resume or observed_session(project, session_id, "resume")
+    stopped = read_state(project)
+    if stopped.get("completed") is True:
+        raise RuntimeError("stop.request incorrectly marked the run completed")
+    if checkpoint.get("run_id") and stopped.get("run_id") != checkpoint.get("run_id"):
+        raise RuntimeError(
+            "stop.request replaced durable run state: "
+            f"before={checkpoint.get('run_id')!r}, after={stopped.get('run_id')!r}"
+        )
+    for field in ("current", "cycle", "workflow_position"):
+        before = checkpoint.get(field)
+        after = stopped.get(field)
+        if isinstance(before, int) and isinstance(after, int) and after < before:
+            raise RuntimeError(
+                f"stop.request regressed durable {field}: before={before}, after={after}"
+            )
+    if checkpoint.get("ai_session_id") and not stopped.get("ai_session_id"):
+        raise RuntimeError("stop.request lost the durable AI session checkpoint")
 
     resumed = run_command(
         runner_command(settings, project, resume=True),
         console_log(project, "resume-console.jsonl"),
         settings.run_timeout,
-        observe_resume,
     )
     assert_completed(project, resumed)
-    if not saw_resume:
-        raise RuntimeError("stop.request resume completed without same-session evidence")
+
+    # Same-session model transport is intentionally validated by resume_probe(),
+    # which stops at a deterministic checkpoint that is guaranteed to require
+    # another AI call. This detached stop probe may stop after the current AI
+    # Stage has already checkpointed and while a command/validator is active;
+    # requiring a new model.prompt(session_mode=resume) here is a race-prone
+    # false failure even when durable stop/resume is correct.
 
 
-def custom_task_producer_probe(settings: Settings, root: Path) -> None:
-    """Prove a non-Plan Python Stage can produce Task[] for a real Qwen task run."""
+def custom_dynamic_producer_probe(settings: Settings, root: Path) -> None:
+    """Prove a non-Plan Python Stage can produce a durable dynamic child Workflow."""
     project = create_project(root, "custom-task-producer-probe")
-    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
+    (project / "task_producer.py").write_text(CUSTOM_DYNAMIC_PRODUCER, encoding="utf-8")
     workflow = project / "workflow.yaml"
-    workflow.write_text(CUSTOM_TASK_WORKFLOW, encoding="utf-8")
+    workflow.write_text(CUSTOM_DYNAMIC_WORKFLOW, encoding="utf-8")
     code = run_command(
         runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
@@ -1745,16 +2523,16 @@ def custom_task_producer_probe(settings: Settings, root: Path) -> None:
     state = read_state(project)
     tasks = state.get("tasks")
     if not isinstance(tasks, list) or len(tasks) != 1:
-        raise RuntimeError("custom Task Producer did not install exactly one durable Task")
+        raise RuntimeError("custom Dynamic Producer did not install exactly one durable Task")
     if tasks[0].get("status") != "completed":
-        raise RuntimeError("custom Task Producer task did not complete")
+        raise RuntimeError("custom Dynamic Producer task did not complete")
 
 
-def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
+def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
     project = create_project(root, f"system-{workflow}-probe")
     ai_validation = workflow in {"ai", "mixed"}
     expected_ai_sessions = (
-        system_final_ai_contract(workflow)[0] if ai_validation else 0
+        builtin_final_ai_contract(workflow)[0] if ai_validation else 0
     )
     code = run_command(
         runner_command(
@@ -1762,21 +2540,913 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
             project,
             final_ai=ai_validation,
             ai_only=workflow == "ai",
-            workflow=SYSTEM_WORKFLOWS[workflow],
+            workflow=WORKFLOWS[workflow],
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
     assert_completed(project, code)
-    assert_system_topology(project, workflow)
+    assert_builtin_topology(project, workflow)
     assert_prompt_transport_contract(project)
     if ai_validation:
         sessions = final_validation_sessions(project)
         if len(sessions) < expected_ai_sessions:
             raise RuntimeError(
-                f"system/{workflow} reused Final AI validation sessions: "
+                f"workflow/{workflow} reused Final AI validation sessions: "
                 f"expected {expected_ai_sessions}, got {len(sessions)}"
             )
+
+
+DYNAMIC_SESSION_ROUTER_PROMPT = """You are a deterministic Dynamic Handoff coordinator.
+
+Goal:
+{{ goal }}
+
+Previous Stage result:
+{{ previous }}
+
+Choose exactly one next Stage: main_role.
+Do not perform the selected Stage's work yourself.
+"""
+
+DYNAMIC_SESSION_ROLE_PROMPT = """You are the selected Dynamic Handoff role.
+
+Goal:
+{{ goal }}
+
+Assigned responsibility:
+{{ instructions }}
+
+Handoff context:
+{{ previous }}
+
+Follow the assigned responsibility exactly. Do not use tools or modify files.
+"""
+
+DYNAMIC_SESSION_WORKFLOW = """stages:
+  coordinator:
+    type: handoff
+    prompt: dynamic_router.md
+    targets: [main_role]
+    session_policy: role
+    error_policy:
+      retries: 2
+
+  main_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Always return exactly MAIN_DONE.
+    session_policy: main
+    routes:
+      pass: main_gate
+
+  main_gate:
+    type: command
+    command: "{python} main_gate.py"
+    routes:
+      fail: main_role
+      pass: stable_role
+
+  stable_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Always return exactly STABLE_DONE.
+    session_policy: role
+    routes:
+      pass: stable_gate
+
+  stable_gate:
+    type: command
+    command: "{python} stable_gate.py"
+    routes:
+      fail: stable_role
+      pass: fresh_role
+
+  fresh_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Always return exactly FRESH_DONE.
+    session_policy: fresh
+    routes:
+      pass: final_gate
+
+  final_gate:
+    type: command
+    command: "{python} final_gate.py"
+    routes:
+      pass: done
+
+flow:
+  - coordinator
+  - main_role
+  - main_gate
+  - stable_role
+  - stable_gate
+  - fresh_role
+  - final_gate
+"""
+
+
+def _assert_session_reuse_or_controlled_rotation(
+    project: Path,
+    stage: str,
+    sessions: list[str],
+    policy: str,
+) -> None:
+    if len(sessions) < 2:
+        raise RuntimeError(
+            f"session_policy={policy} produced insufficient session evidence for {stage}: "
+            f"{sessions!r}"
+        )
+    first, second = sessions[-2:]
+    if first == second:
+        return
+
+    events = runner_events(project)
+    fresh_previous = {
+        str(event.get("previous_session") or "")
+        for event in events
+        if event.get("type") == "runner.session"
+        and event.get("action") == "fresh"
+        and str(event.get("previous_session") or "")
+    }
+    recovery_modes = {
+        str(event.get("retry_mode") or "")
+        for event in events
+        if _structured_recovery_event(event)
+    }
+    resumed_sessions = {
+        str(event.get("session") or "")
+        for event in events
+        if event.get("type") in {"model.prompt", "model.result"}
+        and event.get("session_mode") == "resume"
+        and str(event.get("session") or "")
+    }
+    if (
+        "recover" in recovery_modes
+        and first in fresh_previous
+        and first in resumed_sessions
+    ):
+        return
+
+    raise RuntimeError(
+        f"session_policy={policy} changed session without controlled recovery for {stage}: "
+        f"sessions={sessions!r}, fresh_previous={sorted(fresh_previous)!r}, "
+        f"recovery_modes={sorted(recovery_modes)!r}, resumed={sorted(resumed_sessions)!r}"
+    )
+
+
+def _assert_dynamic_session_policy_evidence(
+    project: Path,
+    state: dict[str, object],
+) -> None:
+    stage_sessions = state.get("stage_sessions")
+    if not isinstance(stage_sessions, dict):
+        raise RuntimeError("Dynamic Handoff live state missing stage_sessions")
+
+    main_results = stage_result_sessions(project, "main_role")
+    stable_results = stage_result_sessions(project, "stable_role")
+    fresh_results = stage_result_sessions(project, "fresh_role")
+    _assert_session_reuse_or_controlled_rotation(
+        project,
+        "main_role",
+        main_results,
+        "main",
+    )
+    _assert_session_reuse_or_controlled_rotation(
+        project,
+        "stable_role",
+        stable_results,
+        "role",
+    )
+    if not fresh_results:
+        raise RuntimeError("session_policy=fresh produced no real model session evidence")
+    if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
+        raise RuntimeError(
+            "Dynamic Handoff session policies did not produce isolated session identities"
+        )
+
+    # Completed runs keep semantic event evidence, not active-only checkpoints.
+    if state.get("ai_session_id") or stage_sessions:
+        raise RuntimeError(
+            "completed Dynamic Handoff run retained active-only session state"
+        )
+
+
+def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None:
+    """Exercise Dynamic Handoff plus main/role/fresh session transport with real Qwen."""
+    project = create_project(
+        root,
+        "dynamic-handoff-session-policy-probe",
+        prompt="Exercise Dynamic Handoff session policies and finish the deterministic route.",
+    )
+    (project / "dynamic_router.md").write_text(
+        DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8"
+    )
+    (project / "dynamic_role.md").write_text(
+        DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8"
+    )
+    (project / "main_gate.py").write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('main-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "print(f'MAIN_GATE_{value}')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+    (project / "stable_gate.py").write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('stable-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "print(f'STABLE_GATE_{value}')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+    (project / "final_gate.py").write_text(
+        "print('DYNAMIC_FINAL_GATE_PASS')\n", encoding="utf-8"
+    )
+    workflow = project / "workflow.yaml"
+    workflow.write_text(DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    # Fail before a real backend call if the live fixture drifts from the current
+    # production Workflow/Prompt contract.
+    from runner.workflow.loader import load_workflow
+    loaded = load_workflow(workflow)
+    by_name = {str(item.get("name", "")): item for item in loaded}
+    for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
+        prompt = Path(str(by_name.get(name, {}).get("prompt") or ""))
+        if not prompt.is_absolute() or not prompt.is_file():
+            raise RuntimeError(
+                f"Dynamic Handoff live fixture prompt did not resolve: {name} -> {prompt}"
+            )
+
+    code = run_command(
+        runner_command(settings, project, workflow=workflow),
+        console_log(project, "console.jsonl"),
+        semantic_probe_timeout(settings),
+    )
+    assert_state_completed(project, code)
+
+    starts = [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    expected = [
+        "coordinator",
+        "main_role",
+        "main_gate",
+        "main_role",
+        "main_gate",
+        "stable_role",
+        "stable_gate",
+        "stable_role",
+        "stable_gate",
+        "fresh_role",
+        "final_gate",
+    ]
+    if starts != expected:
+        raise RuntimeError(
+            "Dynamic Handoff live routing mismatch: "
+            f"expected={expected}, observed={starts}"
+        )
+
+    _assert_dynamic_session_policy_evidence(project, read_state(project))
+
+
+
+BUNDLED_DYNAMIC_EXPECTED = "DYNAMIC_HANDOFF_BUNDLED_PASS"
+
+BUNDLED_DYNAMIC_PROMPT = f"""Create a file named dynamic_handoff_probe.txt containing exactly:
+{BUNDLED_DYNAMIC_EXPECTED}
+
+Keep the change minimal. Do not modify runner control files.
+The Goal is already clear, so avoid unnecessary analysis roles.
+After implementation, use only the independent verification needed to establish completion, then finish through final validation.
+"""
+
+
+def bundled_dynamic_handoff_probe(settings: Settings, root: Path) -> dict[str, object]:
+    """Run the shipped dynamic_handoff.yaml end to end with real Qwen."""
+    project = create_project(
+        root,
+        "bundled-dynamic-handoff-probe",
+        prompt=BUNDLED_DYNAMIC_PROMPT,
+    )
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+                max_cycles=12,
+        ),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_state_completed(project, code)
+
+    target = project / "dynamic_handoff_probe.txt"
+    if not target.is_file():
+        raise RuntimeError("bundled Dynamic Handoff did not create the required artifact")
+    actual = target.read_text(encoding="utf-8-sig").rstrip("\r\n")
+    if actual != BUNDLED_DYNAMIC_EXPECTED:
+        raise RuntimeError(
+            "bundled Dynamic Handoff artifact mismatch: "
+            f"expected={BUNDLED_DYNAMIC_EXPECTED!r}, actual={actual!r}"
+        )
+
+    starts = [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    if not starts or starts[0] != "coordinator":
+        raise RuntimeError(f"bundled Dynamic Handoff did not start at coordinator: {starts!r}")
+    if "final_validate" not in starts:
+        raise RuntimeError("bundled Dynamic Handoff never reached final_validate")
+    writers = [name for name in starts if name in {"implementer", "debugger"}]
+    if not writers:
+        raise RuntimeError(
+            "bundled Dynamic Handoff completed without an implementation/debugging writer"
+        )
+    if "risk_reviewer" in starts:
+        raise RuntimeError("removed risk_reviewer unexpectedly returned to bundled workflow")
+
+    role_names = {
+        "requirements_analyst",
+        "solution_architect",
+        "implementer",
+        "debugger",
+        "verifier",
+    }
+    roles = [name for name in starts if name in role_names]
+    state = read_state(project)
+    if state.get("ai_session_id") or state.get("stage_sessions"):
+        raise RuntimeError(
+            "completed bundled Dynamic Handoff retained active-only session state"
+        )
+    return {
+        "workflow": str(DYNAMIC_HANDOFF_WORKFLOW),
+        "stage_starts": starts,
+        "total_stage_starts": len(starts),
+        "coordinator_runs": starts.count("coordinator"),
+        "roles_used": sorted(set(roles)),
+        "role_runs": len(roles),
+        "writer_roles": sorted(set(writers)),
+        "final_validate_runs": starts.count("final_validate"),
+    }
+
+
+
+DYNAMIC_ROLE_MATRIX_CASES = (
+    (
+        "ambiguous-requirement",
+        """Read REQUIREMENTS.md first. The file contains the authoritative requested value.
+Create matrix_requirement.txt containing exactly that value.
+Do not guess the value and do not modify REQUIREMENTS.md.
+Use the specialist that best resolves requirement ambiguity before implementation.
+""",
+        ("requirements_analyst", "implementer"),
+        "requirements_analyst",
+    ),
+    (
+        "existing-failure",
+        """The existing broken.txt is incorrect and failure.log explains the concrete defect.
+Diagnose that existing failure and repair broken.txt so it contains exactly FIXED.
+Do not rewrite unrelated files.
+""",
+        ("debugger", "implementer"),
+        "debugger",
+    ),
+    (
+        "verify-only",
+        """The required deliverable verify_only.txt already exists and should contain exactly VERIFIED.
+Do not modify project files if it is already correct.
+Independently verify the existing evidence and finish through final validation.
+""",
+        ("verifier",),
+        "verifier",
+    ),
+)
+
+
+def _dynamic_stage_starts(project: Path) -> list[str]:
+    return [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+
+
+def _assert_dynamic_run_completed(project: Path, code: int) -> list[str]:
+    assert_state_completed(project, code)
+    starts = _dynamic_stage_starts(project)
+    if not starts or starts[0] != "coordinator":
+        raise RuntimeError(f"Dynamic Handoff did not start at coordinator: {starts!r}")
+    if "final_validate" not in starts:
+        raise RuntimeError(f"Dynamic Handoff never reached final_validate: {starts!r}")
+    state = read_state(project)
+    if state.get("ai_session_id") or state.get("stage_sessions"):
+        raise RuntimeError("completed Dynamic Handoff retained active-only session state")
+    return starts
+
+
+def dynamic_handoff_role_matrix_probe(
+    settings: Settings,
+    root: Path,
+) -> list[dict[str, object]]:
+    """Exercise role selection across distinct real-Qwen bundled-workflow scenarios."""
+    results: list[dict[str, object]] = []
+    for name, prompt, allowed_roles, preferred_role in DYNAMIC_ROLE_MATRIX_CASES:
+        project = create_project(root, f"dynamic-role-{name}", prompt=prompt)
+        if name == "ambiguous-requirement":
+            (project / "REQUIREMENTS.md").write_text("TAIWAN_MATRIX_7F4C\n", encoding="utf-8")
+        elif name == "existing-failure":
+            (project / "broken.txt").write_text("BROKEN\n", encoding="utf-8")
+            (project / "failure.log").write_text(
+                "broken.txt must contain exactly FIXED\n", encoding="utf-8"
+            )
+        elif name == "verify-only":
+            (project / "verify_only.txt").write_text("VERIFIED\n", encoding="utf-8")
+
+        code = run_command(
+            runner_command(
+                settings,
+                project,
+                workflow=DYNAMIC_HANDOFF_WORKFLOW,
+                ai_only=True,
+                max_cycles=12,
+            ),
+            console_log(project, "console.jsonl"),
+            settings.run_timeout,
+        )
+        starts = _assert_dynamic_run_completed(project, code)
+        observed_roles = {
+            item for item in starts
+            if item in {
+                "requirements_analyst", "solution_architect", "implementer",
+                "debugger", "verifier",
+            }
+        }
+        if name != "verify-only" and not observed_roles.intersection(allowed_roles):
+            raise RuntimeError(
+                f"Dynamic Handoff role matrix {name} used no reasonable worker role; "
+                f"allowed={list(allowed_roles)!r}, observed={sorted(observed_roles)!r}, "
+                f"stages={starts!r}"
+            )
+        if name == "verify-only":
+            invalid_writers = observed_roles.intersection({"implementer", "debugger"})
+            if invalid_writers:
+                raise RuntimeError(
+                    f"verify-only unnecessarily used write-capable role(s): "
+                    f"{sorted(invalid_writers)!r}; stages={starts!r}"
+                )
+        if name == "ambiguous-requirement":
+            value = (project / "matrix_requirement.txt").read_text(
+                encoding="utf-8-sig"
+            ).strip()
+            if value != "TAIWAN_MATRIX_7F4C":
+                raise RuntimeError(
+                    f"ambiguous-requirement produced wrong value: {value!r}"
+                )
+        elif name == "existing-failure":
+            value = (project / "broken.txt").read_text(encoding="utf-8-sig").strip()
+            if value != "FIXED":
+                raise RuntimeError(f"existing-failure was not repaired: {value!r}")
+        elif name == "verify-only":
+            value = (project / "verify_only.txt").read_text(
+                encoding="utf-8-sig"
+            ).strip()
+            if value != "VERIFIED":
+                raise RuntimeError(f"verify-only changed required evidence: {value!r}")
+
+        results.append({
+            "case": name,
+            "allowed_roles": list(allowed_roles),
+            "preferred_role": preferred_role,
+            "preferred_role_observed": preferred_role in observed_roles,
+            "roles_used": sorted(observed_roles),
+            "coordinator_runs": starts.count("coordinator"),
+            "stage_starts": starts,
+        })
+    return results
+
+
+DYNAMIC_FINAL_RECOVERY_PROMPT = """Create final_recovery.txt containing exactly READY.
+Completion also requires final_approval.txt containing exactly RECOVERED.
+Use the Dynamic Handoff approval gate: if it rejects the first attempt, repair
+the missing approval evidence and revisit the gate before final AI validation.
+Do not modify validation.py or workflow configuration.
+"""
+
+DYNAMIC_FINAL_APPROVAL_GATE = '''from pathlib import Path
+
+root = Path.cwd()
+marker = root / ".ai-task-runner" / "final-approval-gate-first-fail"
+approval = root / "final_approval.txt"
+primary = root / "final_recovery.txt"
+marker.parent.mkdir(parents=True, exist_ok=True)
+if not marker.exists():
+    # The first semantic FAIL is a deterministic fixture condition, not an
+    # instruction asking the model to intentionally leave work incomplete.
+    # Discard premature approval so recovery must repair real missing evidence.
+    approval.unlink(missing_ok=True)
+    marker.write_text("rejected\\n", encoding="utf-8")
+    print("VALIDATION_FAILED: final approval must be repaired after the gate")
+    raise SystemExit(1)
+if not primary.is_file() or primary.read_text(encoding="utf-8-sig").strip() != "READY":
+    print("VALIDATION_FAILED: final_recovery.txt must contain READY")
+    raise SystemExit(1)
+if not approval.is_file() or approval.read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+    print("VALIDATION_FAILED: final_approval.txt must contain RECOVERED")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
+def _prepare_dynamic_final_recovery_workflow(
+    project: Path,
+    source_workflow: Path = DYNAMIC_HANDOFF_WORKFLOW,
+) -> Path:
+    """Adapt only this live fixture; preserve the shipped Final AI Validator."""
+    try:
+        import yaml
+        data = yaml.safe_load(source_workflow.read_text(encoding="utf-8"))
+    except ImportError as error:
+        raise RuntimeError("probe-44 fixture requires PyYAML") from error
+    except (OSError, yaml.YAMLError) as error:
+        raise RuntimeError(f"cannot load shipped Dynamic Handoff workflow: {error}") from error
+    if not isinstance(data, dict):
+        raise RuntimeError("shipped Dynamic Handoff workflow must be a mapping")
+    stages = data.get("stages")
+    flow = data.get("flow")
+    if not isinstance(stages, dict) or not isinstance(flow, list):
+        raise RuntimeError("shipped Dynamic Handoff workflow shape changed")
+    coordinator = stages.get("coordinator")
+    final_validate = stages.get("final_validate")
+    if (
+        not isinstance(coordinator, dict)
+        or not isinstance(final_validate, dict)
+        or final_validate.get("type") != "ai_validator"
+        or final_validate.get("session_policy") != "fresh"
+    ):
+        raise RuntimeError("shipped Dynamic Handoff final validation contract changed")
+    targets = coordinator.get("targets")
+    if not isinstance(targets, list) or targets.count("final_validate") != 1:
+        raise RuntimeError("shipped Dynamic Handoff coordinator target contract changed")
+    if flow.count("final_validate") != 1:
+        raise RuntimeError("shipped Dynamic Handoff flow contract changed")
+
+    coordinator["targets"] = [
+        "approval_gate" if target == "final_validate" else target
+        for target in targets
+    ]
+    stages["approval_gate"] = {
+        "type": "command",
+        "label": "Deterministic Final Approval Gate",
+        "command": "{python} final_approval_gate.py",
+        "result_kind": "validation",
+        "routes": {
+            "pass": "final_validate",
+            "fail": "coordinator",
+        },
+    }
+    final_index = flow.index("final_validate")
+    flow.insert(final_index, "approval_gate")
+
+    (project / "final_approval_gate.py").write_text(
+        DYNAMIC_FINAL_APPROVAL_GATE, encoding="utf-8"
+    )
+    workflow = project / "dynamic-final-recovery-workflow.yaml"
+    workflow.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    from runner.workflow.loader import load_workflow
+
+    loaded = load_workflow(workflow)
+    names = [str(stage.get("name") or "") for stage in loaded]
+    if names[-2:] != ["approval_gate", "final_validate"]:
+        raise RuntimeError(f"dynamic final recovery fixture topology drifted: {names!r}")
+    return workflow
+
+
+def _assert_dynamic_final_recovery_events(project: Path) -> None:
+    """Fail closed on actual semantic order; never infer recovery from final files."""
+    events = [
+        (str(event.get("stage") or ""), str(event.get("action") or ""),
+         str(event.get("result") or ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage"
+    ]
+    failed = next(
+        (i for i, e in enumerate(events)
+         if e == ("approval_gate", "finish", "fail")), None
+    )
+    if failed is None:
+        raise RuntimeError("deterministic approval gate did not produce its initial FAIL")
+    passed = next(
+        (i for i, e in enumerate(events)
+         if i > failed and e == ("approval_gate", "finish", "pass")), None
+    )
+    if passed is None:
+        raise RuntimeError("approval gate never PASSed after recovery")
+    if not any(e == ("coordinator", "start", "") for e in events[failed + 1:passed]):
+        raise RuntimeError("approval FAIL did not route back through coordinator")
+    if not any(
+        e[0] in {"implementer", "debugger"} and e[1] == "start"
+        for e in events[failed + 1:passed]
+    ):
+        raise RuntimeError("approval FAIL recovered without a write-capable specialist")
+    if not any(
+        e == ("final_validate", "finish", "pass") for e in events[passed + 1:]
+    ):
+        raise RuntimeError("fresh Final AI Validator did not PASS after approval recovery")
+    sessions = stage_result_sessions(project, "final_validate")
+    if not sessions or not all(sessions):
+        raise RuntimeError("Final AI Validator session evidence is missing")
+
+
+def dynamic_handoff_final_recovery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Prove deterministic FAIL -> coordinator repair -> real fresh Final AI PASS."""
+    project = create_project(
+        root,
+        "dynamic-final-recovery-probe",
+        prompt=DYNAMIC_FINAL_RECOVERY_PROMPT,
+    )
+    workflow = _prepare_dynamic_final_recovery_workflow(
+        project, DYNAMIC_HANDOFF_WORKFLOW
+    )
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=workflow,
+            ai_only=True,
+            max_cycles=12,
+        ),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    starts = _assert_dynamic_run_completed(project, code)
+    _assert_dynamic_final_recovery_events(project)
+    if starts.count("approval_gate") < 2 or starts.count("coordinator") < 2:
+        raise RuntimeError(
+            f"approval recovery did not route back through coordinator: {starts!r}"
+        )
+    if (project / "final_recovery.txt").read_text(encoding="utf-8-sig").strip() != "READY":
+        raise RuntimeError("final recovery primary artifact mismatch")
+    if (project / "final_approval.txt").read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+        raise RuntimeError("final recovery approval artifact mismatch")
+    return {
+        "stage_starts": starts,
+        "coordinator_runs": starts.count("coordinator"),
+        "approval_gate_runs": starts.count("approval_gate"),
+        "final_validate_runs": starts.count("final_validate"),
+    }
+
+
+DYNAMIC_API_RECOVERY_VALIDATOR = '''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+target = Path(a.project_root).resolve() / "dynamic_api_recovery.txt"
+if not target.is_file():
+    print("VALIDATION_FAILED: missing dynamic_api_recovery.txt")
+    raise SystemExit(1)
+if target.read_text(encoding="utf-8-sig").strip() != "RECOVERED":
+    print("VALIDATION_FAILED: dynamic_api_recovery.txt content mismatch")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
+def dynamic_handoff_api_recovery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Inject a real HTTP 503 while the shipped Dynamic Handoff workflow is active."""
+    with (
+        transient_proxy(settings.api_port) as proxy,
+        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
+    ):
+        project = create_project(
+            root,
+            "dynamic-api-recovery-probe",
+            prompt="""Create dynamic_api_recovery.txt containing exactly RECOVERED.
+Use the normal Dynamic Handoff workflow and finish through final validation.
+Do not modify validation.py; it already matches this Goal.
+""",
+            validator=DYNAMIC_API_RECOVERY_VALIDATOR,
+        )
+        log = console_log(project, "console.jsonl")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        stream = log.open("w", encoding="utf-8")
+        probe_env = os.environ.copy()
+        probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"
+        options: dict[str, object] = {
+            "cwd": ROOT,
+            "stdin": subprocess.DEVNULL,
+            "stdout": stream,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+            "env": probe_env,
+        }
+        if os.name == "nt":
+            options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            options["start_new_session"] = True
+        process = subprocess.Popen(
+            runner_command(
+                settings,
+                project,
+                workflow=DYNAMIC_HANDOFF_WORKFLOW,
+                ai_only=True,
+                max_cycles=12,
+            ),
+            **options,
+        )
+        deadline = time.monotonic() + settings.run_timeout
+        outage_until = 0.0
+        injected = False
+        coordinator_finished = False
+        successes_before_outage = 0
+        try:
+            while process.poll() is None and time.monotonic() < deadline:
+                if not coordinator_finished:
+                    coordinator_finished = observed_stage_result(
+                        project,
+                        "coordinator",
+                        "pass",
+                    )
+                if not injected and coordinator_finished:
+                    successes_before_outage = proxy.successes
+                    proxy.status_code = 503
+                    proxy.fail = True
+                    outage_until = time.monotonic() + API_RECOVERY_SHORT_OUTAGE_SECONDS
+                    injected = True
+                if proxy.fail and proxy.failures > 0 and time.monotonic() >= outage_until:
+                    proxy.fail = False
+                time.sleep(0.1)
+        finally:
+            proxy.fail = False
+            if process.poll() is None:
+                terminate(process)
+            stream.close()
+
+        code = process.returncode or 0
+        starts = _assert_dynamic_run_completed(project, code)
+        if not coordinator_finished:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe never observed initial coordinator PASS"
+            )
+        if not injected or proxy.failures <= 0:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe armed HTTP 503 after coordinator PASS "
+                "but no subsequent model request crossed the proxy"
+            )
+        if proxy.successes <= successes_before_outage:
+            raise RuntimeError(
+                "Dynamic Handoff API recovery probe observed 503 failures but no successful "
+                "upstream request after outage recovery"
+            )
+        value = (project / "dynamic_api_recovery.txt").read_text(
+            encoding="utf-8-sig"
+        ).strip()
+        if value != "RECOVERED":
+            raise RuntimeError(f"Dynamic API recovery artifact mismatch: {value!r}")
+        if str(read_state(project).get("last_error") or ""):
+            raise RuntimeError("Dynamic API recovery left stale last_error")
+        return {
+            "stage_starts": starts,
+            "coordinator_finished_before_outage": coordinator_finished,
+            "proxy_failures": proxy.failures,
+            "proxy_successes_before_outage": successes_before_outage,
+            "proxy_successes": proxy.successes,
+        }
+
+
+def dynamic_handoff_stop_resume_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Stop a shipped Dynamic Handoff run after role selection, then resume it."""
+    project = create_project(
+        root,
+        "dynamic-stop-resume-probe",
+        prompt="""Create dynamic_stop_a.txt containing exactly A and dynamic_stop_b.txt containing exactly B.
+Keep the work minimal and finish through final validation.
+""",
+    )
+    first_log = console_log(project, "first-console.jsonl")
+    first_log.parent.mkdir(parents=True, exist_ok=True)
+    stream = first_log.open("w", encoding="utf-8")
+    options: dict[str, object] = {
+        "cwd": ROOT,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stream,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    process = subprocess.Popen(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+                max_cycles=12,
+        ),
+        **options,
+    )
+    work = project / ".ai-task-runner"
+    stop_request = work / "stop.request"
+    marker = work / "runner-process.json"
+    checkpoint: dict[str, object] = {}
+    checkpoint_role = ""
+    role_names = {
+        "requirements_analyst", "solution_architect", "implementer",
+        "debugger", "verifier",
+    }
+    deadline = time.monotonic() + settings.run_timeout
+    try:
+        while process.poll() is None and time.monotonic() < deadline:
+            started_roles = [
+                str(event.get("stage") or "")
+                for event in runner_events(project)
+                if (
+                    event.get("type") == "runner.stage"
+                    and event.get("action") == "start"
+                    and str(event.get("stage") or "") in role_names
+                )
+            ]
+            if marker.is_file() and started_roles:
+                checkpoint_role = started_roles[-1]
+                checkpoint = dict(read_state(project))
+                stop_request.write_text("stop\n", encoding="utf-8")
+                break
+            time.sleep(0.05)
+        if not checkpoint:
+            raise RuntimeError(
+                "Dynamic Handoff stop/resume observed no worker-role start before run exit"
+            )
+        code = process.wait(timeout=min(settings.run_timeout, 30))
+    finally:
+        if process.poll() is None:
+            terminate(process)
+        stream.close()
+    if code != 130:
+        raise RuntimeError(f"Dynamic Handoff stop.request exit mismatch: {code}")
+    if marker.exists() or stop_request.exists():
+        raise RuntimeError("Dynamic Handoff stop cleanup left stale control files")
+    stopped = read_state(project)
+    if stopped.get("completed") is True:
+        raise RuntimeError("Dynamic Handoff stop incorrectly completed the run")
+    if not checkpoint.get("run_id"):
+        raise RuntimeError("Dynamic Handoff stop/resume captured no durable run_id")
+    if stopped.get("run_id") != checkpoint.get("run_id"):
+        raise RuntimeError("Dynamic Handoff stop/resume replaced durable run_id")
+
+    resumed = run_command(
+        runner_command(
+            settings,
+            project,
+            workflow=DYNAMIC_HANDOFF_WORKFLOW,
+            ai_only=True,
+            resume=True,
+            max_cycles=12,
+        ),
+        console_log(project, "resume-console.jsonl"),
+        settings.run_timeout,
+    )
+    starts = _assert_dynamic_run_completed(project, resumed)
+    if (project / "dynamic_stop_a.txt").read_text(encoding="utf-8-sig").strip() != "A":
+        raise RuntimeError("Dynamic stop/resume artifact A mismatch")
+    if (project / "dynamic_stop_b.txt").read_text(encoding="utf-8-sig").strip() != "B":
+        raise RuntimeError("Dynamic stop/resume artifact B mismatch")
+    return {
+        "checkpoint_role": checkpoint_role,
+        "checkpoint_stage": str(checkpoint.get("stage") or ""),
+        "checkpoint_position": checkpoint.get("workflow_position"),
+        "stage_starts": starts,
+    }
 
 
 REVIEW_ROUTING_PROMPT = """Make review.txt contain exactly these two logical lines:
@@ -1812,7 +3482,6 @@ REVIEW_ROUTING_POLICY = """protected_paths:
   - seed_review.py
   - review_gate.py
   - review_execute.md
-  - review_check.md
   - workflow.yaml
 instructions:
   always: Work only inside this project root. Modify review.txt only for this probe.
@@ -1845,7 +3514,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     command: "{python} seed_review.py"
 
   execute:
-    type: task
+    type: base
+    profile: execute
     status: Executing Review feedback
     prompt: review_execute.md
 
@@ -1854,31 +3524,22 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     status: Forcing deterministic first Review routing failure
     run_state: reviewing
     command: "{python} review_gate.py"
-
-  review_verify:
-    type: review
-    status: Reviewing repaired state with Qwen
-    prompt: review_check.md
-    skip_on_error: false
+    routes:
+      fail: execute
 
   validate_file:
     type: command
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validating deterministic Review routing probe
+    routes:
+      fail: execute
 
 flow:
   - execute
   - seed
-  - stage: review
-    restart_at: execute
-    max_attempts: 3
-    on_exhausted: fail
-  - review_verify
-  - stage: validate_file
-    restart_at: execute
-    max_attempts: 2
-    on_exhausted: fail
+  - review
+  - validate_file
 '''
 
 
@@ -1911,11 +3572,18 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
     )
-    (project / "review_check.md").write_text(
-        REVIEW_ROUTING_REVIEW_PROMPT, encoding="utf-8"
-    )
     workflow = project / "workflow.yaml"
     workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+    loaded = load_workflow(workflow)
+    loaded_by_name = {str(item.get("name", "")): item for item in loaded}
+    if loaded_by_name.get("validate_file", {}).get("routes") != {"fail": "execute"}:
+        raise RuntimeError(
+            "review failure-routing live fixture lost validate_file.fail -> execute before launch: "
+            f"{loaded_by_name.get('validate_file')!r}"
+        )
+
     log = console_log(project, "console.jsonl")
     try:
         code = run_command(
@@ -1930,13 +3598,33 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
             "review failure-routing probe exceeded bounded semantic timeout; "
             + probe_timeout_diagnostic(project, log)
         ) from exc
+    if code != 0:
+        snapshot = project / ".ai-task-runner" / "workflow.snapshot.json"
+        frozen_route = None
+        try:
+            frozen = json.loads(snapshot.read_text(encoding="utf-8"))
+            frozen_by_name = {
+                str(item.get("name", "")): item
+                for item in frozen
+                if isinstance(item, dict)
+            }
+            frozen_route = frozen_by_name.get("validate_file", {}).get("routes")
+        except Exception as error:
+            frozen_route = f"<snapshot unavailable: {error}>"
+        raise RuntimeError(
+            "review failure-routing run exited before completion; "
+            f"frozen validate_file.routes={frozen_route!r}; "
+            + probe_timeout_diagnostic(project, log)
+        )
     assert_state_completed(project, code)
     if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
         raise RuntimeError("review failure-routing probe produced unexpected logical lines")
     if not observed_stage_result(project, "review", "fail"):
         raise RuntimeError("review routing probe did not exercise deterministic Review gate FAIL")
-    if not observed_stage_result(project, "review_verify", "pass"):
-        raise RuntimeError("review routing probe Qwen Review did not PASS repaired state")
+    if not observed_stage_result(project, "review", "pass"):
+        raise RuntimeError("deterministic Review gate did not PASS after Execute repaired state")
+    if not observed_stage_result(project, "validate_file", "pass"):
+        raise RuntimeError("review routing probe validator did not PASS repaired state")
     executes = stage_prompt_records(project, "execute")
     if not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
@@ -2023,29 +3711,29 @@ FULL_LOOP_WORKFLOW = '''stages:
     type: command
     run_state: reviewing
     command: "{python} full_loop_review_gate.py"
+    routes:
+      fail: execute
 
   review_verify:
-    type: review
+    type: base
+    profile: review
     prompt: full_loop_review.md
-    skip_on_error: false
+    routes:
+      fail: execute
 
   validate_file:
     type: command
     result_kind: validation
     command: "{python} full_loop_validator.py"
+    routes:
+      fail: execute
 
 flow:
   - execute
   - seed
-  - stage: review
-    restart_at: execute
-    max_attempts: 3
-    on_exhausted: fail
+  - review
   - review_verify
-  - stage: validate_file
-    restart_at: execute
-    max_attempts: 2
-    on_exhausted: fail
+  - validate_file
 '''
 
 
@@ -2186,8 +3874,36 @@ the same file exactly, again with no trailing newline or whitespace, and continu
     )
     assert_completed(project, code, "route.txt", ROUTING_FINAL)
     state = read_state(project)
-    if marker.read_text(encoding="utf-8") != ROUTING_INITIAL or state.get("cycle", 1) < 2:
-        raise RuntimeError("validator failure did not route back through another planning cycle")
+    if marker.read_text(encoding="utf-8") != ROUTING_INITIAL:
+        raise RuntimeError("validator failure probe did not observe the expected initial value")
+    events = runner_events(project)
+    validator_fail_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event.get("type") == "runner.stage"
+            and event.get("action") == "finish"
+            and event.get("stage") == "validate_file"
+            and event.get("result") == "fail"
+        ),
+        None,
+    )
+    planning_restart_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if validator_fail_index is not None
+            and index > validator_fail_index
+            and event.get("type") == "runner.stage"
+            and event.get("action") == "start"
+            and event.get("stage") == "planning"
+        ),
+        None,
+    )
+    if validator_fail_index is None or planning_restart_index is None:
+        raise RuntimeError(
+            "validator failure did not durably route from validate_file back to planning"
+        )
     planning_prompts = stage_prompt_records(project, "planning")
     if len(planning_prompts) < 2 or not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
@@ -2344,7 +4060,7 @@ def yaml_list_resume_probe(
             "project_root": projects[0].name,
             "validator": str(projects[0] / "validation.py"),
             "validator_args": ["--case-token", "ITEM-1"],
-            "max_attempts": 1,
+            "stage_retries": 1,
             "retry_delay": 0,
         },
         {
@@ -2478,7 +4194,7 @@ def yaml_list_endurance_probe(
             "prompt": case_prompt(PROMPT, f"yaml-endurance-{index:03d}"),
             "project_root": project.name,
             "validator": str(project / "validation.py"),
-            "max_attempts": 1,
+            "stage_retries": 1,
             "retry_delay": 0,
         })
     script = batch / "tasks.yaml"
@@ -2545,60 +4261,323 @@ def final_ai_quorum_probe(
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
 
+
+API_RECOVERY_SHORT_OUTAGE_SECONDS = 5.0
+API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS = 45.0
+API_RECOVERY_STATUS_CODES = (429, 502, 503)
+API_RECOVERY_ARM_TIMEOUT_SECONDS = 30.0
+
+API_RECOVERY_ARM_SCRIPT = f'''from pathlib import Path
+import time
+
+root = Path(".ai-task-runner")
+marker = root / "api-outage-armed"
+active = root / "api-outage-active"
+root.mkdir(parents=True, exist_ok=True)
+marker.write_text("armed\\n", encoding="utf-8")
+deadline = time.monotonic() + {API_RECOVERY_ARM_TIMEOUT_SECONDS!r}
+while not active.is_file():
+    if time.monotonic() >= deadline:
+        raise SystemExit("API outage harness did not acknowledge arm marker")
+    time.sleep(0.05)
+'''
+
+API_RECOVERY_WARMUP_PROMPT = """Establish the Runner session for the API recovery probe.
+Do not modify files. Return exactly WARMUP_READY.
+"""
+
+API_RECOVERY_EXECUTE_PROMPT = f"""The API outage gate has already been armed.
+Create a UTF-8 file named health.txt containing exactly this text, with no trailing newline:
+{EXPECTED}
+
+Modify health.txt only and return immediately after the file is correct.
+"""
+
+API_RECOVERY_WORKFLOW = '''stages:
+  warmup:
+    type: base
+    profile: generic
+    prompt: api_warmup.md
+    session_policy: main
+
+  arm:
+    type: command
+    command: "{python} api_outage_arm.py"
+
+  execute:
+    type: base
+    profile: execute
+    prompt: api_execute.md
+    session_policy: main
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    routes:
+      fail: execute
+
+flow:
+  - warmup
+  - arm
+  - execute
+  - validate_file
+'''
+
+
+def _prepare_api_recovery_fixture(project: Path) -> tuple[Path, Path, Path]:
+    """Create a deterministic boundary immediately before the AI call under outage."""
+    (project / "api_warmup.md").write_text(API_RECOVERY_WARMUP_PROMPT, encoding="utf-8")
+    (project / "api_execute.md").write_text(API_RECOVERY_EXECUTE_PROMPT, encoding="utf-8")
+    (project / "api_outage_arm.py").write_text(API_RECOVERY_ARM_SCRIPT, encoding="utf-8")
+    workflow = project / "api-recovery-workflow.yaml"
+    workflow.write_text(API_RECOVERY_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+
+    loaded = load_workflow(workflow)
+    names = [str(item.get("name") or "") for item in loaded]
+    if names != ["warmup", "arm", "execute", "validate_file"]:
+        raise RuntimeError(f"API disconnect fixture topology drifted: {names!r}")
+    runtime = project / ".ai-task-runner"
+    return workflow, runtime / "api-outage-armed", runtime / "api-outage-active"
+
+
+def _structured_recovery_event(event: dict[str, object]) -> bool:
+    kind = str(event.get("type") or "")
+    action = str(event.get("action") or "")
+    if kind == "runner.retry" and action == "retry":
+        return True
+    return (
+        kind == "runner.recovery"
+        and action == "retry"
+        and int(event.get("retry") or 0) >= 1
+        and str(event.get("retry_mode") or "") in {"retry", "recover"}
+    )
+
+
+def recovery_backoff_observation(root: Path) -> dict[str, object]:
+    """Summarize durable StageExecutor retry waits without retaining retry history."""
+    waits: list[float] = []
+    for path in root.rglob("log.txt"):
+        if path.parent.name != ".ai-task-runner":
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                not isinstance(event, dict)
+                or event.get("type") != "runner.recovery"
+                or event.get("action") != "retry"
+            ):
+                continue
+            value = event.get("wait_seconds")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                waits.append(float(value))
+    return {
+        "count": len(waits),
+        "min_wait_seconds": min(waits) if waits else None,
+        "max_wait_seconds": max(waits) if waits else None,
+        "configured_max_seconds": LIVE_RETRY_MAX_DELAY_SECONDS,
+        "cap_reached": bool(waits and max(waits) >= LIVE_RETRY_MAX_DELAY_SECONDS),
+    }
+
+
+def _assert_recovery_wait_bounds(events: list[dict[str, object]]) -> None:
+    waits = [
+        float(event["wait_seconds"])
+        for event in events
+        if (
+            event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and isinstance(event.get("wait_seconds"), (int, float))
+            and not isinstance(event.get("wait_seconds"), bool)
+        )
+    ]
+    invalid = [
+        value
+        for value in waits
+        if value <= 0 or value > LIVE_RETRY_MAX_DELAY_SECONDS
+    ]
+    if invalid:
+        raise RuntimeError(
+            "Runner recovery wait escaped configured bounds: "
+            f"waits={waits!r}, max={LIVE_RETRY_MAX_DELAY_SECONDS}"
+        )
+
+
+def _proxy_recovery_observed(
+    session_id: str,
+    proxy,
+    successes_before_outage: int,
+) -> bool:
+    return bool(
+        session_id
+        and proxy.failures > 0
+        and not proxy.fail
+        and not proxy.disconnect
+        and proxy.successes > successes_before_outage
+    )
+
+
+def _assert_controlled_api_session_rotation(
+    session_id: str,
+    session_rotated: bool,
+    events: list[dict[str, object]],
+) -> None:
+    """Allow bounded Fresh Session rotation only when Runner evidence proves ownership."""
+    fresh_events = [
+        event for event in events
+        if event.get("type") == "runner.session" and event.get("action") == "fresh"
+    ]
+    if not session_rotated and not fresh_events:
+        return
+
+    recovery_modes = [
+        str(event.get("retry_mode") or "")
+        for event in events
+        if _structured_recovery_event(event)
+    ]
+    if not fresh_events:
+        raise RuntimeError(
+            "API outage replaced the session without controlled Runner fresh-session evidence"
+        )
+    if "recover" not in recovery_modes:
+        raise RuntimeError(
+            "API outage rotated Fresh Session without runner.recovery mode=recover evidence"
+        )
+    exact_match = any(
+        str(event.get("previous_session") or "") == session_id
+        for event in fresh_events
+    )
+    if exact_match:
+        return
+
+    # The 100ms state poll can lag a fast Qwen retry/rotation boundary. In that
+    # case, accept only a Fresh event whose previous_session is independently
+    # proven by model transport evidence to have been an actually resumed
+    # session in this run. This preserves the controlled-rotation gate without
+    # making a racy durable-state sample the sole session identity authority.
+    resumed_sessions = {
+        str(event.get("session") or "")
+        for event in events
+        if (
+            event.get("type") in {"model.prompt", "model.result"}
+            and str(event.get("session_mode") or "") == "resume"
+            and str(event.get("session") or "")
+        )
+    }
+    proven_previous = {
+        str(event.get("previous_session") or "")
+        for event in fresh_events
+        if str(event.get("previous_session") or "") in resumed_sessions
+    }
+    if proven_previous:
+        return
+
+    observed_fresh_previous = sorted({
+        str(event.get("previous_session") or "")
+        for event in fresh_events
+        if str(event.get("previous_session") or "")
+    })
+    raise RuntimeError(
+        "API outage Fresh Session evidence does not match a proven pre-rotation session: "
+        f"polled_session={session_id!r}, fresh_previous={observed_fresh_previous!r}, "
+        f"resumed_sessions={sorted(resumed_sessions)!r}"
+    )
+
+
 def api_recovery_probe(
     settings: Settings,
     root: Path,
     name: str = "api-recovery-probe",
     *,
-    outage_seconds: float = 15,
+    outage_seconds: float = API_RECOVERY_SHORT_OUTAGE_SECONDS,
     disconnect: bool = False,
     status_code: int = 502,
 ) -> bool:
     with (
         transient_proxy(settings.api_port) as proxy,
-        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=1),
+        # Disable Qwen CLI's own HTTP retry here so the injected outage reaches
+        # StageExecutor. This probe is specifically for Runner same-session
+        # retry/backoff/recovery, not the backend client's internal retry loop.
+        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
     ):
-        project = create_project(root, name)
+        project = create_project(root, name, validator=API_RECOVERY_VALIDATOR)
+        workflow, outage_marker, outage_active_marker = _prepare_api_recovery_fixture(project)
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
         stream = log.open("w", encoding="utf-8")
+        probe_env = os.environ.copy()
+        # This probe owns the recovery boundary. Qwen Code can independently
+        # enable persistent unattended retry; force it off here so injected
+        # outages must escape to StageExecutor / runner.api.
+        probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"
         options: dict[str, object] = {
             "cwd": ROOT,
             "stdin": subprocess.DEVNULL,
             "stdout": stream,
             "stderr": subprocess.STDOUT,
             "text": True,
+            "env": probe_env,
         }
         if os.name == "nt":
             options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             options["start_new_session"] = True
-        process = subprocess.Popen(runner_command(settings, project), **options)
+        process = subprocess.Popen(
+            runner_command(
+                settings,
+                project,
+                workflow=workflow,
+                max_cycles=API_RECOVERY_MAX_CYCLES,
+            ),
+            **options,
+        )
         deadline = time.monotonic() + settings.run_timeout
         session_id = ""
         outage_until = 0.0
         successes_before_outage = 0
         recovered = False
+        session_rotated = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
                 current_session = state.get("ai_session_id")
-                if not session_id and isinstance(current_session, str) and current_session:
+                outage_armed = (
+                    outage_marker is not None
+                    and outage_marker.is_file()
+                )
+                if (
+                    not session_id
+                    and outage_armed
+                    and isinstance(current_session, str)
+                    and current_session
+                ):
                     session_id = current_session
                     successes_before_outage = proxy.successes
                     proxy.disconnect = disconnect
                     proxy.status_code = status_code
                     proxy.fail = not disconnect
                     outage_until = time.monotonic() + outage_seconds
-                if (proxy.fail or proxy.disconnect) and time.monotonic() >= outage_until:
+                    outage_active_marker.write_text("active\n", encoding="utf-8")
+                if (
+                    (proxy.fail or proxy.disconnect)
+                    and proxy.failures > 0
+                    and time.monotonic() >= outage_until
+                ):
                     proxy.fail = False
                     proxy.disconnect = False
-                recovered = recovered or (
-                    session_id != ""
-                    and proxy.failures > 0
-                    and not proxy.fail
-                    and not proxy.disconnect
-                    and proxy.successes > successes_before_outage
+                recovered = recovered or _proxy_recovery_observed(
+                    session_id,
+                    proxy,
+                    successes_before_outage,
                 )
                 if (
                     not recovered
@@ -2607,7 +4586,11 @@ def api_recovery_probe(
                     and current_session
                     and current_session != session_id
                 ):
-                    raise RuntimeError("API recovery replaced the healthy session")
+                    # Do not decide here whether rotation was legal. Polling is
+                    # intentionally racy with fast retry/recovery. Record the
+                    # observation and validate it once against durable Runner
+                    # session/recovery events after the child exits.
+                    session_rotated = True
                 time.sleep(0.1)
         finally:
             proxy.fail = False
@@ -2616,16 +4599,164 @@ def api_recovery_probe(
                 terminate(process)
             stream.close()
         code = process.returncode or 0
-        assert_completed(project, code)
-        evidence = (project / ".ai-task-runner" / "log.txt").read_text(
-            encoding="utf-8"
+        assert_completed(
+            project,
+            code,
+            accepted_bytes=API_RECOVERY_ALLOWED_BYTES,
         )
-        if (
-            not session_id or not recovered
-            or "verdict=RESET_SESSION" in evidence
-        ):
-            raise RuntimeError("API outage did not recover in the same session")
+        # The final successful upstream request can complete the run between two
+        # 100ms polling iterations. Re-read proxy counters after process exit so
+        # a clean recovery is not lost merely because the child exited quickly.
+        recovered = recovered or _proxy_recovery_observed(
+            session_id,
+            proxy,
+            successes_before_outage,
+        )
+        events = runner_events(project)
+        console_events = jsonl_events(log)
+        # Recovery/session evidence is validated after process exit from the
+        # durable probe-owned JSON stream plus production event log.
+        all_events = [*console_events, *events]
+        _assert_recovery_wait_bounds(all_events)
+        evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in all_events)
+        if not session_id or not recovered or "verdict=RESET_SESSION" in evidence:
+            raise RuntimeError(
+                "API outage did not recover cleanly: "
+                f"session={bool(session_id)}, recovered={recovered}, "
+                f"failures={proxy.failures}, successes_before={successes_before_outage}, "
+                f"successes_after={proxy.successes}, disconnect={disconnect}, "
+                f"armed={bool(outage_marker and outage_marker.is_file())}"
+            )
+
+        # StageExecutor intentionally bounds failures per session. A 5s
+        # injected outage can span the 2s retry and legitimately consume that
+        # budget, so short and long outages share the same controlled-rotation
+        # contract instead of encoding timing as a semantic guarantee.
+        _assert_controlled_api_session_rotation(
+            session_id,
+            session_rotated,
+            all_events,
+        )
+        # Real Qwen may absorb/retry transport failures below StageExecutor even
+        # with SDK retry knobs minimized. This probe owns end-to-end outage
+        # resilience and bounded-session continuity, not the exact recovery layer.
+        # StageExecutor structured recovery is proved separately by the production
+        # CLI session_expiry_recovery_preflight above. If we do observe a
+        # runner.recovery/runner.retry event here, it is useful extra evidence but
+        # not mandatory for a valid backend-level self-recovery.
+        final_state = read_state(project)
+        if str(final_state.get("last_error") or ""):
+            raise RuntimeError("successful API recovery left stale last_error in durable state")
         return True
+
+
+def _require_recovery_backoff_cap(project: Path) -> dict[str, object]:
+    observation = recovery_backoff_observation(project)
+    if not observation["count"] or observation["cap_reached"] is not True:
+        raise RuntimeError(
+            "long transient outage did not reach configured Runner backoff cap: "
+            f"{observation}"
+        )
+    return observation
+
+
+def runner_backoff_cap_preflight(root: Path) -> dict[str, object]:
+    """Prove production StageExecutor reaches the configured retry cap.
+
+    Real Qwen may absorb transport retries internally, so this probe uses a
+    controlled local agent while still running through the production CLI,
+    StageExecutor, durable event log and real sleep path.
+    """
+    agent = ROOT / "tests" / "transient_backoff_agent.py"
+    if not agent.is_file():
+        raise RuntimeError(f"transient backoff probe agent is missing: {agent}")
+    project = create_project(root, "runner-backoff-cap-probe")
+    state_dir = root / "_runner-backoff-cap-state"
+    command = [
+        sys.executable, str(RUNNER),
+        "--backend", "qwen",
+        "--command", subprocess.list2cmdline([sys.executable, str(agent)]),
+        "--project-root", str(project),
+        "--goal", "Create done.txt and validate it.",
+        "--validator", "ai",
+        "--stage-retries", "-1",
+        "--retry-delay", str(LIVE_RETRY_DELAY_SECONDS),
+        "--retry-max-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
+        "--agent-timeout", "60",
+        "--planning-timeout", "60",
+        "--force-new",
+        "--no-ui-project-register",
+        "--json-events",
+    ]
+    previous = os.environ.get("BACKOFF_TEST_STATE_DIR")
+    previous_failures = os.environ.get("BACKOFF_TEST_FAILURES")
+    os.environ["BACKOFF_TEST_STATE_DIR"] = str(state_dir)
+    os.environ["BACKOFF_TEST_FAILURES"] = "5"
+    try:
+        code = run_command(
+            command,
+            console_log(project, "backoff-cap-console.jsonl"),
+            LIVE_RETRY_MAX_DELAY_SECONDS + 120,
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("BACKOFF_TEST_STATE_DIR", None)
+        else:
+            os.environ["BACKOFF_TEST_STATE_DIR"] = previous
+        if previous_failures is None:
+            os.environ.pop("BACKOFF_TEST_FAILURES", None)
+        else:
+            os.environ["BACKOFF_TEST_FAILURES"] = previous_failures
+    assert_state_completed(project, code)
+    observation = _require_recovery_backoff_cap(project)
+    waits = [
+        float(event["wait_seconds"])
+        for event in runner_events(project)
+        if (
+            event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and isinstance(event.get("wait_seconds"), (int, float))
+            and not isinstance(event.get("wait_seconds"), bool)
+        )
+    ]
+    expected_waits = [2.0, 4.0, 8.0, 16.0, float(LIVE_RETRY_MAX_DELAY_SECONDS)]
+    if waits[: len(expected_waits)] != expected_waits:
+        raise RuntimeError(
+            "controlled Runner backoff sequence did not reach the cap monotonically: "
+            f"waits={waits!r}, expected_prefix={expected_waits!r}"
+        )
+    if observation["max_wait_seconds"] != LIVE_RETRY_MAX_DELAY_SECONDS:
+        raise RuntimeError(
+            "controlled Runner backoff did not hit the exact configured cap: "
+            f"{observation}"
+        )
+    return observation
+
+
+def long_http_recovery_probe(
+    settings: Settings,
+    root: Path,
+    outage_seconds: float,
+) -> tuple[int, ...]:
+    """Prove Runner max-backoff plus real-Qwen long HTTP outage recovery."""
+    runner_backoff_cap_preflight(root)
+    for status_code in API_RECOVERY_STATUS_CODES:
+        name = f"api-long-http-{status_code}-probe"
+        api_recovery_probe(
+            settings,
+            root,
+            name,
+            outage_seconds=outage_seconds,
+            status_code=status_code,
+        )
+    return API_RECOVERY_STATUS_CODES
+
+
+def _soak_transient_status_code(run_number: int, every: int) -> int:
+    if every <= 0:
+        return API_RECOVERY_STATUS_CODES[0]
+    occurrence = max(0, run_number // every - 1)
+    return API_RECOVERY_STATUS_CODES[occurrence % len(API_RECOVERY_STATUS_CODES)]
 
 
 def timeout_probe(
@@ -2745,16 +4876,88 @@ def _tree_bytes(root: Path) -> int:
     return total
 
 
-def resource_snapshot(root: Path) -> dict[str, int]:
-    return {
+def _active_process_marker_count(root: Path) -> int:
+    return sum(
+        1 for path in root.rglob("active-process.txt") if path.is_file()
+    )
+
+
+def resource_snapshot(
+    root: Path,
+    *,
+    include_run_root_bytes: bool = False,
+    include_active_process_markers: bool = False,
+) -> dict[str, int]:
+    result = {
         "rss_bytes": _rss_bytes(),
         "threads": threading.active_count(),
         "handles": _handle_count(),
-        "run_root_bytes": _tree_bytes(root),
-        "active_process_markers": sum(
-            1 for path in root.rglob("active-process.txt") if path.is_file()
+        "active_process_markers": (
+            _active_process_marker_count(root)
+            if include_active_process_markers
+            else 0
         ),
+        "project_state_json_bytes": 0,
+        "project_stage_sessions": 0,
+        "project_dynamic_groups": 0,
+        "project_dynamic_task_groups": 0,
+        "project_review_failures": 0,
+        "project_transition_history": 0,
+        "project_expanded_workflow_stages": 0,
+        "project_debug_history_bytes": 0,
     }
+    if include_run_root_bytes:
+        result["run_root_bytes"] = _tree_bytes(root)
+    return result
+
+
+def project_state_metrics(project: Path) -> dict[str, int]:
+    work = project / ".ai-task-runner"
+    state_path = work / "state.json"
+    state = read_json(state_path)
+    def count_mapping(name: str) -> int:
+        value = state.get(name)
+        return len(value) if isinstance(value, dict) else 0
+
+    expanded = state.get("expanded_workflow")
+    try:
+        state_bytes = state_path.stat().st_size
+    except OSError:
+        state_bytes = 0
+    return {
+        "project_state_json_bytes": int(state_bytes),
+        "project_stage_sessions": count_mapping("stage_sessions"),
+        "project_dynamic_groups": count_mapping("dynamic_groups"),
+        "project_dynamic_task_groups": count_mapping("dynamic_task_groups"),
+        "project_review_failures": count_mapping("review_failures"),
+        "project_transition_history": (
+            len(state.get("transition_history"))
+            if isinstance(state.get("transition_history"), list)
+            else 0
+        ),
+        "project_expanded_workflow_stages": len(expanded) if isinstance(expanded, list) else 0,
+        "project_debug_history_bytes": _tree_bytes(work / "debug" / "history"),
+    }
+
+
+def assert_completed_project_state_clean(project: Path) -> None:
+    """Fail fast if completed runs retain active-only technical state."""
+    state = read_state(project)
+    if state.get("completed") is not True:
+        raise RuntimeError(f"project did not complete before cleanup check: {project}")
+    stale = {
+        name: len(value)
+        for name in (
+            "stage_sessions",
+            "review_failures",
+            "dynamic_groups",
+            "dynamic_task_groups",
+        )
+        if isinstance((value := state.get(name)), dict) and value
+    }
+    if stale:
+        detail = ", ".join(f"{name}={count}" for name, count in sorted(stale.items()))
+        raise RuntimeError(f"completed project retained stale technical state: {detail}")
 
 
 def _resource_maximum(
@@ -2785,7 +4988,11 @@ def _record_resource_snapshot(
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
-    baseline = resource_snapshot(root)
+    baseline = resource_snapshot(
+        root,
+        include_run_root_bytes=True,
+        include_active_process_markers=True,
+    )
     maximum = dict(baseline)
     _record_resource_snapshot(root, 0, baseline)
     result = SoakResult(resource_start=baseline, resource_max=maximum)
@@ -2800,10 +5007,22 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             result = replace(result, timeout_probes=result.timeout_probes + 1)
 
         if every_nth(settings.soak_transient_api_every, run_number):
-            api_recovery_probe(run_settings, root, f"soak-api-{run_number:04d}")
+            status_code = _soak_transient_status_code(
+                run_number,
+                settings.soak_transient_api_every,
+            )
+            api_recovery_probe(
+                run_settings,
+                root,
+                f"soak-api-{status_code}-{run_number:04d}",
+                status_code=status_code,
+            )
+            status_counts = dict(result.transient_status_counts)
+            status_counts[status_code] = status_counts.get(status_code, 0) + 1
             result = replace(
                 result,
                 transient_recoveries=result.transient_recoveries + 1,
+                transient_status_counts=status_counts,
             )
 
         if every_nth(settings.soak_yaml_every, run_number):
@@ -2824,10 +5043,11 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 settings.run_timeout,
             )
         assert_completed(project, code)
+        assert_completed_project_state_clean(project)
         mixed_validations = result.mixed_validations
         if mixed:
             mixed_validations += 1
-            expected_ai_sessions = system_final_ai_contract("mixed")[0]
+            expected_ai_sessions = builtin_final_ai_contract("mixed")[0]
             if len(final_validation_sessions(project)) < expected_ai_sessions:
                 raise RuntimeError(
                     f"soak-{run_number:04d} did not use {expected_ai_sessions} "
@@ -2839,13 +5059,21 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             mixed_validations=mixed_validations,
             sandbox_runs=result.sandbox_runs + int(sandboxed),
         )
-        sample = resource_snapshot(root)
+        sample = resource_snapshot(
+            project,
+            include_active_process_markers=True,
+        )
+        sample.update(project_state_metrics(project))
         maximum = _resource_maximum(maximum, sample)
         _record_resource_snapshot(root, run_number, sample)
         result = replace(result, resource_max=maximum, resource_end=sample)
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    final_sample = resource_snapshot(root)
+    final_sample = resource_snapshot(
+        root,
+        include_run_root_bytes=True,
+        include_active_process_markers=True,
+    )
     maximum = _resource_maximum(maximum, final_sample)
     _record_resource_snapshot(root, result.completed, final_sample)
     return replace(
@@ -2854,6 +5082,59 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
         resource_max=maximum,
         resource_end=final_sample,
     )
+
+
+def require_resource_bounds(result: SoakResult) -> None:
+    """Fail soak on clearly unbounded per-run state/process growth.
+
+    run_root_bytes is intentionally excluded: the harness retains a new Project
+    directory per soak iteration, so total run-root size is expected to grow.
+    These are conservative safety rails, not product-size limits.
+    """
+    start = result.resource_start or {}
+    maximum = result.resource_max or {}
+    end = result.resource_end or {}
+    failures: list[str] = []
+
+    if int(end.get("active_process_markers", 0)) != 0:
+        failures.append(
+            f"active process markers remain: {end.get('active_process_markers')}"
+        )
+
+    thread_start = int(start.get("threads", 0))
+    thread_end = int(end.get("threads", 0))
+    if thread_start and thread_end > thread_start + 16:
+        failures.append(f"thread count grew {thread_start} -> {thread_end}")
+
+    handle_start = int(start.get("handles", -1))
+    handle_end = int(end.get("handles", -1))
+    if handle_start >= 0 and handle_end >= 0 and handle_end > handle_start + 128:
+        failures.append(f"Windows handle count grew {handle_start} -> {handle_end}")
+
+    rss_start = int(start.get("rss_bytes", 0))
+    rss_end = int(end.get("rss_bytes", 0))
+    if rss_start and rss_end > rss_start + 512 * 1024 * 1024:
+        failures.append(
+            f"harness RSS grew by {(rss_end - rss_start) / (1024 * 1024):.1f} MiB"
+        )
+
+    ceilings = {
+        "project_state_json_bytes": 8 * 1024 * 1024,
+        "project_stage_sessions": 2048,
+        "project_dynamic_groups": 2048,
+        "project_dynamic_task_groups": 2048,
+        "project_review_failures": 2048,
+        "project_transition_history": MAX_TRANSITION_HISTORY,
+        "project_expanded_workflow_stages": 4096,
+        "project_debug_history_bytes": 128 * 1024 * 1024,
+    }
+    for key, ceiling in ceilings.items():
+        value = int(maximum.get(key, 0))
+        if value > ceiling:
+            failures.append(f"{key} exceeded safety rail: {value} > {ceiling}")
+
+    if failures:
+        raise RuntimeError("soak resource bounds failed: " + "; ".join(failures))
 
 
 def require_dense_coverage(result: SoakResult) -> None:
@@ -2867,6 +5148,11 @@ def require_dense_coverage(result: SoakResult) -> None:
         )
         if count < 1
     ]
+    missing.extend(
+        f"transient API HTTP {status}"
+        for status in API_RECOVERY_STATUS_CODES
+        if result.transient_status_counts.get(status, 0) < 1
+    )
     if missing:
         raise RuntimeError("high-density soak missed: " + ", ".join(missing))
 
@@ -2927,8 +5213,12 @@ def transient_proxy(upstream_port: int):
                         self.send_header(key, value)
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
-                self.wfile.write(payload)
+                # Publish success before the response body becomes observable by the caller.
+                # Otherwise Windows may schedule the client immediately after wfile.write()
+                # while this handler has not incremented the counter yet, making the
+                # reliability probe nondeterministically fail despite a successful proxy.
                 control.successes += 1
+                self.wfile.write(payload)
             finally:
                 connection.close()
 
@@ -3104,6 +5394,14 @@ def windows_orphan_cleanup_preflight(root: Path) -> None:
 
 def main() -> int:
     args = arguments()
+    if args.list_probes:
+        print_probe_list()
+        return 0
+    try:
+        start_probe = resolve_start_probe(args.start_probe)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
     if args.high_density:
         if args.pause == 30:
             args.pause = 5
@@ -3114,7 +5412,7 @@ def main() -> int:
         if args.soak_final_ai_every == 0:
             args.soak_final_ai_every = 8
         if args.soak_transient_api_every == 0:
-            args.soak_transient_api_every = 4
+            args.soak_transient_api_every = 2
         if args.soak_timeout_every == 0:
             args.soak_timeout_every = 6
         if args.soak_yaml_every == 0:
@@ -3131,13 +5429,14 @@ def main() -> int:
         or args.soak_timeout_every < 0
         or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
+        or args.long_http_outage_seconds <= 0
         or args.long_api_outage_seconds <= 0
         or args.single_process_yaml_items < 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
             "hours/pause/soak-* frequency values must be non-negative; "
-            "run-timeout, agent-timeout, planning-timeout, long API outage, "
+            "run-timeout, agent-timeout, planning-timeout, long HTTP/API outage, "
             "single-process YAML items, and api-port must be valid"
         )
     if args.example_smoke_matrix_workflow and not args.example_smoke_matrix_project:
@@ -3159,154 +5458,314 @@ def main() -> int:
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
+    revision, source_dirty = source_revision()
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
-    runner_ownership_preflight(run_root)
-    print("PASS cross-process Runner ownership lock preflight", flush=True)
-    windows_orphan_cleanup_preflight(run_root)
-    if os.name == "nt":
-        print("PASS bounded Windows orphan taskkill preflight", flush=True)
-    qwen_sandbox_preflight(settings, args.hours)
-    if qwen_sandbox_required(settings, args.hours):
-        print("PASS Qwen sandbox Docker preflight", flush=True)
-    api_retry_classification_preflight()
-    print("PASS API transient/deterministic retry classification preflight", flush=True)
-    task_array_recovery_preflight()
-    print("PASS malformed Task envelope -> complete TaskArray recovery preflight", flush=True)
-    session_expiry_recovery_preflight()
-    print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
-
-    dryrun_results = workflow_dryrun_preflight()
     print(
-        f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
+        f"SOURCE_REVISION={revision or '<unavailable>'} "
+        f"DIRTY={source_dirty if source_dirty is not None else '<unknown>'}",
         flush=True,
     )
-    readonly_contract = system_readonly_safety_contract()
-    print("PASS system Workflow readonly_safety observe contract preflight", flush=True)
-    workflow_dryrun_negative_preflight()
-    print("PASS workflow dry-run negative/error preflight", flush=True)
-    stage_result_mapping_preflight()
-    print("PASS Review/Validator boolean verdict mapping preflight", flush=True)
-    loop_detection_contract_preflight()
-    print("PASS Qwen loop-detection + bounded Planning retry preflight", flush=True)
-    runtime_long_path_preflight()
-    print("PASS >MAX_PATH runtime resource/state/copy preflight", flush=True)
-    readonly_long_path_preflight()
-    print("PASS >MAX_PATH reusable read-only snapshot preflight", flush=True)
-    technical_artifact_safety_preflight()
-    print("PASS protected-path technical-artifact ignore preflight", flush=True)
-    with qwen_test_endpoint(settings.sandbox, settings.api_port):
-        resume_probe(settings, run_root)
-        print("PASS resume/process-restart probe", flush=True)
-        stop_request_resume_probe(settings, run_root)
-        print("PASS detached-UI stop.request/resume probe", flush=True)
-        for workflow in ("file", "ai", "mixed"):
-            system_workflow_probe(settings, run_root, workflow)
-            print(f"PASS system/{workflow} topology + prompt contract probe", flush=True)
-        custom_task_producer_probe(settings, run_root)
-        print("PASS custom Python Task Producer -> task-scope probe", flush=True)
-        review_failure_routing_probe(settings, run_root)
-        print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
-        complete_closed_loop_probe(settings, run_root)
-        print("PASS complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure probe", flush=True)
-        validator_failure_routing_probe(settings, run_root)
-        print("PASS validator FAIL -> Planning shared-feedback routing probe", flush=True)
-        file_protection_probe(settings, run_root)
-        print("PASS protected-file policy probe", flush=True)
-        transient_observed = api_recovery_probe(settings, run_root)
-        print("PASS HTTP 502 transient API/same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings, run_root, "api-rate-limit-429-probe",
-            outage_seconds=5, status_code=429,
+    print(
+        f"START_PROBE={start_probe + 1:02d} {PROBE_ORDER[start_probe]}",
+        flush=True,
+    )
+
+    stage_probe_live: dict[str, object] = {}
+    dryrun_results: list[dict[str, object]] = []
+    review_error_policy: dict[str, object] = {}
+    review_max_failures: dict[str, object] = {}
+    readonly_contract: dict[str, object] = {}
+    transient_observed = False
+    soak_result = SoakResult()
+    example_results: list[tuple[ExampleSmokeCase, Path]] = []
+    bundled_dynamic_result: dict[str, object] = {}
+    dynamic_role_matrix: list[dict[str, object]] = []
+    dynamic_final_recovery: dict[str, object] = {}
+    dynamic_api_recovery: dict[str, object] = {}
+    dynamic_stop_resume: dict[str, object] = {}
+
+    if probe_enabled("ownership-lock", start_probe):
+        runner_ownership_preflight(run_root)
+        print_probe_pass("ownership-lock", "cross-process Runner ownership lock preflight")
+    if probe_enabled("windows-orphan-cleanup", start_probe):
+        windows_orphan_cleanup_preflight(run_root)
+        if os.name == "nt":
+            print_probe_pass("windows-orphan-cleanup", "bounded Windows orphan taskkill preflight")
+    if probe_enabled("qwen-sandbox", start_probe):
+        qwen_sandbox_preflight(settings, args.hours)
+        if qwen_sandbox_required(settings, args.hours):
+            print_probe_pass("qwen-sandbox", "Qwen sandbox Docker preflight")
+    if probe_enabled("api-retry-classification", start_probe):
+        api_retry_classification_preflight()
+        print_probe_pass("api-retry-classification", "API transient/deterministic retry classification preflight")
+    if probe_enabled("task-array-recovery", start_probe):
+        task_array_recovery_preflight()
+        print_probe_pass("task-array-recovery", "malformed Task envelope -> complete TaskArray recovery preflight")
+    if probe_enabled("session-expiry-recovery", start_probe):
+        session_expiry_recovery_preflight()
+        print_probe_pass("session-expiry-recovery", "expired-session -> Fresh Session durable recovery preflight")
+    if probe_enabled("stage-probe-live", start_probe):
+        stage_probe_live = stage_probe_live_preflight(settings)
+        alternate_stage = stage_probe_live.get("alternate_stage")
+        alternate_tested = (
+            isinstance(alternate_stage, dict)
+            and alternate_stage.get("tested") is True
         )
-        print("PASS HTTP 429 rate-limit same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings, run_root, "api-service-unavailable-503-probe",
-            outage_seconds=5, status_code=503,
+        suffix = " + alternate Stage backend/model" if alternate_tested else ""
+        print_probe_pass(
+            "stage-probe-live",
+            "real-Qwen isolated Agent Ping + Review Stage Probe" + suffix + " preflight",
         )
-        print("PASS HTTP 503 service-unavailable same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings,
-            run_root,
-            "api-disconnect-3m-probe",
-            outage_seconds=args.long_api_outage_seconds,
-            disconnect=True,
-        )
-        print(
-            f"PASS API disconnect/{args.long_api_outage_seconds:g}s same-session recovery probe",
-            flush=True,
-        )
-        multi_todo_resume_probe(settings, run_root)
-        print("PASS multi-TODO/checkpoint resume probe", flush=True)
-        yaml_list_resume_probe(settings, run_root)
-        print("PASS YAML List/resume + validator_args + per-item Final AI 3/2 probe", flush=True)
-        yaml_list_endurance_probe(settings, run_root, args.single_process_yaml_items)
-        if args.single_process_yaml_items:
+        if not alternate_tested and isinstance(alternate_stage, dict):
             print(
-                f"PASS single-process YAML endurance ({args.single_process_yaml_items} items)",
+                "SKIP alternate Stage backend/model probe: "
+                f"{alternate_stage.get('reason') or 'unavailable'}",
                 flush=True,
             )
-        final_ai_quorum_probe(settings, run_root, mixed=False)
-        print("PASS Final AI 3/2 quorum probe", flush=True)
-        timeout_probe(settings, run_root)
-        print("PASS timeout/recovery-budget probe", flush=True)
-        soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
-        if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
-            raise RuntimeError("soak ended before the requested wall-clock duration")
-        if args.high_density and args.hours:
-            require_dense_coverage(soak_result)
-        if args.require_transient and not transient_observed:
-            raise RuntimeError("no real transient API recovery was observed")
-        example_results = []
-        for case in example_cases:
-            project = example_smoke_probe(
+    if probe_enabled("workflow-dryrun", start_probe):
+        dryrun_results = workflow_dryrun_preflight()
+        print_probe_pass(
+            "workflow-dryrun",
+            f"workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
+        )
+    if probe_enabled("review-error-policy", start_probe):
+        review_error_policy = builtin_review_error_policy_contract()
+        print_probe_pass("review-error-policy", "built-in Review retries=2 -> fail-soft Skip contract preflight")
+    if probe_enabled("review-max-failures", start_probe):
+        review_max_failures = builtin_review_max_failures_contract()
+        print_probe_pass("review-max-failures", "built-in Review max_failures=3 semantic FAIL cap preflight")
+    if probe_enabled("readonly-safety", start_probe):
+        readonly_contract = builtin_readonly_safety_contract()
+        print_probe_pass("readonly-safety", "built-in Workflow readonly_safety observe contract preflight")
+    if probe_enabled("workflow-dryrun-negative", start_probe):
+        workflow_dryrun_negative_preflight()
+        print_probe_pass("workflow-dryrun-negative", "workflow dry-run negative/error preflight")
+    if probe_enabled("stage-result-mapping", start_probe):
+        stage_result_mapping_preflight()
+        print_probe_pass("stage-result-mapping", "Review/Validator boolean verdict mapping preflight")
+    if probe_enabled("loop-detection", start_probe):
+        loop_detection_contract_preflight()
+        max_cycle_supervisor_preflight(settings, run_root)
+        print_probe_pass(
+            "loop-detection",
+            "Qwen loop-detection + semantic max-cycle Supervisor no-resume preflight",
+        )
+    if probe_enabled("runtime-long-path", start_probe):
+        runtime_long_path_preflight()
+        print_probe_pass("runtime-long-path", ">MAX_PATH runtime resource/state/copy preflight")
+    if probe_enabled("readonly-long-path", start_probe):
+        readonly_long_path_preflight()
+        print_probe_pass("readonly-long-path", ">MAX_PATH reusable read-only snapshot preflight")
+    if probe_enabled("technical-artifact-safety", start_probe):
+        technical_artifact_safety_preflight()
+        print_probe_pass("technical-artifact-safety", "protected-path technical-artifact ignore preflight")
+
+    with qwen_test_endpoint(settings.sandbox, settings.api_port):
+        if probe_enabled("resume", start_probe):
+            resume_probe(settings, run_root)
+            print_probe_pass("resume", "resume/process-restart probe")
+        if probe_enabled("real-session-expiry", start_probe):
+            real_session_expiry_probe(settings, run_root)
+            print_probe_pass("real-session-expiry", "real-Qwen expired Session -> Fresh Session resume probe")
+        if probe_enabled("stop-request-resume", start_probe):
+            stop_request_resume_probe(settings, run_root)
+            print_probe_pass("stop-request-resume", "detached-UI stop.request/resume probe")
+        for workflow in ("file", "ai", "mixed"):
+            probe_name = f"workflow-{workflow}"
+            if probe_enabled(probe_name, start_probe):
+                builtin_workflow_probe(settings, run_root, workflow)
+                print_probe_pass(probe_name, f"workflow/{workflow} topology + prompt contract probe")
+        if probe_enabled("dynamic-handoff-session-policy", start_probe):
+            dynamic_handoff_session_policy_probe(settings, run_root)
+            print_probe_pass("dynamic-handoff-session-policy", "Dynamic Handoff main/role/fresh session-policy live probe")
+        if probe_enabled("custom-dynamic-producer", start_probe):
+            custom_dynamic_producer_probe(settings, run_root)
+            print_probe_pass("custom-dynamic-producer", "custom Python Dynamic Producer -> dynamic child Workflow probe")
+        if probe_enabled("review-failure-routing", start_probe):
+            review_failure_routing_probe(settings, run_root)
+            print_probe_pass("review-failure-routing", "Review FAIL -> Execute shared-feedback routing probe")
+        if probe_enabled("complete-closed-loop", start_probe):
+            complete_closed_loop_probe(settings, run_root)
+            print_probe_pass("complete-closed-loop", "complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure probe")
+        if probe_enabled("validator-failure-routing", start_probe):
+            validator_failure_routing_probe(settings, run_root)
+            print_probe_pass("validator-failure-routing", "validator FAIL -> Planning shared-feedback routing probe")
+        if probe_enabled("file-protection", start_probe):
+            file_protection_probe(settings, run_root)
+            print_probe_pass("file-protection", "protected-file policy probe")
+        if probe_enabled("api-502", start_probe):
+            transient_observed = api_recovery_probe(settings, run_root)
+            print_probe_pass("api-502", "HTTP 502 transient API/bounded-session recovery probe")
+        if probe_enabled("api-429", start_probe):
+            api_recovery_probe(
+                settings, run_root, "api-rate-limit-429-probe",
+                outage_seconds=API_RECOVERY_SHORT_OUTAGE_SECONDS, status_code=429,
+            )
+            print_probe_pass("api-429", "HTTP 429 rate-limit bounded-session recovery probe")
+        if probe_enabled("api-503", start_probe):
+            api_recovery_probe(
+                settings, run_root, "api-service-unavailable-503-probe",
+                outage_seconds=API_RECOVERY_SHORT_OUTAGE_SECONDS, status_code=503,
+            )
+            print_probe_pass("api-503", "HTTP 503 service-unavailable bounded-session recovery probe")
+        if probe_enabled("api-long-http", start_probe):
+            statuses = long_http_recovery_probe(
                 settings,
                 run_root,
-                case.source,
-                case.workflow,
-                case.name,
+                args.long_http_outage_seconds,
             )
-            example_results.append((case, project))
-            print(f"PASS copied-example real-agent smoke {case.name}", flush=True)
+            print_probe_pass(
+                "api-long-http",
+                "long HTTP "
+                + "/".join(str(code) for code in statuses)
+                + f"/{args.long_http_outage_seconds:g}s bounded-session recovery probe",
+            )
+        if probe_enabled("api-disconnect", start_probe):
+            api_recovery_probe(
+                settings,
+                run_root,
+                "api-disconnect-3m-probe",
+                outage_seconds=args.long_api_outage_seconds,
+                disconnect=True,
+            )
+            print_probe_pass(
+                "api-disconnect",
+                f"API disconnect/{args.long_api_outage_seconds:g}s bounded-session recovery probe",
+            )
+        if probe_enabled("multi-todo-resume", start_probe):
+            multi_todo_resume_probe(settings, run_root)
+            print_probe_pass("multi-todo-resume", "multi-TODO/checkpoint resume probe")
+        if probe_enabled("yaml-list-resume", start_probe):
+            yaml_list_resume_probe(settings, run_root)
+            print_probe_pass("yaml-list-resume", "YAML List/resume + validator_args + per-item Final AI 3/2 probe")
+        if probe_enabled("yaml-list-endurance", start_probe):
+            yaml_list_endurance_probe(settings, run_root, args.single_process_yaml_items)
+            if args.single_process_yaml_items:
+                print_probe_pass(
+                    "yaml-list-endurance",
+                    f"single-process YAML endurance ({args.single_process_yaml_items} items)",
+                )
+        if probe_enabled("final-ai-quorum", start_probe):
+            final_ai_quorum_probe(settings, run_root, mixed=False)
+            print_probe_pass("final-ai-quorum", "Final AI 3/2 quorum probe")
+        if probe_enabled("timeout-recovery-budget", start_probe):
+            timeout_probe(settings, run_root)
+            print_probe_pass("timeout-recovery-budget", "timeout/recovery-budget probe")
+        if probe_enabled("soak", start_probe):
+            soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
+            if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
+                raise RuntimeError("soak ended before the requested wall-clock duration")
+            if args.hours:
+                require_resource_bounds(soak_result)
+            if args.high_density and args.hours:
+                require_dense_coverage(soak_result)
+            if args.hours:
+                print_probe_pass("soak", f"{args.hours:g}H soak completed ({soak_result.completed} runs)")
+        if args.require_transient and probe_enabled("api-502", start_probe) and not transient_observed:
+            raise RuntimeError("no real transient API recovery was observed")
+        if probe_enabled("example-smoke", start_probe):
+            for case in example_cases:
+                project = example_smoke_probe(
+                    settings,
+                    run_root,
+                    case.source,
+                    case.workflow,
+                    case.name,
+                )
+                example_results.append((case, project))
+                print_probe_pass("example-smoke", f"copied-example real-agent smoke {case.name}")
+        if probe_enabled("bundled-dynamic-handoff", start_probe):
+            bundled_dynamic_result = bundled_dynamic_handoff_probe(settings, run_root)
+            print_probe_pass(
+                "bundled-dynamic-handoff",
+                "bundled dynamic_handoff.yaml real-Qwen workflow probe "
+                f"(roles={','.join(bundled_dynamic_result.get('roles_used', []))}, "
+                f"coordinator_runs={bundled_dynamic_result.get('coordinator_runs', 0)})",
+            )
+        if probe_enabled("dynamic-handoff-role-matrix", start_probe):
+            dynamic_role_matrix = dynamic_handoff_role_matrix_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-role-matrix",
+                "bundled Dynamic Handoff multi-scenario role selection matrix",
+            )
+        if probe_enabled("dynamic-handoff-final-recovery", start_probe):
+            dynamic_final_recovery = dynamic_handoff_final_recovery_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-final-recovery",
+                "Final Validator FAIL -> coordinator -> repair -> PASS",
+            )
+        if probe_enabled("dynamic-handoff-api-recovery", start_probe):
+            dynamic_api_recovery = dynamic_handoff_api_recovery_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-api-recovery",
+                "Dynamic Handoff + injected HTTP 503 recovery",
+            )
+        if probe_enabled("dynamic-handoff-stop-resume", start_probe):
+            dynamic_stop_resume = dynamic_handoff_stop_resume_probe(settings, run_root)
+            print_probe_pass(
+                "dynamic-handoff-stop-resume",
+                "Dynamic Handoff in-role stop.request -> resume",
+            )
     summary = {
         "passed": True,
+        "source_revision": revision,
+        "source_dirty": source_dirty,
         "sandbox": settings.sandbox,
         "high_density": args.high_density,
         "hours_requested": args.hours,
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
-        "protected_file_probe": True,
-        "runner_ownership_preflight": True,
-        "windows_orphan_cleanup_preflight": os.name == "nt",
-        "api_retry_classification_preflight": True,
-        "task_array_recovery_preflight": True,
-        "session_expiry_recovery_preflight": True,
-        "http_429_recovered": True,
-        "http_502_recovered": True,
-        "http_503_recovered": True,
+        "start_probe": {
+            "index": start_probe + 1,
+            "name": PROBE_ORDER[start_probe],
+        },
+        "protected_file_probe": probe_enabled("file-protection", start_probe),
+        "runner_ownership_preflight": probe_enabled("ownership-lock", start_probe),
+        "windows_orphan_cleanup_preflight": (
+            os.name == "nt" and probe_enabled("windows-orphan-cleanup", start_probe)
+        ),
+        "api_retry_classification_preflight": probe_enabled("api-retry-classification", start_probe),
+        "task_array_recovery_preflight": probe_enabled("task-array-recovery", start_probe),
+        "session_expiry_recovery_preflight": probe_enabled("session-expiry-recovery", start_probe),
+        "http_429_recovered": probe_enabled("api-429", start_probe),
+        "http_502_recovered": probe_enabled("api-502", start_probe),
+        "http_503_recovered": probe_enabled("api-503", start_probe),
         "single_process_yaml_items": args.single_process_yaml_items,
-        "workflow_dryrun_preflight": True,
-        "system_readonly_safety_contract": readonly_contract,
-        "workflow_dryrun_negative_preflight": True,
-        "stage_result_mapping_preflight": True,
-        "runtime_long_path_preflight": True,
-        "readonly_long_path_preflight": True,
-        "technical_artifact_safety_preflight": True,
-        "stop_request_resume_probe": True,
+        "stage_probe_live_preflight": stage_probe_live,
+        "workflow_dryrun_preflight": probe_enabled("workflow-dryrun", start_probe),
+        "builtin_review_error_policy_contract": review_error_policy,
+        "builtin_review_max_failures_contract": review_max_failures,
+        "builtin_readonly_safety_contract": readonly_contract,
+        "workflow_dryrun_negative_preflight": probe_enabled("workflow-dryrun-negative", start_probe),
+        "stage_result_mapping_preflight": probe_enabled("stage-result-mapping", start_probe),
+        "runtime_long_path_preflight": probe_enabled("runtime-long-path", start_probe),
+        "readonly_long_path_preflight": probe_enabled("readonly-long-path", start_probe),
+        "technical_artifact_safety_preflight": probe_enabled("technical-artifact-safety", start_probe),
+        "real_session_expiry_probe": probe_enabled("real-session-expiry", start_probe),
+        "stop_request_resume_probe": probe_enabled("stop-request-resume", start_probe),
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
-        "loop_detection_contract_preflight": True,
-        "system_workflow_contracts": ["file", "ai", "mixed"],
-        "custom_task_producer_probe": True,
-        "review_failure_routing_probe": True,
-        "validator_failure_routing_probe": True,
-        "yaml_list_resume_probe": True,
-        "yaml_list_item_runtime_options_probe": True,
-        "yaml_list_final_ai_quorum_probe": True,
+        "loop_detection_contract_preflight": probe_enabled("loop-detection", start_probe),
+        "builtin_workflow_contracts": [
+            workflow for workflow in ("file", "ai", "mixed")
+            if probe_enabled(f"workflow-{workflow}", start_probe)
+        ],
+        "dynamic_handoff_session_policy_probe": probe_enabled("dynamic-handoff-session-policy", start_probe),
+        "custom_dynamic_producer_probe": probe_enabled("custom-dynamic-producer", start_probe),
+        "review_failure_routing_probe": probe_enabled("review-failure-routing", start_probe),
+        "validator_failure_routing_probe": probe_enabled("validator-failure-routing", start_probe),
+        "yaml_list_resume_probe": probe_enabled("yaml-list-resume", start_probe),
+        "yaml_list_item_runtime_options_probe": probe_enabled("yaml-list-resume", start_probe),
+        "yaml_list_final_ai_quorum_probe": probe_enabled("yaml-list-resume", start_probe),
         "soak_runs_completed": soak_result.completed,
         "soak_elapsed_seconds": round(soak_result.elapsed_seconds, 3),
         "soak_final_ai_every": settings.soak_final_ai_every,
         "soak_mixed_validation_runs": soak_result.mixed_validations,
         "soak_transient_api_every": settings.soak_transient_api_every,
         "soak_transient_recovery_runs": soak_result.transient_recoveries,
+        "soak_transient_status_counts": {
+            str(code): int(soak_result.transient_status_counts.get(code, 0))
+            for code in API_RECOVERY_STATUS_CODES
+        },
         "soak_timeout_every": settings.soak_timeout_every,
         "soak_timeout_probe_runs": soak_result.timeout_probes,
         "soak_yaml_every": settings.soak_yaml_every,
@@ -3318,9 +5777,13 @@ def main() -> int:
             "max": soak_result.resource_max,
             "end": soak_result.resource_end,
         },
+        "recovery_backoff_observation": recovery_backoff_observation(run_root),
         "transient_observed": transient_observed,
+        "long_http_outage_seconds": args.long_http_outage_seconds,
+        "long_http_status_codes": list(API_RECOVERY_STATUS_CODES),
+        "long_http_recovered": probe_enabled("api-long-http", start_probe),
         "long_api_outage_seconds": args.long_api_outage_seconds,
-        "long_api_disconnect_recovered": True,
+        "long_api_disconnect_recovered": probe_enabled("api-disconnect", start_probe),
         "example_smoke": bool(example_results),
         "example_smoke_runs": len(example_results),
         "example_smoke_source": (
@@ -3341,6 +5804,11 @@ def main() -> int:
             }
             for case, project in example_results
         ],
+        "bundled_dynamic_handoff": bundled_dynamic_result,
+        "dynamic_handoff_role_matrix": dynamic_role_matrix,
+        "dynamic_handoff_final_recovery": dynamic_final_recovery,
+        "dynamic_handoff_api_recovery": dynamic_api_recovery,
+        "dynamic_handoff_stop_resume": dynamic_stop_resume,
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(

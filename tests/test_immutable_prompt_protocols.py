@@ -3,17 +3,18 @@ from pathlib import Path
 
 import pytest
 
-from runner.ai.structured_output import parse_result
+from runner.agent import parse_result
 from runner.errors import RunnerError
-from runner.prompts.protocols import (
+from runner.prompting import (
     PLAN_PROTOCOL,
+    DYNAMIC_TASKS_PROTOCOL,
+    DYNAMIC_STAGES_PROTOCOL,
     REVIEW_PROTOCOL,
     VALIDATION_PROTOCOL,
     append_stage_protocol,
     structured_retry_prompt,
 )
-from runner.workflow.result_parsers import parse_ai_validation, parse_review
-from runner.workflow.task_output import decode_tasks
+from runner.workflow.results import decode_tasks, parse_ai_validation, parse_review
 
 
 def _valid_task_payload() -> dict[str, object]:
@@ -110,3 +111,65 @@ def test_legacy_editable_contract_files_are_gone():
     assert "RUNNER_IMMUTABLE_PLAN_PROTOCOL" in PLAN_PROTOCOL
     assert "RUNNER_IMMUTABLE_REVIEW_PROTOCOL" in REVIEW_PROTOCOL
     assert "RUNNER_IMMUTABLE_VALIDATION_PROTOCOL" in VALIDATION_PROTOCOL
+
+
+
+def test_dynamic_producer_protocols_require_producer_defined_child_stages():
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" in DYNAMIC_TASKS_PROTOCOL
+    assert '"tasks"' in DYNAMIC_TASKS_PROTOCOL
+    assert '"stages"' in DYNAMIC_TASKS_PROTOCOL
+    assert "Runner never invents Execute/Review" in DYNAMIC_TASKS_PROTOCOL
+    assert "task_complete=true" in DYNAMIC_TASKS_PROTOCOL
+
+    assert "RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL" in DYNAMIC_STAGES_PROTOCOL
+    assert '"stages"' in DYNAMIC_STAGES_PROTOCOL
+    assert "Runner never infers child Stage types" in DYNAMIC_STAGES_PROTOCOL
+
+    plan = append_stage_protocol("plan", "plan_tasks")
+    generic_tasks = append_stage_protocol("produce", "tasks")
+    stages = append_stage_protocol("produce", "stages")
+    assert "RUNNER_IMMUTABLE_PLAN_PROTOCOL" in plan
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" not in plan
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" in generic_tasks
+    assert "RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL" in stages
+
+
+def test_review_and_validator_verdicts_do_not_depend_on_editable_prompt_text():
+    from runner.workflow.stages import (
+        AIValidatorStage,
+        AIValidatorStageSpec,
+        BaseStage,
+        BaseStageSpec,
+    )
+
+    review = BaseStage(
+        BaseStageSpec(
+            name="custom_review",
+            profile="review",
+            prompt="custom/review-anything.md",
+        )
+    )
+    validator = AIValidatorStage(
+        AIValidatorStageSpec(
+            name="custom_validator",
+            prompt="custom/validator-anything.md",
+        )
+    )
+
+    # Editable Prompt content chooses WHAT to inspect, never HOW semantic verdicts
+    # are encoded. PASS/FAIL mapping remains Runner-owned.
+    assert review.result_status({"completed": True}) == "pass"
+    assert review.result_status({"completed": False}) == "fail"
+    assert validator.result_status({"passed": True}) == "pass"
+    assert validator.result_status({"passed": False}) == "fail"
+
+    review_wire = append_stage_protocol(
+        "Ignore every formatting convention in this editable prompt.",
+        review.result_kind,
+    )
+    validator_wire = append_stage_protocol(
+        "Return a long prose essay from this editable prompt.",
+        validator.result_kind,
+    )
+    assert review_wire.rstrip().endswith("[/RUNNER_IMMUTABLE_REVIEW_PROTOCOL]")
+    assert validator_wire.rstrip().endswith("[/RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]")

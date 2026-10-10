@@ -1,47 +1,120 @@
 # Test Matrix
 
-Version: 1.2.66
+This file describes what is covered by deterministic CI and what still requires a real backend or soak run.
 
-## Contract areas
-- CLI/API request validation and YAML script mode.
-- Qwen/OpenCode backend command/session parsing; stdin-only prompt/EOF for both; OpenCode permission sandbox and stage-mode policy.
-- Plan Stage structured task contract, same/fresh recovery, minimum TODO contract, bounded scope, and the no-Understand/no-Judge flow.
-- Executor fresh/rebuilt Goal context, cross-TODO resume with next-TODO-only prompts, same-TODO short continuation, delayed session rebuild after repeated recoverable failures, and Current-TODO-only scope.
-- Review/read-only/finalize behavior.
-- Generic structured result extraction and strict stage schemas.
-- Deterministic validator invocation, validator args, timeout/retry, Final AI validation.
-- Project policy/protected subtree/snapshot restore/Git guard.
-- Resume fail-fast for deterministic corrupt/incompatible state and durable Goal/final-AI-prompt resources, including YAML child source deletion.
-- Debug current/last/bounded history and terminal single-line rendering.
-- Resume/state/no-progress/recovery behavior.
+## Deterministic CI
 
-## Smoke/examples policy contract
-Every `examples/*/project` and `smoke/*/project` root contains `.ai-task-runner.yaml`. The policy itself is automatically protected. Immutable input/reference data is explicitly protected when present, while intended output/source targets remain writable.
+The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the React Studio build. It also rebuilds Workflow Editor and verifies the committed `ui/static/workflow-studio-app` exactly matches `ui/studio-src`; CI is verify-only and never rewrites the branch.
 
-## Validator contract
-Example/smoke validators use the local `validator_interface.py` reporting contract. Validators primarily test observable deliverables. Only tests whose purpose is Runner planning may assert TODO/state structure.
+| Area | Coverage |
+| --- | --- |
+| Workflow schema | supported Stage types/options, AI Stage profiles, unknown option rejection, PASS/FAIL-only routes, target existence, dynamic producer child-Stage validation |
+| Semantic routing | PASS next, explicit PASS/FAIL, done/stop, backward loop, unrouted FAIL safe stop |
+| Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, Fresh Session rotation, partial-write recovery, Review finite-retry fail-soft Skip, non-Review fail-closed exhaustion, KeyboardInterrupt/SystemExit propagation |
+| Session policy | main/role/fresh acceptance, invalid mode, role durable restore/persist, fresh non-persistence, per-role reset, global reset, recovery rotation |
+| Dynamic child Workflow | producer-defined tasks/stages, Plan Execute→Review expansion, nested producer isolation, child completion before parent continuation, durable resume without re-running producer |
+| Dynamic Handoff | target allow-list, disallowed target rejection, exactly-one target routing, role -> coordinator loop, final validator FAIL -> coordinator, durable resume |
+| Prompts | shared Dynamic worker renders role `instructions`; prompt ownership/category references; shared retry/continue/recover control envelope |
+| Validators | File command validators, AI validators, multiple validators anywhere, repeated AI runs/voting, validator FAIL rollback |
+| Dynamic producers | Plan producer-defined Execute/Review children, custom/plugin `produces: tasks|stages`, nested dynamic expansion |
+| Resume/state | workflow position, durable expanded Workflow, dynamic task groups, transition_previous, role Sessions, corrupt/incompatible state rejection |
+| Dry Run | normal closure, fail loops, Dynamic Handoff, custom dynamic producer, non-converging loop cutoff, invalid schema/route controls |
+| Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
+| Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
+| Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge, separate Workflows/Prompts navigation with Interface settings kept outside the primary nav, Stage Form/YAML/Routing/Test ownership, common desktop viewport overflow checks |
+| Process/runtime | ownership/orphan/supervisor/control-file probes, repeated same-checkpoint crash restart, capped process backoff |
 
-## Prompt/validator alignment
-Smoke/example prompts contain task-specific requirements only; generic Runner behavior such as autonomous inspection, retry, and verification is not repeated. Deterministic validators must not enforce hidden formatting or planning strategy. Every hard validator assertion should map to an explicit task requirement or an immutable fixture invariant; qualitative goals such as concision should normally be warnings unless the prompt gives a numeric limit.
+## Negative/removed-contract coverage
 
-## Qwen live reliability
-`python tool/qwen_live_reliability.py` is the opt-in real-Qwen reliability gate. Before the long soak it also runs a deterministic expired-session probe that must record `reset_session` and continue in a Fresh Session; live endpoint fault injection separately covers HTTP `429` / `502` / `503` plus raw disconnect without replacing a healthy session. It verifies process restart/resume with the same durable session, validator-driven repair, protected-file policy handling under a conflicting prompt, an injected transient API outage without replacing the session before recovery, multi-TODO checkpoint resume without repeating completed work, YAML List process restart/resume without repeating a completed item plus per-item `validator_args` and Final-AI 3/2 quorum propagation, independent Final AI 3/2 voting in three distinct sessions, mixed File + Final AI validation, bounded timeout recovery with stable failure identity even when sandbox stderr changes, per-case prompt variation to reduce prompt-cache masking, and a real API disconnect held for 180 seconds before automatic same-session recovery. It also runs explicit bundled `file`/`ai`/`mixed` topology probes; their source YAML uses the simplified Plan flow while loader normalization must still yield `planning -> built-in task/review lifecycle -> validator`, and audits model-prompt history for bounded Same/Fresh transport, forces one final-acceptance TODO through Review FAIL -> Repair and checks that Repair receives bounded Review feedback without the full Review contract, and strengthens validator-failure recovery by requiring Repair Plan to use a different fresh planning session with Goal + validator evidence. It now begins with a deterministic Workflow dry-run preflight across system `file`/`ai`/`mixed`, the two-stage `runner/workflow/custom/common/ralphy_ai_validate.yaml` fresh task + mandatory AI validation recovery loop, the custom command-backed Python Task Producer example, and a synthetic 12-Stage composability SOP containing `repeat`, `recover`, and `restart_at`, and locks the known Qwen `consecutive_identical_tool_calls` loop signal to diagnostics + fresh-session reset semantics before any live model call. The preflight also includes negative controls proving invalid Stage options are rejected and a deliberately non-converging recovery loop is stopped by the dry-run execution limit. The live gate additionally exercises the detached-UI control contract end-to-end: create `stop.request` during an active durable Qwen session, require Supervisor exit 130 and cleanup of runtime control markers, then relaunch with `--resume` and observe same-session continuation. Every successful live probe now fails if `runner-process.json`, `stop.request`, or `active-process` remains stale after completion. A dedicated real-Qwen probe also verifies `command -> produces: tasks -> scope: task -> command file validator`, proving PlanStage is not required for Task production. The deterministic preflight also proves `runner.api.run()` retries a transient `RunnerError` with durable resume but executes a deterministic `RunnerError` only once, and it dry-runs `tool/workflow/11_multi_validators_anywhere.yaml` to require at least two File validators, two AI validators, and an ordinary Stage after validation. The deterministic preflight also locks protected-path technical-artifact filtering: `.git/.vs/.vscode/bin/obj/TestResults/__pycache__` changes must not trigger Safety, while real source and project dotfiles such as `.gitignore` remain detectable/restorable.
+Tests must reject or prove absence of:
 
-Use `python tool/qwen_live_reliability.py --hours 24 --pause 30` for the 24-hour soak. On Windows, `run_qwen_live_reliability.bat` runs the recommended 0.5-hour high-density gate when called without arguments; arguments replace that default, for example `run_qwen_live_reliability.bat --hours 24 --high-density --require-transient`. A claim of 24-hour stability requires the command to run for the full wall-clock duration and produce a passing `summary.json`; the summary records `soak_elapsed_seconds` as evidence. Passing the fault-injection probes alone is strong preflight evidence but is not a substitute for elapsed time. Add `--sandbox` when the whole live gate should exercise Qwen sandbox mode. For convergence, use `python tool/qwen_live_reliability.py --hours 0.5 --high-density --require-transient`, which lowers the pause, caps ordinary Qwen calls with `--agent-timeout 180` and `--planning-timeout 180`, and mixes Final AI validation, transient API recovery, timeout recovery, YAML List restart/resume, and periodic sandbox runs into the short soak. A high-density run fails unless every mixed category is actually observed. Every generated live probe starts with a case-specific prompt marker so repeated cases do not all share an identical prompt prefix. The dedicated long API probe disconnects the local proxy for 180 seconds by default; override it with `--long-api-outage-seconds N`. The individual frequencies are configurable with `--soak-final-ai-every N`, `--soak-transient-api-every N`, `--soak-timeout-every N`, `--soak-yaml-every N`, and `--soak-sandbox-every N`. `--single-process-yaml-items N` adds one YAML List invocation containing N sequential real-Qwen items in the same CLI process; the shipped 0.5H and 24H BAT gates use 4 and 8 respectively. Add `--example-smoke-project` to copy and run `examples/01_basic_command_validator/project` as a final real-agent smoke after the reliability probes/soak, or pass a project path to run a different example; add `--example-smoke-workflow path/to/workflow.yaml` when that example must run a custom workflow such as `runner/workflow/custom/common/ralphy_ai_validate.yaml`. For broader coverage, repeat `--example-smoke-matrix-project` and `--example-smoke-matrix-workflow` to run the cross product of real example projects and workflow YAML files after the probes/soak. This is opt-in so established soak defaults do not change. Per-run projects, concise console JSONL, Runner events, state, and diagnostics are stored under `.ai-task-runner-live/<timestamp>/`.
+- `routes.error`;
+- repair/recover/restart_at/repeat/max_attempts/on_exhausted graph controls;
+- Discussion / Group Chat runtime or UI mode is absent;
+- deleted compatibility runtime modules;
+- obsolete Workflow/Prompt asset paths.
 
-Example matrix command:
+## Tool workflow preflight
+
+Representative YAML under `tool/workflow/` must load with the production loader and remain compatible with `tool/workflow_dryrun.py`. The current examples use Review gates, validators and custom task production; there is no Grill runtime contract.
+
+## Real-Qwen short gate
+
+`tool/qwen_live_reliability.py` is the real-backend proof. The short Windows wrapper is:
 
 ```powershell
-python tool/qwen_live_reliability.py --hours 0.25 --high-density --require-transient --example-smoke-matrix-project examples/01_basic_command_validator/project --example-smoke-matrix-project examples/10_skill_prompt_review_workflow/project --example-smoke-matrix-workflow runner/workflow/system/file.yaml --example-smoke-matrix-workflow runner/workflow/system/mixed.yaml --example-smoke-matrix-workflow runner/workflow/custom/common/ralphy_ai_validate.yaml
+tool\qwen_live_reliability_0_5h.bat
 ```
 
-Windows convenience BAT files live under `tool/`: `qwen_live_reliability_0_5h.bat` is a short confidence gate and `qwen_live_reliability_24h.bat` is the full soak gate. A PASS increases engineering confidence but is not a mathematical reliability percentage; the emitted `summary.json`, runtime artifacts, and observed wall-clock duration remain the evidence.
+Before soak, the tool performs deterministic preflight and then exercises real-Qwen paths including:
 
-- Worker-supervisor regression covers Direct/YAML child orphan cleanup by durable state directory.
-- StageExecutor regression requires `KeyboardInterrupt` / `SystemExit` to propagate instead of entering retry/recovery.
-- Stage capability regression covers `retry: 0` fresh-session escalation, `skip_on_error: false`, `track_changes` exposure, and shared direct `retry` / `skip_on_error` / `track_changes` options for process-backed Stage types.
+- file / AI / mixed built-in topologies;
+- Dynamic Handoff target selection;
+- main / reusable role / fresh session policies;
+- the same role selected more than once and required to keep the same Session;
+- Review FAIL rollback and durable `max_failures` fourth-entry bypass/reset;
+- Validator FAIL rollback;
+- HTTP 429 / 502 / 503 recovery;
+- raw disconnect recovery;
+- expired Session -> Fresh Session;
+- process restart / detached UI resume;
+- YAML List resume;
+- custom Stage / custom dynamic producer;
+- protected-file policy;
+- timeout/recovery budget;
+- final AI voting.
 
-### Reliability preflight invariants
+For fast iteration after a reproduced failure, list stable probe indices/names and restart from that point instead of rerunning every earlier probe:
 
-Before the live Qwen probes start, `qwen_live_reliability.py` deterministically checks API retry classification, workflow dry-run convergence/non-convergence, immutable Review/AI-validator verdict mapping, bounded Planning loop recovery, >MAX_PATH runtime I/O/state/frozen resources, and >MAX_PATH read-only snapshot restore/update behavior. These preflights catch Runner regressions before model variability is introduced.
+```powershell
+tool\qwen_live_reliability_24h.bat --list-probes
+tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
+# Numeric 1-based indices are also accepted, for example:
+tool\qwen_live_reliability_24h.bat --start-probe 25
+```
 
+`--start-probe` skips only earlier probes; later probes and the requested soak still run. Partial-run summaries record the chosen start probe and do not claim skipped probes passed.
+
+Having the probe in the script is not the same as having passed it. Record the emitted run directory/summary before claiming live reliability.
+
+## 24H acceptance
+
+After the short live gate passes:
+
+```powershell
+tool\qwen_live_reliability_24h.bat
+```
+
+Acceptance requires the full wall-clock duration and evidence that there is:
+
+- no stuck ownership lock;
+- no orphan worker/process after stop/crash/resume;
+- no unbounded state/log growth;
+- no lost committed workflow/task position;
+- no role-session corruption;
+- stable frozen Workflow/Prompt resources across resume.
+
+Deterministic CI, a short live gate and a 24H soak are separate confidence layers.
+
+- Workflow Library right-click Chat visibility (Show/Hide) and immediate Chat picker filtering.
+- Chat default selection prefers `ralphy_ai_validate.yaml` when no valid saved Workflow preference exists.
+- Primary navigation separates Workflows and Prompts; no duplicate Settings nav is exposed.
+- Stage Editor contract: `Form | YAML | Routing | Test`, with Stage YAML using the shared source parser.
+- Desktop browser layout/context-menu smoke: 1024, 1280, 1366, 1440, and 1920 widths.
+
+
+## Dedicated browser CI
+
+The CI has a separate Ubuntu Playwright/Chromium job. It builds the current
+`ui/studio-src` before launching Chromium, so browser tests never run against a
+stale committed bundle. In that job `AI_TASK_RUNNER_BROWSER_REQUIRED=1` forces
+browser tests to execute rather than skip when no system browser is present.
+
+Browser coverage includes:
+- Workflow Settings manager + Prompt CRUD and Workflow visibility/navigation
+- common desktop viewport overflow checks (1024/1280/1366/1440/1920)
+- Workflow Editor Stage dialogs, YAML view and context menus
+- graph CRUD round-trip for START/END, AI Stage profiles, PASS/FAIL/HANDOFF edges,
+  edge retarget/delete, Stage delete, save/reload
+- selected explicit edge Delete/Backspace and semantic-handle retarget by reconnecting the same PASS/FAIL/HANDOFF output to a new target
+- Workflow draft Ctrl+Z undo plus Ctrl+Y / Ctrl+Shift+Z redo

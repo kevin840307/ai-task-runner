@@ -7,12 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from runner.task_runner import TaskRunner
 from runner import bootstrap
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.plugins.safety import git_subcommand
-from runner.project.policy import POLICY_FILENAME, protected_paths
+from runner.workspace import POLICY_FILENAME, protected_paths
 from runner.runtime.process_runner import run_process
 from runner.plugins.safety import normalize_paths, restore_changed, snapshot
 
@@ -96,7 +95,7 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
-    from runner.project.policy import instruction_text
+    from runner.workspace import instruction_text
 
     (tmp_path / POLICY_FILENAME).write_text(
         "instructions:\n"

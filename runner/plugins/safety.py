@@ -16,15 +16,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..project.policy import protected_paths as policy_protected_paths
 from ..errors import RunnerError
-from ..utils.files import copy_ignore, copy_path, digest, io_path, remove_path
+from ..utils import copy_ignore, copy_path, digest, io_path, remove_path
 from ..bootstrap import current_runtime
-from .contracts import HookViolation
+from .runtime import HookViolation
 
-from ..project.files import (
-    TECHNICAL_EXCLUDE_DIRS, excluded_dirs, is_technical_artifact,
-    restore_project_changes, tree_manifest,
+from ..workspace import (
+    TECHNICAL_EXCLUDE_DIRS,
+    excluded_dirs,
+    is_technical_artifact,
+    protected_paths as policy_protected_paths,
+    restore_project_changes,
+    tree_manifest,
 )
 
 BLOCKED_GIT_SUBCOMMANDS = frozenset({"add", "commit", "push"})
@@ -383,7 +386,7 @@ class SafetyHook:
         protected = self._protected(root)
         if not protected:
             return ""
-        paths = "\n".join(f"- {path}" for path in protected)
+        paths = "\n".join(f"- {path.as_posix()}" for path in protected)
         return (
             "Safety rules:\n"
             "- Never modify runner state, runner source, validator inputs, backend-owned rules, or other protected paths listed below.\n"
