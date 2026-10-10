@@ -3960,7 +3960,10 @@ def test_api_recovery_probe_bounds_semantic_recovery_cycles():
     end = source.index("\ndef _require_recovery_backoff_cap", start)
     block = source[start:end]
 
-    assert "max_cycles=4" in block
+    # Four initial stages consume cycles 1-4. A validate FAIL must still have
+    # budget to execute -> validate again; keep two bounded repair rounds.
+    assert live.API_RECOVERY_MAX_CYCLES == 8
+    assert "max_cycles=API_RECOVERY_MAX_CYCLES" in block
 
 
 def test_dynamic_session_policy_allows_only_controlled_rotation(tmp_path):
