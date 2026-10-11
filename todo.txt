@@ -387,6 +387,24 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate true 24H soak after separator-dropped malformed Windows write-path fix.
+    - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
+      timeout-recovery-budget PASS, then soak-yaml-0140 failed inside yaml_list_resume_probe.
+    - Durable task evidence recorded changed_files=['C<U+F03A>Userskevin...item-1health.txt']
+      and Qwen loop detection stopped repeated identical writes before item 1 could complete.
+    - This is the same production Windows absolute-path flattening family seen previously,
+      but with a second observed transport form: ':' became U+F03A while all '\\'
+      separators were dropped instead of becoming U+F05C.
+    - Existing is_malformed_windows_path_filename() only matched the older
+      C<U+F03A><U+F05C>... form, so StageExecutor did not delete/retry this variant.
+    - Production fix broadens the narrow signature to any single filename beginning
+      with an ASCII drive letter + U+F03A. StageExecutor therefore removes the malformed
+      artifact and uses its existing technical Fresh recovery envelope.
+    - Deterministic regressions now cover both observed malformed forms plus normal
+      relative filename/path negative cases.
+    - Runner semantic/runtime ownership is unchanged; validator and loop detection
+      remain strict. Real-Qwen soak rerun from probe 40 is required before checking this item.
+
 [ ] Revalidate API-recovery soak semantic repair budget after soak-api-502-0454.
     - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
       timeout-recovery-budget PASS, then soak-api-502-0454 failed closed.
