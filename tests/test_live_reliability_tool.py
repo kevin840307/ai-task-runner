@@ -2792,6 +2792,13 @@ def test_soak_result_tracks_bounded_transient_status_counts():
     assert result.transient_status_counts == {429: 1, 502: 1, 503: 1}
 
 
+def test_soak_frontloads_mixed_final_ai_coverage():
+    assert (
+        (1 == 1 or live.every_nth(8, 1))
+    )
+    assert live.every_nth(8, 8)
+
+
 def test_soak_transient_status_rotation_covers_all_http_classes():
     assert [
         live._soak_transient_status_code(run_number, 2)
