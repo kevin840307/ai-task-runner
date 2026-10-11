@@ -4792,6 +4792,11 @@ def every_nth(every: int, run_number: int) -> bool:
     return every > 0 and run_number % every == 0
 
 
+def soak_mixed_final_ai_enabled(every: int, run_number: int) -> bool:
+    """Front-load required mixed Final AI coverage, then keep periodic cadence."""
+    return every > 0 and (run_number == 1 or run_number % every == 0)
+
+
 def run_endpoint(settings: Settings, sandbox: bool):
     if sandbox == settings.sandbox:
         return nullcontext()
@@ -5035,10 +5040,10 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             result = replace(result, yaml_runs=result.yaml_runs + 1)
 
         project = create_project(root, f"soak-{run_number:04d}")
-        mixed = (
-            run_number == 1
-            or every_nth(settings.soak_final_ai_every, run_number)
-        ) if settings.soak_final_ai_every else False
+        mixed = soak_mixed_final_ai_enabled(
+            settings.soak_final_ai_every,
+            run_number,
+        )
         with run_endpoint(settings, sandboxed):
             code = run_command(
                 runner_command(run_settings, project, final_ai=mixed),
