@@ -2793,10 +2793,12 @@ def test_soak_result_tracks_bounded_transient_status_counts():
 
 
 def test_soak_frontloads_mixed_final_ai_coverage():
-    assert (
-        (1 == 1 or live.every_nth(8, 1))
-    )
-    assert live.every_nth(8, 8)
+    assert live.soak_mixed_final_ai_enabled(8, 1) is True
+    assert live.soak_mixed_final_ai_enabled(8, 2) is False
+    assert live.soak_mixed_final_ai_enabled(8, 7) is False
+    assert live.soak_mixed_final_ai_enabled(8, 8) is True
+    assert live.soak_mixed_final_ai_enabled(8, 9) is False
+    assert live.soak_mixed_final_ai_enabled(0, 1) is False
 
 
 def test_soak_transient_status_rotation_covers_all_http_classes():
