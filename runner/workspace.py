@@ -113,16 +113,19 @@ def project_manifest(root: Path, work: Path) -> dict[str, tuple[str, str | None]
 def is_malformed_windows_path_filename(path: Path | str) -> bool:
     """Detect a Windows absolute path accidentally flattened into one filename.
 
-    Qwen/Windows tool transport has been observed replacing ':' and '\\' with
-    private-use glyphs U+F03A/U+F05C, producing names such as
-    'C<U+F03A><U+F05C>Users<U+F05C>...<U+F05C>health.txt' under project_root.
-    Such a file can never satisfy a project-relative deliverable and must not be
-    treated as successful Stage work.
+    Qwen/Windows tool transport has produced two observed forms:
+    - ':' and '\\' replaced by private-use glyphs U+F03A/U+F05C.
+    - ':' replaced by U+F03A while path separators are dropped entirely.
+
+    Both forms become one project-root filename beginning with a drive letter
+    plus U+F03A. That prefix is sufficient and intentionally fail-closed: it is
+    transport evidence of a flattened Windows drive path, not a valid relative
+    deliverable path.
     """
     value = Path(path).as_posix()
     if "/" in value or len(value) < 4:
         return False
-    return bool(re.match(r"^[A-Za-z]\uf03a\uf05c", value)) and value.count("\uf05c") >= 2
+    return bool(re.match(r"^[A-Za-z]\uf03a", value))
 
 
 def changed_project_files(
