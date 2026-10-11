@@ -8,6 +8,7 @@ from runner.errors import ConfigurationError, RunnerError
 from runner.runtime import events
 from runner.runtime.events import EventBus
 from runner.runtime.run_state import RunState
+from runner.workspace import is_malformed_windows_path_filename
 from runner.workflow.execution import StageExecutor
 from runner.workflow.stages import StageResult
 from runner.workflow.stages import StageContext
@@ -558,6 +559,21 @@ def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path,
         and event["previous_session"] == "session-before-partial-write"
         for event in records
     )
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("C\uf03a\uf05cUsers\uf05ckevin\uf05cproject\uf05chealth.txt", True),
+        ("C\uf03aUserskevinprojecthealth.txt", True),
+        ("health.txt", False),
+        ("C-health.txt", False),
+        ("folder/health.txt", False),
+        ("notes-C\uf03areport.txt", False),
+    ],
+)
+def test_malformed_windows_path_filename_detection_is_narrow(path, expected):
+    assert is_malformed_windows_path_filename(path) is expected
 
 
 @pytest.mark.parametrize(
