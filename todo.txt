@@ -387,6 +387,22 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate high-density soak after front-loading mixed Final AI coverage.
+    - 2026-10-12 focused rerun started at probe 40 on source revision
+      a37d08f645f3f35af7efff2993aed087aee7f420, DIRTY=False.
+    - Soak itself completed without a task/runtime exception, but final dense acceptance
+      failed with "high-density soak missed: mixed Final AI".
+    - Root cause is harness scheduling: mixed Final AI ran only every 8th soak iteration.
+      A slower real-Qwen 0.5H run can finish fewer than 8 iterations even when healthy,
+      so required coverage was coupled to throughput rather than the requested gate.
+    - Fix: when mixed Final AI cadence is enabled, run 1 always performs the mixed
+      Final AI check, then the existing every-N cadence continues (default every 8).
+      This preserves periodic 24H coverage without extending --hours or weakening
+      require_dense_coverage().
+    - Deterministic regression locks run 1 / run 8 enabled, intermediate runs disabled,
+      and cadence=0 fully disabled.
+    - fail-start remains at probe 40 for the focused soak rerun.
+
 [ ] Revalidate true 24H soak after separator-dropped malformed Windows write-path fix.
     - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
       timeout-recovery-budget PASS, then soak-yaml-0140 failed inside yaml_list_resume_probe.
