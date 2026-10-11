@@ -560,12 +560,18 @@ def test_partial_write_error_rotates_fresh_and_preserves_project_state(tmp_path,
     )
 
 
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "C\uf03a\uf05cUsers\uf05ckevin\uf05cproject\uf05chealth.txt",
+        "C\uf03aUserskevinprojecthealth.txt",
+    ],
+)
 def test_executor_recovers_from_flattened_windows_absolute_path_filename(
     tmp_path,
     monkeypatch,
+    malformed,
 ):
-    malformed = "C\uf03a\uf05cUsers\uf05ckevin\uf05cproject\uf05chealth.txt"
-
     class WritesMalformedThenCorrect(Stage):
         mode = "write"
 
