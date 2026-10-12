@@ -116,6 +116,45 @@ def test_fail_edge_is_the_only_closed_loop_mechanism(tmp_path):
     assert executor.seen == ["work", "review", "work", "review"]
 
 
+def test_validator_fail_backward_route_carries_validation_transition_to_planning(tmp_path):
+    workflow = [
+        node("planning"),
+        node("validate_file", routes={"fail": "planning"}),
+    ]
+    ctx = context(tmp_path, workflow)
+    validations = 0
+    planning_previous = []
+
+    def callback(stage, _ctx, previous):
+        nonlocal validations
+        if stage.name == "planning":
+            planning_previous.append(previous)
+            return StageResult("planning", "pass")
+        validations += 1
+        if validations == 1:
+            return StageResult(
+                "validate_file",
+                "fail",
+                output="VALIDATION_FAILED: repair current artifact",
+                kind="validation",
+            )
+        return StageResult(
+            "validate_file",
+            "pass",
+            output="VALIDATION_PASSED",
+            kind="validation",
+        )
+
+    assert FlowEngine(ctx).run(Executor(callback)) == 0
+    assert len(planning_previous) == 2
+    assert planning_previous[0] is None
+    assert planning_previous[1].stage == "validate_file"
+    assert planning_previous[1].status == "fail"
+    assert planning_previous[1].kind == "validation"
+    assert planning_previous[1].output == "VALIDATION_FAILED: repair current artifact"
+    assert ctx.state.cycle == 2
+
+
 def test_routed_stage_receives_previous_structured_result(tmp_path):
     workflow = [
         node("review", routes={"fail": "repair"}),
