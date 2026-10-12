@@ -387,6 +387,34 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate validator-failure-routing after transition-owned feedback fix.
+    - 2026-10-12 full live gate passed [24/46] dynamic-handoff-session-policy,
+      [25/46] custom-dynamic-producer, [26/46] review-failure-routing and
+      [27/46] complete-closed-loop, then [28/46] validator-failure-routing failed
+      its prompt-transport assertion.
+    - The preceding stale-feedback fix correctly removed ambient state.validator_output
+      from every shared-control prompt, but exposed a real missing branch:
+      command/file validators return kind=validation with concrete FAIL output and
+      data=None, while _control_feedback() only labelled structured AI-validator
+      data.passed=false as "Validator:".
+    - Result: FlowEngine correctly routed validate_file FAIL back to Planning, but
+      shared control labelled the current transition only as "validate_file: ...";
+      probe 28 correctly rejected that contract drift.
+    - Fix: any current previous.kind=validation FAIL now uses the same transition-owned
+      "Validator:" label. Structured AI validators use reason/missing_items; command
+      validators fall back to current previous.output/error. Ambient validator_output
+      remains excluded, so the example-smoke stale-feedback bug is not reintroduced.
+    - Additional cleanup: ambient task.last_review is also excluded from shared semantic
+      feedback. Current Review FAIL data is carried only by previous.kind=review, avoiding
+      duplicate/stale Review findings on later transitions.
+    - Mock regressions cover:
+      * stale run validator history omitted from Review -> Execute;
+      * stale task.last_review omitted and current Review feedback emitted once;
+      * command-validator FAIL output labelled Validator and stale state omitted;
+      * FlowEngine backward validate_file FAIL -> Planning carries kind=validation,
+        output and cycle transition correctly.
+    - fail-start now resumes at probe 28.
+
 [ ] Revalidate example-smoke after isolating stale validator feedback from task-local Review retries.
     - 2026-10-12 full live gate passed probes 35-39 and the first three probe-40
       example-smoke cases, then example-smoke-10-skill-prompt-review-workflow-file stalled.
