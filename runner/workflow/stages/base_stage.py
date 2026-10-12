@@ -509,9 +509,15 @@ class BaseStage:
                         "Review missing_items: "
                         + json.dumps(missing, ensure_ascii=False)[-2500:]
                     )
-            elif previous.kind == "validation" and data.get("passed") is False:
+            elif previous.kind == "validation":
                 reason = str(data.get("reason") or "").strip()
                 missing = data.get("missing_items")
+                # AI validators expose structured reason/missing_items. Command/file
+                # validators normally expose only their concrete stdout. Both are
+                # the same current validation transition and must use the same
+                # shared-control Validator label.
+                if not reason:
+                    reason = str(previous.error or previous.output or "").strip()
                 if reason:
                     parts.append("Validator: " + reason[-2000:])
                 if isinstance(missing, list) and missing:
@@ -522,7 +528,7 @@ class BaseStage:
 
         if previous is not None and previous.status in {"fail", "error"}:
             detail = str(previous.error or previous.output or "").strip()
-            if detail:
+            if detail and previous.kind != "validation":
                 parts.append(f"{previous.stage}: {detail[-2000:]}")
         return "\n".join(parts)
 
