@@ -387,6 +387,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Reordered ai-task-runner live gate so long-running soak is last.
+    - Probe order is now 1-39 short/functional gates, 40 example-smoke,
+      41-45 Dynamic Handoff coverage, and 46 soak.
+    - main() execution order matches PROBE_ORDER; deterministic regression prevents
+      the long soak block from moving ahead of Dynamic Handoff probes.
+    - This makes failures fail fast before spending 0.5H/24H on endurance coverage.
+    - run_qwen_live_reliability_fail_start.bat now defaults to probe 46 (soak);
+      callers can still override --start-probe explicitly.
+    - No Runner runtime/workflow semantics changed; this is live-gate orchestration only.
+
 [x] Revalidate probe 44 after deterministic writer-to-gate recovery closure.
     - 2026-10-12 focused real-Qwen rerun on source revision 349dc6215823b2acd0f96ad5b9e5ed71bb812943, DIRTY=False:
       * [44/46] PASS dynamic-handoff-final-recovery.
@@ -1653,7 +1663,7 @@ RELEASE GATES
     - no unbounded state/log/history growth
     - frozen Workflow/Prompt resources stable across Resume
 
-[x] Current HEAD deterministic CI green
+[ ] Current HEAD deterministic CI green
     - HEAD 349dc6215823b2acd0f96ad5b9e5ed71bb812943.
     - GitHub Actions runs 38239446080 and 38239453215 completed successfully.
     - This includes the deterministic writer-to-approval-gate closure regression,
