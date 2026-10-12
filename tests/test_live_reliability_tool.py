@@ -2831,6 +2831,14 @@ def test_dynamic_handoff_extended_live_probes_run_before_soak():
     assert live.PROBE_ORDER.index("soak") + 1 == 46
 
 
+def test_main_executes_long_soak_after_dynamic_handoff_probes():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    stop = source.index('if probe_enabled("dynamic-handoff-stop-resume", start_probe):')
+    soak = source.index('if probe_enabled("soak", start_probe):', stop)
+    summary = source.index("    summary = {", soak)
+    assert stop < soak < summary
+
+
 def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runtime_primitives():
     source = Path(live.__file__).read_text(encoding="utf-8")
 
