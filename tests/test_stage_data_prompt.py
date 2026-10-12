@@ -134,6 +134,42 @@ def test_task_local_review_retry_ignores_stale_run_validator_feedback(tmp_path):
     assert "stale README.md missing" not in feedback
 
 
+def test_command_validator_failure_feedback_uses_current_transition_output(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+    from runner.workflow.stages import StageResult
+
+    state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
+    state.validator_output = "VALIDATION_FAILED: stale old result"
+    ctx = StageContext(
+        config=SimpleNamespace(),
+        root=tmp_path,
+        work=tmp_path,
+        state=state,
+        ai_client=SimpleNamespace(session_id="session"),
+        state_file=tmp_path / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+    stage = BaseStage(BaseStageSpec(name="planning", prompt="common/planning.md"))
+    previous = StageResult(
+        "validate_file",
+        "fail",
+        output="VALIDATION_FAILED: replace route.txt content with exactly RECOVERED",
+        data=None,
+        kind="validation",
+    )
+
+    feedback = stage._control_feedback(ctx, previous)
+
+    assert "Validator: VALIDATION_FAILED: replace route.txt content with exactly RECOVERED" in feedback
+    assert "stale old result" not in feedback
+    assert "validate_file:" not in feedback
+
+
 def test_top_level_validator_failure_feedback_uses_structured_data_when_output_empty(tmp_path):
     from types import SimpleNamespace
 
