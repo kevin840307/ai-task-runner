@@ -95,6 +95,64 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
     assert 'Review missing_items: ["Add REVIEW_REQUIRED"]' in feedback
 
 
+def test_current_review_feedback_is_not_duplicated_from_task_history(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.runtime.run_state import Task
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+    from runner.workflow.stages import StageResult
+
+    task = Task(
+        id="task-1",
+        title="task",
+        description="work",
+        deliverable="artifact",
+        acceptance_criteria=["done"],
+        last_review={
+            "completed": False,
+            "reason": "stale review reason",
+            "missing_items": ["stale item"],
+        },
+    )
+    state = RunState(
+        run_id="test",
+        goal="check project",
+        project_root=str(tmp_path),
+        tasks=[task],
+    )
+    ctx = StageContext(
+        config=SimpleNamespace(),
+        root=tmp_path,
+        work=tmp_path,
+        state=state,
+        ai_client=SimpleNamespace(session_id="session"),
+        state_file=tmp_path / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
+    previous = StageResult(
+        "review",
+        "fail",
+        output="",
+        data={
+            "completed": False,
+            "reason": "current review reason",
+            "missing_items": ["current item"],
+        },
+        kind="review",
+    )
+
+    feedback = stage._control_feedback(ctx, previous)
+
+    assert feedback.count("Review: current review reason") == 1
+    assert feedback.count('Review missing_items: ["current item"]') == 1
+    assert "stale review reason" not in feedback
+    assert "stale item" not in feedback
+
+
 def test_task_local_review_retry_ignores_stale_run_validator_feedback(tmp_path):
     from types import SimpleNamespace
 
