@@ -2875,6 +2875,9 @@ def test_dynamic_final_recovery_fixture_preserves_fresh_ai_validation(tmp_path):
     assert by_name["final_validate"]["routes"]["fail"] == "coordinator"
     assert "approval_gate" in by_name["coordinator"]["targets"]
     assert "final_validate" not in by_name["coordinator"]["targets"]
+    assert by_name["implementer"]["routes"]["pass"] == "approval_gate"
+    assert by_name["debugger"]["routes"]["pass"] == "approval_gate"
+    assert by_name["verifier"]["routes"]["pass"] == "coordinator"
 
 
 def test_dynamic_final_approval_gate_always_fails_first_then_checks_evidence(tmp_path):
