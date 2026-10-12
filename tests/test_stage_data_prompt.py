@@ -95,6 +95,45 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
     assert 'Review missing_items: ["Add REVIEW_REQUIRED"]' in feedback
 
 
+def test_task_local_review_retry_ignores_stale_run_validator_feedback(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+    from runner.workflow.stages import StageResult
+
+    state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
+    state.validator_output = "VALIDATION_FAILED: stale README.md missing"
+    ctx = StageContext(
+        config=SimpleNamespace(),
+        root=tmp_path,
+        work=tmp_path,
+        state=state,
+        ai_client=SimpleNamespace(session_id="session"),
+        state_file=tmp_path / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
+    previous = StageResult(
+        "review",
+        "fail",
+        output="",
+        data={
+            "completed": False,
+            "reason": "Current review needs one task-local fix",
+            "missing_items": ["current item"],
+        },
+        kind="review",
+    )
+
+    feedback = stage._control_feedback(ctx, previous)
+
+    assert "Current review needs one task-local fix" in feedback
+    assert "stale README.md missing" not in feedback
+
+
 def test_top_level_validator_failure_feedback_uses_structured_data_when_output_empty(tmp_path):
     from types import SimpleNamespace
 
