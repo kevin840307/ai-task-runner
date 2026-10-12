@@ -488,10 +488,12 @@ class BaseStage:
                 parts.append("Review: " + reason)
             if missing:
                 parts.append("Review missing_items: " + json.dumps(missing, ensure_ascii=False))
-        validator = str(getattr(ctx.state, "validator_output", "") or "").strip()
-        if validator:
-            parts.append("Validator: " + validator[-2000:])
-
+        # Validator feedback is transition-owned, not ambient run state.
+        # state.validator_output intentionally persists the latest validation result
+        # for durable inspection/planning, but injecting it into every task-local
+        # Review -> Execute retry can replay stale feedback from an earlier cycle.
+        # A real validator FAIL reaches this Stage as previous.kind == "validation"
+        # below, which is the authoritative feedback path.
         # Structured AI stages keep their semantic verdict in StageResult.data.
         # Their output may intentionally be empty, so top-level rollback must
         # transport reason/missing_items from data instead of relying on output.
