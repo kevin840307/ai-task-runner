@@ -3108,6 +3108,23 @@ def _prepare_dynamic_final_recovery_workflow(
         "approval_gate" if target == "final_validate" else target
         for target in targets
     ]
+    for writer_name in ("implementer", "debugger"):
+        writer = stages.get(writer_name)
+        if not isinstance(writer, dict):
+            raise RuntimeError(
+                f"shipped Dynamic Handoff writer Stage changed: {writer_name}"
+            )
+        routes = writer.get("routes")
+        if not isinstance(routes, dict) or routes.get("pass") != "coordinator":
+            raise RuntimeError(
+                f"shipped Dynamic Handoff writer routing changed: {writer_name}"
+            )
+        # Probe-only deterministic closure: coordinator still chooses the real
+        # write-capable AI specialist after approval FAIL, but once that writer
+        # repairs the evidence we revisit the gate directly instead of asking
+        # coordinator to infer from stale conversational context that it is time
+        # to validate again.
+        routes["pass"] = "approval_gate"
     stages["approval_gate"] = {
         "type": "command",
         "label": "Deterministic Final Approval Gate",
