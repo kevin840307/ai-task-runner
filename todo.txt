@@ -387,7 +387,21 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
-[ ] Revalidate probe 44 after deterministic writer-to-gate recovery closure.
+[x] Revalidate probe 44 after deterministic writer-to-gate recovery closure.
+    - 2026-10-12 focused real-Qwen rerun on source revision 349dc6215823b2acd0f96ad5b9e5ed71bb812943, DIRTY=False:
+      * [44/46] PASS dynamic-handoff-final-recovery.
+        stage_starts=[coordinator, implementer, approval_gate, coordinator,
+        implementer, approval_gate, final_validate]; coordinator_runs=2;
+        approval_gate_runs=2; final_validate_runs=1.
+      * This proves the deterministic closure exactly as intended:
+        first approval gate FAIL -> coordinator -> real write-capable AI repair ->
+        approval gate PASS -> unchanged fresh Final AI validator PASS.
+      * [45/46] PASS dynamic-handoff-api-recovery with injected HTTP 503;
+        proxy_failures=2, proxy_successes_before_outage=1, proxy_successes=30.
+      * [46/46] PASS dynamic-handoff-stop-resume;
+        checkpoint_role=implementer, checkpoint_stage=workflow_route,
+        checkpoint_position=3; resumed execution reached final_validate.
+      * Shipped dynamic_handoff.yaml remained unchanged.
     - 2026-10-12 real-Qwen rerun passed [42/46] bundled-dynamic-handoff and
       [43/46] dynamic-handoff-role-matrix, then probe 44 exhausted max_cycles=12.
     - Durable state ended after verifier PASS with final_recovery.txt=READY and
@@ -1639,10 +1653,11 @@ RELEASE GATES
     - no unbounded state/log/history growth
     - frozen Workflow/Prompt resources stable across Resume
 
-[ ] Current HEAD deterministic CI green
-    - HEAD 1d46986eca94df83dc2c107f55dae797509bba3d.
-    - GitHub Actions runs 37939807355 and 37939813893 completed successfully.
-    - This includes the probe-44 deterministic fixture/oracle regression and the explicit shipped-workflow dependency check.
+[x] Current HEAD deterministic CI green
+    - HEAD 349dc6215823b2acd0f96ad5b9e5ed71bb812943.
+    - GitHub Actions runs 38239446080 and 38239453215 completed successfully.
+    - This includes the deterministic writer-to-approval-gate closure regression,
+      fail-start probe-44 alignment, and the existing shipped-workflow dependency checks.
 
 [ ] Final release cleanup
     - rerun deterministic CI after any soak-driven fix
