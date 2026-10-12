@@ -2808,28 +2808,27 @@ def test_soak_transient_status_rotation_covers_all_http_classes():
     ] == [429, 502, 503, 429, 502, 503]
 
 
-def test_bundled_dynamic_handoff_is_probe_42_and_runs_after_example_smoke():
-    bundled_index = live.PROBE_ORDER.index("bundled-dynamic-handoff")
-    assert bundled_index + 1 == 42
-    assert live.PROBE_ORDER[bundled_index - 1 : bundled_index + 1] == (
-        "example-smoke",
-        "bundled-dynamic-handoff",
-    )
-
-
-def test_dynamic_handoff_extended_live_probes_are_43_through_46():
+def test_live_probe_order_runs_long_soak_last():
     assert len(live.PROBE_ORDER) == 46
-    assert live.PROBE_ORDER[-5:] == (
+    assert live.PROBE_ORDER[-1] == "soak"
+    assert live.PROBE_ORDER[-7:] == (
+        "example-smoke",
         "bundled-dynamic-handoff",
         "dynamic-handoff-role-matrix",
         "dynamic-handoff-final-recovery",
         "dynamic-handoff-api-recovery",
         "dynamic-handoff-stop-resume",
+        "soak",
     )
-    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 43
-    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 44
-    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 45
-    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 46
+
+
+def test_dynamic_handoff_extended_live_probes_run_before_soak():
+    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 41
+    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 42
+    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 43
+    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 44
+    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 45
+    assert live.PROBE_ORDER.index("soak") + 1 == 46
 
 
 def test_dynamic_handoff_extended_probes_use_shipped_workflow_and_existing_runtime_primitives():
@@ -3749,7 +3748,7 @@ def test_fail_start_launcher_reuses_canonical_0_5h_gate_and_allows_override():
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 44 %*' in text
+    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 46 %*' in text
     assert "--high-density" not in text
     assert "--example-smoke-matrix-project" not in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
