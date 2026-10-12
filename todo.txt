@@ -387,6 +387,26 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate example-smoke after isolating stale validator feedback from task-local Review retries.
+    - 2026-10-12 full live gate passed probes 35-39 and the first three probe-40
+      example-smoke cases, then example-smoke-10-skill-prompt-review-workflow-file stalled.
+    - Uploaded project evidence shows README.md was created successfully and executor
+      evidence correctly reported the current README acceptance criteria as satisfied.
+    - However RUNNER_SHARED_STAGE_CONTROL repeatedly injected the durable
+      state.validator_output from the previous top-level validate_file cycle:
+      "E001 README.md is missing". Review therefore rejected the already-correct
+      current task and sent it back to Execute repeatedly; a later retry timed out.
+    - Root cause is runtime feedback ownership: state.validator_output is durable
+      run-level history/planning state, not authoritative feedback for every
+      task-local Review -> Execute transition.
+    - Fix: shared-stage control no longer injects ambient state.validator_output.
+      Real validator FAIL feedback is still carried by the actual previous
+      StageResult when previous.kind == validation; current Review feedback is carried
+      by previous.kind == review / task.last_review.
+    - Deterministic regression proves a stale run-level validator message is omitted
+      from a Review retry while current review findings remain present.
+    - fail-start now resumes at probe 40 (example-smoke).
+
 [x] Reordered ai-task-runner live gate so long-running soak is last.
     - Probe order is now 1-39 short/functional gates, 40 example-smoke,
       41-45 Dynamic Handoff coverage, and 46 soak.
