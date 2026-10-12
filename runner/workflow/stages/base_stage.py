@@ -479,15 +479,11 @@ class BaseStage:
         previous: StageResult | None,
     ) -> str:
         parts: list[str] = []
-        task = ctx.task
-        review = getattr(task, "last_review", None) if task is not None else None
-        if isinstance(review, dict) and review.get("completed") is False:
-            reason = str(review.get("reason") or "").strip()
-            missing = review.get("missing_items")
-            if reason:
-                parts.append("Review: " + reason)
-            if missing:
-                parts.append("Review missing_items: " + json.dumps(missing, ensure_ascii=False))
+        # Semantic feedback is transition-owned. Durable task.last_review and
+        # state.validator_output remain useful history/state, but replaying them
+        # ambiently can mix an older verdict into an unrelated current transition.
+        # Review/Validator feedback below is derived only from the actual previous
+        # StageResult, which FlowEngine also persists/restores across Resume.
         # Validator feedback is transition-owned, not ambient run state.
         # state.validator_output intentionally persists the latest validation result
         # for durable inspection/planning, but injecting it into every task-local
