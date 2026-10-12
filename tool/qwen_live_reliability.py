@@ -82,13 +82,13 @@ PROBE_ORDER = (
     "yaml-list-endurance",
     "final-ai-quorum",
     "timeout-recovery-budget",
-    "soak",
     "example-smoke",
     "bundled-dynamic-handoff",
     "dynamic-handoff-role-matrix",
     "dynamic-handoff-final-recovery",
     "dynamic-handoff-api-recovery",
     "dynamic-handoff-stop-resume",
+    "soak",
 )
 
 QWEN_SANDBOX_ERROR_MARKERS = (
@@ -5676,16 +5676,6 @@ def main() -> int:
         if probe_enabled("timeout-recovery-budget", start_probe):
             timeout_probe(settings, run_root)
             print_probe_pass("timeout-recovery-budget", "timeout/recovery-budget probe")
-        if probe_enabled("soak", start_probe):
-            soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
-            if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
-                raise RuntimeError("soak ended before the requested wall-clock duration")
-            if args.hours:
-                require_resource_bounds(soak_result)
-            if args.high_density and args.hours:
-                require_dense_coverage(soak_result)
-            if args.hours:
-                print_probe_pass("soak", f"{args.hours:g}H soak completed ({soak_result.completed} runs)")
         if args.require_transient and probe_enabled("api-502", start_probe) and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
         if probe_enabled("example-smoke", start_probe):
@@ -5731,6 +5721,16 @@ def main() -> int:
                 "dynamic-handoff-stop-resume",
                 "Dynamic Handoff in-role stop.request -> resume",
             )
+        if probe_enabled("soak", start_probe):
+            soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
+            if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
+                raise RuntimeError("soak ended before the requested wall-clock duration")
+            if args.hours:
+                require_resource_bounds(soak_result)
+            if args.high_density and args.hours:
+                require_dense_coverage(soak_result)
+            if args.hours:
+                print_probe_pass("soak", f"{args.hours:g}H soak completed ({soak_result.completed} runs)")
     summary = {
         "passed": True,
         "source_revision": revision,
