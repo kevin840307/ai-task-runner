@@ -387,6 +387,28 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate probe 44 after deterministic writer-to-gate recovery closure.
+    - 2026-10-12 real-Qwen rerun passed [42/46] bundled-dynamic-handoff and
+      [43/46] dynamic-handoff-role-matrix, then probe 44 exhausted max_cycles=12.
+    - Durable state ended after verifier PASS with final_recovery.txt=READY and
+      final_approval.txt=RECOVERED; verifier independently ran final_approval_gate.py
+      and reported VALIDATION_PASSED.
+    - Durable validator_output still showed the earlier gate FAIL because the workflow
+      had not actually revisited approval_gate; this is not a reducer/state-clear bug.
+      A real validation PASS would overwrite validator_output.
+    - Root cause is probe-only routing nondeterminism: after coordinator selected a
+      write-capable specialist and the evidence was repaired, that writer routed back
+      to coordinator, which could spend remaining cycles on verifier/other roles instead
+      of selecting approval_gate again.
+    - Fix is fixture-only: approval_gate FAIL still routes through the real coordinator;
+      coordinator still selects a real AI implementer/debugger; after that writer PASS,
+      the derived probe workflow routes directly back to approval_gate. Gate PASS then
+      routes to the unchanged fresh Final AI validator.
+    - Shipped runner/assets/workflows/dynamic_handoff.yaml is unchanged.
+    - Deterministic fixture regression locks implementer/debugger -> approval_gate while
+      verifier and other worker routing remain unchanged.
+    - fail-start now resumes at probe 44.
+
 [ ] Revalidate high-density soak after front-loading mixed Final AI coverage.
     - 2026-10-12 focused rerun started at probe 40 on source revision
       a37d08f645f3f35af7efff2993aed087aee7f420, DIRTY=False.
