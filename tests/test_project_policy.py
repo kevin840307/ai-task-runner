@@ -151,6 +151,9 @@ def test_sandbox_goal_reference_is_project_relative(tmp_path: Path) -> None:
     text = instruction.read_text(encoding="utf-8")
     assert "Original requirement file: requirements/goal.md" in text
     assert goal.resolve().as_posix() not in text
+    assert tmp_path.resolve().as_posix() not in text
+    assert "Protected runner-owned paths" in text
+    assert ".ai-task-runner.yaml" in text
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
