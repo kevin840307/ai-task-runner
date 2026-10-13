@@ -315,7 +315,18 @@ def update_goal_reference(root: Path, filename: str, goal_file: str | None) -> P
     text = io_path(path).read_text(encoding="utf-8")
     text = _without_managed_block(text, GOAL_REFERENCE_START, GOAL_REFERENCE_END)
     if goal_file:
-        reference = Path(goal_file).expanduser().resolve().as_posix()
+        goal_path = Path(goal_file).expanduser().resolve()
+        reference = goal_path.as_posix()
+        try:
+            from .bootstrap import current_runtime
+            sandbox = bool(getattr(current_runtime().config, "sandbox", False))
+        except RuntimeError:
+            sandbox = False
+        if sandbox:
+            try:
+                reference = goal_path.relative_to(root.resolve()).as_posix()
+            except ValueError:
+                reference = goal_path.name
         text += f"""
 
 {GOAL_REFERENCE_START}
