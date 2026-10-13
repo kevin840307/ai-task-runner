@@ -386,7 +386,25 @@ class SafetyHook:
         protected = self._protected(root)
         if not protected:
             return ""
-        paths = "\n".join(f"- {path.as_posix()}" for path in protected)
+        sandbox = bool(getattr(current_runtime().config, "sandbox", False))
+        project = root.resolve()
+        display_paths: list[str] = []
+        external_protected = False
+        for path in protected:
+            resolved = path.resolve()
+            if sandbox:
+                try:
+                    display_paths.append(resolved.relative_to(project).as_posix())
+                except ValueError:
+                    external_protected = True
+            else:
+                display_paths.append(resolved.as_posix())
+        if sandbox and external_protected:
+            display_paths.insert(
+                0,
+                "<runner source outside project; host path intentionally hidden in sandbox>",
+            )
+        paths = "\n".join(f"- {value}" for value in dict.fromkeys(display_paths))
         return (
             "Safety rules:\n"
             "- Never modify runner state, runner source, validator inputs, backend-owned rules, or other protected paths listed below.\n"
