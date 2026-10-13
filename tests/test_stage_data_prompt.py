@@ -26,6 +26,66 @@ def test_default_flow_has_no_prompt_path_resolver_hardcode():
     assert '.replace(".md"' not in source
 
 
+def test_sandbox_prompt_context_hides_host_root_and_uses_relative_validator(tmp_path):
+    from runner.prompting import build_stage_prompt_context
+
+    validator = tmp_path / "validation.py"
+    validator.write_text("print('ok')\n", encoding="utf-8")
+    state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
+    ctx = StageContext(
+        config=SimpleNamespace(
+            sandbox=True,
+            validator_prompt="",
+            ai_validator_prompt="",
+        ),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
+        ai_client=SimpleNamespace(session_id=""),
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=validator,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+
+    values = build_stage_prompt_context(ctx, "execute")
+
+    assert values["project"]["root"] == "."
+    assert values["validation"]["validator_path"] == "validation.py"
+    assert str(tmp_path.resolve()) not in values["rules"]
+    assert "WRITE/CREATE/DELETE only inside project root: ." in values["rules"]
+
+
+def test_non_sandbox_prompt_context_keeps_host_paths(tmp_path):
+    from runner.prompting import build_stage_prompt_context
+
+    validator = tmp_path / "validation.py"
+    state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
+    ctx = StageContext(
+        config=SimpleNamespace(
+            sandbox=False,
+            validator_prompt="",
+            ai_validator_prompt="",
+        ),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
+        ai_client=SimpleNamespace(session_id=""),
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=validator,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+
+    values = build_stage_prompt_context(ctx, "execute")
+
+    assert values["project"]["root"] == str(tmp_path)
+    assert values["validation"]["validator_path"] == str(validator)
+    assert str(tmp_path) in values["rules"]
+
+
 def test_previous_structured_data_is_available_and_bounded(tmp_path):
     import json
 
