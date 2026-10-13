@@ -4200,6 +4200,77 @@ def yaml_list_resume_probe(
         raise RuntimeError("YAML List resume events are incomplete")
 
 
+def yaml_endurance_failure_diagnostic(
+    projects: list[Path],
+    log: Path,
+) -> str:
+    """Summarize the first failed/incomplete YAML child with durable evidence."""
+    events = jsonl_events(log)
+    completed = {
+        int(event.get("script_index"))
+        for event in events
+        if event.get("type") == "script.item_completed"
+        and isinstance(event.get("script_index"), int)
+    }
+    failed_index = next(
+        (
+            int(event["script_index"])
+            for event in events
+            if event.get("type") == "script.item_failed"
+            and isinstance(event.get("script_index"), int)
+        ),
+        None,
+    )
+    if failed_index is None:
+        failed_index = next(
+            (index for index in range(1, len(projects) + 1) if index not in completed),
+            None,
+        )
+    if failed_index is None or not 1 <= failed_index <= len(projects):
+        return "failed_item=unknown; console_tail=" + _tail_text(
+            log.read_text(encoding="utf-8", errors="replace")
+            if log.is_file()
+            else "console unavailable",
+            2400,
+        )
+
+    project = projects[failed_index - 1]
+    work = project / ".ai-task-runner" / "script" / f"{failed_index:03d}"
+    state = read_json(work / "state.json")
+    state_summary = {
+        key: state.get(key)
+        for key in (
+            "stage",
+            "cycle",
+            "current",
+            "workflow_position",
+            "last_error",
+            "transition_previous",
+            "validator_output",
+        )
+    }
+    health = project / "health.txt"
+    if health.is_file():
+        try:
+            health_summary = repr(health.read_text(encoding="utf-8"))
+        except OSError:
+            health_summary = "<unreadable>"
+    else:
+        health_summary = "<missing>"
+    try:
+        console_tail = _tail_text(
+            log.read_text(encoding="utf-8", errors="replace"),
+            2400,
+        )
+    except OSError:
+        console_tail = "console unavailable"
+    return (
+        f"failed_item={failed_index}; state="
+        + json.dumps(state_summary, ensure_ascii=False, default=str)
+        + f"; health.txt={health_summary}; console_tail={console_tail}"
+    )
+
+
 def yaml_list_endurance_probe(
     settings: Settings,
     root: Path,
@@ -4219,8 +4290,6 @@ def yaml_list_endurance_probe(
             "prompt": case_prompt(PROMPT, f"yaml-endurance-{index:03d}"),
             "project_root": project.name,
             "validator": str(project / "validation.py"),
-            "stage_retries": 1,
-            "retry_delay": 0,
         })
     script = batch / "tasks.yaml"
     script.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -4231,7 +4300,10 @@ def yaml_list_endurance_probe(
         settings.run_timeout * max(1, items),
     )
     if code != 0:
-        raise RuntimeError(f"YAML endurance process failed: exit={code}")
+        raise RuntimeError(
+            f"YAML endurance process failed: exit={code}; "
+            + yaml_endurance_failure_diagnostic(projects, log)
+        )
     for index, project in enumerate(projects, 1):
         assert_completed(
             project,
