@@ -39,6 +39,31 @@ def test_yaml_item_project_root_defaults_to_outer_root(tmp_path):
     assert Path(child.work_dir) == Path(".ai-task-runner") / "script" / "001"
 
 
+def test_yaml_items_isolate_work_state_and_inherit_unattended_retry_policy(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  project_root: a\n  validator: ai\n"
+        "- prompt: second\n  project_root: b\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    config = base_config(tmp_path)
+    items = load_yaml_script(script)
+
+    first = build_script_item_config(config, items[0], 1)
+    second = build_script_item_config(config, items[1], 2)
+
+    assert first.work_dir != second.work_dir
+    assert Path(first.work_dir) == Path(".ai-task-runner") / "script" / "001"
+    assert Path(second.work_dir) == Path(".ai-task-runner") / "script" / "002"
+    assert first.resume is False and second.resume is False
+    assert first.force_new is True and second.force_new is True
+    assert first.stage_retries == second.stage_retries == config.stage_retries == -1
+    assert first.retry_delay == second.retry_delay == config.retry_delay
+    assert first.retry_max_delay == second.retry_max_delay == config.retry_max_delay
+
+
 def test_yaml_item_project_root_resolves_from_outer_root(tmp_path):
     project = tmp_path / "examples" / "one"
     project.mkdir(parents=True)
