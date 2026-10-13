@@ -10,8 +10,8 @@ import pytest
 from runner import bootstrap
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
-from runner.plugins.safety import git_subcommand
-from runner.workspace import POLICY_FILENAME, protected_paths
+from runner.plugins.safety import SafetyHook, git_subcommand
+from runner.workspace import POLICY_FILENAME, protected_paths, update_goal_reference
 from runner.runtime.process_runner import run_process
 from runner.plugins.safety import normalize_paths, restore_changed, snapshot
 
@@ -92,6 +92,65 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(
     assert "git version" in version.output.lower()
     assert blocked.return_code == 126
     assert "human review is required" in blocked.output.lower()
+
+
+def test_sandbox_safety_instructions_hide_host_paths_but_keep_project_policy(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - prompt.md\n  - validation.py\n",
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        project_root=str(tmp_path),
+        validator="ai",
+        sandbox=True,
+        human_output=False,
+    )
+
+    with bootstrap.runtime_scope(config):
+        text = SafetyHook().instructions(tmp_path)
+
+    assert "prompt.md" in text
+    assert "validation.py" in text
+    assert ".ai-task-runner.yaml" in text
+    assert str(tmp_path.resolve()).replace("\\", "/") not in text
+    assert "<runner source outside project; host path intentionally hidden in sandbox>" in text
+
+
+def test_non_sandbox_safety_instructions_keep_absolute_paths(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - prompt.md\n",
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        project_root=str(tmp_path),
+        validator="ai",
+        sandbox=False,
+        human_output=False,
+    )
+
+    with bootstrap.runtime_scope(config):
+        text = SafetyHook().instructions(tmp_path)
+
+    assert (tmp_path / "prompt.md").resolve().as_posix() in text
+
+
+def test_sandbox_goal_reference_is_project_relative(tmp_path: Path) -> None:
+    goal = tmp_path / "requirements" / "goal.md"
+    goal.parent.mkdir()
+    goal.write_text("goal\n", encoding="utf-8")
+    config = RuntimeConfig(
+        project_root=str(tmp_path),
+        validator="ai",
+        sandbox=True,
+        human_output=False,
+    )
+
+    with bootstrap.runtime_scope(config):
+        instruction = update_goal_reference(tmp_path, "QWEN.md", str(goal))
+
+    text = instruction.read_text(encoding="utf-8")
+    assert "Original requirement file: requirements/goal.md" in text
+    assert goal.resolve().as_posix() not in text
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
