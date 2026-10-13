@@ -386,7 +386,10 @@ class SafetyHook:
         protected = self._protected(root)
         if not protected:
             return ""
-        sandbox = bool(getattr(current_runtime().config, "sandbox", False))
+        try:
+            sandbox = bool(getattr(current_runtime().config, "sandbox", False))
+        except RuntimeError:
+            sandbox = False
         project = root.resolve()
         display_paths: list[str] = []
         external_protected = False
