@@ -3859,7 +3859,7 @@ def test_fail_start_launcher_reuses_canonical_0_5h_gate_and_allows_override():
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 46 %*' in text
+    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 37 %*' in text
     assert "--high-density" not in text
     assert "--example-smoke-matrix-project" not in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
