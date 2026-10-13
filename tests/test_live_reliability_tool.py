@@ -1731,6 +1731,45 @@ def test_yaml_list_resume_probe_accepts_first_item_completion_event(
     live.yaml_list_resume_probe(settings(tmp_path), tmp_path)
 
 
+def test_yaml_list_resume_probe_reports_worker_exit_before_checkpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeProcess:
+        pid = 12345
+        returncode = 1
+
+        def __init__(self, command, **options):
+            batch = Path(command[command.index("--project-root") + 1])
+            item = batch / "item-1"
+            state = item / ".ai-task-runner" / "script" / "001" / "state.json"
+            state.parent.mkdir(parents=True, exist_ok=True)
+            state.write_text(
+                json.dumps({
+                    "completed": False,
+                    "stage": "executing",
+                    "last_error": "synthetic worker failure",
+                }),
+                encoding="utf-8",
+            )
+            options["stdout"].write("synthetic worker failure\n")
+            options["stdout"].flush()
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
+
+    with pytest.raises(
+        RuntimeError,
+        match="YAML List worker exited before first item completion checkpoint",
+    ):
+        live.yaml_list_resume_probe(settings(tmp_path), tmp_path)
+
+
 def test_yaml_list_resume_probe_reports_qwen_sandbox_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
