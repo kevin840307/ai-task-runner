@@ -387,6 +387,31 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[ ] Revalidate YAML List endurance with production-like unattended recovery.
+    - 2026-10-13 live rerun passed [34/46] api-disconnect, [35/46]
+      multi-todo-resume and [36/46] yaml-list-resume, then [37/46]
+      yaml-list-endurance returned process exit=1.
+    - The original endurance harness discarded all child evidence and reported only
+      "YAML endurance process failed: exit=1", so this run alone cannot safely be
+      classified as Runner vs Qwen semantic/tool failure.
+    - Harness review found a real contract mismatch: the endurance-only fixture forced
+      stage_retries=1 and retry_delay=0 for every item even though its purpose is to
+      exercise accumulated single-process unattended stability. Runner's unattended
+      production default is stage_retries=-1 with bounded backoff/fresh-session recovery.
+    - Fix: endurance items no longer override technical retry policy; they inherit the
+      canonical Runner/live command defaults. The overall batch remains hard-bounded by
+      run_timeout * item_count, so a genuine unrecoverable loop still fails closed.
+    - Failure diagnostics now locate the first script.item_failed/incomplete child and
+      report child stage/cycle/workflow position/last_error/transition_previous/
+      validator_output, health.txt state and console tail.
+    - Runner YAML item isolation was reviewed and left unchanged: each item already owns
+      a distinct project/work directory and fresh child runtime. A mock regression now
+      locks distinct work dirs, force_new/resume semantics, and inheritance of
+      stage_retries/retry_delay/retry_max_delay from the parent when not overridden.
+    - Live regressions verify endurance payloads no longer hardcode bounded retries and
+      that an exit=1 identifies the exact failed child with durable evidence.
+    - fail-start now resumes at probe 37 (yaml-list-endurance).
+
 [ ] Revalidate final soak after sandbox host-path projection fix.
     - 2026-10-13 live rerun reached [45/46] PASS dynamic-handoff-stop-resume;
       therefore probes 28 validator-failure-routing, 40 example-smoke and 41-45
