@@ -387,7 +387,35 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
-[ ] Revalidate validator-failure-routing after transition-owned feedback fix.
+[ ] Revalidate final soak after sandbox host-path projection fix.
+    - 2026-10-13 live rerun reached [45/46] PASS dynamic-handoff-stop-resume;
+      therefore probes 28 validator-failure-routing, 40 example-smoke and 41-45
+      Dynamic Handoff all completed before the final soak failure.
+    - Final [46/46] soak failed inside soak-yaml-0119 item-1. Durable state showed
+      validate_file FAIL -> planning twice, then the third Execute hit Qwen loop
+      detection while repeatedly trying to inspect an invalid host-style path.
+    - Uploaded soak-yaml-0119 evidence proves a Runner sandbox path-projection bug:
+      QWEN.md and Stage rules exposed Windows host absolute paths such as C:/Users/...,
+      while Qwen sandbox tools execute in a Linux container cwd such as /c/Users/....
+      The model translated the host path to /C/Users/... (case-sensitive mismatch),
+      wrote/read outside the real sandbox project cwd, and host validation continued
+      to report health.txt mismatch.
+    - Owner is Runner, not the YAML List fixture: the fixture correctly detected that
+      the required project-root health.txt was absent/mismatched and loop detection
+      correctly stopped repeated identical invalid tool calls.
+    - Fix keeps one authoritative host path model and changes only AI-visible display:
+      * sandbox Stage project.root is "." and project-local validator paths are relative;
+      * Safety plugin shows project-local protected paths relative and hides external
+        runner-source host paths behind a descriptive sentinel;
+      * managed goal references are project-relative in sandbox;
+      * non-sandbox path display remains unchanged.
+    - No host/container path mapper or second filesystem state was introduced.
+    - Deterministic/mock regressions cover sandbox vs non-sandbox Stage prompt paths,
+      sandbox SafetyHook path projection, sandbox QWEN.md/goal-reference integration,
+      and assert the full generated sandbox instruction file contains no host project root.
+    - fail-start now resumes at probe 46 (soak).
+
+[x] Revalidate validator-failure-routing after transition-owned feedback fix.
     - 2026-10-12 full live gate passed [24/46] dynamic-handoff-session-policy,
       [25/46] custom-dynamic-producer, [26/46] review-failure-routing and
       [27/46] complete-closed-loop, then [28/46] validator-failure-routing failed
@@ -415,7 +443,7 @@ LIVE REGRESSION NOTES
         output and cycle transition correctly.
     - fail-start now resumes at probe 28.
 
-[ ] Revalidate example-smoke after isolating stale validator feedback from task-local Review retries.
+[x] Revalidate example-smoke after isolating stale validator feedback from task-local Review retries.
     - 2026-10-12 full live gate passed probes 35-39 and the first three probe-40
       example-smoke cases, then example-smoke-10-skill-prompt-review-workflow-file stalled.
     - Uploaded project evidence shows README.md was created successfully and executor
