@@ -75,12 +75,16 @@ def save_prompt(
 
     return write_text(target, text, expected_hash=expected_hash, validate=validate)
 
-def prompt_instructions(root: Path) -> tuple[str, str]:
-    """Build shared Runner rules and user always-on instructions with one policy read."""
+def prompt_instructions(
+    root: Path,
+    *,
+    display_root: str | None = None,
+) -> tuple[str, str]:
+    """Build shared Runner rules using paths meaningful to the active agent."""
     text = instruction_text(root, "always")
     always = f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
     rules = render_prompt("common/rules.md", {
-        "project": {"root": str(root)},
+        "project": {"root": display_root or str(root)},
         "plugin_rules": collect_plugin_instructions(root),
     }) + always
     return rules, always
@@ -179,9 +183,24 @@ def build_stage_prompt_context(
     """Return the only supported top-level variables for Stage templates."""
     state = ctx.state
     tasks = [_task_data(task) for task in state.tasks]
-    rules, always_instructions = prompt_instructions(ctx.root)
+    sandbox = bool(getattr(ctx.config, "sandbox", False))
+    display_root = "." if sandbox else str(ctx.root)
+    rules, always_instructions = prompt_instructions(
+        ctx.root,
+        display_root=display_root,
+    )
     validator_prompt = getattr(ctx.config, "validator_prompt", "") or ""
     ai_validator_prompt = getattr(ctx.config, "ai_validator_prompt", "") or ""
+    validator_path = ""
+    if ctx.validator_path:
+        path = Path(ctx.validator_path)
+        if sandbox:
+            try:
+                validator_path = path.resolve().relative_to(ctx.root.resolve()).as_posix()
+            except ValueError:
+                validator_path = path.name
+        else:
+            validator_path = str(path)
     return {
         "goal": state.goal,
         "instructions": "",
@@ -193,11 +212,11 @@ def build_stage_prompt_context(
             "validator_feedback": state.validator_output,
         },
         "validation": {
-            "validator_path": str(ctx.validator_path) if ctx.validator_path else "",
+            "validator_path": validator_path,
             "feedback": state.validator_output,
             "instructions": ai_validator_prompt or validator_prompt,
         },
-        "project": {"root": str(ctx.root)},
+        "project": {"root": display_root},
         "planning": {
             "inspection_summary": "",
             "progress": {
