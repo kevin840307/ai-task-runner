@@ -1634,6 +1634,10 @@ def test_yaml_list_endurance_probe_uses_one_process_and_all_child_work_dirs(
         ), encoding="utf-8")
         assert "--script" in command
         assert timeout == settings(tmp_path).run_timeout * 3
+        script = Path(command[command.index("--script") + 1])
+        payload = json.loads(script.read_text(encoding="utf-8"))
+        assert all("stage_retries" not in item for item in payload)
+        assert all("retry_delay" not in item for item in payload)
         return 0
 
     def fake_assert(project: Path, code: int, expected_file="health.txt", expected_text=live.EXPECTED, work_dir=".ai-task-runner") -> None:
@@ -1650,6 +1654,66 @@ def test_yaml_list_endurance_probe_uses_one_process_and_all_child_work_dirs(
         ".ai-task-runner/script/002",
         ".ai-task-runner/script/003",
     ]
+
+
+def test_yaml_list_endurance_failure_reports_first_failed_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_create(parent: Path, name: str, *args, **kwargs) -> Path:
+        project = parent / name
+        project.mkdir(parents=True)
+        (project / "validation.py").write_text("pass", encoding="utf-8")
+        return project
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        batch = Path(command[command.index("--project-root") + 1])
+        failed = batch / "item-002"
+        work = failed / ".ai-task-runner" / "script" / "002"
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "state.json").write_text(
+            json.dumps({
+                "completed": False,
+                "stage": "executing",
+                "cycle": 2,
+                "current": 0,
+                "workflow_position": 1,
+                "last_error": "synthetic loop failure",
+                "transition_previous": {
+                    "stage": "execute",
+                    "status": "error",
+                    "kind": "task",
+                },
+                "validator_output": "VALIDATION_FAILED: mismatch",
+            }),
+            encoding="utf-8",
+        )
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(
+            "\n".join([
+                json.dumps({"type": "script.item_completed", "script_index": 1}),
+                json.dumps({
+                    "type": "script.item_failed",
+                    "script_index": 2,
+                    "exit_code": 1,
+                }),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        return 1
+
+    monkeypatch.setattr(live, "create_project", fake_create)
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    with pytest.raises(RuntimeError) as exc:
+        live.yaml_list_endurance_probe(settings(tmp_path), tmp_path, 3)
+
+    message = str(exc.value)
+    assert "failed_item=2" in message
+    assert '"stage": "executing"' in message
+    assert "synthetic loop failure" in message
+    assert "VALIDATION_FAILED: mismatch" in message
+    assert "health.txt=<missing>" in message
 
 
 def test_yaml_list_resume_probe_accepts_first_item_completion_event(
