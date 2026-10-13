@@ -4124,6 +4124,7 @@ def yaml_list_resume_probe(
             return health.stat().st_mtime_ns
         return None
 
+    natural_exit_code = None
     try:
         while process.poll() is None and time.monotonic() < deadline:
             first_mtime = first_item_mtime()
@@ -4131,6 +4132,7 @@ def yaml_list_resume_probe(
                 terminate(process)
                 break
             time.sleep(0.1)
+        natural_exit_code = process.poll()
     finally:
         if first_mtime is None:
             first_mtime = first_item_mtime()
@@ -4139,15 +4141,21 @@ def yaml_list_resume_probe(
         stream.close()
     if first_mtime is None:
         exit_code = process.poll()
+        state = read_json(first_state)
         diagnostic = qwen_sandbox_log_diagnostic(first_log)
         if diagnostic:
             raise RuntimeError(
                 "YAML List first item did not complete because "
-                f"{diagnostic}: exit={exit_code}, state={read_json(first_state)}"
+                f"{diagnostic}: exit={exit_code}, state={state}"
+            )
+        if natural_exit_code is not None:
+            raise RuntimeError(
+                "YAML List worker exited before first item completion checkpoint: "
+                f"exit={natural_exit_code}, state={state}"
             )
         raise RuntimeError(
-            "could not interrupt YAML List after its first completed item: "
-            f"exit={exit_code}, state={read_json(first_state)}"
+            "YAML List first item did not reach completion checkpoint before harness timeout: "
+            f"exit={exit_code}, state={state}"
         )
 
     resume_log = console_log(batch, "resume-console.jsonl")
