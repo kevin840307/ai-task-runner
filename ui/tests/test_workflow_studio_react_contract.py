@@ -414,9 +414,12 @@ def test_primary_navigation_separates_workflows_prompts_and_settings():
 def test_workflow_library_controls_chat_visibility_and_ralphy_default():
     index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    defaults = (ROOT / "ui" / "data" / "defaults.json").read_text(encoding="utf-8")
     styles = (ROOT / "ui" / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
 
-    assert 'DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml"' in app
+    assert '"default_workflow": "ralphy_ai_validate.yaml"' in defaults
+    assert 'api("/api/ui/defaults"' in app
+    assert "defaultWorkflowName" in app
     assert "workflowBasename" in app
     assert 'id="workflowContextMenu"' in index
     assert "openWorkflowContextMenu" in app
