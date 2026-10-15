@@ -43,6 +43,7 @@ class ChatIndex:
         name = " ".join(title.split()) or path.name or "New Chat"
         if len(name) > 120:
             raise ValueError("Chat title is too long")
+        self.file.parent.mkdir(parents=True, exist_ok=True)
         with project_file_lock(self.file):
             rows = self._read()
             record = {
@@ -52,7 +53,6 @@ class ChatIndex:
                 "created_at": time.time(),
             }
             rows.append(record)
-            self.file.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.file.with_name(self.file.name + "." + record["chat_id"] + ".tmp")
             try:
                 temporary.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
