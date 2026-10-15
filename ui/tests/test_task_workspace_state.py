@@ -127,6 +127,17 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         })
         return self.state.tasks.update(task["task_id"], last_status="completed")
 
+    def test_task_history_limit_can_extend_beyond_legacy_500_cap(self):
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(self.project),
+            instruction="history",
+            workflow=str(self.state.workflow),
+        )
+        payload = self.state.tasks_payload(self.chat_id, limit=501)
+        self.assertEqual(payload["tasks"][0]["task_id"], task["task_id"])
+        self.assertFalse(payload["meta"]["has_more"])
+
     def test_explicit_and_default_workflows_use_same_allowed_catalog(self):
         self.assertEqual(
             self.state._resolve_task_workflow(self.project, str(self.state.workflow)),
