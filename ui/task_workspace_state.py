@@ -254,12 +254,20 @@ class TaskWorkspaceMixin:
                 run_id = str(runtime.get("run_id") or "")
                 if run_id:
                     execution_changes["run_id"] = run_id
-            try:
-                task = self.tasks.update_latest_execution(task["task_id"], **execution_changes)
-            except ValueError:
-                task = self.tasks.update(task["task_id"], last_status=status)
-            if runtime.get("last_error"):
-                task = self.tasks.update(task["task_id"], last_error=str(runtime.get("last_error") or ""))
+            executions = list(task.get("executions") or [])
+            latest = executions[-1] if executions else {}
+            changed = (
+                task.get("last_status") != status
+                or any(latest.get(key) != value for key, value in execution_changes.items() if key != "last_status")
+            )
+            if changed:
+                try:
+                    task = self.tasks.update_latest_execution(task["task_id"], **execution_changes)
+                except ValueError:
+                    task = self.tasks.update(task["task_id"], last_status=status)
+            runtime_error = str(runtime.get("last_error") or "")
+            if runtime_error and runtime_error != str(task.get("last_error") or ""):
+                task = self.tasks.update(task["task_id"], last_error=runtime_error)
 
         return {
             **task,
