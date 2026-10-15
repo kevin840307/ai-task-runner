@@ -730,6 +730,7 @@ class ProjectRuntimeMixin:
             "running": running,
             "launching": launching,
             "run_id": state.get("run_id") or "",
+            "request_id": str(request.get("request_id") or ""),
             "stale": stale,
             "pid": pid,
             "worker_pid": marker.get("worker_pid"),
@@ -951,7 +952,7 @@ class ProjectRuntimeMixin:
         tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
+    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> dict:
         """Start one Workflow task from an immutable UI request snapshot.
 
         A completed prior run is reset automatically. An interrupted/stopped run
@@ -959,8 +960,6 @@ class ProjectRuntimeMixin:
         discard recoverable state.
         """
         with self._chat_lock, self._runtime_lock:
-            if not str(workflow or "").strip():
-                raise ValueError("Select a Workflow before Run")
             runtime = self.read_runtime(project)
             if not runtime.get("actions", {}).get("run"):
                 if runtime.get("running"):
@@ -998,6 +997,7 @@ class ProjectRuntimeMixin:
                 shutil.rmtree(Path(request["request_dir"]), ignore_errors=True)
                 raise
             self.append_message(project, "user", message)
+            return request
 
     def resume(self, project: Path) -> None:
         """Resume only a durable stopped run; launch() remains the process owner."""
