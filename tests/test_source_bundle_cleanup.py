@@ -8,7 +8,17 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_default_bundle_excludes_runtime_and_cache_artifacts():
     excluded_paths = [
         ".pytest_cache/v/cache/nodeids",
+        ".mypy_cache/3.11/cache.json",
+        ".ruff_cache/content",
+        ".tox/py311/bin/python",
+        ".nox/tests/bin/python",
+        ".venv/Lib/site-packages/pkg.py",
         "runner/__pycache__/x.cpython-313.pyc",
+        "ui/studio-src/node_modules/react/index.js",
+        "ui/studio-src/dist/index.js",
+        "build/generated.bin",
+        "coverage/report.json",
+        "htmlcov/index.html",
         "examples/demo/.ai-task-runner/state.json",
         "examples/demo/.ai-task-runner/validator-reports/file/summary.txt",
         "examples/demo/validator-reports/file/summary.txt",
