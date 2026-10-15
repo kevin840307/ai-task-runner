@@ -9,6 +9,7 @@ let activeTab = "chat";
 let workflowChoices = [];
 let taskGoalFile = "";
 const taskListRawByRow = new WeakMap();
+let draggedTaskListRow = null;
 
 async function request(url, payload) {
   const options = payload === undefined ? {} : {
@@ -203,6 +204,17 @@ function cloneRaw(raw) {
 function addTaskListItem(value = "", workflow = "", index = null, raw = null) {
   const row = document.createElement("div");
   row.className = "task-list-item";
+  row.draggable = true;
+  row.addEventListener("dragstart", () => { draggedTaskListRow = row; row.dataset.dragging = "true"; });
+  row.addEventListener("dragend", () => { draggedTaskListRow = null; delete row.dataset.dragging; });
+  row.addEventListener("dragover", event => event.preventDefault());
+  row.addEventListener("drop", event => {
+    event.preventDefault();
+    if (!draggedTaskListRow || draggedTaskListRow === row) return;
+    const rect = row.getBoundingClientRect();
+    if (event.clientY < rect.top + rect.height / 2) row.before(draggedTaskListRow);
+    else row.after(draggedTaskListRow);
+  });
   const text = document.createElement("textarea");
   text.maxLength = 20000;
   text.required = true;
@@ -228,13 +240,28 @@ function addTaskListItem(value = "", workflow = "", index = null, raw = null) {
   controls.className = "move-buttons";
   const up = document.createElement("button"); up.type = "button"; up.textContent = "↑"; up.title = "Move up";
   const down = document.createElement("button"); down.type = "button"; down.textContent = "↓"; down.title = "Move down";
+  const file = document.createElement("button"); file.type = "button"; file.textContent = "File"; file.title = "Use goal file";
   const duplicate = document.createElement("button"); duplicate.type = "button"; duplicate.textContent = "⧉"; duplicate.title = "Duplicate";
   const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = "Remove";
+  file.addEventListener("click", async () => {
+    if (!currentChat?.path_available) return;
+    try {
+      const picked = await request("/api/files/pick", {kind: "file", project: currentChat.root_path, current: ""});
+      if (picked.cancelled || !picked.path) return;
+      const nextRaw = cloneRaw(taskListRawByRow.get(row));
+      delete nextRaw.prompt;
+      delete nextRaw.goal;
+      nextRaw.goal_file = picked.path;
+      taskListRawByRow.set(row, nextRaw);
+      text.value = "Use file: " + picked.path;
+      row.dataset.originalInstruction = text.value;
+    } catch (error) { report(error); }
+  });
   up.addEventListener("click", () => row.previousElementSibling?.before(row));
   down.addEventListener("click", () => row.nextElementSibling?.after(row));
   duplicate.addEventListener("click", () => addTaskListItem(text.value, override.value, [...row.parentElement.children].indexOf(row) + 1, cloneRaw(taskListRawByRow.get(row))));
   remove.addEventListener("click", () => { if (row.parentElement.children.length > 1) row.remove(); });
-  controls.append(up, down, duplicate, remove);
+  controls.append(up, down, file, duplicate, remove);
   row.append(text, override, controls);
   const root = element("taskListItems");
   if (index === null || index >= root.children.length) root.append(row);
