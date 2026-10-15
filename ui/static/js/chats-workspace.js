@@ -61,7 +61,7 @@ function relativeAge(timestamp) {
 
 function elapsedText(task) {
   const latest = (task.executions || []).at(-1) || {};
-  const started = Number(latest.started_at || 0);
+  const started = Number(task.latest_execution_started_at || latest.started_at || 0);
   if (!started) return "";
   const active = ["running", "recovering", "launching", "stopping"].some(value => statusText(task).toLowerCase().includes(value));
   if (!active) return "";
