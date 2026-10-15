@@ -237,7 +237,7 @@ def test_future_chat_task_and_task_list_browser_contract():
         # Child evidence opens in the existing Task Detail surface.
         page.get_by_role("button", name="1. Two Completed").click()
         page.get_by_text("Item 1 evidence").wait_for()
-        page.get_by_text("child one result").wait_for()
+        page.get_by_text("child one result", exact=True).wait_for()
 
         for viewport in ({"width": 720, "height": 720}, {"width": 480, "height": 720}):
             page.set_viewport_size(viewport)
