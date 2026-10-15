@@ -181,6 +181,7 @@ class Handler(SimpleHTTPRequestHandler):
                     title=str(body.get("title", "")),
                     workflow=str(body.get("workflow", "")),
                     source_message_id=str(body.get("source_message_id", "")),
+                    goal_file=str(body.get("goal_file", "")),
                 ))
             if parsed.path == "/api/tasks/action":
                 return self._json(self.state.task_action(
