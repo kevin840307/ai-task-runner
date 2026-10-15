@@ -108,7 +108,11 @@
     <label class="task-form-row">Workflow
       <select id="taskWorkflow"><option value="">Use default Workflow</option></select>
     </label>
-    <div class="chat-meta">Main · <span id="mainAvailability">Checking…</span></div>
+    <label class="task-form-row">Workspace
+      <select id="taskWorkspace"><option value="main">Main</option></select>
+      <small id="taskWorkspaceHint">Main is always available. Worktrees are optional isolation.</small>
+    </label>
+    <div class="chat-meta"><span id="mainAvailability">Checking…</span></div>
     <div class="task-form-actions"><button id="taskCancel" type="button">Cancel</button><button id="taskRun" type="submit">Run Task</button></div>
   </form>
 </div>
