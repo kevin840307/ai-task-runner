@@ -788,7 +788,9 @@ PHASE 7 - Polish after the basic model is stable
 [ ] Improve low-resolution/responsive behavior.
     - Context sidebar can collapse.
     - Task cards gracefully reduce columns.
-    - Task Detail composer remains usable and attached to the detail surface.
+    - Task Detail action/input area remains usable and attached to the detail surface.
+      Show an instruction input only when the canonical state/action supports it (for example Continue after terminal);
+      do not imply live mid-run instruction injection when the shared Runner does not support it.
     - No horizontal overflow for long Chat/Task/Workflow/Prompt names.
 
 [ ] Preserve accessibility and predictable interaction.
@@ -892,7 +894,7 @@ Before each phase is merged, verify:
 Recommended implementation order
 --------------------------------
 1. Normal Chat + immutable root-path identity.
-2. New Single Task creation on Main using the existing Runner.
+2. New Task creation on Main using the existing Runner.
 3. Current-Chat Tasks card page.
 4. Task Detail = existing execution Chat/runtime view.
 5. Sequential Task / YAML List UI using the existing script runner.
