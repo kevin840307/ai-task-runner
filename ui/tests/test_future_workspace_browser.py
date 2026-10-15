@@ -204,6 +204,15 @@ def test_future_chat_task_and_task_list_browser_contract():
         page.locator("#chatSend").click()
         page.get_by_text("Read-only answer").wait_for()
 
+        # AI-assisted Task List creation is preview-only until the user explicitly runs it.
+        page.locator(".chat-bubble-actions").first.get_by_role("button", name="Create Task List", exact=True).click()
+        page.get_by_text("Preview ready · review/reorder before Run List.", exact=True).wait_for()
+        preview_rows = page.locator(".task-list-item textarea")
+        assert preview_rows.count() == 2
+        assert [preview_rows.nth(i).input_value() for i in range(2)] == ["First", "Second"]
+        assert created_payloads == []
+        page.locator("#taskCancel").click()
+
         # One shared New Task form from a Chat message.
         page.locator(".chat-bubble-actions").first.get_by_role("button", name="Create Task", exact=True).click()
         page.locator("#taskInstruction").wait_for()
