@@ -1,6 +1,7 @@
-name: Sync Studio Bundle Once
+name: Sync Release Artifacts
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - minimal-closed-loop-runtime
@@ -17,11 +18,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: minimal-closed-loop-runtime
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: ui/studio-src/package-lock.json
+
       - name: Build exact Studio bundle
         working-directory: ui/studio-src
         run: |
@@ -29,14 +36,58 @@ jobs:
           ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
           npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
           npm run build
-      - name: Commit generated bundle only
+
+      - name: Regenerate canonical source bundle
         run: |
-          if git diff --quiet -- ui/static/workflow-studio-app; then
-            echo "Studio bundle already synchronized."
+          python tool/bundle.py pack . project.bundle.txt
+          python tool/bundle.py verify project.bundle.txt
+
+      - name: Verify source bundle exclusions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tool.bundle import read_bundle
+
+          forbidden_parts = {
+              ".git",
+              ".pytest_cache",
+              "__pycache__",
+              ".ai-task-runner",
+              "validator-reports",
+          }
+          paths = [
+              str(item.get("path") or "")
+              for item in read_bundle(Path("project.bundle.txt"))
+          ]
+          bad = [
+              path for path in paths
+              if any(part in forbidden_parts for part in Path(path).parts)
+              or Path(path).suffix == ".pyc"
+              or path == "project.bundle.txt"
+          ]
+          if bad:
+              raise SystemExit("runtime/cache artifacts leaked into bundle: " + ", ".join(bad[:20]))
+          required = {
+              "runner/workflow/flow_engine.py",
+              "tool/qwen_live_reliability.py",
+              "tests/test_live_reliability_tool.py",
+              "todo.txt",
+              "DevFollow.txt",
+          }
+          missing = sorted(required - set(paths))
+          if missing:
+              raise SystemExit("required release sources missing from bundle: " + ", ".join(missing))
+          print(f"Bundle path contract OK: {len(paths)} records")
+          PY
+
+      - name: Commit generated release artifacts
+        run: |
+          if git diff --quiet -- ui/static/workflow-studio-app project.bundle.txt; then
+            echo "Release artifacts already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ui/static/workflow-studio-app
-          git commit -m "Sync Studio bundle from source"
+          git add ui/static/workflow-studio-app project.bundle.txt
+          git commit -m "Sync final release artifacts"
           git push origin HEAD:minimal-closed-loop-runtime
