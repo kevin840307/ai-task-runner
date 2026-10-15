@@ -161,6 +161,7 @@ class Handler(SimpleHTTPRequestHandler):
                         chat_id=str(body.get("chat_id", "")),
                         items=body.get("items", []),
                         title=str(body.get("title", "")),
+                        default_workflow=str(body.get("workflow", "")),
                     ))
                 if task_type != "single":
                     raise ValueError("Task type must be single or sequential")
