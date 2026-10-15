@@ -247,6 +247,27 @@ class TaskWorkspaceMixin:
             return []
         return rows[-400:]
 
+    def _terminal_execution_evidence(self, project: Path, runtime: dict) -> dict:
+        return {
+            "status": str(runtime.get("status") or ""),
+            "stage": str(runtime.get("stage") or ""),
+            "cycle": int(runtime.get("cycle") or 0),
+            "completed_count": int(runtime.get("completed_count") or 0),
+            "total": int(runtime.get("total") or 0),
+            "last_error": str(runtime.get("last_error") or ""),
+            "result": self._read_text(
+                project / ".ai-task-runner" / "debug" / "last-result.txt",
+                limit=12000,
+            ).strip(),
+            "stream_tail": str(runtime.get("stream") or "")[-6000:],
+            "activity_summary": list(runtime.get("activity_summary") or [])[-20:],
+            "recovery": (
+                dict(runtime.get("recovery") or {})
+                if isinstance(runtime.get("recovery"), dict)
+                else {}
+            ),
+        }
+
     def _sync_task(self, task: dict) -> dict:
         project = Path(str(task.get("root_path") or ""))
         if not project.is_dir():
@@ -284,6 +305,15 @@ class TaskWorkspaceMixin:
                 run_id = str(runtime.get("run_id") or "")
                 if run_id:
                     execution_changes["run_id"] = run_id
+            if not runtime.get("running") and (
+                runtime.get("completed")
+                or status in {"completed", "stopped", "needs_attention"}
+                or runtime.get("last_error")
+            ):
+                execution_changes["evidence"] = self._terminal_execution_evidence(
+                    project,
+                    runtime,
+                )
             executions = list(task.get("executions") or [])
             latest = executions[-1] if executions else {}
             changed = (
@@ -333,7 +363,41 @@ class TaskWorkspaceMixin:
             ]
         elif task.get("runtime_archive"):
             history = self._archived_messages(str(task.get("runtime_archive") or ""), run_ids)
-        return {**task, "history": history}
+
+        path_runtime = task.get("runtime")
+        if path_runtime is None and project.is_dir():
+            path_runtime = self.read_runtime(project)
+        path_actions = (
+            path_runtime.get("actions")
+            if isinstance(path_runtime, dict) and isinstance(path_runtime.get("actions"), dict)
+            else {}
+        )
+        owns_runtime = bool(task.get("owns_runtime"))
+        last_status = str(task.get("last_status") or "").lower()
+        terminal = (
+            "completed" in last_status
+            or last_status in {"needs_attention", "failed", "error"}
+        )
+        available_actions = {
+            "stop": bool(owns_runtime and path_actions.get("stop")),
+            "resume": bool(owns_runtime and path_actions.get("resume")),
+            "rerun": bool(
+                terminal
+                and (
+                    (owns_runtime and (path_actions.get("rerun") or path_actions.get("run")))
+                    or (not owns_runtime and path_actions.get("run"))
+                )
+            ),
+            "continue": bool(terminal and path_actions.get("run")),
+            "delete": not bool(owns_runtime and isinstance(path_runtime, dict) and path_runtime.get("running")),
+            "cleanup_workspace": bool(
+                task.get("workspace_kind") == "worktree"
+                and task.get("workspace_managed")
+                and not task.get("workspace_removed")
+                and not (owns_runtime and isinstance(path_runtime, dict) and path_runtime.get("running"))
+            ),
+        }
+        return {**task, "history": history, "available_actions": available_actions}
 
     def _sync_prior_tasks(self, project: Path) -> None:
         for existing in self.tasks.list(root=str(project)):
