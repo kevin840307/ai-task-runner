@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chats · AI Task Runner</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+.chat-shell{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);height:100vh;background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
+.chat-side{padding:20px;border-right:1px solid #bec6ce;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.chat-side button,.chat-main button{padding:9px 14px;cursor:pointer}
+.chat-side button[data-active="true"]{font-weight:700;outline:2px solid currentColor}
+.chat-list{display:grid;gap:8px}.chat-list button{text-align:left}
+.chat-main{min-width:0;display:flex;flex-direction:column;padding:20px;gap:14px}
+.chat-scroll{overflow:auto;flex:1;display:flex;flex-direction:column;gap:10px}
+.chat-bubble{padding:12px;max-width:780px;border:1px solid #aab4bf;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-main textarea{width:100%;min-height:84px;resize:vertical;box-sizing:border-box;padding:12px}
+.chat-compose{display:flex;align-items:flex-end;gap:10px}.chat-compose textarea{flex:1}
+.chat-side select{width:100%;padding:8px}.chat-meta{overflow-wrap:anywhere;opacity:.8;font-size:.88rem}
+.chat-error{color:#a32222;min-height:1.4em}
+@media(max-width:680px){.chat-shell{grid-template-columns:1fr;height:auto;min-height:100vh}.chat-side{border-right:0;border-bottom:1px solid #bec6ce}.chat-main{min-height:65vh}}
+</style>
+</head>
+<body>
+<div class="chat-shell">
+  <aside class="chat-side">
+    <a href="/" aria-label="Back to Tasks">← Tasks / Workflows / Prompts</a>
+    <h1>Chats</h1>
+    <label for="chatProject">Project root</label>
+    <select id="chatProject"><option value="">Select a project</option></select>
+    <button id="newChat" type="button">+ New Chat</button>
+    <div id="chatList" class="chat-list" aria-label="Chat list"></div>
+  </aside>
+  <main class="chat-main">
+    <h2 id="chatTitle">Select or create a Chat</h2>
+    <p id="chatPath" class="chat-meta"></p>
+    <p id="chatNotice" class="chat-meta">Chat notes are saved separately from Runner tasks. AI conversational replies are not yet supported in this workspace.</p>
+    <div id="chatMessages" class="chat-scroll" role="log" aria-live="polite"></div>
+    <form id="chatComposer" class="chat-compose">
+      <label for="chatText" class="sr-only">Message</label>
+      <textarea id="chatText" placeholder="Write a message…" maxlength="20000" disabled required></textarea>
+      <button id="chatSend" type="submit" disabled>Save message</button>
+    </form>
+    <p id="chatError" class="chat-error" role="alert"></p>
+  </main>
+</div>
+<script type="module" src="/js/chats-workspace.js"></script>
+</body>
+</html>
