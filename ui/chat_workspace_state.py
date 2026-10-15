@@ -14,6 +14,15 @@ class ChatWorkspaceMixin:
             raise ValueError("Chat not found")
         return chat
 
+    def archive_chat(self, chat_id: str, archived: bool = True) -> dict:
+        chat = self._chat_record(chat_id)
+        if archived:
+            for task in self.tasks.list(chat_id=chat_id):
+                current = self._sync_task(task)
+                if current.get("runtime", {}).get("running"):
+                    raise ValueError("Stop the active Task before archiving this Chat")
+        return self.chats.update(chat_id, archived=bool(archived))
+
     def chat_turn(self, chat_id: str, message: str) -> dict:
         text = str(message or "").strip()
         if not text:
