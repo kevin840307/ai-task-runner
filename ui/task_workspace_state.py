@@ -261,6 +261,8 @@ class TaskWorkspaceMixin:
         goal_file: str = "",
         workspace_mode: str = "main",
         workspace_path: str = "",
+        backend: str = "",
+        model: str = "",
     ) -> dict:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
@@ -306,7 +308,13 @@ class TaskWorkspaceMixin:
                 workspace_path,
             )
             self._sync_prior_tasks(project)
-            request = self.launch_message(project, task_instruction, workflow=resolved_workflow)
+            request = self.launch_message(
+                project,
+                task_instruction,
+                workflow=resolved_workflow,
+                backend=str(backend or ""),
+                model=str(model or ""),
+            )
         except Exception as exc:
             task = self.tasks.update(
                 task["task_id"],
@@ -321,6 +329,8 @@ class TaskWorkspaceMixin:
             "started_at": time.time(),
             "instruction": task_instruction,
             "source_goal_file": source_goal_file,
+            "backend": str(request.get("backend") or backend or ""),
+            "model": str(request.get("model") or model or ""),
             "workflow": str(request.get("workflow") or resolved_workflow),
             "run_id": "",
         })
@@ -467,6 +477,8 @@ class TaskWorkspaceMixin:
         default_workflow: str = "",
         workspace_mode: str = "main",
         workspace_path: str = "",
+        backend: str = "",
+        model: str = "",
     ) -> dict:
         project, normalized, candidate_yaml, inherited_workflow = self._normalize_task_list_items(
             chat_id,
@@ -492,7 +504,13 @@ class TaskWorkspaceMixin:
             )
             self._sync_prior_tasks(project)
             script = self._write_task_list(project, task["task_id"], normalized, 1)
-            self.launch_script_task(project, str(script), workflow=inherited_workflow)
+            self.launch_script_task(
+                project,
+                str(script),
+                workflow=inherited_workflow,
+                backend=str(backend or ""),
+                model=str(model or ""),
+            )
         except Exception as exc:
             task = self.tasks.update(task["task_id"], last_status="needs_attention", last_error=str(exc))
             return self._sync_task(task)
@@ -504,6 +522,8 @@ class TaskWorkspaceMixin:
             "instruction": task["instruction"],
             "workflow": inherited_workflow,
             "default_workflow": inherited_workflow,
+            "backend": str(backend or ""),
+            "model": str(model or ""),
             "run_id": "",
             "item_count": len(normalized),
         })
