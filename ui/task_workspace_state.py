@@ -340,6 +340,47 @@ class TaskWorkspaceMixin:
             "owns_runtime": owns_visible_runtime,
         }
 
+    @staticmethod
+    def _task_list_projection(task: dict) -> dict:
+        executions = list(task.get("executions") or [])
+        latest = executions[-1] if executions else {}
+        runtime = task.get("runtime") if isinstance(task.get("runtime"), dict) else None
+        runtime_projection = None
+        if runtime is not None:
+            runtime_projection = {
+                key: runtime.get(key)
+                for key in (
+                    "status",
+                    "running",
+                    "completed",
+                    "stage",
+                    "script_index",
+                    "script_total",
+                    "total",
+                    "completed_count",
+                    "attention_reason",
+                    "updated_at",
+                )
+                if key in runtime
+            }
+        return {
+            "task_id": str(task.get("task_id") or ""),
+            "chat_id": str(task.get("chat_id") or ""),
+            "title": str(task.get("title") or ""),
+            "task_type": str(task.get("task_type") or "single"),
+            "workflow": str(task.get("workflow") or ""),
+            "workspace_kind": str(task.get("workspace_kind") or "main"),
+            "last_status": str(task.get("last_status") or ""),
+            "last_error": str(task.get("last_error") or ""),
+            "path_available": bool(task.get("path_available", True)),
+            "created_at": float(task.get("created_at") or 0),
+            "updated_at": float(task.get("updated_at") or 0),
+            "latest_execution_started_at": float(latest.get("started_at") or 0),
+            "execution_count": len(executions),
+            "item_count": len(task.get("items") or []),
+            "runtime": runtime_projection,
+        }
+
     def tasks_payload(
         self,
         chat_id: str = "",
@@ -368,7 +409,8 @@ class TaskWorkspaceMixin:
             ]
             synced = [self._sync_task(task) for task in rows]
             synced = [
-                item for item in synced
+                self._task_list_projection(item)
+                for item in synced
                 if str(item.get("last_status") or "").lower() in candidate_statuses
                 or (
                     isinstance(item.get("runtime"), dict)
@@ -383,7 +425,10 @@ class TaskWorkspaceMixin:
                 "meta": {"total": total, "returned": len(synced), "has_more": False},
             }
         selected = rows[: int(limit)]
-        synced = [self._sync_task(task) for task in selected]
+        synced = [
+            self._task_list_projection(self._sync_task(task))
+            for task in selected
+        ]
         return {
             "tasks": synced,
             "meta": {
