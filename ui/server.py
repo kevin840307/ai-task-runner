@@ -148,6 +148,15 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             body = self._body()
             if parsed.path == "/api/tasks/create":
+                task_type = str(body.get("task_type", "single"))
+                if task_type == "sequential":
+                    return self._json(self.state.create_task_list(
+                        chat_id=str(body.get("chat_id", "")),
+                        items=body.get("items", []),
+                        title=str(body.get("title", "")),
+                    ))
+                if task_type != "single":
+                    raise ValueError("Task type must be single or sequential")
                 return self._json(self.state.create_task(
                     chat_id=str(body.get("chat_id", "")),
                     instruction=str(body.get("instruction", "")),
