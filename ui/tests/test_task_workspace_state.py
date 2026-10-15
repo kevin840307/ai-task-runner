@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from ui.chat_index import ChatIndex
+from ui.task_index import TaskIndex
+from ui.task_workspace_state import TaskWorkspaceMixin
+
+
+class FakeTaskWorkspace(TaskWorkspaceMixin):
+    def __init__(self, root: Path):
+        self.repo_root = root
+        self.tasks = TaskIndex(root / "tasks.json")
+        self.chats = ChatIndex(root / "chats.json")
+        self.runtime = {
+            "running": False,
+            "completed": True,
+            "status": "completed",
+            "stage": "completed",
+            "cycle": 2,
+            "completed_count": 1,
+            "total": 1,
+            "last_error": "",
+            "stream": "final visible output",
+            "activity_summary": ["Validated"],
+            "recovery": {},
+            "actions": {"run": True, "rerun": True, "stop": False, "resume": False},
+            "run_id": "run-old",
+            "request_id": "req-old",
+        }
+        self.launched = []
+
+    @staticmethod
+    def _read_json(path: Path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    @staticmethod
+    def _read_text(path: Path, limit: int = 0):
+        try:
+            value = path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        return value[-limit:] if limit else value
+
+    def read_runtime(self, project: Path):
+        return dict(self.runtime)
+
+    def messages(self, project: Path):
+        return []
+
+    def sync_completion(self, project: Path):
+        return False
+
+    def _known_workflow_paths(self, project: Path):
+        return [self.workflow]
+
+    def launch_message(self, project: Path, message: str, **kwargs):
+        self.launched.append((Path(project), message, kwargs))
+        return {
+            "request_id": "req-new",
+            "workflow": kwargs.get("workflow", ""),
+            "backend": kwargs.get("backend", ""),
+            "model": kwargs.get("model", ""),
+        }
+
+
+class TaskWorkspaceHistoryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.project = self.root / "project"
+        self.project.mkdir()
+        self.state = FakeTaskWorkspace(self.root)
+        self.state.workflow = self.root / "workflow.yaml"
+        self.state.workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        self.chat_id = self.state.chats.create(str(self.project))["chat_id"]
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def _completed_task(self):
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(self.project),
+            instruction="original frozen instruction",
+            workflow=str(self.state.workflow),
+        )
+        task = self.state.tasks.update(
+            task["task_id"],
+            last_status="completed",
+            backend="qwen",
+            model="model-a",
+        )
+        return self.state.tasks.append_execution(task["task_id"], {
+            "request_id": "req-old",
+            "run_id": "run-old",
+            "instruction": task["instruction"],
+            "workflow": str(self.state.workflow),
+        })
+
+    def test_historical_completed_task_reruns_from_its_frozen_inputs_when_path_is_free(self):
+        task = self._completed_task()
+        # Another terminal Task may be the latest runtime owner; this Task is history.
+        marker = self.project / ".ai-task-runner" / "ui" / "active-task.json"
+        marker.parent.mkdir(parents=True)
+        marker.write_text(json.dumps({"task_id": "f" * 32, "request_id": "other"}), encoding="utf-8")
+
+        detail = self.state.task_detail(task["task_id"])
+        self.assertTrue(detail["available_actions"]["rerun"])
+
+        result = self.state.task_action(task["task_id"], "rerun")
+
+        self.assertEqual(len(result["executions"]), 2)
+        launched_project, message, kwargs = self.state.launched[-1]
+        self.assertEqual(launched_project, self.project)
+        self.assertEqual(message, "original frozen instruction")
+        self.assertEqual(kwargs["workflow"], str(self.state.workflow))
+        self.assertEqual(kwargs["backend"], "qwen")
+        self.assertEqual(kwargs["model"], "model-a")
+        marker_value = json.loads(marker.read_text(encoding="utf-8"))
+        self.assertEqual(marker_value["task_id"], task["task_id"])
+
+    def test_terminal_execution_evidence_is_persisted_before_future_runtime_reuse(self):
+        task = self._completed_task()
+        marker = self.project / ".ai-task-runner" / "ui" / "active-task.json"
+        marker.parent.mkdir(parents=True)
+        marker.write_text(
+            json.dumps({"task_id": task["task_id"], "request_id": "req-old"}),
+            encoding="utf-8",
+        )
+        result_file = self.project / ".ai-task-runner" / "debug" / "last-result.txt"
+        result_file.parent.mkdir(parents=True)
+        result_file.write_text("durable final result", encoding="utf-8")
+
+        synced = self.state._sync_task(task)
+        evidence = synced["executions"][-1]["evidence"]
+
+        self.assertEqual(evidence["result"], "durable final result")
+        self.assertEqual(evidence["stream_tail"], "final visible output")
+        self.assertEqual(evidence["stage"], "completed")
+        self.assertEqual(evidence["activity_summary"], ["Validated"])
+
+
+if __name__ == "__main__":
+    unittest.main()
