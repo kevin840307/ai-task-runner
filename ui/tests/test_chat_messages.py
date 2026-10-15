@@ -34,6 +34,8 @@ class ChatMessageTests(unittest.TestCase):
             result = messages.list(chat_id)
             self.assertFalse(result["chat"]["path_available"])
             self.assertEqual(result["messages"][0]["text"], "hello")
+            with self.assertRaisesRegex(ValueError, "path unavailable"):
+                messages.append(chat_id, "should fail")
 
     def test_rejects_unknown_chat_and_forged_assistant_message(self):
         with tempfile.TemporaryDirectory() as temp:
