@@ -13,6 +13,8 @@ try:
     from .chat_index import ChatIndex
     from .chat_messages import ChatMessages
     from .project_runtime_state import ProjectRuntimeMixin
+    from .task_index import TaskIndex
+    from .task_workspace_state import TaskWorkspaceMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
@@ -20,12 +22,14 @@ except ImportError:
     from chat_index import ChatIndex
     from chat_messages import ChatMessages
     from project_runtime_state import ProjectRuntimeMixin
+    from task_index import TaskIndex
+    from task_workspace_state import TaskWorkspaceMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
     from server_support import is_loopback_host
 
 
-class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
+class UIState(TaskWorkspaceMixin, ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.ui_root = self.repo_root / "ui"
@@ -33,6 +37,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.projects_file = self.ui_root / "data" / "projects.json"
         self.chats = ChatIndex(self.ui_root / "data" / "chats.json")
         self.chat_messages = ChatMessages(self.ui_root / "data" / "conversations", self.chats)
+        self.tasks = TaskIndex(self.ui_root / "data" / "tasks.json")
         self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
@@ -67,6 +72,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/task":
+                query = parse_qs(parsed.query)
+                return self._json(self.state.task_detail(query.get("task_id", [""])[0]))
+            if parsed.path == "/api/tasks":
+                query = parse_qs(parsed.query)
+                return self._json(self.state.tasks_payload(query.get("chat_id", [""])[0]))
             if parsed.path == "/api/chats/messages":
                 query = parse_qs(parsed.query)
                 return self._json(self.state.chat_messages.list(query.get("chat_id", [""])[0]))
@@ -136,6 +147,23 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._body()
+            if parsed.path == "/api/tasks/create":
+                return self._json(self.state.create_task(
+                    chat_id=str(body.get("chat_id", "")),
+                    instruction=str(body.get("instruction", "")),
+                    title=str(body.get("title", "")),
+                    workflow=str(body.get("workflow", "")),
+                    source_message_id=str(body.get("source_message_id", "")),
+                ))
+            if parsed.path == "/api/tasks/action":
+                return self._json(self.state.task_action(
+                    str(body.get("task_id", "")),
+                    str(body.get("action", "")),
+                    instruction=str(body.get("instruction", "")),
+                    workflow=str(body.get("workflow", "")),
+                ))
+            if parsed.path == "/api/tasks/delete":
+                return self._json(self.state.delete_task(str(body.get("task_id", ""))))
             if parsed.path == "/api/chats/messages/add":
                 return self._json(self.state.chat_messages.append(str(body.get("chat_id", "")), str(body.get("text", ""))))
             if parsed.path == "/api/chats/create":
