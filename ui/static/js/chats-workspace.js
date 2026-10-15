@@ -7,6 +7,7 @@ let currentTask = null;
 let taskFilter = "all";
 let activeTab = "chat";
 let workflowChoices = [];
+const taskListRawByRow = new WeakMap();
 
 async function request(url, payload) {
   const options = payload === undefined ? {} : {
@@ -145,6 +146,12 @@ function fillWorkflowSelect(select, { inherited = false } = {}) {
     option.textContent = `${workflow.name} · ${workflow.group || workflow.scope || "Workflow"}`;
     select.append(option);
   }
+  if (previous && ![...select.options].some(option => option.value === previous)) {
+    const preserved = document.createElement("option");
+    preserved.value = previous;
+    preserved.textContent = "YAML override · " + previous.replaceAll("\\", "/").split("/").pop();
+    select.append(preserved);
+  }
   if ([...select.options].some(option => option.value === previous)) select.value = previous;
 }
 async function loadWorkflowOptions() {
@@ -158,18 +165,37 @@ async function loadWorkflowOptions() {
     for (const select of element("taskListItems").querySelectorAll("select")) fillWorkflowSelect(select, {inherited: true});
   } catch (error) { report(error); }
 }
-function addTaskListItem(value = "", workflow = "", index = null) {
+function rawInstruction(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  return String(raw.prompt || raw.goal || (raw.goal_file ? "Use file: " + raw.goal_file : ""));
+}
+function cloneRaw(raw) {
+  return raw && typeof raw === "object" ? JSON.parse(JSON.stringify(raw)) : {};
+}
+function addTaskListItem(value = "", workflow = "", index = null, raw = null) {
   const row = document.createElement("div");
   row.className = "task-list-item";
   const text = document.createElement("textarea");
   text.maxLength = 20000;
   text.required = true;
   text.placeholder = "Instruction / Prompt";
-  text.value = value;
+  const rawValue = cloneRaw(raw);
+  const shown = value || rawInstruction(rawValue);
+  text.value = shown;
+  row.dataset.originalInstruction = shown;
   const override = document.createElement("select");
   override.setAttribute("aria-label", "Workflow override");
   fillWorkflowSelect(override, {inherited: true});
-  override.value = workflow;
+  const originalWorkflow = workflow || String(rawValue.workflow_file || "");
+  if (originalWorkflow && ![...override.options].some(option => option.value === originalWorkflow)) {
+    const preserved = document.createElement("option");
+    preserved.value = originalWorkflow;
+    preserved.textContent = "YAML override · " + originalWorkflow.replaceAll("\\", "/").split("/").pop();
+    override.append(preserved);
+  }
+  override.value = originalWorkflow;
+  row.dataset.originalWorkflow = originalWorkflow;
+  taskListRawByRow.set(row, rawValue);
   const controls = document.createElement("div");
   controls.className = "move-buttons";
   const up = document.createElement("button"); up.type = "button"; up.textContent = "↑"; up.title = "Move up";
@@ -178,7 +204,7 @@ function addTaskListItem(value = "", workflow = "", index = null) {
   const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = "Remove";
   up.addEventListener("click", () => row.previousElementSibling?.before(row));
   down.addEventListener("click", () => row.nextElementSibling?.after(row));
-  duplicate.addEventListener("click", () => addTaskListItem(text.value, override.value, [...row.parentElement.children].indexOf(row) + 1));
+  duplicate.addEventListener("click", () => addTaskListItem(text.value, override.value, [...row.parentElement.children].indexOf(row) + 1, cloneRaw(taskListRawByRow.get(row))));
   remove.addEventListener("click", () => { if (row.parentElement.children.length > 1) row.remove(); });
   controls.append(up, down, duplicate, remove);
   row.append(text, override, controls);
@@ -186,6 +212,65 @@ function addTaskListItem(value = "", workflow = "", index = null) {
   if (index === null || index >= root.children.length) root.append(row);
   else root.insertBefore(row, root.children[index]);
   return row;
+}
+function taskListItemsPayload() {
+  return [...element("taskListItems").querySelectorAll(".task-list-item")].map(row => {
+    const text = row.querySelector("textarea").value.trim();
+    const override = row.querySelector("select").value;
+    const raw = cloneRaw(taskListRawByRow.get(row));
+    if (Object.keys(raw).length) {
+      if (text !== row.dataset.originalInstruction) {
+        delete raw.goal;
+        delete raw.goal_file;
+        raw.prompt = text;
+      }
+      if (override !== row.dataset.originalWorkflow) {
+        delete raw.workflow;
+        delete raw.workflow_file;
+        if (override) raw.workflow_file = override;
+      }
+    }
+    return {instruction: text, workflow: override, raw};
+  });
+}
+function renderRawTaskList(rawItems) {
+  const root = element("taskListItems");
+  root.replaceChildren();
+  for (const raw of rawItems || []) addTaskListItem(rawInstruction(raw), String(raw?.workflow_file || ""), null, raw);
+  if (!root.children.length) addTaskListItem();
+}
+async function refreshTaskListYaml() {
+  if (!currentChat) return;
+  element("taskListYamlStatus").textContent = "Validating…";
+  try {
+    const data = await request("/api/tasks/list/export", {
+      chat_id: currentChat.chat_id,
+      items: taskListItemsPayload(),
+      workflow: element("taskWorkflow").value
+    });
+    element("taskListYaml").value = data.canonical || "";
+    element("taskListYamlStatus").textContent = "Valid YAML · advanced fields preserved";
+  } catch (error) {
+    element("taskListYamlStatus").textContent = error.message;
+    report(error);
+  }
+}
+async function applyTaskListYaml() {
+  if (!currentChat) return;
+  element("taskListYamlStatus").textContent = "Validating…";
+  try {
+    const data = await request("/api/tasks/list/parse", {
+      chat_id: currentChat.chat_id,
+      content: element("taskListYaml").value,
+      workflow: element("taskWorkflow").value
+    });
+    renderRawTaskList(data.raw || []);
+    element("taskListYaml").value = data.canonical || element("taskListYaml").value;
+    element("taskListYamlStatus").textContent = "Applied · visual edits will preserve untouched YAML fields";
+  } catch (error) {
+    element("taskListYamlStatus").textContent = error.message;
+    report(error);
+  }
 }
 function setTaskType(type) {
   const sequential = type === "sequential";
