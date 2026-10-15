@@ -7,7 +7,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from ui.chat_index import ChatIndex
-from ui.project_registry import path_key
+from project_registry import path_key
 from ui.task_index import TaskIndex
 from ui.task_workspace_state import TaskWorkspaceMixin
 
