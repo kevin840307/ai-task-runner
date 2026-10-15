@@ -706,7 +706,8 @@ async function openTask(taskId) {
   if (task.runtime) {
     addDetailLine(root, "Stage", task.runtime.stage);
     addDetailLine(root, "Cycle", task.runtime.cycle);
-    if (task.runtime.total) addDetailLine(root, "Progress", `${task.runtime.completed_count || 0}/${task.runtime.total}`);
+    if (task.task_type === "sequential" && task.runtime.script_total) addDetailLine(root, "Task List progress", `Item ${task.runtime.script_index || 0}/${task.runtime.script_total}`);
+    else if (task.runtime.total) addDetailLine(root, "Progress", `${task.runtime.completed_count || 0}/${task.runtime.total}`);
     addDetailLine(root, "Attention", task.runtime.attention_reason);
     if (Array.isArray(task.runtime.activity_summary) && task.runtime.activity_summary.length) {
       const activity = document.createElement("div");
