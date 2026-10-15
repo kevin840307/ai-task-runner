@@ -459,6 +459,8 @@ class TaskWorkspaceMixin:
         items: list,
         title: str = "",
         default_workflow: str = "",
+        workspace_mode: str = "main",
+        workspace_path: str = "",
     ) -> dict:
         project, normalized, candidate_yaml, inherited_workflow = self._normalize_task_list_items(
             chat_id,
@@ -466,7 +468,7 @@ class TaskWorkspaceMixin:
             default_workflow,
         )
         self.task_list_yaml_preview(chat_id, candidate_yaml, inherited_workflow)
-        self._sync_prior_tasks(project)
+        chat = self._chat_for_task(chat_id)
         task = self.tasks.create(
             chat_id=chat_id,
             root_path=str(project),
@@ -475,8 +477,15 @@ class TaskWorkspaceMixin:
             task_type="sequential",
         )
         task = self.tasks.update(task["task_id"], items=normalized)
-        script = self._write_task_list(project, task["task_id"], normalized, 1)
         try:
+            task, project = self._prepare_task_workspace(
+                task,
+                chat,
+                workspace_mode,
+                workspace_path,
+            )
+            self._sync_prior_tasks(project)
+            script = self._write_task_list(project, task["task_id"], normalized, 1)
             self.launch_script_task(project, str(script), workflow=inherited_workflow)
         except Exception as exc:
             task = self.tasks.update(task["task_id"], last_status="needs_attention", last_error=str(exc))
