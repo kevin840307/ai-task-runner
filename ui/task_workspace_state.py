@@ -546,8 +546,12 @@ class TaskWorkspaceMixin:
             workflow=resolved_workflow,
             source_message_id=source_message_id,
         )
-        if source_goal_file:
-            task = self.tasks.update(task["task_id"], source_goal_file=source_goal_file)
+        task = self.tasks.update(
+            task["task_id"],
+            source_goal_file=source_goal_file,
+            backend=str(backend or ""),
+            model=str(model or ""),
+        )
         try:
             task, project = self._prepare_task_workspace(
                 task,
