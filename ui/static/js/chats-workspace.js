@@ -616,7 +616,7 @@ function renderTasks() {
     status.textContent = `${statusText(task)}${stage}${progress}${attention}`;
     const meta = document.createElement("small");
     const kind = task.task_type === "sequential" ? "Task List" : "Task";
-    const freshness = relativeAge(task.updated_at || task.created_at);
+    const freshness = relativeAge(runtime.updated_at || task.updated_at || task.created_at);
     const elapsed = elapsedText(task);
     meta.textContent = kind + (elapsed ? " · " + elapsed : "") + (freshness ? " · " + freshness : "");
     button.append(title, status, meta);
@@ -702,10 +702,14 @@ async function openTask(taskId) {
   state.textContent = statusText(task);
   head.append(title, state);
   root.append(head);
+  addDetailLine(root, "Instruction", task.instruction);
+  addDetailLine(root, "Input file", task.source_goal_file);
+  addDetailLine(root, "Workflow", task.workflow || "Runner default");
+  addDetailLine(root, "Backend", task.backend || task.runtime?.backend);
+  addDetailLine(root, "Model", task.model || task.runtime?.model);
   addDetailLine(root, "Workspace", task.root_path);
   addDetailLine(root, "Workspace type", task.workspace_kind || "main");
   addDetailLine(root, "Branch", task.workspace_branch);
-  addDetailLine(root, "Workflow", task.workflow || "Runner default");
   if (task.runtime) {
     addDetailLine(root, "Stage", task.runtime.stage);
     addDetailLine(root, "Cycle", task.runtime.cycle);
