@@ -243,6 +243,13 @@ def test_future_chat_task_and_task_list_browser_contract():
         assert [item["instruction"] for item in created_payloads[-1]["items"]] == ["Two", "One"]
         assert created_payloads[-1]["task_type"] == "sequential"
 
+        # Sequential Stop / Resume uses the same canonical Task action surface.
+        page.get_by_role("button", name="Stop").click()
+        page.get_by_role("button", name="Resume").wait_for()
+        page.get_by_role("button", name="Resume").click()
+        page.get_by_role("button", name="Stop").wait_for()
+        assert actions[-2:] == ["stop", "resume"]
+
         # Child evidence opens in the existing Task Detail surface.
         page.get_by_role("button", name="1. Two Completed").click()
         page.get_by_text("Item 1 evidence").wait_for()
