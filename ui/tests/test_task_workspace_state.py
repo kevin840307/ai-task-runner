@@ -63,6 +63,16 @@ class FakeTaskWorkspace(TaskWorkspaceMixin):
     def product_defaults(self):
         return {"default_workflow": self.workflow.name}
 
+    def studio_files(self, project: Path):
+        return {
+            "workflows": [{
+                "name": self.workflow.name,
+                "path": str(self.workflow.resolve()),
+                "hidden": False,
+            }],
+            "prompts": [],
+        }
+
     @staticmethod
     def _activity_summary(stream):
         return [line for line in str(stream or "").splitlines() if line][-20:]
@@ -108,12 +118,13 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
             backend="qwen",
             model="model-a",
         )
-        return self.state.tasks.append_execution(task["task_id"], {
+        task = self.state.tasks.append_execution(task["task_id"], {
             "request_id": "req-old",
             "run_id": "run-old",
             "instruction": task["instruction"],
             "workflow": str(self.state.workflow),
         })
+        return self.state.tasks.update(task["task_id"], last_status="completed")
 
     def test_explicit_and_default_workflows_use_same_allowed_catalog(self):
         self.assertEqual(
