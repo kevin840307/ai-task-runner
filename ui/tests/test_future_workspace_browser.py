@@ -114,10 +114,10 @@ def test_future_chat_task_and_task_list_browser_contract():
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        if path == "/chats.html":
-            return route.fulfill(status=200, content_type="text/html", body=(STATIC / "chats.html").read_text(encoding="utf-8"))
-        if path == "/js/chats-workspace.js":
-            return route.fulfill(status=200, content_type="text/javascript", body=(STATIC / "js/chats-workspace.js").read_text(encoding="utf-8"))
+        if path in {"/chats.html", "/library.html", "/settings.html"}:
+            return route.fulfill(status=200, content_type="text/html", body=(STATIC / path.lstrip("/")).read_text(encoding="utf-8"))
+        if path in {"/js/chats-workspace.js", "/js/library.js", "/js/settings.js"}:
+            return route.fulfill(status=200, content_type="text/javascript", body=(STATIC / path.lstrip("/")).read_text(encoding="utf-8"))
         if path == "/js/i18n.js":
             return route.fulfill(status=200, content_type="text/javascript", body=(STATIC / "js/i18n.js").read_text(encoding="utf-8"))
         if path == "/styles.css":
@@ -244,5 +244,19 @@ def test_future_chat_task_and_task_list_browser_contract():
             page.wait_for_timeout(50)
             width = page.evaluate("() => ({client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})")
             assert width["scroll"] <= width["client"] + 1
+
+        # Global Library and Settings shells stay usable at low resolution too.
+        page.set_viewport_size({"width": 480, "height": 720})
+        page.goto("http://future.test/library.html", wait_until="domcontentloaded")
+        page.get_by_text("ralphy_ai_validate.yaml", exact=True).wait_for()
+        width = page.evaluate("() => ({client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})")
+        assert width["scroll"] <= width["client"] + 1
+        page.locator("#promptLibraryTab").click()
+        page.get_by_role("button", name="Open Prompt editor").wait_for()
+
+        page.goto("http://future.test/settings.html", wait_until="domcontentloaded")
+        page.get_by_role("heading", name="Settings").wait_for()
+        width = page.evaluate("() => ({client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})")
+        assert width["scroll"] <= width["client"] + 1
 
         browser.close()
