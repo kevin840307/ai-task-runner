@@ -21,7 +21,7 @@ function rememberValidator(workflow, value) { if (!state.project || !workflow) r
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, productDefaults: { default_workflow: "" }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -851,6 +851,17 @@ function renderBackendPickerSelection() {
 }
 
 // ------------------------------ Workflow picker ------------------------------
+async function refreshProductDefaults() {
+  try {
+    const data = await api("/api/ui/defaults", { timeoutMs: 5000 });
+    state.productDefaults = data && typeof data === "object" ? data : { default_workflow: "" };
+    renderWorkflowPicker();
+  } catch (error) {
+    state.productDefaults = { default_workflow: "" };
+    showAppError(error.message);
+  }
+}
+
 async function refreshStudioFiles({ force = false, projectPath = state.project?.path || "" } = {}) {
   const key = projectPath || "@global";
   const fresh = state.studioCatalogKey === key && state.studioCatalogLoadedAt && (Date.now() - state.studioCatalogLoadedAt) < 8000;
@@ -887,7 +898,7 @@ function openWorkflowDropdown() {
   positionWorkflowDropdown();
 }
 
-const DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml";
+function defaultWorkflowName() { return String(state.productDefaults?.default_workflow || ""); }
 function workflowBasename(value) { return String(value || "").replaceAll("\\", "/").split("/").filter(Boolean).pop() || ""; }
 function renderWorkflowPicker() {
   const select = $("workflowSelect"), menu = $("workflowDropdownMenu"), label = $("workflowSelectedLabel"); if (!select || !menu || !label) return;
@@ -903,7 +914,7 @@ function renderWorkflowPicker() {
   }
   if ([...select.options].some((option) => option.value === saved)) select.value = saved;
   else {
-    const preferred = [...select.options].find((option) => workflowBasename(option.value) === DEFAULT_WORKFLOW_NAME || option.textContent === DEFAULT_WORKFLOW_NAME);
+    const preferred = [...select.options].find((option) => workflowBasename(option.value) === defaultWorkflowName() || option.textContent === defaultWorkflowName());
     if (preferred) select.value = preferred.value;
     else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
     else if (select.options.length) select.selectedIndex = 0;
@@ -2050,7 +2061,7 @@ window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
+}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), refreshProductDefaults(), loadProjects()]).then(async () => {
   await restoreWorkflowStudioNavigation();
   await restoreActiveWorkflowGenerator();
 }); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
