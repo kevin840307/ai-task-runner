@@ -27,6 +27,23 @@ class TaskIndex:
             raise ValueError("Task index is unreadable; refusing to overwrite history") from exc
         if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
             raise ValueError("Task index has an invalid format")
+        seen: set[str] = set()
+        for item in data:
+            try:
+                task_id = self._task_id(item.get("task_id"))
+            except ValueError as exc:
+                raise ValueError("Task index has an invalid task_id") from exc
+            chat_id = item.get("chat_id")
+            root_path = item.get("root_path")
+            if not isinstance(chat_id, str) or not chat_id:
+                raise ValueError("Task index has an invalid chat_id")
+            if not isinstance(root_path, str) or not root_path.strip():
+                raise ValueError("Task index has an invalid root_path")
+            if task_id in seen:
+                raise ValueError("Task index has duplicate task_id values")
+            if "executions" in item and not isinstance(item.get("executions"), list):
+                raise ValueError("Task index has invalid executions")
+            seen.add(task_id)
         return data
 
     def _write(self, rows: list[dict]) -> None:
