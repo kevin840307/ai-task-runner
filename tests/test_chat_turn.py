@@ -80,6 +80,39 @@ def test_chat_turn_same_session_sends_only_new_message(tmp_path):
     assert "do not repeat me" not in prompt
 
 
+def test_chat_turn_invalidated_session_rebuilds_once_from_history(tmp_path):
+    clients = []
+
+    def factory(config, root, **kwargs):
+        current = kwargs.get("session_id", "")
+        client = FakeClient(current, fail_invalid=bool(current))
+        clients.append((client, kwargs))
+        return client
+
+    result = run_chat(
+        {
+            "message": "latest",
+            "history": [
+                {"role": "user", "text": "earlier"},
+                {"role": "assistant", "text": "reply"},
+            ],
+        },
+        project=tmp_path,
+        backend="fake",
+        model="fake-model",
+        session_id="stale-session",
+        client_factory=factory,
+    )
+
+    assert len(clients) == 2
+    assert clients[0][1]["session_id"] == "stale-session"
+    assert clients[1][1]["session_id"] == ""
+    assert "earlier" not in clients[0][0].prompts[0]
+    assert "earlier" in clients[1][0].prompts[0]
+    assert result["session_id"] == "session-new"
+    assert result["text"] == "answer"
+
+
 def test_bounded_history_keeps_recent_messages_only():
     rows = [{"role": "user", "text": str(index) * 3000} for index in range(60)]
     bounded = _bounded_history(rows)
