@@ -79,6 +79,11 @@
     </label>
     <label id="singleInstructionRow" class="task-form-row">Instruction / Prompt
       <textarea id="taskInstruction" maxlength="20000" required placeholder="What should AI do?"></textarea>
+      <div class="chat-head-actions">
+        <button id="taskUseFile" type="button">Use file</button>
+        <button id="taskClearFile" type="button" hidden>Clear file</button>
+        <span id="taskGoalFileName" class="chat-meta"></span>
+      </div>
     </label>
     <section id="taskListEditor" class="task-form-row" hidden>
       <span>Ordered items</span>
