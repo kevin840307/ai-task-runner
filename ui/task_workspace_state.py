@@ -32,7 +32,6 @@ except ImportError:
     )
 
 TASK_MARKER = "active-task.json"
-DEFAULT_TASK_WORKFLOW = "ralphy_ai_validate.yaml"
 MAX_TASK_LIST_ITEMS = 200
 
 
@@ -81,13 +80,14 @@ class TaskWorkspaceMixin:
             if path_key(candidate) not in allowed or not candidate.is_file():
                 raise ValueError("Selected Workflow is outside the allowed Global / Project Workflow asset roots")
             return str(candidate)
+        default_name = str(self.product_defaults().get("default_workflow") or "").strip()
         catalog = self.studio_files(project)
         for item in catalog.get("workflows", []):
-            if str(item.get("name") or "") == DEFAULT_TASK_WORKFLOW:
+            if str(item.get("name") or "") == default_name:
                 candidate = Path(str(item.get("path") or "")).expanduser().resolve()
                 if candidate.is_file():
                     return str(candidate)
-        raise ValueError(f"Default Workflow is unavailable: {DEFAULT_TASK_WORKFLOW}")
+        raise ValueError(f"Default Workflow is unavailable: {default_name}")
 
     @staticmethod
     def _same_path(left: str | Path, right: str | Path) -> bool:
