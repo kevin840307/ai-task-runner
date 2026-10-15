@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -145,6 +148,38 @@ def test_yaml_text_parser_matches_file_parser_with_inherited_workflow(tmp_path):
     )
 
     assert from_text == from_file
+
+
+def test_ui_yaml_list_contract_tool_round_trips_cli_supported_fields(tmp_path):
+    content = """- prompt: build
+  backend: qwen
+  stage_retries: -1
+  retry_delay: 7
+  agent_args: [--trace]
+  protect_files: [locked.txt]
+"""
+    expected = parse_yaml_script_text(
+        content,
+        tmp_path / "tasks.yaml",
+        allow_inherited_workflow=True,
+    )
+    tool = Path(__file__).resolve().parents[1] / "tool" / "yaml_list_contract.py"
+    completed = subprocess.run(
+        [sys.executable, str(tool), "--project-root", str(tmp_path)],
+        input=json.dumps({
+            "content": content,
+            "allow_inherited_workflow": True,
+        }),
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["raw"] == yaml.safe_load(content)
+    assert payload["normalized"] == expected
+    assert yaml.safe_load(payload["canonical"]) == yaml.safe_load(content)
 
 def test_yaml_item_workflow_precedence_is_item_then_outer_then_default(tmp_path):
     config = base_config(tmp_path)
