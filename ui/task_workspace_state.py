@@ -95,6 +95,8 @@ class TaskWorkspaceMixin:
                 owns_visible_runtime = False
 
         if runtime is not None:
+            if runtime.get("completed") and task.get("task_type") != "sequential":
+                self.sync_completion(project)
             status = str(runtime.get("status") or "idle")
             execution_changes = {"last_status": status}
             if task.get("task_type") != "sequential":
