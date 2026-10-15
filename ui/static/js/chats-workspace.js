@@ -76,7 +76,7 @@ async function selectChat(id) {
   currentTask = null;
   element("chatTitle").textContent = currentChat?.title || "Select or create a Chat";
   element("chatPath").textContent = currentChat?.root_path || "";
-  const writable = Boolean(currentChat?.path_available);
+  const writable = Boolean(currentChat?.path_available && !currentChat?.archived);
   element("chatText").disabled = !writable;
   element("chatSend").disabled = !writable;
   element("newTask").disabled = !writable || Boolean(currentChat?.archived);
@@ -107,7 +107,7 @@ async function loadMessages() {
       const body = document.createElement("div");
       body.textContent = message.text;
       bubble.append(body);
-      if (message.role === "user" && currentChat.path_available) {
+      if (message.role === "user" && currentChat.path_available && !currentChat.archived) {
         const actions = document.createElement("div");
         actions.className = "chat-bubble-actions";
         const create = document.createElement("button");
