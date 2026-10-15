@@ -124,14 +124,15 @@ def attach_existing_worktree(repo: Path, path: str) -> dict:
 
 
 def archive_runtime(worktree: Path, archive: Path) -> str:
+    # Cleanup may be retried after runtime evidence was archived and removed
+    # from the worktree but Git worktree removal later failed (for example dirty
+    # user changes). Preserve the existing archive as the durable evidence owner.
+    if archive.exists():
+        return str(archive)
     runtime = worktree / ".ai-task-runner"
     if not runtime.is_dir():
         return ""
     archive.parent.mkdir(parents=True, exist_ok=True)
-    if archive.exists():
-        # Cleanup may be retried after a later Git worktree removal failure.
-        # Reuse the already archived evidence instead of failing the retry.
-        return str(archive)
     shutil.copytree(runtime, archive)
     return str(archive)
 
