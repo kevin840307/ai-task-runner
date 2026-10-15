@@ -182,6 +182,8 @@ class Handler(SimpleHTTPRequestHandler):
                         default_workflow=str(body.get("workflow", "")),
                         workspace_mode=str(body.get("workspace_mode", "main")),
                         workspace_path=str(body.get("workspace_path", "")),
+                        backend=str(body.get("backend", "")),
+                        model=str(body.get("model", "")),
                     ))
                 if task_type != "single":
                     raise ValueError("Task type must be single or sequential")
@@ -194,6 +196,8 @@ class Handler(SimpleHTTPRequestHandler):
                     goal_file=str(body.get("goal_file", "")),
                     workspace_mode=str(body.get("workspace_mode", "main")),
                     workspace_path=str(body.get("workspace_path", "")),
+                    backend=str(body.get("backend", "")),
+                    model=str(body.get("model", "")),
                 ))
             if parsed.path == "/api/tasks/action":
                 return self._json(self.state.task_action(
