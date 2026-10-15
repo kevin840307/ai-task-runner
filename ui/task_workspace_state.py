@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -208,6 +210,37 @@ class TaskWorkspaceMixin:
         )
         os.replace(temporary, path)
         return path
+
+    def task_list_yaml_preview(self, chat_id: str, content: str) -> dict:
+        chat = self._chat_for_task(chat_id)
+        if not chat.get("path_available"):
+            raise ValueError("Chat path unavailable")
+        command = [
+            sys.executable,
+            str(self.repo_root / "tool" / "yaml_list_contract.py"),
+            "--project-root",
+            str(chat["root_path"]),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(self.repo_root),
+                input=json.dumps({"content": str(content or "")}, ensure_ascii=False),
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Task List YAML validation unavailable: {exc}") from exc
+        try:
+            payload = json.loads((completed.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            detail = (completed.stderr or completed.stdout or "No output")[-2000:]
+            raise ValueError(f"Task List YAML validation returned invalid output: {detail}") from exc
+        if completed.returncode != 0 or payload.get("error"):
+            raise ValueError(str(payload.get("error") or "Task List YAML validation failed"))
+        return payload
 
     def create_task_list(
         self,
