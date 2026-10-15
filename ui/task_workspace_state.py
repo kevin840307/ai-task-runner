@@ -218,6 +218,7 @@ class TaskWorkspaceMixin:
                 continue
             state = self._read_json(child / "state.json") or {}
             result = self._read_text(child / "debug" / "last-result.txt", limit=6000).strip()
+            raw_stream = self._read_text(child / "stream.log", limit=8000)
             evidence.append({
                 "index": int(child.name),
                 "run_id": str(state.get("run_id") or ""),
@@ -225,6 +226,8 @@ class TaskWorkspaceMixin:
                 "stage": str(state.get("stage") or ""),
                 "last_error": str(state.get("last_error") or ""),
                 "result": result,
+                "output": self._display_stream(raw_stream),
+                "activity_summary": self._activity_summary(raw_stream)[-10:],
             })
         return evidence
 
@@ -852,7 +855,7 @@ class TaskWorkspaceMixin:
                 raise ValueError("Continue requires a new instruction")
             resolved_workflow = self._resolve_task_workflow(
                 project,
-                workflow or (str(task.get("workflow") or "") if not sequential else ""),
+                workflow or str(task.get("workflow") or ""),
             )
             if sequential:
                 segment = len(executions) + 1
