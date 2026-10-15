@@ -44,6 +44,9 @@ class ChatWorkspaceContract(unittest.TestCase):
         self.assertNotIn('</script>\\n<script', library)
         self.assertNotIn('</script>\\n<script', settings)
         self.assertIn('library.clear_search', library_module)
+        self.assertIn('!currentChat.path_available', chat_module)
+        self.assertIn('currentChat.archived', chat_module)
+        self.assertLess(chat_module.index('!currentChat.path_available'), chat_module.index('currentChat.archived'))
         for page in (chats, library, settings):
             self.assertIn('body{display:block;width:100%;height:100vh;overflow:hidden}', page)
 
