@@ -747,8 +747,14 @@ class TaskWorkspaceMixin:
             instruction=f"Task List · {len(normalized)} items",
             title=title or normalized[0]["instruction"][:80],
             task_type="sequential",
+            workflow=inherited_workflow,
         )
-        task = self.tasks.update(task["task_id"], items=normalized)
+        task = self.tasks.update(
+            task["task_id"],
+            items=normalized,
+            backend=str(backend or ""),
+            model=str(model or ""),
+        )
         try:
             task, project = self._prepare_task_workspace(
                 task,
