@@ -122,7 +122,7 @@ Normal Chat turns use the registered backend through a bounded, read-only projec
 
 Tasks have durable UI-owned identity and execution references, but their live status is always projected from the existing Runner runtime. One canonical filesystem execution path may have at most one active Task; browser disabled states are UX only and backend/runtime ownership remains authoritative.
 
-The common New Task form keeps Type, Instruction, optional Title, Workflow, and Run visible. Goal files, Backend/Model, and workspace isolation are secondary/advanced choices. The resolved Workflow, prompt source, Backend/Model and workspace are frozen into the existing Runner request/script inputs before execution.
+The common New Task form keeps Type, Instruction, Workflow, and Run visible. Optional Title, Goal files, Backend/Model, and workspace isolation are secondary/advanced choices. The resolved Workflow, prompt source, Backend/Model and workspace are frozen into the existing Runner request/script inputs before execution.
 
 Task Detail derives Stop / Resume / Rerun / Continue availability from the canonical runtime projection and current path availability. Terminal execution evidence is copied into bounded Task history before that path is reused, so an older Task never resolves to a newer `state.json`. Deleting a Task removes only its UI-owned Task record; it never performs Git integration.
 
