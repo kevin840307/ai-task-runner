@@ -629,7 +629,7 @@ function renderTasks() {
     more.className = "history-more";
     more.textContent = `${t("workspace.load_older_tasks", "Load older Tasks")} (${Math.max(0, Number(currentTasksMeta.total || 0) - currentTasks.length)} remaining)`;
     more.addEventListener("click", async () => {
-      taskVisibleLimit = Math.min(500, taskVisibleLimit + 100);
+      taskVisibleLimit += 100;
       await loadTasks({preserveDetail: true});
     });
     list.append(more);
