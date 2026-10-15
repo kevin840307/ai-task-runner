@@ -83,7 +83,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.workspaces_payload(query.get("chat_id", [""])[0]))
             if parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
-                return self._json(self.state.tasks_payload(query.get("chat_id", [""])[0]))
+                limit = int(query.get("limit", ["100"])[0])
+                attention_only = query.get("attention", ["0"])[0] == "1"
+                return self._json(self.state.tasks_payload(
+                    query.get("chat_id", [""])[0],
+                    limit=limit,
+                    attention_only=attention_only,
+                ))
             if parsed.path == "/api/chats/messages":
                 query = parse_qs(parsed.query)
                 return self._json(self.state.chat_messages.list(query.get("chat_id", [""])[0]))
