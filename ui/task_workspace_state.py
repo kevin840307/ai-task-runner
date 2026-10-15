@@ -324,6 +324,11 @@ class TaskWorkspaceMixin:
             return self._sync_task(task)
 
         request_id = str(request.get("request_id") or "")
+        task = self.tasks.update(
+            task["task_id"],
+            backend=str(request.get("backend") or backend or ""),
+            model=str(request.get("model") or model or ""),
+        )
         task = self.tasks.append_execution(task["task_id"], {
             "request_id": request_id,
             "started_at": time.time(),
@@ -515,6 +520,12 @@ class TaskWorkspaceMixin:
             task = self.tasks.update(task["task_id"], last_status="needs_attention", last_error=str(exc))
             return self._sync_task(task)
 
+        task = self.tasks.update(
+            task["task_id"],
+            backend=str(backend or ""),
+            model=str(model or ""),
+            workflow=inherited_workflow,
+        )
         task = self.tasks.append_execution(task["task_id"], {
             "request_id": "",
             "script_file": str(script),
@@ -562,7 +573,9 @@ class TaskWorkspaceMixin:
                     project,
                     str(latest.get("script_file") or ""),
                     resume=True,
-                    workflow=str(latest.get("default_workflow") or latest.get("workflow") or ""),
+                    workflow=str(latest.get("default_workflow") or latest.get("workflow") or task.get("workflow") or ""),
+                    backend=str(latest.get("backend") or task.get("backend") or ""),
+                    model=str(latest.get("model") or task.get("model") or ""),
                 )
             else:
                 self.resume(project)
@@ -574,7 +587,13 @@ class TaskWorkspaceMixin:
                     raise ValueError("Task List cannot be rerun in its current state")
                 script = str(latest.get("script_file") or "")
                 parent_workflow = str(latest.get("default_workflow") or latest.get("workflow") or "")
-                self.launch_script_task(project, script, workflow=parent_workflow)
+                self.launch_script_task(
+                    project,
+                    script,
+                    workflow=parent_workflow,
+                    backend=str(latest.get("backend") or task.get("backend") or ""),
+                    model=str(latest.get("model") or task.get("model") or ""),
+                )
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
                     "script_file": script,
@@ -589,7 +608,12 @@ class TaskWorkspaceMixin:
             else:
                 if not actions.get("rerun"):
                     raise ValueError("Task cannot be rerun in its current state")
-                request = self.rerun_last(project, workflow=str(task.get("workflow") or workflow or ""))
+                request = self.rerun_last(
+                    project,
+                    workflow=str(task.get("workflow") or workflow or ""),
+                    backend=str(task.get("backend") or ""),
+                    model=str(task.get("model") or ""),
+                )
                 request_id = str((request or {}).get("request_id") or "")
                 task = self.tasks.append_execution(task_id, {
                     "request_id": request_id,
@@ -613,7 +637,13 @@ class TaskWorkspaceMixin:
                 segment = len(executions) + 1
                 item = {"instruction": text, "workflow": "", "raw": {"prompt": text}}
                 script = self._write_task_list(project, task_id, [item], segment)
-                self.launch_script_task(project, str(script), workflow=resolved_workflow)
+                self.launch_script_task(
+                    project,
+                    str(script),
+                    workflow=resolved_workflow,
+                    backend=str(task.get("backend") or ""),
+                    model=str(task.get("model") or ""),
+                )
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
                     "script_file": str(script),
@@ -626,7 +656,13 @@ class TaskWorkspaceMixin:
                 })
                 self._write_task_marker(project, task_id)
             else:
-                request = self.launch_message(project, text, workflow=resolved_workflow)
+                request = self.launch_message(
+                    project,
+                    text,
+                    workflow=resolved_workflow,
+                    backend=str(task.get("backend") or ""),
+                    model=str(task.get("model") or ""),
+                )
                 request_id = str(request.get("request_id") or "")
                 task = self.tasks.append_execution(task_id, {
                     "request_id": request_id,
