@@ -706,6 +706,35 @@ async function openTask(taskId) {
     addDetailLine(root, "Cycle", task.runtime.cycle);
     if (task.runtime.total) addDetailLine(root, "Progress", `${task.runtime.completed_count || 0}/${task.runtime.total}`);
     addDetailLine(root, "Attention", task.runtime.attention_reason);
+    if (Array.isArray(task.runtime.activity_summary) && task.runtime.activity_summary.length) {
+      const activity = document.createElement("div");
+      activity.className = "task-history";
+      for (const row of task.runtime.activity_summary.slice(-8)) {
+        const item = document.createElement("article");
+        item.textContent = String(row);
+        activity.append(item);
+      }
+      root.append(activity);
+    }
+    if (task.runtime.stream) {
+      const output = document.createElement("pre");
+      output.textContent = String(task.runtime.stream).slice(-12000);
+      root.append(output);
+    }
+    const recovery = task.runtime.recovery && typeof task.runtime.recovery === "object" ? task.runtime.recovery : {};
+    if (Object.keys(recovery).length || task.runtime.cli_detail || task.runtime.last_error) {
+      const diagnostics = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "Runtime details";
+      const body = document.createElement("pre");
+      body.textContent = [
+        task.runtime.cli_detail ? "Detail: " + task.runtime.cli_detail : "",
+        task.runtime.last_error ? "Error: " + task.runtime.last_error : "",
+        Object.keys(recovery).length ? "Recovery: " + JSON.stringify(recovery, null, 2) : "",
+      ].filter(Boolean).join("\n");
+      diagnostics.append(summary, body);
+      root.append(diagnostics);
+    }
   } else {
     addDetailLine(root, "Last error", task.last_error);
   }
@@ -762,6 +791,26 @@ async function openTask(taskId) {
   const actions = document.createElement("div");
   actions.className = "task-actions";
   const allowed = task.available_actions || task.runtime?.actions || {};
+  const statusLower = statusText(task).toLowerCase();
+  if (statusLower.includes("completed") || statusLower.includes("attention") || statusLower.includes("error")) {
+    const discuss = document.createElement("button");
+    discuss.type = "button";
+    discuss.textContent = "Discuss in Chat";
+    discuss.addEventListener("click", () => {
+      const latest = (task.executions || []).at(-1) || {};
+      const evidence = latest.evidence || {};
+      const result = String(evidence.result || task.last_error || "").slice(0, 1200);
+      element("chatText").value = [
+        `Discuss Task "${task.title || "Task"}" (${task.task_id}).`,
+        `Status: ${statusText(task)}.`,
+        `Workspace: ${task.root_path}.`,
+        result ? "Latest result/evidence: " + result : "",
+      ].filter(Boolean).join("\n");
+      setTab("chat");
+      element("chatText").focus();
+    });
+    actions.append(discuss);
+  }
   if (allowed.stop) actions.append(makeAction("Stop", "stop"));
   if (allowed.resume) actions.append(makeAction("Resume", "resume"));
   if (allowed.rerun) actions.append(makeAction("Rerun", "rerun", true));
