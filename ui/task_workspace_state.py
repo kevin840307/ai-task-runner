@@ -8,8 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-from project_registry import path_key
-
 try:
     from .task_index import TaskIndex
     from .task_worktree import (
@@ -88,10 +86,6 @@ class TaskWorkspaceMixin:
                 if candidate.is_file():
                     return str(candidate)
         raise ValueError(f"Default Workflow is unavailable: {default_name}")
-
-    @staticmethod
-    def _same_path(left: str | Path, right: str | Path) -> bool:
-        return path_key(left) == path_key(right)
 
     def workspaces_payload(self, chat_id: str) -> dict:
         chat = self._chat_for_task(chat_id)
