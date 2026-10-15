@@ -30,32 +30,32 @@
 <body>
 <div class="chat-shell">
   <nav class="global-rail" aria-label="Global navigation">
-    <a href="/chats.html" aria-current="page" title="Chats">Chats</a>
-    <a href="/library.html" title="Library">Library</a>
-    <a href="/settings.html" title="Settings">Settings</a>
-    <a class="legacy-link" href="/" title="Legacy workspace">Legacy</a>
+    <a href="/chats.html" aria-current="page" title="Chats" data-i18n="workspace.chats">Chats</a>
+    <a href="/library.html" title="Library" data-i18n="workspace.library">Library</a>
+    <a href="/settings.html" title="Settings" data-i18n="workspace.settings">Settings</a>
+    <a class="legacy-link" href="/" title="Legacy workspace" data-i18n="workspace.legacy">Legacy</a>
   </nav>
   <aside class="chat-side" aria-label="Chats context">
     <button id="toggleSidebar" type="button" aria-expanded="true" title="Collapse sidebar">☰</button>
-    <h1>Chats</h1>
-    <label for="chatProject">Project root</label>
-    <select id="chatProject"><option value="">Select a project</option></select>
-    <button id="newChat" type="button">+ New Chat</button>
+    <h1 data-i18n="workspace.chats">Chats</h1>
+    <label for="chatProject" data-i18n="workspace.project_root">Project root</label>
+    <select id="chatProject"><option value="" data-i18n="workspace.select_project">Select a project</option></select>
+    <button id="newChat" type="button" data-i18n="workspace.new_chat">+ New Chat</button>
     <label class="chat-meta"><input id="showArchivedChats" type="checkbox"> Show archived</label>
     <div id="chatList" class="chat-list" aria-label="Chat list"></div>
     <section>
-      <strong>Activity</strong>
+      <strong data-i18n="workspace.activity">Activity</strong>
       <div id="attentionList" class="chat-list" aria-label="Active Tasks and Tasks needing attention"></div>
     </section>
   </aside>
   <main class="chat-main">
     <div class="chat-head">
-      <div><h2 id="chatTitle">Select or create a Chat</h2><p id="chatPath" class="chat-meta"></p></div>
-      <div class="chat-head-actions"><button id="copyChatPath" type="button" disabled>Copy path</button><button id="archiveChat" type="button" disabled>Archive Chat</button><button id="newTask" type="button" disabled>+ New Task</button></div>
+      <div><h2 id="chatTitle" data-i18n="workspace.select_chat">Select or create a Chat</h2><p id="chatPath" class="chat-meta"></p></div>
+      <div class="chat-head-actions"><button id="copyChatPath" type="button" disabled data-i18n="workspace.copy_path">Copy path</button><button id="archiveChat" type="button" disabled data-i18n="workspace.archive_chat">Archive Chat</button><button id="newTask" type="button" disabled data-i18n="workspace.new_task">+ New Task</button></div>
     </div>
     <div class="chat-tabs" role="tablist" aria-label="Chat workspace">
-      <button id="chatTab" type="button" role="tab" aria-selected="true">Chat</button>
-      <button id="tasksTab" type="button" role="tab" aria-selected="false">Tasks <span id="taskCount"></span></button>
+      <button id="chatTab" type="button" role="tab" aria-selected="true" data-i18n="workspace.chat_tab">Chat</button>
+      <button id="tasksTab" type="button" role="tab" aria-selected="false"><span data-i18n="workspace.tasks_tab">Tasks</span> <span id="taskCount"></span></button>
     </div>
     <p id="chatNotice" class="chat-meta">Chat is read-only with project access; use Tasks when you want AI to modify or validate the project.</p>
 
@@ -64,16 +64,16 @@
       <form id="chatComposer" class="chat-compose">
         <label for="chatText" class="sr-only">Message</label>
         <textarea id="chatText" placeholder="Write a message…" maxlength="20000" disabled required></textarea>
-        <button id="chatSend" type="submit" disabled>Send</button>
+        <button id="chatSend" type="submit" disabled data-i18n="workspace.send">Send</button>
       </form>
     </section>
 
     <section id="tasksPanel" class="task-panel" role="tabpanel" hidden>
       <div class="task-filters" aria-label="Task filters">
-        <button type="button" data-task-filter="all" aria-pressed="true">All</button>
-        <button type="button" data-task-filter="active" aria-pressed="false">Active</button>
-        <button type="button" data-task-filter="attention" aria-pressed="false">Needs Attention</button>
-        <button type="button" data-task-filter="completed" aria-pressed="false">Completed</button>
+        <button type="button" data-task-filter="all" aria-pressed="true" data-i18n="workspace.filter_all">All</button>
+        <button type="button" data-task-filter="active" aria-pressed="false" data-i18n="workspace.filter_active">Active</button>
+        <button type="button" data-task-filter="attention" aria-pressed="false" data-i18n="workspace.filter_attention">Needs Attention</button>
+        <button type="button" data-task-filter="completed" aria-pressed="false" data-i18n="workspace.filter_completed">Completed</button>
       </div>
       <div id="taskList" class="task-list"></div>
       <article id="taskDetail" class="task-detail" hidden></article>
@@ -84,59 +84,59 @@
 
 <div id="taskModal" class="modal-layer" hidden>
   <form id="taskForm" class="task-form" role="dialog" aria-modal="true" aria-labelledby="taskFormTitle">
-    <h2 id="taskFormTitle">New Task</h2>
-    <label class="task-form-row">Type
-      <select id="taskType"><option value="single">Task</option><option value="sequential">Task List</option></select>
+    <h2 id="taskFormTitle" data-i18n="task.new">New Task</h2>
+    <label class="task-form-row"><span data-i18n="task.type">Type</span>
+      <select id="taskType"><option value="single" data-i18n="task.single">Task</option><option value="sequential" data-i18n="task.list">Task List</option></select>
     </label>
-    <label id="singleInstructionRow" class="task-form-row">Instruction / Prompt
-      <textarea id="taskInstruction" maxlength="20000" required placeholder="What should AI do?"></textarea>
+    <label id="singleInstructionRow" class="task-form-row"><span data-i18n="task.instruction">Instruction / Prompt</span>
+      <textarea id="taskInstruction" maxlength="20000" required placeholder="What should AI do?" data-i18n-placeholder="task.instruction_placeholder"></textarea>
       <div class="chat-head-actions">
-        <button id="taskUseFile" type="button">Use file</button>
-        <button id="taskClearFile" type="button" hidden>Clear file</button>
+        <button id="taskUseFile" type="button" data-i18n="task.use_file">Use file</button>
+        <button id="taskClearFile" type="button" hidden data-i18n="task.clear_file">Clear file</button>
         <span id="taskGoalFileName" class="chat-meta"></span>
       </div>
     </label>
     <section id="taskListEditor" class="task-form-row" hidden>
-      <span>Ordered items</span>
+      <span data-i18n="task.ordered_items">Ordered items</span>
       <div id="taskListItems"></div>
       <div class="chat-head-actions">
-        <button id="addTaskListItem" type="button">+ Add item</button>
-        <button id="taskListYamlToggle" type="button" aria-expanded="false">YAML</button>
+        <button id="addTaskListItem" type="button" data-i18n="task.add_item">+ Add item</button>
+        <button id="taskListYamlToggle" type="button" aria-expanded="false" data-i18n="task.yaml">YAML</button>
       </div>
       <section id="taskListYamlPanel" hidden>
         <textarea id="taskListYaml" spellcheck="false" placeholder="- prompt: Fix backend discovery&#10;  workflow_file: ..."></textarea>
         <div class="chat-head-actions">
           <input id="taskListYamlFile" type="file" accept=".yaml,.yml,text/yaml,text/plain" hidden>
-          <button id="taskListYamlImport" type="button">Import YAML file</button>
-          <button id="taskListYamlFromVisual" type="button">Refresh YAML from Visual</button>
-          <button id="taskListYamlApply" type="button">Validate & Apply YAML</button>
-          <button id="taskListYamlCopy" type="button">Copy YAML</button>
+          <button id="taskListYamlImport" type="button" data-i18n="task.import_yaml">Import YAML file</button>
+          <button id="taskListYamlFromVisual" type="button" data-i18n="task.refresh_yaml">Refresh YAML from Visual</button>
+          <button id="taskListYamlApply" type="button" data-i18n="task.apply_yaml">Validate & Apply YAML</button>
+          <button id="taskListYamlCopy" type="button" data-i18n="task.copy_yaml">Copy YAML</button>
         </div>
         <small id="taskListYamlStatus"></small>
       </section>
       <small>Items run sequentially through the existing YAML List runner. Advanced YAML fields are preserved.</small>
     </section>
-    <label class="task-form-row">Title <small>Optional · derived from the instruction by default</small>
+    <label class="task-form-row"><span data-i18n="task.title">Title</span> <small data-i18n="task.title_hint">Optional · derived from the instruction by default</small>
       <input id="taskTitle" maxlength="120">
     </label>
-    <label class="task-form-row">Workflow
-      <select id="taskWorkflow"><option value="">Use default Workflow</option></select>
+    <label class="task-form-row"><span data-i18n="task.workflow">Workflow</span>
+      <select id="taskWorkflow"><option value="" data-i18n="task.default_workflow">Use default Workflow</option></select>
     </label>
-    <label id="taskWorkspaceRow" class="task-form-row">Workspace
+    <label id="taskWorkspaceRow" class="task-form-row"><span data-i18n="task.workspace">Workspace</span>
       <select id="taskWorkspace"><option value="main">Main</option></select>
       <small id="taskWorkspaceHint">Main is always available. Worktrees are optional isolation.</small>
     </label>
     <details id="taskAdvanced">
-      <summary>Advanced</summary>
+      <summary data-i18n="task.advanced">Advanced</summary>
       <div class="task-form-row">
-        <label>Backend <select id="taskBackend"><option value="">Default backend</option></select></label>
-        <label>Model <select id="taskModel" disabled><option value="">Backend default model</option></select></label>
+        <label><span data-i18n="task.backend">Backend</span> <select id="taskBackend"><option value="">Default backend</option></select></label>
+        <label><span data-i18n="task.model">Model</span> <select id="taskModel" disabled><option value="">Backend default model</option></select></label>
       </div>
     </details>
-    <div class="chat-meta"><span id="mainAvailability">Checking…</span> <button id="openOwningTask" type="button" hidden>Open owning Task</button></div>
-    <div class="task-form-actions"><button id="taskCancel" type="button">Cancel</button><button id="taskRun" type="submit">Run Task</button></div>
+    <div class="chat-meta"><span id="mainAvailability" data-i18n="task.checking">Checking…</span> <button id="openOwningTask" type="button" hidden>Open owning Task</button></div>
+    <div class="task-form-actions"><button id="taskCancel" type="button" data-i18n="task.cancel">Cancel</button><button id="taskRun" type="submit" data-i18n="task.run">Run Task</button></div>
   </form>
 </div>
-<script type="module" src="/js/chats-workspace.js"></script>
+<script src="/js/i18n.js"></script>\n<script type="module" src="/js/chats-workspace.js"></script>
 </body>
 </html>
