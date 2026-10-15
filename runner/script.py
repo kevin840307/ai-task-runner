@@ -62,6 +62,7 @@ def parse_yaml_script_text(
     source: Path,
     *,
     allow_missing_files: bool = False,
+    allow_inherited_workflow: bool = False,
 ) -> list[dict[str, Any]]:
     """Parse YAML List text through the same canonical item contract as CLI files."""
     try:
@@ -75,7 +76,13 @@ def parse_yaml_script_text(
     if not isinstance(data, list) or not data:
         raise RunnerError("YAML script must be a non-empty array")
     return [
-        _parse_item(source, item, index, allow_missing_files=allow_missing_files)
+        _parse_item(
+            source,
+            item,
+            index,
+            allow_missing_files=allow_missing_files,
+            allow_inherited_workflow=allow_inherited_workflow,
+        )
         for index, item in enumerate(data, 1)
     ]
 
@@ -84,6 +91,7 @@ def load_yaml_script(
     path: Path,
     *,
     allow_missing_files: bool = False,
+    allow_inherited_workflow: bool = False,
 ) -> list[dict[str, Any]]:
     """Load and normalize one YAML List batch file."""
     try:
@@ -94,6 +102,7 @@ def load_yaml_script(
         text,
         path,
         allow_missing_files=allow_missing_files,
+        allow_inherited_workflow=allow_inherited_workflow,
     )
 
 
@@ -103,7 +112,11 @@ def execute_script(config: RuntimeConfig, execute_one: ExecuteOne) -> int:
     if not script.is_file():
         raise ConfigurationError("invalid YAML script")
     try:
-        items = load_yaml_script(script, allow_missing_files=config.resume)
+        items = load_yaml_script(
+            script,
+            allow_missing_files=config.resume,
+            allow_inherited_workflow=config.workflow_explicit,
+        )
     except RunnerError as error:
         raise ConfigurationError(str(error)) from error
 
@@ -216,6 +229,7 @@ def _parse_item(
     index: int,
     *,
     allow_missing_files: bool = False,
+    allow_inherited_workflow: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise RunnerError(f"script item {index} must be an object")
@@ -242,10 +256,10 @@ def _parse_item(
     if validator is None and explicit_workflow:
         validator = ""
     if not isinstance(validator, str) or (
-        not validator.strip() and not explicit_workflow
+        not validator.strip() and not explicit_workflow and not allow_inherited_workflow
     ):
         raise RunnerError(
-            f"script item {index} requires validator path/'ai' unless it supplies a workflow"
+            f"script item {index} requires validator path/'ai' unless it supplies or inherits a workflow"
         )
 
     ai_prompt, ai_prompt_file = _ai_validator_prompt(
