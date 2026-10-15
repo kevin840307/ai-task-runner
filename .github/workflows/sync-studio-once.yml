@@ -7,6 +7,8 @@ on:
       - minimal-closed-loop-runtime
     paths:
       - .github/workflows/sync-studio-once.yml
+      - tool/bundle.py
+      - tests/test_source_bundle_cleanup.py
 
 permissions:
   contents: write
@@ -51,7 +53,17 @@ jobs:
           forbidden_parts = {
               ".git",
               ".pytest_cache",
+              ".mypy_cache",
+              ".ruff_cache",
+              ".tox",
+              ".nox",
+              ".venv",
               "__pycache__",
+              "node_modules",
+              "build",
+              "dist",
+              "coverage",
+              "htmlcov",
               ".ai-task-runner",
               "validator-reports",
           }
