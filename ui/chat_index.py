@@ -35,6 +35,8 @@ class ChatIndex:
         ]
 
     def create(self, root: str, title: str = "") -> dict:
+        if not str(root).strip():
+            raise ValueError("Chat root path is required")
         path = Path(root).expanduser().resolve()
         if not path.is_dir():
             raise ValueError("Chat root folder does not exist")
