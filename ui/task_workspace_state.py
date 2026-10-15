@@ -211,7 +211,7 @@ class TaskWorkspaceMixin:
         os.replace(temporary, path)
         return path
 
-    def task_list_yaml_preview(self, chat_id: str, content: str) -> dict:
+    def task_list_yaml_preview(self, chat_id: str, content: str, default_workflow: str = "") -> dict:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
             raise ValueError("Chat path unavailable")
@@ -225,7 +225,10 @@ class TaskWorkspaceMixin:
             completed = subprocess.run(
                 command,
                 cwd=str(self.repo_root),
-                input=json.dumps({"content": str(content or "")}, ensure_ascii=False),
+                input=json.dumps({
+                    "content": str(content or ""),
+                    "allow_inherited_workflow": bool(self._resolve_task_workflow(Path(chat["root_path"]), default_workflow)),
+                }, ensure_ascii=False),
                 capture_output=True,
                 text=True,
                 timeout=20,
@@ -247,7 +250,7 @@ class TaskWorkspaceMixin:
         chat_id: str,
         items: list,
         default_workflow: str = "",
-    ) -> tuple[Path, list[dict], str]:
+    ) -> tuple[Path, list[dict], str, str]:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
             raise ValueError("Chat path unavailable")
@@ -277,9 +280,6 @@ class TaskWorkspaceMixin:
             if override:
                 item.pop("workflow", None)
                 item["workflow_file"] = self._resolve_task_workflow(project, override)
-            elif not item.get("workflow") and not item.get("workflow_file") and not item.get("validator"):
-                item["workflow_file"] = inherited_workflow
-
             display_instruction = (
                 str(item.get("prompt") or item.get("goal") or "").strip()
                 or (f"Use file: {item.get('goal_file')}" if item.get("goal_file") else f"Task {index}")
@@ -299,7 +299,7 @@ class TaskWorkspaceMixin:
             allow_unicode=True,
             sort_keys=False,
         )
-        return project, normalized, candidate_yaml
+        return project, normalized, candidate_yaml, inherited_workflow
 
     def task_list_yaml_export(
         self,
@@ -307,12 +307,12 @@ class TaskWorkspaceMixin:
         items: list,
         default_workflow: str = "",
     ) -> dict:
-        _, normalized, candidate_yaml = self._normalize_task_list_items(
+        _, normalized, candidate_yaml, inherited_workflow = self._normalize_task_list_items(
             chat_id,
             items,
             default_workflow,
         )
-        preview = self.task_list_yaml_preview(chat_id, candidate_yaml)
+        preview = self.task_list_yaml_preview(chat_id, candidate_yaml, inherited_workflow)
         return {
             "canonical": str(preview.get("canonical") or candidate_yaml),
             "raw": preview.get("raw") or [],
@@ -327,12 +327,12 @@ class TaskWorkspaceMixin:
         title: str = "",
         default_workflow: str = "",
     ) -> dict:
-        project, normalized, candidate_yaml = self._normalize_task_list_items(
+        project, normalized, candidate_yaml, inherited_workflow = self._normalize_task_list_items(
             chat_id,
             items,
             default_workflow,
         )
-        self.task_list_yaml_preview(chat_id, candidate_yaml)
+        self.task_list_yaml_preview(chat_id, candidate_yaml, inherited_workflow)
         self._sync_prior_tasks(project)
         task = self.tasks.create(
             chat_id=chat_id,
@@ -344,7 +344,7 @@ class TaskWorkspaceMixin:
         task = self.tasks.update(task["task_id"], items=normalized)
         script = self._write_task_list(project, task["task_id"], normalized, 1)
         try:
-            self.launch_script_task(project, str(script))
+            self.launch_script_task(project, str(script), workflow=inherited_workflow)
         except Exception as exc:
             task = self.tasks.update(task["task_id"], last_status="needs_attention", last_error=str(exc))
             return self._sync_task(task)
@@ -354,7 +354,8 @@ class TaskWorkspaceMixin:
             "script_file": str(script),
             "started_at": time.time(),
             "instruction": task["instruction"],
-            "workflow": "",
+            "workflow": inherited_workflow,
+            "default_workflow": inherited_workflow,
             "run_id": "",
             "item_count": len(normalized),
         })
@@ -389,7 +390,12 @@ class TaskWorkspaceMixin:
             if not owns_runtime or not actions.get("resume"):
                 raise ValueError("Task cannot be resumed in its current state")
             if sequential:
-                self.launch_script_task(project, str(latest.get("script_file") or ""), resume=True)
+                self.launch_script_task(
+                    project,
+                    str(latest.get("script_file") or ""),
+                    resume=True,
+                    workflow=str(latest.get("default_workflow") or latest.get("workflow") or ""),
+                )
             else:
                 self.resume(project)
         elif action == "rerun":
@@ -399,13 +405,15 @@ class TaskWorkspaceMixin:
                 if runtime.get("running") or not (actions.get("run") or actions.get("rerun")):
                     raise ValueError("Task List cannot be rerun in its current state")
                 script = str(latest.get("script_file") or "")
-                self.launch_script_task(project, script)
+                parent_workflow = str(latest.get("default_workflow") or latest.get("workflow") or "")
+                self.launch_script_task(project, script, workflow=parent_workflow)
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
                     "script_file": script,
                     "started_at": time.time(),
                     "instruction": task.get("instruction") or "",
-                    "workflow": "",
+                    "workflow": parent_workflow,
+                    "default_workflow": parent_workflow,
                     "run_id": "",
                     "item_count": len(task.get("items") or []),
                 })
@@ -435,15 +443,16 @@ class TaskWorkspaceMixin:
             )
             if sequential:
                 segment = len(executions) + 1
-                item = {"instruction": text, "workflow": resolved_workflow}
+                item = {"instruction": text, "workflow": "", "raw": {"prompt": text}}
                 script = self._write_task_list(project, task_id, [item], segment)
-                self.launch_script_task(project, str(script))
+                self.launch_script_task(project, str(script), workflow=resolved_workflow)
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
                     "script_file": str(script),
                     "started_at": time.time(),
                     "instruction": text,
                     "workflow": resolved_workflow,
+                    "default_workflow": resolved_workflow,
                     "run_id": "",
                     "item_count": 1,
                 })
