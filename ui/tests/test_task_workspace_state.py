@@ -229,6 +229,26 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Task not found"):
             self.state.tasks.get(task["task_id"])
 
+    def test_single_launch_failure_preserves_selected_backend_model(self):
+        with patch.object(
+            self.state,
+            "launch_message",
+            side_effect=ValueError("temporary launch failure"),
+        ):
+            task = self.state.create_task(
+                chat_id=self.chat_id,
+                instruction="frozen",
+                workflow=str(self.state.workflow),
+                backend="qwen",
+                model="model-a",
+            )
+
+        self.assertEqual(task["last_status"], "needs_attention")
+        self.assertEqual(task["instruction"], "frozen")
+        self.assertEqual(task["workflow"], str(self.state.workflow))
+        self.assertEqual(task["backend"], "qwen")
+        self.assertEqual(task["model"], "model-a")
+
     def test_task_list_launch_failure_preserves_frozen_parent_inputs(self):
         items = [
             {"instruction": "first", "workflow": "", "raw": {"prompt": "first"}},
