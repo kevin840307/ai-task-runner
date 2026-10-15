@@ -1050,7 +1050,7 @@ class ProjectRuntimeMixin:
                 raise
             return request
 
-    def launch_script_task(self, project: Path, script_file: str, *, resume: bool = False) -> None:
+    def launch_script_task(self, project: Path, script_file: str, *, resume: bool = False, workflow: str = "") -> None:
         """Launch/resume one YAML List through the same process/runtime owner."""
         script = Path(script_file).expanduser().resolve()
         if not script.is_file():
@@ -1070,6 +1070,7 @@ class ProjectRuntimeMixin:
                 project,
                 None,
                 mode="resume" if resume else "run",
+                workflow=workflow,
                 script_file=str(script),
             )
 
