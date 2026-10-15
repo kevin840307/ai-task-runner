@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings · AI Task Runner</title><link rel="stylesheet" href="/styles.css">
+<style>
+.settings-shell{min-height:100vh;display:grid;grid-template-columns:220px minmax(0,1fr);background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
+.settings-nav{padding:20px;border-right:1px solid #b9c2cb;display:flex;flex-direction:column;gap:12px}.settings-nav a{padding:9px;border-radius:8px}
+.settings-main{padding:24px;max-width:760px}.settings-card{border:1px solid #b9c2cb;border-radius:12px;padding:18px;display:grid;gap:16px}.settings-row{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;align-items:center}.settings-row select{padding:9px}
+@media(max-width:700px){.settings-shell{grid-template-columns:1fr}.settings-nav{border-right:0;border-bottom:1px solid #b9c2cb;flex-direction:row;flex-wrap:wrap}.settings-row{grid-template-columns:1fr}}
+</style>
+</head><body>
+<div class="settings-shell">
+<nav class="settings-nav" aria-label="Global navigation">
+<strong>AI Task Runner</strong><a href="/chats.html">Chats</a><a href="/library.html">Library</a><a href="/settings.html" aria-current="page">Settings</a><a href="/">Legacy workspace</a>
+</nav>
+<main class="settings-main">
+<h1>Settings</h1>
+<p>Interface preferences only. Runner, Workflow and Task execution settings stay with their existing owners.</p>
+<section class="settings-card">
+<label class="settings-row">Appearance <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+<label class="settings-row">Accent <select id="theme"><option value="teal">Teal</option><option value="blue">Deep Blue</option><option value="violet">Violet</option><option value="amber">Amber</option><option value="rose">Rose</option></select></label>
+<label class="settings-row">Motion <select id="motion"><option value="full">Full</option><option value="system">System</option><option value="reduced">Reduced</option></select></label>
+<label class="settings-row">Language <select id="language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
+<p id="settingsStatus" role="status"></p>
+</section>
+</main></div>
+<script type="module" src="/js/settings.js"></script>
+</body></html>
