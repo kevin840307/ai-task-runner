@@ -1,4 +1,5 @@
-const $=id=>document.getElementById(id);\nconst t=(key,fallback="")=>window.I18n?.t(key,fallback)??fallback??key;
+const $=id=>document.getElementById(id);
+const t=(key,fallback="")=>window.I18n?.t(key,fallback)??fallback??key;
 let mode="workflow", data={workflows:[],prompts:[]}, projects=[];
 async function api(url){const r=await fetch(url);const v=await r.json();if(!r.ok||v.error)throw new Error(v.error||"Request failed");return v}
 function selectedProject(){return $("libraryScope").value}
