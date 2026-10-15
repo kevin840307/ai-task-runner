@@ -194,6 +194,7 @@ def test_future_chat_task_and_task_list_browser_contract():
             kwargs["executable_path"] = executable
         browser = playwright.chromium.launch(**kwargs)
         page = browser.new_page()
+        page.add_init_script("localStorage.setItem('ai-task-runner.language', 'en')")
         page.route("http://future.test/**", handler)
         page.goto("http://future.test/chats.html", wait_until="domcontentloaded")
         page.get_by_role("button", name="Fixture Chat").click()
@@ -237,5 +238,11 @@ def test_future_chat_task_and_task_list_browser_contract():
         page.get_by_role("button", name="1. Two Completed").click()
         page.get_by_text("Item 1 evidence").wait_for()
         page.get_by_text("child one result").wait_for()
+
+        for viewport in ({"width": 720, "height": 720}, {"width": 480, "height": 720}):
+            page.set_viewport_size(viewport)
+            page.wait_for_timeout(50)
+            width = page.evaluate("() => ({client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})")
+            assert width["scroll"] <= width["client"] + 1
 
         browser.close()
