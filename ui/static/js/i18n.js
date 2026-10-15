@@ -74,6 +74,8 @@
       "task.stop": "停止", "task.resume": "繼續執行", "task.rerun": "重新執行", "task.continue": "延續任務", "task.discuss": "回 Chat 討論", "task.delete": "刪除任務", "task.cleanup_worktree": "清理 Worktree",
       "library.title": "資源庫", "library.desc": "可重用的 Workflow 與 Prompt；Scope 不跟隨目前 Chat。", "library.workflows": "Workflows", "library.prompts": "Prompts", "library.scope": "Scope", "library.global": "Global", "library.search": "搜尋資源…",
       "library.no_results": "沒有搜尋結果。清除搜尋即可顯示全部資源。", "library.no_workflows": "目前沒有 Workflow。可開啟既有 Workflow 編輯器建立。", "library.no_prompts": "目前沒有 Prompt。可開啟既有 Prompt 編輯器建立。",
+    "library.project": "專案", "library.loading": "載入中…", "library.clear_search": "清除搜尋", "library.open_workflows": "開啟 Workflow 編輯器", "library.open_prompts": "開啟 Prompt 編輯器",
+    "library.visible_task_picker": "顯示於任務 Workflow 選擇器", "library.hidden_task_picker": "不顯示於任務 Workflow 選擇器", "library.prompt_asset": "Prompt",
       "settings.title": "設定", "settings.desc": "只管理介面偏好；Runner、Workflow 與 Task 執行設定仍由各自 owner 管理。", "settings.interface": "介面", "settings.appearance": "外觀", "settings.accent": "主題色", "settings.motion": "動態效果", "settings.language": "語言", "settings.saved": "已儲存",
     },
     en: {
@@ -148,6 +150,8 @@
       "task.stop": "Stop", "task.resume": "Resume", "task.rerun": "Rerun", "task.continue": "Continue Task", "task.discuss": "Discuss in Chat", "task.delete": "Delete Task", "task.cleanup_worktree": "Cleanup Worktree",
       "library.title": "Library", "library.desc": "Reusable Workflow and Prompt assets. Scope is explicit and is not inherited from the selected Chat.", "library.workflows": "Workflows", "library.prompts": "Prompts", "library.scope": "Scope", "library.global": "Global", "library.search": "Search assets…",
       "library.no_results": "No results. Clear search to see all assets.", "library.no_workflows": "No Workflows. Open the existing Workflow editor to create one.", "library.no_prompts": "No Prompts. Open the existing Prompt editor to create one.",
+    "library.project": "Project", "library.loading": "Loading…", "library.clear_search": "Clear search", "library.open_workflows": "Open Workflow editor", "library.open_prompts": "Open Prompt editor",
+    "library.visible_task_picker": "Visible in Task Workflow picker", "library.hidden_task_picker": "Hidden from Task Workflow picker", "library.prompt_asset": "Prompt",
       "settings.title": "Settings", "settings.desc": "Interface preferences only. Runner, Workflow and Task execution settings stay with their existing owners.", "settings.interface": "Interface", "settings.appearance": "Appearance", "settings.accent": "Accent", "settings.motion": "Motion", "settings.language": "Language", "settings.saved": "Saved",
     }
   };
