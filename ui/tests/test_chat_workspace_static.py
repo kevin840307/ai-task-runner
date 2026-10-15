@@ -41,6 +41,8 @@ class ChatWorkspaceContract(unittest.TestCase):
         self.assertIn('Load older Tasks', chat_module)
         self.assertIn('available_actions', chat_module)
         self.assertIn('runtime.updated_at || task.updated_at', chat_module)
+        self.assertIn('task.latest_execution_started_at || latest.started_at', chat_module)
+        self.assertNotIn('Math.min(500, taskVisibleLimit + 100)', chat_module)
         self.assertIn('addDetailLine(root, "Instruction", task.instruction)', chat_module)
         self.assertIn('addDetailLine(root, "Backend"', chat_module)
         self.assertIn('addDetailLine(root, "Model"', chat_module)
