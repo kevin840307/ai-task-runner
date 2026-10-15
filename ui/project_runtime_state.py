@@ -1017,7 +1017,7 @@ class ProjectRuntimeMixin:
                 readonly_safety=str(request.get("readonly_safety") or "restore"),
             )
 
-    def rerun_last(self, project: Path, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
+    def rerun_last(self, project: Path, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> dict:
         """Atomically reset and relaunch the last user task within this UI process."""
         with self._chat_lock, self._runtime_lock:
             runtime = self.read_runtime(project)
@@ -1046,6 +1046,7 @@ class ProjectRuntimeMixin:
                 folder = Path(request["request_dir"])
                 shutil.rmtree(folder, ignore_errors=True)
                 raise
+            return request
 
     def launch(
         self,
