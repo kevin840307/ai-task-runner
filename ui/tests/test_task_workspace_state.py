@@ -60,6 +60,17 @@ class FakeTaskWorkspace(TaskWorkspaceMixin):
     def _known_workflow_paths(self, project: Path):
         return [self.workflow]
 
+    def product_defaults(self):
+        return {"default_workflow": self.workflow.name}
+
+    @staticmethod
+    def _activity_summary(stream):
+        return [line for line in str(stream or "").splitlines() if line][-20:]
+
+    @staticmethod
+    def _display_stream(stream):
+        return str(stream or "")
+
     def launch_message(self, project: Path, message: str, **kwargs):
         self.launched.append((Path(project), message, kwargs))
         return {
@@ -125,6 +136,36 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         self.assertEqual(kwargs["model"], "model-a")
         marker_value = json.loads(marker.read_text(encoding="utf-8"))
         self.assertEqual(marker_value["task_id"], task["task_id"])
+
+    def test_delete_removes_only_task_owned_ui_artifacts(self):
+        task = self._completed_task()
+        request_dir = self.project / ".ai-task-runner" / "ui" / "requests" / "req-old"
+        request_dir.mkdir(parents=True)
+        (request_dir / "request.json").write_text("{}", encoding="utf-8")
+        list_dir = self.project / ".ai-task-runner" / "ui" / "task-lists"
+        list_dir.mkdir(parents=True)
+        script = list_dir / f"{task['task_id']}-001.yaml"
+        script.write_text("- prompt: x\n", encoding="utf-8")
+        archive = self.project / ".ai-task-runner" / "ui" / "task-history" / task["task_id"] / "runtime"
+        archive.mkdir(parents=True)
+        (archive / "state.json").write_text("{}", encoding="utf-8")
+        source_file = self.project / "keep.txt"
+        source_file.write_text("keep", encoding="utf-8")
+
+        self.state.runtime = {
+            "running": False,
+            "completed": True,
+            "status": "completed",
+            "actions": {"run": True, "rerun": True, "stop": False, "resume": False},
+        }
+        self.state.delete_task(task["task_id"])
+
+        self.assertFalse(request_dir.exists())
+        self.assertFalse(script.exists())
+        self.assertFalse(archive.parent.exists())
+        self.assertTrue(source_file.is_file())
+        with self.assertRaisesRegex(ValueError, "Task not found"):
+            self.state.tasks.get(task["task_id"])
 
     def test_terminal_execution_evidence_is_persisted_before_future_runtime_reuse(self):
         task = self._completed_task()
