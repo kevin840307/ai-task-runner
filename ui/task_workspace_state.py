@@ -242,14 +242,12 @@ class TaskWorkspaceMixin:
             raise ValueError(str(payload.get("error") or "Task List YAML validation failed"))
         return payload
 
-    def create_task_list(
+    def _normalize_task_list_items(
         self,
-        *,
         chat_id: str,
         items: list,
-        title: str = "",
         default_workflow: str = "",
-    ) -> dict:
+    ) -> tuple[Path, list[dict], str]:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
             raise ValueError("Chat path unavailable")
@@ -300,6 +298,39 @@ class TaskWorkspaceMixin:
             [item["raw"] for item in normalized],
             allow_unicode=True,
             sort_keys=False,
+        )
+        return project, normalized, candidate_yaml
+
+    def task_list_yaml_export(
+        self,
+        chat_id: str,
+        items: list,
+        default_workflow: str = "",
+    ) -> dict:
+        _, normalized, candidate_yaml = self._normalize_task_list_items(
+            chat_id,
+            items,
+            default_workflow,
+        )
+        preview = self.task_list_yaml_preview(chat_id, candidate_yaml)
+        return {
+            "canonical": str(preview.get("canonical") or candidate_yaml),
+            "raw": preview.get("raw") or [],
+            "items": normalized,
+        }
+
+    def create_task_list(
+        self,
+        *,
+        chat_id: str,
+        items: list,
+        title: str = "",
+        default_workflow: str = "",
+    ) -> dict:
+        project, normalized, candidate_yaml = self._normalize_task_list_items(
+            chat_id,
+            items,
+            default_workflow,
         )
         self.task_list_yaml_preview(chat_id, candidate_yaml)
         self._sync_prior_tasks(project)
