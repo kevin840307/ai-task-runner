@@ -23,6 +23,17 @@ class ChatIndex:
             raise ValueError("Chat index is unreadable; refusing to overwrite history") from exc
         if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
             raise ValueError("Chat index has an invalid format")
+        seen: set[str] = set()
+        for item in data:
+            chat_id = item.get("chat_id")
+            root_path = item.get("root_path")
+            if not isinstance(chat_id, str) or not chat_id:
+                raise ValueError("Chat index has an invalid chat_id")
+            if not isinstance(root_path, str) or not root_path.strip():
+                raise ValueError("Chat index has an invalid root_path")
+            if chat_id in seen:
+                raise ValueError("Chat index has duplicate chat_id values")
+            seen.add(chat_id)
         return data
 
     def list(self, root: str = "") -> list[dict]:
