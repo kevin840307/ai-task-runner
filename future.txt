@@ -419,6 +419,17 @@ Delete:
 
 PHASE 1 - Normal Chat workspace
 -------------------------------
+Implementation progress (2026-10-15, feature/future-chat-foundation):
+- [x] Foundation only: UI-owned durable Chat identity index (ui/chat_index.py) with immutable
+  chat_id/root_path, multiple Chats per path, missing-path read-only visibility, and fail-closed
+  malformed-index handling; list/create endpoints are additive under /api/chats.
+- [x] Added deterministic Chat-index regression tests (ui/tests/test_chat_index.py).
+- [ ] Still required before Phase 1 is complete: normal conversational Chat UI/message model,
+  create/switch Chat controls, UI integration and browser tests. The existing Project run Chat
+  remains unchanged until its replacement is covered by regression tests.
+- [ ] Validation pending: run full existing UI/Runner regressions and Windows/Ubuntu CI on the
+  implementation commit. No 24H/live-soak claim is made for this foundation slice.
+
 [ ] Convert the current primary Chat surface into a normal project-aware AI Chat.
     - A Chat is bound to one root path.
     - Chat itself does not select a Workflow.
