@@ -138,6 +138,10 @@ def test_sandbox_goal_reference_is_project_relative(tmp_path: Path) -> None:
     goal = tmp_path / "requirements" / "goal.md"
     goal.parent.mkdir()
     goal.write_text("goal\n", encoding="utf-8")
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - requirements/goal.md\n",
+        encoding="utf-8",
+    )
     config = RuntimeConfig(
         project_root=str(tmp_path),
         validator="ai",
