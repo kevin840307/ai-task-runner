@@ -150,6 +150,12 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._body()
+            if parsed.path == "/api/tasks/list/export":
+                return self._json(self.state.task_list_yaml_export(
+                    str(body.get("chat_id", "")),
+                    body.get("items", []),
+                    str(body.get("workflow", "")),
+                ))
             if parsed.path == "/api/tasks/list/parse":
                 return self._json(self.state.task_list_yaml_preview(str(body.get("chat_id", "")), str(body.get("content", ""))))
             if parsed.path == "/api/chats/turn":
