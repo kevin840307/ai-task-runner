@@ -11,3 +11,12 @@ function apply(){
 }
 for(const [id,fallback] of Object.entries({appearance:"system",theme:"teal",motion:"full",language:"zh-TW"})){$(id).value=read(id,fallback);$(id).addEventListener("change",()=>{try{localStorage.setItem(keys[id],$(id).value);$("settingsStatus").textContent="Saved";apply()}catch(e){$("settingsStatus").textContent=e.message}})}
 apply();
+const settingsShell=document.querySelector(".settings-shell");
+function setSettingsContextCollapsed(collapsed){
+  settingsShell.classList.toggle("context-collapsed",collapsed);
+  $("toggleSettingsContext").setAttribute("aria-expanded",String(!collapsed));
+  $("toggleSettingsContext").title=collapsed?"Expand Settings sidebar":"Collapse Settings sidebar";
+  try{localStorage.setItem("ai-task-runner.settings.context-collapsed",String(collapsed))}catch(_){}
+}
+$("toggleSettingsContext").addEventListener("click",()=>setSettingsContextCollapsed(!settingsShell.classList.contains("context-collapsed")));
+try{setSettingsContextCollapsed(localStorage.getItem("ai-task-runner.settings.context-collapsed")==="true")}catch(_){}
