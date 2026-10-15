@@ -22,6 +22,23 @@ async function request(url, payload) {
 }
 function report(error) { element("chatError").textContent = error?.message || String(error); }
 function clearError() { element("chatError").textContent = ""; }
+function syncWorkspaceUrl() {
+  const params = new URLSearchParams();
+  if (currentChat?.chat_id) params.set("chat", currentChat.chat_id);
+  if (activeTab !== "chat") params.set("tab", activeTab);
+  if (currentTask?.task_id) params.set("task", currentTask.task_id);
+  const query = params.toString();
+  history.replaceState({}, "", location.pathname + (query ? "?" + query : ""));
+}
+function initialWorkspaceRoute() {
+  const params = new URLSearchParams(location.search);
+  return {
+    chat: params.get("chat") || "",
+    tab: params.get("tab") === "tasks" ? "tasks" : "chat",
+    task: params.get("task") || "",
+  };
+}
+
 function statusText(task) {
   const runtime = task.runtime || {};
   return String(runtime.status || task.last_status || "pending").replaceAll("_", " ");
@@ -41,6 +58,7 @@ function setTab(tab) {
   element("conversationPanel").hidden = tasks;
   element("tasksPanel").hidden = !tasks;
   if (tasks) loadTasks().catch(report);
+  syncWorkspaceUrl();
 }
 function taskBadgeCounts(allTasks) {
   const map = new Map();
@@ -61,14 +79,19 @@ async function selectChat(id) {
   const writable = Boolean(currentChat?.path_available);
   element("chatText").disabled = !writable;
   element("chatSend").disabled = !writable;
-  element("newTask").disabled = !writable;
+  element("newTask").disabled = !writable || Boolean(currentChat?.archived);
+  element("archiveChat").disabled = !currentChat;
+  element("archiveChat").textContent = currentChat?.archived ? "Restore Chat" : "Archive Chat";
   element("chatNotice").textContent = currentChat && !writable
     ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
-    : "Chat is read-only with project access. Use Tasks for file changes, execution, validation, and long-running work.";
+    : currentChat?.archived
+      ? "Archived · history is retained. Restore this Chat before starting new work."
+      : "Chat is read-only with project access. Use Tasks for file changes, execution, validation, and long-running work.";
   for (const button of element("chatList").querySelectorAll("button[data-id]")) {
     button.dataset.active = String(button.dataset.id === id);
   }
   await Promise.all([loadMessages(), loadTasks()]);
+  syncWorkspaceUrl();
 }
 async function loadMessages() {
   const container = element("chatMessages");
@@ -107,7 +130,11 @@ async function loadChats(keepSelection = true) {
   const selectedProject = element("chatProject").value;
   const list = element("chatList");
   list.replaceChildren();
-  for (const chat of chats.filter(item => !selectedProject || item.root_path === selectedProject)) {
+  const showArchived = element("showArchivedChats").checked;
+  for (const chat of chats.filter(item =>
+    (!selectedProject || item.root_path === selectedProject)
+    && (showArchived || !item.archived)
+  )) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.id = chat.chat_id;
@@ -115,7 +142,7 @@ async function loadChats(keepSelection = true) {
     const suffix = !chat.path_available ? " · Path unavailable"
       : badge?.attention ? ` · Needs Attention ${badge.attention}`
       : badge?.active ? ` · Running ${badge.active}` : "";
-    button.textContent = chat.title + suffix;
+    button.textContent = chat.title + (chat.archived ? " · Archived" : "") + suffix;
     button.addEventListener("click", () => selectChat(chat.chat_id).catch(report));
     list.append(button);
   }
@@ -431,6 +458,7 @@ async function refreshOpenTask() {
 async function openTask(taskId) {
   const task = await request("/api/task?task_id=" + encodeURIComponent(taskId));
   currentTask = task;
+  syncWorkspaceUrl();
   const root = element("taskDetail");
   root.replaceChildren();
   root.hidden = false;
@@ -547,6 +575,19 @@ async function openTask(taskId) {
 }
 
 element("chatTab").addEventListener("click", () => setTab("chat"));
+element("archiveChat").addEventListener("click", async () => {
+  if (!currentChat) return;
+  try {
+    const updated = await request("/api/chats/archive", {
+      chat_id: currentChat.chat_id,
+      archived: !currentChat.archived
+    });
+    currentChat = {...currentChat, ...updated};
+    element("showArchivedChats").checked = Boolean(currentChat.archived) || element("showArchivedChats").checked;
+    await loadChats(true);
+  } catch (error) { report(error); }
+});
+element("showArchivedChats").addEventListener("change", () => loadChats(true).catch(report));
 element("tasksTab").addEventListener("click", () => setTab("tasks"));
 element("chatProject").addEventListener("change", () => { loadChats(false).catch(report); });
 element("newChat").addEventListener("click", async () => {
@@ -651,7 +692,17 @@ for (const button of document.querySelectorAll("[data-task-filter]")) {
   });
 }
 document.addEventListener("keydown", event => { if (event.key === "Escape" && !element("taskModal").hidden) closeTaskModal(); });
-Promise.all([loadProjects(), loadChats()]).catch(report);
+(async () => {
+  const route = initialWorkspaceRoute();
+  await loadProjects();
+  currentChat = route.chat ? {chat_id: route.chat} : null;
+  if (route.chat) element("showArchivedChats").checked = true;
+  await loadChats(true);
+  setTab(route.tab);
+  if (route.task && currentChat) {
+    try { await openTask(route.task); } catch (error) { report(error); }
+  }
+})().catch(report);
 setInterval(() => {
   if (document.hidden || !currentChat || activeTab !== "tasks") return;
   loadTasks().catch(() => {});
