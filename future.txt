@@ -81,9 +81,22 @@ Chat
 ├─ root path
 ├─ normal conversation
 └─ Tasks created from this Chat
-   ├─ Task A
-   ├─ Task B
-   └─ Task C
+   ├─ Single Task
+   │  └─ one Runner execution/history container
+   └─ Sequential Task
+      ├─ Item 1
+      ├─ Item 2
+      ├─ Item 3
+      └─ ... executed by the existing YAML List/script runner
+
+A Task may be Single or Sequential:
+- Single Task maps to one normal Runner execution/history container.
+- Sequential Task maps to the existing YAML List/script runner and owns an ordered list of child items.
+- Sequential Task is NOT a generic queue, scheduler, DAG engine, or UI-owned orchestration runtime.
+- UI edits/launches/observes the canonical YAML List contract; ordering, resume and child execution remain Runner-owned.
+- A Sequential Task owns the canonical execution path for the whole active list. Waiting child items do not
+  independently own the path and cannot bypass the one-active-Task-per-path rule.
+- CLI / YAML List and UI must remain two adapters over the same script execution contract.
 
 A Task is a durable work record/container, not merely the currently active Run:
 - created from the current Chat or manually from the Tasks page,
@@ -510,7 +523,130 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - Delete must not merge/rebase/cherry-pick or otherwise modify source-control integration state.
     - Future worktree cleanup remains a separate operation; deleting a Task must not silently perform Git integration.
 
-PHASE 5 - Global Library
+PHASE 5 - Sequential Task / YAML List UI
+--------------------------------------------
+Purpose:
+Expose the Runner's existing YAML List / script execution capability in the UI so users can define,
+run, stop, resume and inspect an ordered development sequence without switching to CLI.
+
+Architecture / ownership:
+[ ] Reuse the existing YAML List/script runner as the ONLY execution owner.
+    - Do not create a React-side scheduler, queue state machine, retry loop or child-run orchestrator.
+    - UI sends one canonical ordered list to the existing backend/script runner.
+    - Child ordering, current item, completion, stop/resume and failure semantics remain Runner-owned.
+    - Preserve CLI/YAML behavior exactly; the UI is an adapter/projection over the same contract.
+    - If a capability is missing in both CLI and UI, fix the shared backend/runtime contract first instead
+      of adding a UI-only behavior.
+
+[ ] Treat Sequential Task as one Task record with ordered child items.
+    - The parent Task owns stable task_id/chat_id/root/workspace/workflow/history references.
+    - Child items are execution inputs/status projections, not independent top-level Task records.
+    - The whole active Sequential Task owns the canonical execution path until it reaches a terminal state.
+    - Do not allow another Single/Sequential Task to start on the same canonical path while it is active.
+
+Creation UX:
+[ ] Add Task type selection in New Task:
+    - Single Task
+    - Sequential Task
+    - Keep Single Task as the simple/default path unless usage proves another default is better.
+
+[ ] Sequential Task creation sheet/editor should support:
+    - ordered item list,
+    - add / remove / duplicate item,
+    - drag to reorder before execution,
+    - per-item title/goal,
+    - Workflow selection per item when supported by the existing YAML List contract,
+    - Advanced section only for existing canonical YAML/script fields,
+    - preview/edit canonical YAML for advanced users where practical.
+    - Do not expose fields that the shared runner does not actually support.
+
+[ ] Support convenient bulk creation without inventing another format.
+    - Paste/import existing YAML List.
+    - Optional "Create Sequential Task" from Chat-selected messages/AI-generated plan.
+    - AI-assisted creation must produce the same canonical YAML List structure and always show a preview
+      before launch/edit.
+    - Visual editor <-> YAML representation must round-trip without silently dropping supported fields.
+
+Execution UX:
+[ ] Sequential Task Detail should show compact ordered progress, for example:
+      1  ✓ Analyze architecture       Completed
+      2  ● Refactor backend          Running / Execute
+      3  ○ Update UI                 Waiting
+      4  ○ Full validation           Waiting
+    - Parent header shows current item N / total, overall Task state and current Stage/attention reason.
+    - Clicking an item opens/reuses the existing execution detail/log surface for that child/run.
+    - Waiting items are clearly non-running and do not appear to own separate runtime sessions.
+
+[ ] Stop / Resume must map directly to existing YAML List/script semantics.
+    - Stop stops the active script/list through the canonical backend action.
+    - Resume must use durable script/item checkpoints: completed items stay completed, the interrupted
+      child resumes according to Runner semantics, then later items continue in order.
+    - UI must never infer completion by card state and manually launch the next child.
+    - Rerun/Restart semantics must be explicitly mapped to existing script runner behavior before exposing
+      a button; do not overload Resume/Continue terminology.
+
+[ ] Preserve failure visibility and recovery semantics.
+    - If an item Needs Attention / fails closed, parent Sequential Task surfaces the failed item and reason.
+    - Technical retry/recovery remains StageExecutor/script-runner owned.
+    - Semantic failure routing remains Workflow-owned.
+    - UI may offer only actions allowed by canonical runtime projection/backend guards.
+
+History / durability:
+[ ] Keep Sequential Task history inspectable.
+    - Parent history shows list-level execution segments/runs.
+    - Each child retains links to its actual run/state/log evidence.
+    - Completed child evidence remains inspectable after later children run.
+    - A later Sequential Task on the same path must not make an older Task Detail resolve to the new state.json.
+    - Delete Task removes only UI-owned Task/index references according to the same Task deletion policy;
+      it must not silently delete source changes or perform Git integration.
+
+Cards / list UX:
+[ ] Tasks page should distinguish Single vs Sequential without creating a separate scheduler dashboard.
+    - Example Single card: "Completed · ralphy_ai_validate".
+    - Example Sequential card: "Sequential · 2/4 · Running".
+    - Existing filters remain status-oriented: All / Active / Needs Attention / Completed.
+    - Do not add priority queues, automatic reordering, dependencies or background scheduling.
+
+Compatibility / tests:
+[ ] Add deterministic/backend tests proving UI and CLI use the same YAML List execution contract.
+[ ] Add Browser E2E for create/reorder/start/stop/resume/open-child/history.
+[ ] Keep current yaml-list-resume and yaml-list-endurance live probes authoritative for real backend behavior.
+[ ] Verify old CLI YAML files continue to run unchanged after UI support lands.
+[ ] Verify one-active-Task-per-path applies equally to Single and Sequential Tasks.
+[ ] Verify refresh/stale-tab/double-click cannot launch the next item or a second parent Task independently.
+
+Illustrative UI sketch (direction only):
+
++--------------------------------------------------------------------------------+
+| New Task                                                                       |
+|                                                                                |
+| Type          ( ) Single Task   (*) Sequential Task                            |
+| Path          C:\repo\ai-task-runner          Available                       |
+|                                                                                |
+| Tasks                                                                          |
+|  ≡ 1  Analyze backend architecture                         [Edit] [⋯]          |
+|  ≡ 2  Refactor backend discovery                           [Edit] [⋯]          |
+|  ≡ 3  Update UI                                            [Edit] [⋯]          |
+|  ≡ 4  Run full validation                                  [Edit] [⋯]          |
+|                                                                                |
+|  [ + Add item ]                  [ YAML ] [ Advanced ]                          |
+|                                                        [ Create & Run ]        |
++--------------------------------------------------------------------------------+
+
+Running detail:
+
++--------------------------------------------------------------------------------+
+| Backend modernization        Sequential · Running · Item 2 / 4        [ Stop ] |
+|--------------------------------------------------------------------------------|
+| ✓ 1  Analyze backend architecture      Completed · 12m                        |
+| ● 2  Refactor backend discovery        Running · Execute · 8m                 |
+| ○ 3  Update UI                         Waiting                                |
+| ○ 4  Run full validation               Waiting                                |
+|--------------------------------------------------------------------------------|
+| Selected item detail / existing execution Chat-runtime view                    |
++--------------------------------------------------------------------------------+
+
+PHASE 6 - Global Library
 ------------------------
 [ ] Move reusable assets into a global Library navigation domain.
     - Library is not owned by the selected Chat.
@@ -540,7 +676,7 @@ PHASE 5 - Global Library
     - Tasks are status-heavy -> cards are appropriate.
     - Workflows / Prompts are asset-heavy -> compact list/search is more appropriate.
 
-PHASE 6 - Polish after the basic model is stable
+PHASE 7 - Polish after the basic model is stable
 ------------------------------------------------
 [ ] Improve navigation ergonomics.
     - Global rail + contextual sidebar + main content.
@@ -577,7 +713,7 @@ PHASE 6 - Polish after the basic model is stable
 
 FINAL PHASE - Worktree support / parallel Task isolation
 --------------------------------------------------------
-Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + Library are stable.
+Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + Sequential Task/YAML List UI + Library are stable.
 
 [ ] Add Task workspace selection only when worktree support actually exists:
     - Main
@@ -626,6 +762,8 @@ Non-goals
 ---------
 - Do not turn Tasks into a second Workflow engine.
 - Do not build a separate global Task scheduler/dashboard unless a proven requirement appears.
+- Sequential Task is an explicit user-authored ordered YAML List, not a global queue/scheduler; do not add
+  priority, automatic dependency resolution or UI-owned next-item launching.
 - Do not make Chat runtime state authoritative.
 - Do not let Library scope depend on whichever Chat is currently selected.
 - Do not auto-merge completed Tasks.
@@ -640,16 +778,17 @@ Before each phase is merged, verify:
 - Ownership: can stale tabs/double clicks bypass the one-active-Task-per-path rule?
 - History: does the change preserve old Task/Run history without duplicating runtime truth?
 - UX: are Busy / Missing path / Empty / Loading / Error / Completed / Needs Attention states understandable?
-- Compatibility: did current Workflow Studio / Prompt Editor / CLI / Runner behavior stay green unless an
-  explicitly necessary migration was part of this phase?
+- Compatibility: did current Workflow Studio / Prompt Editor / CLI / YAML List / Runner behavior stay green
+  unless an explicitly necessary migration was part of this phase?
 - Simplicity: did the implementation add a second store/state machine/scheduler when an existing owner could be reused?
 
 Recommended implementation order
 --------------------------------
 1. Normal Chat + immutable root-path identity.
-2. New Task creation on Main using the existing Runner.
+2. New Single Task creation on Main using the existing Runner.
 3. Current-Chat Tasks card page.
 4. Task Detail = existing execution Chat/runtime view.
-5. Global Library navigation for Workflows + Prompts.
-6. Navigation/responsive/performance polish.
-7. Worktree support and parallel isolated Tasks LAST.
+5. Sequential Task / YAML List UI using the existing script runner.
+6. Global Library navigation for Workflows + Prompts.
+7. Navigation/responsive/performance polish.
+8. Worktree support and parallel isolated Tasks LAST.
