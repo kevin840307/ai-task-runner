@@ -46,14 +46,14 @@
       <button id="chatTab" type="button" role="tab" aria-selected="true">Chat</button>
       <button id="tasksTab" type="button" role="tab" aria-selected="false">Tasks <span id="taskCount"></span></button>
     </div>
-    <p id="chatNotice" class="chat-meta">Chat notes are saved separately from Runner tasks. AI conversational replies are not yet supported in this workspace.</p>
+    <p id="chatNotice" class="chat-meta">Chat is read-only with project access; use Tasks when you want AI to modify or validate the project.</p>
 
     <section id="conversationPanel" class="chat-scroll" role="tabpanel">
       <div id="chatMessages" class="chat-scroll" role="log" aria-live="polite"></div>
       <form id="chatComposer" class="chat-compose">
         <label for="chatText" class="sr-only">Message</label>
         <textarea id="chatText" placeholder="Write a message…" maxlength="20000" disabled required></textarea>
-        <button id="chatSend" type="submit" disabled>Save message</button>
+        <button id="chatSend" type="submit" disabled>Send</button>
       </form>
     </section>
 
