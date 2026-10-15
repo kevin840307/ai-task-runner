@@ -189,6 +189,79 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Task not found"):
             self.state.tasks.get(task["task_id"])
 
+    def test_sequential_rerun_uses_original_frozen_items_not_latest_continue_segment(self):
+        frozen_items = [
+            {"instruction": "first", "workflow": "", "raw": {"prompt": "first"}},
+            {"instruction": "second", "workflow": "", "raw": {"prompt": "second"}},
+        ]
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(self.project),
+            instruction="Task List · 2 items",
+            task_type="sequential",
+            workflow=str(self.state.workflow),
+        )
+        task = self.state.tasks.update(
+            task["task_id"],
+            items=frozen_items,
+            backend="qwen",
+            model="model-a",
+            last_status="completed",
+        )
+        task = self.state.tasks.append_execution(task["task_id"], {
+            "request_id": "",
+            "script_file": str(self.project / "original.yaml"),
+            "instruction": task["instruction"],
+            "workflow": str(self.state.workflow),
+            "default_workflow": str(self.state.workflow),
+            "run_id": "",
+            "item_count": 2,
+        })
+        task = self.state.tasks.append_execution(task["task_id"], {
+            "request_id": "",
+            "script_file": str(self.project / "continue.yaml"),
+            "instruction": "follow-up",
+            "workflow": str(self.state.workflow),
+            "default_workflow": str(self.state.workflow),
+            "run_id": "",
+            "item_count": 1,
+        })
+        task = self.state.tasks.update(task["task_id"], last_status="completed")
+        marker = self.project / ".ai-task-runner" / "ui" / "active-task.json"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps({"task_id": "f" * 32, "request_id": "other"}),
+            encoding="utf-8",
+        )
+        rerun_script = self.project / "rerun.yaml"
+        rerun_script.write_text("- prompt: first\n- prompt: second\n", encoding="utf-8")
+
+        with patch.object(
+            self.state,
+            "_write_task_list",
+            return_value=rerun_script,
+        ) as write_list, patch.object(self.state, "launch_script_task") as launch:
+            result = self.state.task_action(task["task_id"], "rerun")
+
+        write_list.assert_called_once_with(
+            self.project,
+            task["task_id"],
+            frozen_items,
+            3,
+        )
+        launch.assert_called_once_with(
+            self.project,
+            str(rerun_script),
+            workflow=str(self.state.workflow),
+            backend="qwen",
+            model="model-a",
+        )
+        latest = result["executions"][-1]
+        self.assertEqual(latest["script_file"], str(rerun_script))
+        self.assertEqual(latest["item_count"], 2)
+        self.assertEqual(latest["instruction"], "Task List · 2 items")
+
+
     def test_historical_sequential_task_keeps_child_evidence_after_new_runtime_owner(self):
         task = self.state.tasks.create(
             chat_id=self.chat_id,
