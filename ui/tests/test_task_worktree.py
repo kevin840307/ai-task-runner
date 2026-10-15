@@ -95,6 +95,22 @@ def test_attach_rejects_unrelated_path(monkeypatch, tmp_path):
         worktree.attach_existing_worktree(repo, str(tmp_path / "other"))
 
 
+def test_runtime_archive_retry_reuses_existing_evidence(tmp_path):
+    wt = tmp_path / "wt"
+    runtime = wt / ".ai-task-runner"
+    runtime.mkdir(parents=True)
+    (runtime / "state.json").write_text('{"completed": true}', encoding="utf-8")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "state.json").write_text('{"completed": true}', encoding="utf-8")
+
+    result = worktree.archive_runtime(wt, archive)
+
+    assert Path(result) == archive
+    assert (runtime / "state.json").is_file()
+    assert (archive / "state.json").read_text(encoding="utf-8") == '{"completed": true}'
+
+
 def test_runtime_archive_is_copy_and_does_not_delete_source(tmp_path):
     wt = tmp_path / "wt"
     runtime = wt / ".ai-task-runner"
