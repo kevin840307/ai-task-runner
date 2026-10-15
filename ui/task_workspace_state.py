@@ -190,6 +190,11 @@ class TaskWorkspaceMixin:
                 raise ValueError("Stop the active Task before cleaning up its worktree")
             archive = source / ".ai-task-runner" / "ui" / "task-history" / task_id / "runtime"
             archive_path = archive_runtime(workspace, archive)
+            if archive_path and archive_path != str(task.get("runtime_archive") or ""):
+                # Persist durable evidence ownership before Git removal. If a dirty
+                # worktree makes removal fail, Task Detail can still read history and
+                # a later cleanup retry reuses the same archive.
+                task = self.tasks.update(task_id, runtime_archive=archive_path)
             runtime = workspace / ".ai-task-runner"
             if runtime.is_dir():
                 import shutil
