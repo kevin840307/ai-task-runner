@@ -6,6 +6,7 @@ let currentTasks = [];
 let currentTask = null;
 let taskFilter = "all";
 let activeTab = "chat";
+let workflowChoices = [];
 
 async function request(url, payload) {
   const options = payload === undefined ? {} : {
@@ -131,23 +132,68 @@ async function loadProjects() {
     selector.append(option);
   }
 }
-async function loadWorkflowOptions() {
-  const select = element("taskWorkflow");
+function fillWorkflowSelect(select, { inherited = false } = {}) {
+  const previous = select.value;
   select.replaceChildren();
   const fallback = document.createElement("option");
   fallback.value = "";
-  fallback.textContent = "Use default Workflow";
+  fallback.textContent = inherited ? "Inherited" : "Use default Workflow";
   select.append(fallback);
+  for (const workflow of workflowChoices) {
+    const option = document.createElement("option");
+    option.value = workflow.path;
+    option.textContent = `${workflow.name} · ${workflow.group || workflow.scope || "Workflow"}`;
+    select.append(option);
+  }
+  if ([...select.options].some(option => option.value === previous)) select.value = previous;
+}
+async function loadWorkflowOptions() {
+  workflowChoices = [];
+  fillWorkflowSelect(element("taskWorkflow"));
   if (!currentChat?.path_available) return;
   try {
     const data = await request("/api/studio/files?x=1&project=" + encodeURIComponent(currentChat.root_path));
-    for (const workflow of (data.workflows || []).filter(item => !item.hidden)) {
-      const option = document.createElement("option");
-      option.value = workflow.path;
-      option.textContent = `${workflow.name} · ${workflow.group || workflow.scope || "Workflow"}`;
-      select.append(option);
-    }
+    workflowChoices = (data.workflows || []).filter(item => !item.hidden);
+    fillWorkflowSelect(element("taskWorkflow"));
+    for (const select of element("taskListItems").querySelectorAll("select")) fillWorkflowSelect(select, {inherited: true});
   } catch (error) { report(error); }
+}
+function addTaskListItem(value = "", workflow = "", index = null) {
+  const row = document.createElement("div");
+  row.className = "task-list-item";
+  const text = document.createElement("textarea");
+  text.maxLength = 20000;
+  text.required = true;
+  text.placeholder = "Instruction / Prompt";
+  text.value = value;
+  const override = document.createElement("select");
+  override.setAttribute("aria-label", "Workflow override");
+  fillWorkflowSelect(override, {inherited: true});
+  override.value = workflow;
+  const controls = document.createElement("div");
+  controls.className = "move-buttons";
+  const up = document.createElement("button"); up.type = "button"; up.textContent = "↑"; up.title = "Move up";
+  const down = document.createElement("button"); down.type = "button"; down.textContent = "↓"; down.title = "Move down";
+  const duplicate = document.createElement("button"); duplicate.type = "button"; duplicate.textContent = "⧉"; duplicate.title = "Duplicate";
+  const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = "Remove";
+  up.addEventListener("click", () => row.previousElementSibling?.before(row));
+  down.addEventListener("click", () => row.nextElementSibling?.after(row));
+  duplicate.addEventListener("click", () => addTaskListItem(text.value, override.value, [...row.parentElement.children].indexOf(row) + 1));
+  remove.addEventListener("click", () => { if (row.parentElement.children.length > 1) row.remove(); });
+  controls.append(up, down, duplicate, remove);
+  row.append(text, override, controls);
+  const root = element("taskListItems");
+  if (index === null || index >= root.children.length) root.append(row);
+  else root.insertBefore(row, root.children[index]);
+  return row;
+}
+function setTaskType(type) {
+  const sequential = type === "sequential";
+  element("singleInstructionRow").hidden = sequential;
+  element("taskListEditor").hidden = !sequential;
+  element("taskInstruction").required = !sequential;
+  element("taskRun").textContent = sequential ? "Run List" : "Run Task";
+  if (sequential && !element("taskListItems").children.length) addTaskListItem();
 }
 async function updateMainAvailability() {
   if (!currentChat?.path_available) { element("mainAvailability").textContent = "Path unavailable"; return; }
