@@ -54,6 +54,8 @@ class ChatMessages:
         chat = self._chat(chat_id)
         if not chat["path_available"]:
             raise ValueError("Chat path unavailable; history is read-only")
+        if chat.get("archived"):
+            raise ValueError("Archived Chat is read-only")
         if role not in {"user", "assistant"}:
             raise ValueError("Invalid Chat message role")
         if not isinstance(text, str) or not text.strip() or len(text) > 20000:
