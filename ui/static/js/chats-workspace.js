@@ -126,7 +126,11 @@ async function loadMessages() {
         create.type = "button";
         create.textContent = "Create Task";
         create.addEventListener("click", () => openTaskModal(message.text, message.message_id || ""));
-        actions.append(create);
+        const createList = document.createElement("button");
+        createList.type = "button";
+        createList.textContent = "Create Task List";
+        createList.addEventListener("click", () => openSuggestedTaskList(message.text, message.message_id || ""));
+        actions.append(create, createList);
         bubble.append(actions);
       }
       container.append(bubble);
@@ -496,6 +500,34 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   await Promise.all([loadWorkflowOptions(), loadTaskBackends(), loadTaskWorkspaces(), updateMainAvailability()]);
   element("taskInstruction").focus();
 }
+async function openSuggestedTaskList(requestText, sourceMessageId = "") {
+  await openTaskModal("", sourceMessageId);
+  element("taskType").value = "sequential";
+  setTaskType("sequential");
+  element("taskListItems").replaceChildren();
+  addTaskListItem("Generating Task List preview…");
+  element("taskRun").disabled = true;
+  element("taskListYamlStatus").textContent = "AI is preparing an ordered preview. Nothing is running yet.";
+  try {
+    const data = await request("/api/chats/task-list/suggest", {
+      chat_id: currentChat.chat_id,
+      request: requestText
+    });
+    element("taskListItems").replaceChildren();
+    for (const item of data.items || []) addTaskListItem(item.instruction || "");
+    if (!element("taskListItems").children.length) addTaskListItem(requestText);
+    element("taskListYamlStatus").textContent = "Preview ready · review/reorder before Run List.";
+    await refreshTaskListYaml();
+  } catch (error) {
+    element("taskListItems").replaceChildren();
+    addTaskListItem(requestText);
+    element("taskListYamlStatus").textContent = "AI preview failed; using the source message as one item.";
+    report(error);
+  } finally {
+    element("taskRun").disabled = false;
+  }
+}
+
 function closeTaskModal() {
   element("taskModal").hidden = true;
   element("taskForm").dataset.sourceMessageId = "";
