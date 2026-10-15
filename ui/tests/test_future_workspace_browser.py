@@ -224,15 +224,15 @@ def test_future_chat_task_and_task_list_browser_contract():
         page.locator("#taskInstruction").wait_for()
         assert page.locator("#taskInstruction").input_value() == "Refactor backend safely"
         page.locator("#taskRun").click()
-        page.get_by_role("button", name="Stop").wait_for()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Stop", exact=True).wait_for()
         assert created_payloads[-1]["task_type"] == "single"
         assert "chat=" in page.url and "task=" in page.url
 
         # Stop and Resume map to canonical actions.
-        page.get_by_role("button", name="Stop").click()
-        page.get_by_role("button", name="Resume").wait_for()
-        page.get_by_role("button", name="Resume").click()
-        page.get_by_role("button", name="Stop").wait_for()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Stop", exact=True).click()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Resume", exact=True).wait_for()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Resume", exact=True).click()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Stop", exact=True).wait_for()
         assert actions[:2] == ["stop", "resume"]
 
         # Stable Chat/Task identities restore the same Task Detail after refresh.
@@ -256,10 +256,10 @@ def test_future_chat_task_and_task_list_browser_contract():
         assert created_payloads[-1]["task_type"] == "sequential"
 
         # Sequential Stop / Resume uses the same canonical Task action surface.
-        page.get_by_role("button", name="Stop").click()
-        page.get_by_role("button", name="Resume").wait_for()
-        page.get_by_role("button", name="Resume").click()
-        page.get_by_role("button", name="Stop").wait_for()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Stop", exact=True).click()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Resume", exact=True).wait_for()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Resume", exact=True).click()
+        page.locator("#taskDetail .task-actions").get_by_role("button", name="Stop", exact=True).wait_for()
         assert actions[-2:] == ["stop", "resume"]
 
         # Child evidence opens in the existing Task Detail surface.
