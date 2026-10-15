@@ -23,7 +23,7 @@
 .chat-error{color:#a32222;min-height:1.4em}
 .task-panel{display:flex;flex-direction:column;gap:12px;min-height:0;flex:1}.task-list{overflow:auto}.task-card{border:1px solid #aab4bf;border-radius:12px;padding:12px;text-align:left;background:transparent}.task-card strong,.task-card small{display:block}.task-card small{margin-top:4px;opacity:.8}
 .task-detail{border:1px solid #aab4bf;border-radius:12px;padding:16px;overflow:auto;max-height:55vh}.task-detail-head{display:flex;justify-content:space-between;gap:12px}.task-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.task-history{display:grid;gap:8px}.task-history article{padding:10px;border-left:3px solid currentColor;white-space:pre-wrap}
-.modal-layer{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:18px;z-index:40}.modal-layer[hidden]{display:none}.task-form{background:var(--surface,#fff);color:var(--text,#18202a);width:min(680px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:14px;display:grid;gap:14px}.task-form textarea{min-height:140px}.task-form-actions{display:flex;justify-content:flex-end;gap:8px}.task-form-row{display:grid;gap:6px}.task-empty{padding:24px;text-align:center;opacity:.8}
+.modal-layer{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:18px;z-index:40}.modal-layer[hidden]{display:none}.task-form{background:var(--surface,#fff);color:var(--text,#18202a);width:min(680px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:14px;display:grid;gap:14px}.task-form textarea{min-height:140px}.task-form-actions{display:flex;justify-content:flex-end;gap:8px}.task-form-row{display:grid;gap:6px}.task-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:start;margin:8px 0}.task-list-item textarea{min-height:86px}.task-list-item button{padding:8px}.task-list-item .move-buttons{display:flex;flex-direction:column;gap:4px}.task-empty{padding:24px;text-align:center;opacity:.8}
 @media(max-width:680px){.chat-shell{grid-template-columns:1fr;height:auto;min-height:100vh}.chat-side{border-right:0;border-bottom:1px solid #bec6ce}.chat-main{min-height:65vh}.chat-head{flex-direction:column}.chat-compose{flex-direction:column;align-items:stretch}}
 </style>
 </head>
@@ -75,11 +75,17 @@
   <form id="taskForm" class="task-form" role="dialog" aria-modal="true" aria-labelledby="taskFormTitle">
     <h2 id="taskFormTitle">New Task</h2>
     <label class="task-form-row">Type
-      <select id="taskType"><option value="single">Task</option><option value="sequential" disabled>Task List · coming next</option></select>
+      <select id="taskType"><option value="single">Task</option><option value="sequential">Task List</option></select>
     </label>
-    <label class="task-form-row">Instruction / Prompt
+    <label id="singleInstructionRow" class="task-form-row">Instruction / Prompt
       <textarea id="taskInstruction" maxlength="20000" required placeholder="What should AI do?"></textarea>
     </label>
+    <section id="taskListEditor" class="task-form-row" hidden>
+      <span>Ordered items</span>
+      <div id="taskListItems"></div>
+      <button id="addTaskListItem" type="button">+ Add item</button>
+      <small>Items run sequentially through the existing YAML List runner.</small>
+    </section>
     <label class="task-form-row">Title <small>Optional · derived from the instruction by default</small>
       <input id="taskTitle" maxlength="120">
     </label>
