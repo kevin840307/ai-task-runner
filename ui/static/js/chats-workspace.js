@@ -758,8 +758,11 @@ async function openTask(taskId) {
     (task.items || []).forEach((item, index) => {
       const row = document.createElement("article");
       const number = index + 1;
-      const state = allCompleted || (currentIndex && number < currentIndex)
+      const evidence = childEvidence.get(number);
+      const state = evidence?.completed || (allCompleted && !evidence?.last_error)
         ? "Completed"
+        : evidence?.last_error ? "Needs Attention"
+        : currentIndex && number < currentIndex ? "Skipped"
         : currentIndex === number ? `${statusText(task)}${task.runtime?.stage ? " · " + task.runtime.stage : ""}`
         : "Waiting";
       row.textContent = `${number}. ${item.instruction || "Task"}\n${state}`;
