@@ -31,6 +31,8 @@ class ChatWorkspaceMixin:
             raise ValueError("Chat message is too long")
         with self._conversation_lock:
             chat = self._chat_record(chat_id)
+            if chat.get("archived"):
+                raise ValueError("Archived Chat is read-only")
             if not chat.get("path_available"):
                 raise ValueError("Chat path unavailable; history is read-only")
             project = Path(chat["root_path"])
