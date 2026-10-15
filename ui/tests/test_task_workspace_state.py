@@ -7,6 +7,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from ui.chat_index import ChatIndex
+from ui.project_registry import path_key
 from ui.task_index import TaskIndex
 from ui.task_workspace_state import TaskWorkspaceMixin
 
@@ -33,6 +34,7 @@ class FakeTaskWorkspace(TaskWorkspaceMixin):
             "request_id": "req-old",
         }
         self.launched = []
+        self.script_launched = []
 
     @staticmethod
     def _read_json(path: Path):
@@ -90,6 +92,9 @@ class FakeTaskWorkspace(TaskWorkspaceMixin):
             "backend": kwargs.get("backend", ""),
             "model": kwargs.get("model", ""),
         }
+
+    def launch_script_task(self, project: Path, script_file: str, **kwargs):
+        self.script_launched.append((Path(project), str(script_file), kwargs))
 
 
 class TaskWorkspaceHistoryTests(unittest.TestCase):
@@ -191,9 +196,9 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
 
         self.assertEqual(len(result["executions"]), 2)
         launched_project, message, kwargs = self.state.launched[-1]
-        self.assertEqual(launched_project, self.project)
+        self.assertEqual(path_key(launched_project), path_key(self.project))
         self.assertEqual(message, "original frozen instruction")
-        self.assertEqual(kwargs["workflow"], str(self.state.workflow))
+        self.assertEqual(path_key(kwargs["workflow"]), path_key(self.state.workflow))
         self.assertEqual(kwargs["backend"], "qwen")
         self.assertEqual(kwargs["model"], "model-a")
         marker_value = json.loads(marker.read_text(encoding="utf-8"))
@@ -245,7 +250,7 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
 
         self.assertEqual(task["last_status"], "needs_attention")
         self.assertEqual(task["instruction"], "frozen")
-        self.assertEqual(task["workflow"], str(self.state.workflow))
+        self.assertEqual(path_key(task["workflow"]), path_key(self.state.workflow))
         self.assertEqual(task["backend"], "qwen")
         self.assertEqual(task["model"], "model-a")
 
@@ -330,19 +335,16 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         ) as write_list, patch.object(self.state, "launch_script_task") as launch:
             result = self.state.task_action(task["task_id"], "rerun")
 
-        write_list.assert_called_once_with(
-            self.project,
-            task["task_id"],
-            frozen_items,
-            3,
-        )
-        launch.assert_called_once_with(
-            self.project,
-            str(rerun_script),
-            workflow=str(self.state.workflow),
-            backend="qwen",
-            model="model-a",
-        )
+        write_args = write_list.call_args.args
+        self.assertEqual(path_key(write_args[0]), path_key(self.project))
+        self.assertEqual(write_args[1:], (task["task_id"], frozen_items, 3))
+        launch_args = launch.call_args.args
+        launch_kwargs = launch.call_args.kwargs
+        self.assertEqual(path_key(launch_args[0]), path_key(self.project))
+        self.assertEqual(path_key(launch_args[1]), path_key(rerun_script))
+        self.assertEqual(path_key(launch_kwargs["workflow"]), path_key(self.state.workflow))
+        self.assertEqual(launch_kwargs["backend"], "qwen")
+        self.assertEqual(launch_kwargs["model"], "model-a")
         latest = result["executions"][-1]
         self.assertEqual(latest["script_file"], str(rerun_script))
         self.assertEqual(latest["item_count"], 2)
@@ -440,8 +442,8 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         archive = source / ".ai-task-runner" / "ui" / "task-history" / task["task_id"] / "runtime"
 
         def fake_archive(worktree, target):
-            self.assertEqual(Path(worktree), workspace)
-            self.assertEqual(Path(target), archive)
+            self.assertEqual(path_key(worktree), path_key(workspace))
+            self.assertEqual(path_key(Path(target).parent), path_key(archive.parent))
             target.mkdir(parents=True)
             (target / "state.json").write_text("{}", encoding="utf-8")
             return str(target)
@@ -454,7 +456,7 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
                 self.state.cleanup_task_workspace(task["task_id"])
 
         persisted = self.state.tasks.get(task["task_id"])
-        self.assertEqual(persisted["runtime_archive"], str(archive))
+        self.assertEqual(path_key(persisted["runtime_archive"]), path_key(archive))
         self.assertFalse(persisted.get("workspace_removed", False))
         self.assertTrue((archive / "state.json").is_file())
 
