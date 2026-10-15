@@ -960,6 +960,8 @@ class ProjectRuntimeMixin:
         discard recoverable state.
         """
         with self._chat_lock, self._runtime_lock:
+            if not str(workflow or "").strip():
+                raise ValueError("Select a Workflow before Run")
             runtime = self.read_runtime(project)
             if not runtime.get("actions", {}).get("run"):
                 if runtime.get("running"):
@@ -1061,13 +1063,18 @@ class ProjectRuntimeMixin:
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
+        script_file: str = "",
     ) -> None:
         with self._launch_lock:
             runtime = self.read_runtime(project)
             if runtime["running"]:
                 raise ValueError("This project already has an active runtime")
             command = [sys.executable, str(self.repo_root / "ai_task_runner.py"), "--project-root", str(project)]
-            if mode == "resume":
+            if script_file:
+                command += ["--script", str(Path(script_file).expanduser().resolve())]
+                if mode == "resume":
+                    command.append("--resume")
+            elif mode == "resume":
                 command.append("--resume")
             else:
                 if goal_file:
