@@ -1,4 +1,5 @@
 const element = (id) => document.getElementById(id);
+const t = (key, fallback = "") => window.I18n?.t(key, fallback) ?? fallback ?? key;
 let currentChat = null;
 let chats = [];
 let projects = [];
@@ -109,7 +110,7 @@ async function selectChat(id) {
   element("newTask").disabled = !writable || Boolean(currentChat?.archived);
   element("archiveChat").disabled = !currentChat;
   element("copyChatPath").disabled = !currentChat?.root_path;
-  element("archiveChat").textContent = currentChat?.archived ? "Restore Chat" : "Archive Chat";
+  element("archiveChat").textContent = currentChat?.archived ? t("workspace.restore_chat", "Restore Chat") : t("workspace.archive_chat", "Archive Chat");
   element("chatNotice").textContent = currentChat && !writable
     ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
     : currentChat?.archived
@@ -168,7 +169,7 @@ function renderAttention(tasks) {
   if (!attention.length) {
     const empty = document.createElement("small");
     empty.className = "chat-meta";
-    empty.textContent = "No active Tasks or attention needed.";
+    empty.textContent = t("workspace.no_activity", "No active Tasks or attention needed.");
     root.append(empty);
     return;
   }
@@ -405,7 +406,7 @@ function setTaskType(type) {
   element("taskInstruction").required = !sequential && !taskGoalFile;
   element("taskUseFile").hidden = sequential;
   element("taskClearFile").hidden = sequential || !taskGoalFile;
-  element("taskRun").textContent = sequential ? "Run List" : "Run Task";
+  element("taskRun").textContent = sequential ? t("task.run_list", "Run List") : t("task.run", "Run Task");
   if (sequential && !element("taskListItems").children.length) addTaskListItem();
 }
 function renderTaskModels() {
@@ -593,7 +594,7 @@ function renderTasks() {
   if (!visible.length) {
     const empty = document.createElement("div");
     empty.className = "task-empty";
-    empty.textContent = currentTasks.length ? "No Tasks match this filter." : "No Tasks yet. Create a Task from this Chat.";
+    empty.textContent = currentTasks.length ? t("workspace.no_task_results", "No Tasks match this filter.") : t("workspace.no_tasks", "No Tasks yet. Create a Task from this Chat.");
     list.append(empty);
     return;
   }
@@ -624,7 +625,7 @@ function renderTasks() {
     const more = document.createElement("button");
     more.type = "button";
     more.className = "history-more";
-    more.textContent = `Load older Tasks (${Math.max(0, Number(currentTasksMeta.total || 0) - currentTasks.length)} remaining)`;
+    more.textContent = `${t("workspace.load_older_tasks", "Load older Tasks")} (${Math.max(0, Number(currentTasksMeta.total || 0) - currentTasks.length)} remaining)`;
     more.addEventListener("click", async () => {
       taskVisibleLimit = Math.min(500, taskVisibleLimit + 100);
       await loadTasks({preserveDetail: true});
@@ -801,7 +802,7 @@ async function openTask(taskId) {
   if (statusLower.includes("completed") || statusLower.includes("attention") || statusLower.includes("error")) {
     const discuss = document.createElement("button");
     discuss.type = "button";
-    discuss.textContent = "Discuss in Chat";
+    discuss.textContent = t("task.discuss", "Discuss in Chat");
     discuss.addEventListener("click", () => {
       const latest = (task.executions || []).at(-1) || {};
       const evidence = latest.evidence || {};
@@ -817,9 +818,9 @@ async function openTask(taskId) {
     });
     actions.append(discuss);
   }
-  if (allowed.stop) actions.append(makeAction("Stop", "stop"));
-  if (allowed.resume) actions.append(makeAction("Resume", "resume"));
-  if (allowed.rerun) actions.append(makeAction("Rerun", "rerun", true));
+  if (allowed.stop) actions.append(makeAction(t("task.stop", "Stop"), "stop"));
+  if (allowed.resume) actions.append(makeAction(t("task.resume", "Resume"), "resume"));
+  if (allowed.rerun) actions.append(makeAction(t("task.rerun", "Rerun"), "rerun", true));
   const completed = Boolean(task.runtime?.completed) || statusText(task).toLowerCase().includes("completed");
   if (allowed.continue || (!task.available_actions && completed)) {
     const text = document.createElement("textarea");
@@ -845,7 +846,7 @@ async function openTask(taskId) {
       .catch(() => {});
     const continueButton = document.createElement("button");
     continueButton.type = "button";
-    continueButton.textContent = "Continue Task";
+    continueButton.textContent = t("task.continue", "Continue Task");
     continueButton.addEventListener("click", async () => {
       if (!text.value.trim()) return;
       try {
@@ -864,7 +865,7 @@ async function openTask(taskId) {
   if (allowed.cleanup_workspace || (!task.available_actions && !task.runtime?.running && task.workspace_kind === "worktree" && task.workspace_managed && !task.workspace_removed)) {
     const cleanup = document.createElement("button");
     cleanup.type = "button";
-    cleanup.textContent = "Cleanup Worktree";
+    cleanup.textContent = t("task.cleanup_worktree", "Cleanup Worktree");
     cleanup.addEventListener("click", async () => {
       if (!window.confirm("Archive Task runtime evidence and remove this worktree? The branch is kept and nothing is merged.")) return;
       try {
@@ -877,7 +878,7 @@ async function openTask(taskId) {
   if (allowed.delete !== false && !task.runtime?.running) {
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "Delete Task";
+    remove.textContent = t("task.delete", "Delete Task");
     remove.className = "danger";
     remove.addEventListener("click", async () => {
       if (!window.confirm("Delete this Task record? This does not merge or modify source control.")) return;
@@ -1117,6 +1118,14 @@ for (const button of document.querySelectorAll("[data-task-filter]")) {
   });
 }
 document.addEventListener("keydown", event => { if (event.key === "Escape" && !element("taskModal").hidden) closeTaskModal(); });
+window.addEventListener("app-language-changed", () => {
+  element("archiveChat").textContent = currentChat?.archived
+    ? t("workspace.restore_chat", "Restore Chat")
+    : t("workspace.archive_chat", "Archive Chat");
+  setTaskType(element("taskType").value);
+  renderTasks();
+});
+
 (async () => {
   const route = initialWorkspaceRoute();
   await loadProjects();
