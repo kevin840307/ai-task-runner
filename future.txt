@@ -419,52 +419,53 @@ Delete:
 
 PHASE 1 - Normal Chat workspace
 -------------------------------
-Implementation progress (2026-10-15, feature/future-chat-foundation):
-- [x] Foundation only: UI-owned durable Chat identity index (ui/chat_index.py) with immutable
-  chat_id/root_path, multiple Chats per path, missing-path read-only visibility, and fail-closed
-  malformed-index handling; list/create endpoints are additive under /api/chats.
-- [x] Added deterministic Chat-index regression tests (ui/tests/test_chat_index.py).
-- [x] Added UI-owned Chat user-message transcripts (ui/chat_messages.py) and read/append APIs;
-  isolated per Chat and independent of Runner messages.jsonl / RunState. Assistant response
-  generation remains intentionally unimplemented; user messages are not fake Runner Tasks.
-- [x] Added Chat transcript isolation/durability/rejection tests (ui/tests/test_chat_messages.py).
-- [x] Added an additive Chats workspace at /chats.html: project selection, multiple Chat
-  selection, message viewing and authoring, and read-only missing-path feedback.
-  This does not replace the existing Tasks execution UI. Static regression is in
-  ui/tests/test_chat_workspace_static.py; browser validation still required.
-- [x] Refuse message writes when the Chat root is unavailable; history remains readable.
-- [ ] Still required before Phase 1 is complete: real normal conversational AI interaction,
-  fully integrated global navigation/Chat UX, and browser tests. The current Chats page
-  deliberately stores authored messages only and never fabricates AI responses. The existing Project run Chat
-  remains unchanged until its replacement is covered by regression tests.
-- [ ] Validation pending: run full existing UI/Runner regressions and Windows/Ubuntu CI on the
-  implementation commit. No 24H/live-soak claim is made for this foundation slice.
+Implementation complete (2026-10-16, feature/future-chat-foundation):
+- [x] Phase 1-7 and the final Worktree isolation phase are implemented on this branch without
+  replacing Runner Core, FlowEngine, StageExecutor, RunState, Workflow YAML, or script/YAML List ownership.
+- [x] Normal project-aware AI Chat is read-only at the backend permission boundary; durable Chat/Message
+  identity remains UI-owned and separate from Runner retry/resume/routing state.
+- [x] Task / Task List creation, canonical one-active-Task-per-path ownership, frozen execution inputs,
+  historical evidence, Continue / Resume / Rerun semantics, YAML round-trip, and bounded/lazy history
+  projections are covered by deterministic regressions.
+- [x] Global Library + Settings navigation, Workflow/Prompt reuse, responsive/low-resolution behavior,
+  refresh restoration, empty/error states, and the final Browser E2E flow are covered.
+- [x] Worktree Main/New/Existing selection, independent path ownership, explicit cleanup with durable
+  history archival, Busy-path navigation, and the no-auto-merge/rebase/cherry-pick rule are implemented.
+- [x] Final code review fixed additional durability/semantic issues found during validation: Worktree
+  cleanup retry evidence, Sequential Rerun after Continue, archived-vs-missing Chat state, frozen inputs
+  on launch failure, >500 Task lazy history, bounded Task-card payloads, and fail-closed Chat/Task indexes.
+- [x] Final regression gate on code HEAD 8f183bc0 (PR Actions run 38823460629):
+  Windows Python 3.11 = 1202 passed / 26 skipped / 3 subtests passed;
+  Ubuntu Python 3.11 = 1202 passed / 26 skipped / 3 subtests passed;
+  Browser E2E = 26 passed; Studio build + committed bundle verification = PASS.
+- [x] Existing yaml-list-resume / yaml-list-endurance real-backend probes remain authoritative and unchanged.
+  This roadmap completion does not claim a new 24H/real-Qwen soak; no second reliability engine was added.
 
-[ ] Convert the current primary Chat surface into a normal project-aware AI Chat.
+[x] Convert the current primary Chat surface into a normal project-aware AI Chat.
     - A Chat is bound to one root path.
     - Chat itself does not select a Workflow.
     - Chat itself does not render Stage / retry / validator / runtime state as its main purpose.
     - Keep the familiar current Chat interaction where possible instead of replacing it with a dashboard.
     - The Chat can discuss/analyse the bound codebase normally.
 
-[ ] Treat root path as part of Chat identity.
+[x] Treat root path as part of Chat identity.
     - Do not silently change a Chat from path A to path B after it already owns Tasks/history.
     - Prefer "start a new Chat with another path" over mutating an established Chat's root.
     - Path can be shown compactly in the header with copy/open affordances.
 
-[ ] Keep Chat UI metadata outside Runner Core.
+[x] Keep Chat UI metadata outside Runner Core.
     - Conversation / Message / Chat metadata stays UI-owned.
     - Do not write Chat messages into RunState or make Chat history part of retry/resume/routing state.
 
 PHASE 2 - Task creation from Chat
 ---------------------------------
-[ ] Add simple New Task entry points.
+[x] Add simple New Task entry points.
     - Chat header: + New Task.
     - Optional message-level "Create Task" to prefill the instruction from useful conversation context.
     - Tasks page: + New Task.
     - Keep one creation surface; entry points must not create separate Task forms/contracts.
 
-[ ] Optimize the primary form for the common case.
+[x] Optimize the primary form for the common case.
     - Visible fields should normally be only:
       * Task type: Task / Task List,
       * Instruction / Prompt,
@@ -476,7 +477,7 @@ PHASE 2 - Task creation from Chat
     - Task title is optional: derive a readable title from the instruction by default and allow editing.
     - If Main is the only workspace, show "Main · Available/Busy" as compact status text instead of a selector.
 
-[ ] Make Instruction / Prompt the main input.
+[x] Make Instruction / Prompt the main input.
     - Direct text maps to the existing canonical goal/prompt input.
     - Support "Use file" as a secondary option mapping to existing goal_file semantics.
     - Do not invent a second task-prompt format or separate prompt execution engine.
@@ -484,7 +485,7 @@ PHASE 2 - Task creation from Chat
     - Prompt Library assets remain Stage/Workflow resources unless the shared Runner later gains an explicit
       task-level prompt-asset reference; do not fake that only in UI.
 
-[ ] Make Workflow selectable but optional.
+[x] Make Workflow selectable but optional.
     - Default choice is "Use default Workflow" and must resolve through the same current Runner/default contract.
     - User may explicitly choose any compatible visible Workflow from the existing Workflow Library/catalog.
     - Remembering the last-used Workflow for a project/Chat is allowed as UI convenience, but the resolved Workflow
@@ -492,7 +493,7 @@ PHASE 2 - Task creation from Chat
     - Advanced users may use existing workflow_file / inline Workflow capabilities through Advanced/YAML surfaces.
     - Do not require Workflow selection when the Runner already has a valid default.
 
-[ ] Keep advanced controls collapsed.
+[x] Keep advanced controls collapsed.
     - Advanced may expose only capabilities already supported by the shared Runner, such as:
       goal_file / workflow_file,
       validator / validator prompt,
@@ -501,7 +502,7 @@ PHASE 2 - Task creation from Chat
     - Do not duplicate Stage-level settings at Task level when Workflow already owns them.
     - Advanced defaults should inherit the existing project/runtime configuration rather than forcing repeated input.
 
-[ ] Freeze resolved execution inputs at start.
+[x] Freeze resolved execution inputs at start.
     - source_chat_id / source_message references are metadata only.
     - freeze root path, Instruction/Prompt source, resolved Workflow and other canonical inputs required for reproducible execution.
     - Later Chat conversation, remembered defaults or Library edits must not silently mutate an already-running Task.
@@ -530,12 +531,12 @@ The common path should require no knowledge of validator/backend/model/YAML.
 
 PHASE 3 - Tasks page scoped to the current Chat
 -----------------------------------------------
-[ ] Add a Tasks view next to Chat for the selected Chat.
+[x] Add a Tasks view next to Chat for the selected Chat.
     - Main Chat-level tabs should stay simple:
       Chat | Tasks
     - Tasks here means only Tasks created under the selected Chat.
 
-[ ] Use status-oriented Task cards (Azure/cloud-resource style, not a Kanban workflow engine).
+[x] Use status-oriented Task cards (Azure/cloud-resource style, not a Kanban workflow engine).
     - Card should stay compact and prioritize only:
       title,
       status + current Stage / attention reason,
@@ -545,7 +546,7 @@ PHASE 3 - Tasks page scoped to the current Chat
     - Entire card is clickable.
     - Runtime internals such as PID/session IDs/debug trace remain inside Task detail.
 
-[ ] Provide lightweight filters without creating a separate analytics dashboard.
+[x] Provide lightweight filters without creating a separate analytics dashboard.
     - All
     - Active
     - Needs Attention
@@ -553,7 +554,7 @@ PHASE 3 - Tasks page scoped to the current Chat
     - Completed Tasks remain visible and reopenable even after later Tasks use the same path.
     - Do not auto-hide or auto-delete older Tasks because a newer Task exists.
 
-[ ] Surface cross-Chat attention without inventing a global Task management product.
+[x] Surface cross-Chat attention without inventing a global Task management product.
     - Chat rows may show small Running / Needs Attention badges.
     - Add one lightweight global Activity/Attention entry only if needed for long-running work:
       * show Running / Recovering / Needs Attention Tasks across Chats,
@@ -564,12 +565,12 @@ PHASE 3 - Tasks page scoped to the current Chat
 
 PHASE 4 - Task Detail reuses the pre-redesign execution Chat
 ------------------------------------------------------------
-[ ] Reframe the current/pre-redesign runtime Chat as Task Detail.
+[x] Reframe the current/pre-redesign runtime Chat as Task Detail.
     - Clicking a Task opens its execution detail.
     - Preserve the useful existing execution conversation/log presentation instead of rebuilding
       everything as a dashboard.
 
-[ ] Task Detail should show:
+[x] Task Detail should show:
     - task title / status,
     - workspace,
     - Workflow,
@@ -580,7 +581,7 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - tests/results,
     - existing/defined allowed actions such as Stop / Continue / Resume / Rerun when valid.
 
-[ ] Keep Task actions obvious and state-specific.
+[x] Keep Task actions obvious and state-specific.
     - Running / Recovering: primary action is Stop. Do not show a free-form "additional instruction" composer
       unless the shared Runner has an explicit, durable live-instruction contract.
     - Interrupted / resumable: primary action is Resume.
@@ -589,19 +590,19 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - Rerun means fresh execution from resolved inputs and should live in the overflow/secondary actions.
     - Never make Continue, Resume and Rerun look interchangeable.
 
-[ ] All Task actions must use the existing canonical runtime projection / allowed_actions.
+[x] All Task actions must use the existing canonical runtime projection / allowed_actions.
     - Browser disabled state is UX only.
     - Backend guards remain authoritative.
     - No Task-specific second control state machine.
 
-[ ] Task completion/history is durable until explicit deletion.
+[x] Task completion/history is durable until explicit deletion.
     - Completed Task remains inspectable even if newer Tasks later run on the same path.
     - Continue / Resume / Rerun appends/preserves execution history under the same Task instead of replacing its earlier history.
     - Task history must not disappear merely because a future worktree is removed.
     - Task history must not disappear merely because a new Task is created.
     - Only explicit Delete Task removes the Task from the Tasks view/index.
 
-[ ] Delete Task is an explicit destructive action.
+[x] Delete Task is an explicit destructive action.
     - Require confirmation.
     - Do not allow deleting an actively running/path-owning Task; Stop it and reach an inactive state first.
     - Delete removes the Task's UI-owned record/index/history references.
@@ -615,7 +616,7 @@ Expose the Runner's existing YAML List / script execution capability in the UI s
 run, stop, resume and inspect an ordered development sequence without switching to CLI.
 
 Architecture / ownership:
-[ ] Reuse the existing YAML List/script runner as the ONLY execution owner.
+[x] Reuse the existing YAML List/script runner as the ONLY execution owner.
     - Do not create a React-side scheduler, queue state machine, retry loop or child-run orchestrator.
     - UI sends one canonical ordered list to the existing backend/script runner.
     - Child ordering, current item, completion, stop/resume and failure semantics remain Runner-owned.
@@ -623,18 +624,18 @@ Architecture / ownership:
     - If a capability is missing in both CLI and UI, fix the shared backend/runtime contract first instead
       of adding a UI-only behavior.
 
-[ ] Treat Sequential Task as one Task record with ordered child items.
+[x] Treat Sequential Task as one Task record with ordered child items.
     - The parent Task owns stable task_id/chat_id/root/workspace/workflow/history references.
     - Child items are execution inputs/status projections, not independent top-level Task records.
     - The whole active Sequential Task owns the canonical execution path until it reaches a terminal state.
     - Do not allow another Single/Sequential Task to start on the same canonical path while it is active.
 
 Creation UX:
-[ ] Present this simply as "Task List" in normal UI.
+[x] Present this simply as "Task List" in normal UI.
     - The user should think "run these tasks in order", not "configure a YAML batch scheduler".
     - Internal implementation may still call it Sequential Task/YAML List.
 
-[ ] Keep Task List creation minimal.
+[x] Keep Task List creation minimal.
     - Parent fields:
       * optional list title (auto-derived when omitted),
       * Default Workflow (optional; "Use default Workflow" by default).
@@ -646,7 +647,7 @@ Creation UX:
     - Support direct Prompt text and existing goal_file through a secondary "Use file" action.
     - Validator/backend/model/plugins/runtime options stay in item/list Advanced only when the existing YAML contract supports them.
 
-[ ] Make list editing obvious.
+[x] Make list editing obvious.
     - add item,
     - remove,
     - duplicate,
@@ -657,7 +658,7 @@ Creation UX:
       If future Runner semantics explicitly support safe pending-item edits, expose that through the shared contract rather
       than implementing UI-only mutation.
 
-[ ] Preserve full YAML power without making YAML the normal experience.
+[x] Preserve full YAML power without making YAML the normal experience.
     - "YAML" is an optional advanced view/import/export surface.
     - Paste/import existing YAML List.
     - Visual editor <-> YAML representation must round-trip all supported fields without silent loss.
@@ -685,7 +686,7 @@ Illustrative common Task List form:
 +------------------------------------------------------------------+
 
 Execution UX:
-[ ] Task List Detail should show compact ordered progress, for example:
+[x] Task List Detail should show compact ordered progress, for example:
       1  ✓ Analyze architecture       Completed
       2  ● Refactor backend          Running / Execute
       3  ○ Update UI                 Waiting
@@ -694,7 +695,7 @@ Execution UX:
     - Clicking an item opens/reuses the existing execution detail/log surface for that child/run.
     - Waiting items are clearly non-running and do not appear to own separate runtime sessions.
 
-[ ] Stop / Resume must map directly to existing YAML List/script semantics.
+[x] Stop / Resume must map directly to existing YAML List/script semantics.
     - Stop stops the active script/list through the canonical backend action.
     - Resume must use durable script/item checkpoints: completed items stay completed, the interrupted
       child resumes according to Runner semantics, then later items continue in order.
@@ -702,14 +703,14 @@ Execution UX:
     - Rerun/Restart semantics must be explicitly mapped to existing script runner behavior before exposing
       a button; do not overload Resume/Continue terminology.
 
-[ ] Preserve failure visibility and recovery semantics.
+[x] Preserve failure visibility and recovery semantics.
     - If an item Needs Attention / fails closed, parent Sequential Task surfaces the failed item and reason.
     - Technical retry/recovery remains StageExecutor/script-runner owned.
     - Semantic failure routing remains Workflow-owned.
     - UI may offer only actions allowed by canonical runtime projection/backend guards.
 
 History / durability:
-[ ] Keep Sequential Task history inspectable.
+[x] Keep Sequential Task history inspectable.
     - Parent history shows list-level execution segments/runs.
     - Each child retains links to its actual run/state/log evidence.
     - Completed child evidence remains inspectable after later children run.
@@ -718,19 +719,19 @@ History / durability:
       it must not silently delete source changes or perform Git integration.
 
 Cards / list UX:
-[ ] Tasks page should distinguish Single vs Sequential without creating a separate scheduler dashboard.
+[x] Tasks page should distinguish Single vs Sequential without creating a separate scheduler dashboard.
     - Example Single card: "Completed · ralphy_ai_validate".
     - Example Task List card: "Task List · 2/4 · Running".
     - Existing filters remain status-oriented: All / Active / Needs Attention / Completed.
     - Do not add priority queues, automatic reordering, dependencies or background scheduling.
 
 Compatibility / tests:
-[ ] Add deterministic/backend tests proving UI and CLI use the same YAML List execution contract.
-[ ] Add Browser E2E for create/reorder/start/stop/resume/open-child/history.
-[ ] Keep current yaml-list-resume and yaml-list-endurance live probes authoritative for real backend behavior.
-[ ] Verify old CLI YAML files continue to run unchanged after UI support lands.
-[ ] Verify one-active-Task-per-path applies equally to Single and Sequential Tasks.
-[ ] Verify refresh/stale-tab/double-click cannot launch the next item or a second parent Task independently.
+[x] Add deterministic/backend tests proving UI and CLI use the same YAML List execution contract.
+[x] Add Browser E2E for create/reorder/start/stop/resume/open-child/history.
+[x] Keep current yaml-list-resume and yaml-list-endurance live probes authoritative for real backend behavior.
+[x] Verify old CLI YAML files continue to run unchanged after UI support lands.
+[x] Verify one-active-Task-per-path applies equally to Single and Sequential Tasks.
+[x] Verify refresh/stale-tab/double-click cannot launch the next item or a second parent Task independently.
 
 Illustrative UI sketch (direction only):
 
@@ -769,7 +770,7 @@ Implementation dependency note:
 - Task / Task List Workflow selection may reuse the existing Workflow catalog/picker before this navigation redesign is finished.
 - Do not block Task List UI on the new Library shell; Phase 6 reorganizes asset navigation, not the underlying Workflow capability.
 
-[ ] Move reusable assets into a global Library navigation domain.
+[x] Move reusable assets into a global Library navigation domain.
     - Library is not owned by the selected Chat.
     - Preserve existing Global + Project asset scopes; "global navigation" does not mean every asset becomes global.
     - Project scope selection must be explicit and independently understandable.
@@ -777,7 +778,7 @@ Implementation dependency note:
       Workflows
       Prompts
 
-[ ] Workflows page
+[x] Workflows page
     - Prefer compact searchable list/table for assets rather than large Task-style cards.
     - Expose asset scope clearly: Global or a specific Project.
     - Open a Workflow into the existing Full Designer.
@@ -787,26 +788,26 @@ Implementation dependency note:
       Once Chat no longer owns the Workflow picker, reuse that setting for the New Task Workflow picker
       (rename UI wording such as "Show in Chat" only when the new Task picker replaces the old Chat picker).
 
-[ ] Prompts page
+[x] Prompts page
     - Prefer compact searchable list/table.
     - Expose asset scope clearly: Global or a specific Project.
     - Open a Prompt into the existing Prompt Editor/Test UI.
     - Prompts remain reusable assets referenced by Workflow/Stage configuration.
 
-[ ] Reuse common page patterns without forcing identical presentation.
+[x] Reuse common page patterns without forcing identical presentation.
     - Tasks are status-heavy -> cards are appropriate.
     - Workflows / Prompts are asset-heavy -> compact list/search is more appropriate.
 
 PHASE 7 - Polish after the basic model is stable
 ------------------------------------------------
-[ ] Improve navigation ergonomics.
+[x] Improve navigation ergonomics.
     - Global rail + contextual sidebar + main content.
     - Preserve context when switching Chat <-> Tasks.
     - Stable Chat/Task/Workflow/Prompt identities should allow refresh/navigation restoration without landing on the wrong item.
     - Clear breadcrumbs/back navigation for Task Detail / Workflow Designer / Prompt Editor.
     - Avoid unnecessary modal stacks.
 
-[ ] Improve low-resolution/responsive behavior.
+[x] Improve low-resolution/responsive behavior.
     - Context sidebar can collapse.
     - Task cards gracefully reduce columns.
     - Task Detail action/input area remains usable and attached to the detail surface.
@@ -814,23 +815,23 @@ PHASE 7 - Polish after the basic model is stable
       do not imply live mid-run instruction injection when the shared Runner does not support it.
     - No horizontal overflow for long Chat/Task/Workflow/Prompt names.
 
-[ ] Preserve accessibility and predictable interaction.
+[x] Preserve accessibility and predictable interaction.
     - Status must use text/icon/semantics, not color alone.
     - Preserve keyboard focus/shortcuts and focus restoration from the current UI.
     - Destructive Delete/Stop actions remain visually separated and confirmed where appropriate.
     - Disabled actions explain why when the reason is not obvious (for example path Busy / Path unavailable).
 
-[ ] Cover empty/loading/error states.
+[x] Cover empty/loading/error states.
     - New Chat / no Tasks / no Workflows / no Prompts should always expose the next useful action.
     - Async discovery failures must not blank the whole surface.
     - Path unavailable and historical-resource-missing states should remain readable and actionable.
 
-[ ] Keep large histories usable.
+[x] Keep large histories usable.
     - Do not eagerly render every historical Task execution/log forever.
     - Use bounded summaries plus lazy/load-more/virtualized detail when scale proves necessary.
     - Preserve existing bounded runtime output policies; UI history must not become an unbounded memory surface.
 
-[ ] Preserve fast first paint.
+[x] Preserve fast first paint.
     - Shared backend/model discovery must not block Chat/Tasks/Library initial rendering.
     - Load expensive optional discovery asynchronously.
 
@@ -838,34 +839,34 @@ FINAL PHASE - Worktree support / parallel Task isolation
 --------------------------------------------------------
 Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + Sequential Task/YAML List UI + Library are stable.
 
-[ ] Add Task workspace selection only when worktree support actually exists:
+[x] Add Task workspace selection only when worktree support actually exists:
     - Main
     - New Worktree
     - Existing Worktree only if a real use case still justifies it.
     - Do not introduce an automatic Task queue/scheduler merely because a path is Busy; fail clearly or let
       the user keep/edit a non-running Task draft only if that workflow is explicitly implemented.
 
-[ ] Keep Main Task support permanently.
+[x] Keep Main Task support permanently.
     - Worktree is an isolation option, not a replacement for Main.
     - Before worktree support exists, multiple Task records/history may exist, but only one active Task
       may own the same canonical Main/root execution path at a time.
     - This ownership rule applies across different Chats that reference the same path.
 
-[ ] Worktree concurrency rule:
+[x] Worktree concurrency rule:
     - one active Task per canonical execution path,
     - Main and each worktree are separate paths and therefore separate ownership domains,
     - separate worktrees allow independent Tasks to run concurrently,
     - do not weaken the rule for multiple browser tabs/Chats,
     - do not build a generic parallel/DAG scheduler just for worktrees.
 
-[ ] Worktree lifecycle:
+[x] Worktree lifecycle:
     - create/attach workspace for Task,
     - execute Task in that workspace,
     - retain enough identity/status for inspection,
     - cleanup is a separate explicit operation,
     - deleting a worktree must not delete Task history.
 
-[ ] Task must NOT merge.
+[x] Task must NOT merge.
     - Task responsibility ends at doing/verifying its assigned work.
     - No automatic merge, rebase, cherry-pick, conflict resolution, or "merge completed" runtime state.
     - Integration remains a separate user decision.
@@ -873,7 +874,7 @@ Do this LAST. It is intentionally postponed until Chat + Tasks + Task Detail + S
       the desired merge/integration flow.
     - This keeps Task execution reliable and prevents merge complexity from contaminating the 24H runtime.
 
-[ ] Main/path busy UX after worktree support:
+[x] Main/path busy UX after worktree support:
     - New Task sheet shows the selected execution path as Available / Busy.
     - If Main already has an active Task on the same canonical path, Main is disabled and the UI points
       to the owning Task, even if it belongs to another Chat.
