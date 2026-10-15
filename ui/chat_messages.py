@@ -9,7 +9,10 @@ from pathlib import Path
 
 from project_registry import project_file_lock
 
-from .chat_index import ChatIndex
+try:
+    from .chat_index import ChatIndex
+except ImportError:  # direct ui/main.py execution
+    from chat_index import ChatIndex
 
 
 class ChatMessages:
