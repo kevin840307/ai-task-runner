@@ -253,18 +253,21 @@ class TaskWorkspaceMixin:
         workflow: str = "",
         source_message_id: str = "",
         goal_file: str = "",
+        workspace_mode: str = "main",
+        workspace_path: str = "",
     ) -> dict:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
             raise ValueError("Chat path unavailable")
-        project = Path(chat["root_path"])
+        source_project = Path(chat["root_path"]).resolve()
+        project = source_project
         source_goal_file = str(goal_file or "").strip()
         task_instruction = str(instruction or "").strip()
         if source_goal_file:
             if task_instruction:
                 raise ValueError("Task must use either Instruction or goal file, not both")
             source = Path(source_goal_file).expanduser()
-            source = source.resolve() if source.is_absolute() else (project / source).resolve()
+            source = source.resolve() if source.is_absolute() else (source_project / source).resolve()
             if not source.is_file():
                 raise ValueError("Task goal file not found")
             try:
@@ -276,8 +279,7 @@ class TaskWorkspaceMixin:
             source_goal_file = str(source)
         if not task_instruction:
             raise ValueError("Task instruction is required")
-        resolved_workflow = self._resolve_task_workflow(project, workflow)
-        self._sync_prior_tasks(project)
+        resolved_workflow = self._resolve_task_workflow(source_project, workflow)
 
         task = self.tasks.create(
             chat_id=chat_id,
@@ -291,6 +293,13 @@ class TaskWorkspaceMixin:
         if source_goal_file:
             task = self.tasks.update(task["task_id"], source_goal_file=source_goal_file)
         try:
+            task, project = self._prepare_task_workspace(
+                task,
+                chat,
+                workspace_mode,
+                workspace_path,
+            )
+            self._sync_prior_tasks(project)
             request = self.launch_message(project, task_instruction, workflow=resolved_workflow)
         except Exception as exc:
             task = self.tasks.update(
