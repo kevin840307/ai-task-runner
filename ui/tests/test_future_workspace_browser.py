@@ -229,6 +229,12 @@ def test_future_chat_task_and_task_list_browser_contract():
         page.get_by_role("button", name="Stop").wait_for()
         assert actions[:2] == ["stop", "resume"]
 
+        # Stable Chat/Task identities restore the same Task Detail after refresh.
+        page.reload(wait_until="domcontentloaded")
+        page.get_by_role("heading", name="Refactor backend safely").wait_for()
+        assert page.locator("#tasksTab").get_attribute("aria-selected") == "true"
+        assert "chat=" in page.url and "task=" in page.url
+
         # Task List uses the same form and preserves manual order.
         page.locator("#newTask").click()
         page.locator("#taskType").select_option("sequential")
