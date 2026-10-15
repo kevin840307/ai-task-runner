@@ -178,6 +178,45 @@ class TaskWorkspaceMixin:
             workspace_removed_at=time.time(),
         )
 
+    def _sequential_child_evidence(self, project: Path) -> list[dict]:
+        script_root = project / ".ai-task-runner" / "script"
+        if not script_root.is_dir():
+            return []
+        evidence: list[dict] = []
+        for child in sorted(script_root.iterdir()):
+            if not child.is_dir() or not child.name.isdigit():
+                continue
+            state = self._read_json(child / "state.json") or {}
+            result = self._read_text(child / "debug" / "last-result.txt", limit=6000).strip()
+            evidence.append({
+                "index": int(child.name),
+                "run_id": str(state.get("run_id") or ""),
+                "completed": bool(state.get("completed")),
+                "stage": str(state.get("stage") or ""),
+                "last_error": str(state.get("last_error") or ""),
+                "result": result,
+            })
+        return evidence
+
+    @staticmethod
+    def _archived_messages(runtime_archive: str, run_ids: set[str]) -> list[dict]:
+        path = Path(str(runtime_archive or "")) / "ui" / "messages.jsonl"
+        if not path.is_file() or not run_ids:
+            return []
+        rows: list[dict] = []
+        try:
+            with path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(item, dict) and str(item.get("run_id") or "") in run_ids:
+                        rows.append(item)
+        except OSError:
+            return []
+        return rows[-400:]
+
     def _sync_task(self, task: dict) -> dict:
         project = Path(str(task.get("root_path") or ""))
         if not project.is_dir():
@@ -205,7 +244,13 @@ class TaskWorkspaceMixin:
                 self.sync_completion(project)
             status = str(runtime.get("status") or "idle")
             execution_changes = {"last_status": status}
-            if task.get("task_type") != "sequential":
+            if task.get("task_type") == "sequential":
+                children = self._sequential_child_evidence(project)
+                execution_changes["children"] = children
+                execution_changes["run_ids"] = [
+                    child["run_id"] for child in children if child.get("run_id")
+                ]
+            else:
                 run_id = str(runtime.get("run_id") or "")
                 if run_id:
                     execution_changes["run_id"] = run_id
@@ -233,9 +278,13 @@ class TaskWorkspaceMixin:
     def task_detail(self, task_id: str) -> dict:
         task = self._sync_task(self.tasks.get(task_id))
         run_ids = {
-            str(item.get("run_id") or "")
+            value
             for item in task.get("executions", [])
-            if str(item.get("run_id") or "")
+            for value in (
+                [str(item.get("run_id") or "")]
+                + [str(run_id or "") for run_id in item.get("run_ids", [])]
+            )
+            if value
         }
         history: list[dict] = []
         project = Path(task["root_path"])
@@ -244,6 +293,8 @@ class TaskWorkspaceMixin:
                 row for row in self.messages(project)
                 if str(row.get("run_id") or "") in run_ids
             ]
+        elif task.get("runtime_archive"):
+            history = self._archived_messages(str(task.get("runtime_archive") or ""), run_ids)
         return {**task, "history": history}
 
     def _sync_prior_tasks(self, project: Path) -> None:
