@@ -12,8 +12,24 @@ from project_registry import path_key
 
 try:
     from .task_index import TaskIndex
+    from .task_worktree import (
+        WorktreeError,
+        archive_runtime,
+        attach_existing_worktree,
+        create_task_worktree,
+        list_worktrees,
+        remove_task_worktree,
+    )
 except ImportError:
     from task_index import TaskIndex
+    from task_worktree import (
+        WorktreeError,
+        archive_runtime,
+        attach_existing_worktree,
+        create_task_worktree,
+        list_worktrees,
+        remove_task_worktree,
+    )
 
 TASK_MARKER = "active-task.json"
 DEFAULT_TASK_WORKFLOW = "ralphy_ai_validate.yaml"
@@ -77,12 +93,96 @@ class TaskWorkspaceMixin:
     def _same_path(left: str | Path, right: str | Path) -> bool:
         return path_key(left) == path_key(right)
 
+    def workspaces_payload(self, chat_id: str) -> dict:
+        chat = self._chat_for_task(chat_id)
+        if not chat.get("path_available"):
+            return {"workspaces": [], "path_available": False}
+        source = Path(chat["root_path"])
+        rows = []
+        try:
+            for row in list_worktrees(source):
+                rows.append({
+                    "kind": "main" if row.get("is_main") else "worktree",
+                    "path": str(row.get("path") or ""),
+                    "branch": str(row.get("branch") or ""),
+                    "is_main": bool(row.get("is_main")),
+                })
+        except (OSError, WorktreeError):
+            rows = [{"kind": "main", "path": str(source), "branch": "", "is_main": True}]
+        return {"workspaces": rows, "path_available": True}
+
+    def _prepare_task_workspace(
+        self,
+        task: dict,
+        chat: dict,
+        workspace_mode: str,
+        workspace_path: str = "",
+    ) -> tuple[dict, Path]:
+        source = Path(chat["root_path"]).resolve()
+        mode = str(workspace_mode or "main")
+        if mode == "main":
+            workspace = {
+                "kind": "main",
+                "path": str(source),
+                "branch": "",
+                "source_root": str(source),
+                "managed": False,
+            }
+        elif mode == "new":
+            workspace = create_task_worktree(source, task["task_id"])
+        elif mode == "existing":
+            workspace = attach_existing_worktree(source, workspace_path)
+        else:
+            raise ValueError("Workspace must be Main, New Worktree, or Existing Worktree")
+        task = self.tasks.update(
+            task["task_id"],
+            root_path=workspace["path"],
+            source_root_path=str(source),
+            workspace_kind=workspace["kind"],
+            workspace_branch=workspace.get("branch", ""),
+            workspace_managed=bool(workspace.get("managed")),
+        )
+        return task, Path(workspace["path"])
+
+    def cleanup_task_workspace(self, task_id: str) -> dict:
+        task = self._sync_task(self.tasks.get(task_id))
+        if task.get("workspace_kind") != "worktree" or not task.get("workspace_managed"):
+            raise ValueError("Only Task-created worktrees can be cleaned up here")
+        workspace = Path(task["root_path"])
+        source = Path(task.get("source_root_path") or "")
+        if not source.is_dir():
+            raise ValueError("Source repository is unavailable")
+        if workspace.is_dir():
+            marker = self._read_task_marker(workspace)
+            if marker.get("task_id") == task_id and self.read_runtime(workspace).get("running"):
+                raise ValueError("Stop the active Task before cleaning up its worktree")
+            archive = source / ".ai-task-runner" / "ui" / "task-history" / task_id / "runtime"
+            archive_path = archive_runtime(workspace, archive)
+            runtime = workspace / ".ai-task-runner"
+            if runtime.is_dir():
+                import shutil
+                shutil.rmtree(runtime)
+            remove_task_worktree(source, workspace)
+        else:
+            archive_path = str(task.get("runtime_archive") or "")
+        return self.tasks.update(
+            task_id,
+            runtime_archive=archive_path,
+            workspace_removed=True,
+            workspace_removed_at=time.time(),
+        )
+
     def _sync_task(self, task: dict) -> dict:
         project = Path(str(task.get("root_path") or ""))
         if not project.is_dir():
-            if task.get("last_status") != "path_unavailable":
+            if not task.get("workspace_removed") and task.get("last_status") != "path_unavailable":
                 task = self.tasks.update(task["task_id"], last_status="path_unavailable")
-            return {**task, "path_available": False, "runtime": None}
+            return {
+                **task,
+                "path_available": False,
+                "workspace_removed": bool(task.get("workspace_removed")),
+                "runtime": None,
+            }
 
         marker = self._read_task_marker(project)
         owns_visible_runtime = marker.get("task_id") == task.get("task_id")
