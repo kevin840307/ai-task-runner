@@ -44,6 +44,8 @@ class ChatWorkspaceContract(unittest.TestCase):
         self.assertNotIn('</script>\\n<script', library)
         self.assertNotIn('</script>\\n<script', settings)
         self.assertIn('library.clear_search', library_module)
+        for page in (chats, library, settings):
+            self.assertIn('body{display:block;width:100%;height:100vh;overflow:hidden}', page)
 
         self.assertIn('id="libraryScope"', library)
         self.assertIn('id="workflowLibraryTab"', library)
