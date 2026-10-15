@@ -273,7 +273,7 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
             )
 
         self.assertEqual(task["last_status"], "needs_attention")
-        self.assertEqual(task["workflow"], str(self.state.workflow))
+        self.assertEqual(path_key(task["workflow"]), path_key(self.state.workflow))
         self.assertEqual(task["backend"], "qwen")
         self.assertEqual(task["model"], "model-a")
         self.assertEqual(
