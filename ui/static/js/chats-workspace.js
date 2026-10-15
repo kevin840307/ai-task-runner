@@ -436,27 +436,45 @@ async function loadTaskWorkspaces() {
   main.value = "main";
   main.textContent = "Main";
   select.append(main);
+  element("taskWorkspaceRow").hidden = true;
   if (!currentChat?.path_available) return;
   try {
     const data = await request("/api/workspaces?chat_id=" + encodeURIComponent(currentChat.chat_id));
+    const mainWorkspace = (data.workspaces || []).find(workspace => workspace.is_main);
+    if (mainWorkspace) {
+      main.dataset.busy = String(Boolean(mainWorkspace.busy));
+      main.dataset.ownerTaskId = mainWorkspace.owner_task_id || "";
+      main.dataset.ownerChatId = mainWorkspace.owner_chat_id || "";
+      main.textContent = mainWorkspace.busy
+        ? "Main · Busy" + (mainWorkspace.owner_title ? " · " + mainWorkspace.owner_title : "")
+        : "Main · Available";
+    }
     if (data.git_available) {
+      element("taskWorkspaceRow").hidden = false;
       const fresh = document.createElement("option");
       fresh.value = "new";
-      fresh.textContent = "New Worktree";
+      fresh.textContent = "New Worktree · Available";
       select.append(fresh);
       for (const workspace of data.workspaces || []) {
         if (workspace.is_main) continue;
         const option = document.createElement("option");
         option.value = "existing:" + workspace.path;
-        option.textContent = "Existing · " + (workspace.branch || workspace.path);
+        option.dataset.busy = String(Boolean(workspace.busy));
+        option.dataset.ownerTaskId = workspace.owner_task_id || "";
+        option.dataset.ownerChatId = workspace.owner_chat_id || "";
+        option.disabled = Boolean(workspace.busy);
+        option.textContent = "Existing · " + (workspace.branch || workspace.path)
+          + (workspace.busy ? " · Busy" + (workspace.owner_title ? " · " + workspace.owner_title : "") : " · Available");
         select.append(option);
       }
-      element("taskWorkspaceHint").textContent = "Main or an isolated Git worktree. Task never merges branches.";
+      element("taskWorkspaceHint").textContent = "Main or an isolated Git worktree. Busy paths cannot start another Task; Task never merges branches.";
     } else {
-      element("taskWorkspaceHint").textContent = "This project is not available as a Git repository; Main only.";
+      element("taskWorkspaceHint").textContent = main.dataset.busy === "true"
+        ? "Main · Busy. Stop the owning Task first."
+        : "Main · Available";
     }
   } catch (error) {
-    element("taskWorkspaceHint").textContent = "Workspace discovery unavailable; Main remains usable.";
+    element("taskWorkspaceHint").textContent = "Workspace discovery unavailable; backend ownership guard still applies.";
     report(error);
   }
 }
@@ -467,15 +485,16 @@ function selectedTaskWorkspace() {
   return {workspace_mode: "main", workspace_path: ""};
 }
 
-async function updateMainAvailability() {
-  if (!currentChat?.path_available) { element("mainAvailability").textContent = "Path unavailable"; return; }
-  try {
-    const runtime = await request("/api/project/runtime?project=" + encodeURIComponent(currentChat.root_path));
-    element("mainAvailability").textContent = runtime.running ? "Busy" : "Available";
-    element("taskRun").disabled = Boolean(runtime.running);
-  } catch (_) {
-    element("mainAvailability").textContent = "Unavailable";
-    element("taskRun").disabled = true;
+function updateSelectedWorkspaceAvailability() {
+  const option = element("taskWorkspace").selectedOptions[0];
+  const busy = option?.dataset.busy === "true";
+  const isNew = option?.value === "new";
+  element("mainAvailability").textContent = busy
+    ? "Selected path · Busy"
+    : isNew ? "New Worktree · Available" : "Selected path · Available";
+  element("taskRun").disabled = busy;
+  if (busy && option?.dataset.ownerTaskId) {
+    element("taskWorkspaceHint").textContent = "Busy path is owned by another active Task. Open that Task or choose New Worktree.";
   }
 }
 async function openTaskModal(prefill = "", sourceMessageId = "") {
@@ -497,7 +516,9 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   addTaskListItem(prefill);
   element("taskForm").dataset.sourceMessageId = sourceMessageId;
   element("taskModal").hidden = false;
-  await Promise.all([loadWorkflowOptions(), loadTaskBackends(), loadTaskWorkspaces(), updateMainAvailability()]);
+  await Promise.all([loadWorkflowOptions(), loadTaskBackends()]);
+  await loadTaskWorkspaces();
+  updateSelectedWorkspaceAvailability();
   element("taskInstruction").focus();
 }
 async function openSuggestedTaskList(requestText, sourceMessageId = "") {
@@ -820,6 +841,7 @@ element("taskClearFile").addEventListener("click", () => {
 });
 element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
 element("taskBackend").addEventListener("change", renderTaskModels);
+element("taskWorkspace").addEventListener("change", updateSelectedWorkspaceAvailability);
 element("addTaskListItem").addEventListener("click", () => addTaskListItem());
 element("taskListYamlToggle").addEventListener("click", async () => {
   const panel = element("taskListYamlPanel");
