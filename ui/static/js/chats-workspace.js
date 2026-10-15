@@ -774,9 +774,12 @@ async function openTask(taskId) {
           addDetailLine(childDetail, "Stage", evidence.stage);
           addDetailLine(childDetail, "Status", evidence.completed ? "Completed" : evidence.last_error ? "Needs Attention" : "In progress");
           addDetailLine(childDetail, "Error", evidence.last_error);
-          if (evidence.result) {
+          if (Array.isArray(evidence.activity_summary) && evidence.activity_summary.length) {
+            addDetailLine(childDetail, "Activity", evidence.activity_summary.join(" · "));
+          }
+          if (evidence.output || evidence.result) {
             const output = document.createElement("pre");
-            output.textContent = evidence.result;
+            output.textContent = [evidence.output, evidence.result].filter(Boolean).join("\n\n");
             childDetail.append(output);
           }
         }
@@ -819,17 +822,40 @@ async function openTask(taskId) {
     const text = document.createElement("textarea");
     text.placeholder = "Continue Task with a new instruction…";
     text.setAttribute("aria-label", "Continue Task instruction");
+    const continueWorkflow = document.createElement("select");
+    continueWorkflow.setAttribute("aria-label", "Continue Task Workflow");
+    const same = document.createElement("option");
+    same.value = "";
+    same.textContent = "Same Workflow";
+    continueWorkflow.append(same);
+    const projectForAssets = task.source_root_path || currentChat?.root_path || task.root_path;
+    request("/api/studio/files?x=1&project=" + encodeURIComponent(projectForAssets))
+      .then(data => {
+        for (const workflow of (data.workflows || []).filter(item => !item.hidden)) {
+          if (String(workflow.path || "") === String(task.workflow || "")) continue;
+          const option = document.createElement("option");
+          option.value = workflow.path;
+          option.textContent = workflow.name;
+          continueWorkflow.append(option);
+        }
+      })
+      .catch(() => {});
     const continueButton = document.createElement("button");
     continueButton.type = "button";
     continueButton.textContent = "Continue Task";
     continueButton.addEventListener("click", async () => {
       if (!text.value.trim()) return;
       try {
-        await request("/api/tasks/action", {task_id: task.task_id, action: "continue", instruction: text.value.trim()});
+        await request("/api/tasks/action", {
+          task_id: task.task_id,
+          action: "continue",
+          instruction: text.value.trim(),
+          workflow: continueWorkflow.value
+        });
         await refreshOpenTask();
       } catch (error) { report(error); }
     });
-    root.append(text);
+    root.append(text, continueWorkflow);
     actions.append(continueButton);
   }
   if (allowed.cleanup_workspace || (!task.available_actions && !task.runtime?.running && task.workspace_kind === "worktree" && task.workspace_managed && !task.workspace_removed)) {
@@ -881,6 +907,14 @@ async function openTask(taskId) {
         evidence.result ? "result: " + evidence.result : "",
         evidence.stream_tail ? "output: " + evidence.stream_tail : "",
       ].filter(Boolean);
+      for (const child of execution.children || []) {
+        details.push(
+          `item ${child.index}: ${child.completed ? "Completed" : child.last_error ? "Needs Attention" : "In progress"}`
+          + (child.stage ? " · " + child.stage : "")
+          + (child.run_id ? " · run " + child.run_id : "")
+          + (child.result ? "\n" + String(child.result).slice(0, 1500) : "")
+        );
+      }
       return {kind: "execution", text: details.join("\n")};
     }),
     ...(task.history || []).map(message => ({kind: "message", text: message.content || ""}))
