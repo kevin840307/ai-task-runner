@@ -882,6 +882,8 @@ class TaskWorkspaceMixin:
                     "instruction": text,
                     "workflow": resolved_workflow,
                     "default_workflow": resolved_workflow,
+                    "backend": str(task.get("backend") or ""),
+                    "model": str(task.get("model") or ""),
                     "run_id": "",
                     "item_count": 1,
                 })
@@ -900,6 +902,8 @@ class TaskWorkspaceMixin:
                     "started_at": time.time(),
                     "instruction": text,
                     "workflow": str(request.get("workflow") or resolved_workflow),
+                    "backend": str(request.get("backend") or task.get("backend") or ""),
+                    "model": str(request.get("model") or task.get("model") or ""),
                     "run_id": "",
                 })
                 self._write_task_marker(project, task_id, request_id)
