@@ -45,6 +45,16 @@ function statusText(task) {
   const runtime = task.runtime || {};
   return String(runtime.status || task.last_status || "pending").replaceAll("_", " ");
 }
+function relativeAge(timestamp) {
+  const value = Number(timestamp || 0);
+  if (!value) return "";
+  const seconds = Math.max(0, Math.round(Date.now() / 1000 - value));
+  if (seconds < 60) return seconds + "s ago";
+  if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+  if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+  return Math.floor(seconds / 86400) + "d ago";
+}
+
 function taskMatchesFilter(task) {
   const status = statusText(task).toLowerCase();
   if (taskFilter === "active") return ["running", "recovering", "launching", "stopping"].some(v => status.includes(v));
@@ -516,7 +526,9 @@ function renderTasks() {
     const stage = runtime.stage ? ` · ${runtime.stage}` : "";
     status.textContent = `${statusText(task)}${stage}${progress}`;
     const meta = document.createElement("small");
-    meta.textContent = task.task_type === "sequential" ? "Task List" : "Task";
+    const kind = task.task_type === "sequential" ? "Task List" : "Task";
+    const freshness = relativeAge(task.updated_at || task.created_at);
+    meta.textContent = kind + (freshness ? " · " + freshness : "");
     button.append(title, status, meta);
     button.addEventListener("click", () => openTask(task.task_id).catch(report));
     list.append(button);
@@ -588,6 +600,11 @@ async function openTask(taskId) {
     addDetailLine(root, "Last error", task.last_error);
   }
   if (task.task_type === "sequential") {
+    const latestExecution = (task.executions || []).at(-1) || {};
+    const childEvidence = new Map((latestExecution.children || []).map(child => [Number(child.index), child]));
+    const childDetail = document.createElement("article");
+    childDetail.className = "task-detail";
+    childDetail.hidden = true;
     const listTitle = document.createElement("h4");
     listTitle.textContent = "Ordered Task List";
     root.append(listTitle);
@@ -603,9 +620,34 @@ async function openTask(taskId) {
         : currentIndex === number ? `${statusText(task)}${task.runtime?.stage ? " · " + task.runtime.stage : ""}`
         : "Waiting";
       row.textContent = `${number}. ${item.instruction || "Task"}\n${state}`;
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      const showChild = () => {
+        const evidence = childEvidence.get(number);
+        childDetail.replaceChildren();
+        const heading = document.createElement("strong");
+        heading.textContent = "Item " + number + " evidence";
+        childDetail.append(heading);
+        if (!evidence) {
+          addDetailLine(childDetail, "Status", "Waiting / no runtime evidence yet");
+        } else {
+          addDetailLine(childDetail, "Run", evidence.run_id);
+          addDetailLine(childDetail, "Stage", evidence.stage);
+          addDetailLine(childDetail, "Status", evidence.completed ? "Completed" : evidence.last_error ? "Needs Attention" : "In progress");
+          addDetailLine(childDetail, "Error", evidence.last_error);
+          if (evidence.result) {
+            const output = document.createElement("pre");
+            output.textContent = evidence.result;
+            childDetail.append(output);
+          }
+        }
+        childDetail.hidden = false;
+      };
+      row.addEventListener("click", showChild);
+      row.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); showChild(); }});
       ordered.append(row);
     });
-    root.append(ordered);
+    root.append(ordered, childDetail);
   }
   const actions = document.createElement("div");
   actions.className = "task-actions";
