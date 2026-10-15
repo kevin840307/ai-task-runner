@@ -102,15 +102,45 @@ class TaskWorkspaceMixin:
         git_available = True
         try:
             for row in list_worktrees(source):
+                workspace_path = str(row.get("path") or "")
+                runtime = self.read_runtime(Path(workspace_path)) if Path(workspace_path).is_dir() else {}
+                marker = self._read_task_marker(Path(workspace_path)) if Path(workspace_path).is_dir() else {}
+                owner_task_id = str(marker.get("task_id") or "")
+                owner = None
+                if owner_task_id:
+                    try:
+                        owner = self.tasks.get(owner_task_id)
+                    except ValueError:
+                        owner = None
                 rows.append({
                     "kind": "main" if row.get("is_main") else "worktree",
-                    "path": str(row.get("path") or ""),
+                    "path": workspace_path,
                     "branch": str(row.get("branch") or ""),
                     "is_main": bool(row.get("is_main")),
+                    "busy": bool(runtime.get("running")),
+                    "owner_task_id": owner_task_id,
+                    "owner_chat_id": str((owner or {}).get("chat_id") or ""),
+                    "owner_title": str((owner or {}).get("title") or ""),
                 })
         except (OSError, WorktreeError):
             git_available = False
-            rows = [{"kind": "main", "path": str(source), "branch": "", "is_main": True}]
+            runtime = self.read_runtime(source)
+            marker = self._read_task_marker(source)
+            owner_task_id = str(marker.get("task_id") or "")
+            try:
+                owner = self.tasks.get(owner_task_id) if owner_task_id else {}
+            except ValueError:
+                owner = {}
+            rows = [{
+                "kind": "main",
+                "path": str(source),
+                "branch": "",
+                "is_main": True,
+                "busy": bool(runtime.get("running")),
+                "owner_task_id": owner_task_id,
+                "owner_chat_id": str(owner.get("chat_id") or ""),
+                "owner_title": str(owner.get("title") or ""),
+            }]
         return {
             "workspaces": rows,
             "path_available": True,
