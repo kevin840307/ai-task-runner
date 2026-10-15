@@ -798,19 +798,24 @@ class TaskWorkspaceMixin:
                 raise ValueError("Task cannot be rerun while its path is unavailable or busy")
             self._sync_prior_tasks(project)
             if sequential:
-                script = str(latest.get("script_file") or "")
-                parent_workflow = str(
-                    latest.get("default_workflow")
-                    or latest.get("workflow")
-                    or task.get("workflow")
-                    or ""
+                frozen_items = list(task.get("items") or [])
+                if not frozen_items:
+                    raise ValueError("Task List has no frozen items to rerun")
+                script = str(
+                    self._write_task_list(
+                        project,
+                        task_id,
+                        frozen_items,
+                        len(executions) + 1,
+                    )
                 )
+                parent_workflow = str(task.get("workflow") or "")
                 self.launch_script_task(
                     project,
                     script,
                     workflow=parent_workflow,
-                    backend=str(latest.get("backend") or task.get("backend") or ""),
-                    model=str(latest.get("model") or task.get("model") or ""),
+                    backend=str(task.get("backend") or ""),
+                    model=str(task.get("model") or ""),
                 )
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
@@ -819,10 +824,10 @@ class TaskWorkspaceMixin:
                     "instruction": task.get("instruction") or "",
                     "workflow": parent_workflow,
                     "default_workflow": parent_workflow,
-                    "backend": str(latest.get("backend") or task.get("backend") or ""),
-                    "model": str(latest.get("model") or task.get("model") or ""),
+                    "backend": str(task.get("backend") or ""),
+                    "model": str(task.get("model") or ""),
                     "run_id": "",
-                    "item_count": len(task.get("items") or []),
+                    "item_count": len(frozen_items),
                 })
                 self._write_task_marker(project, task_id)
             else:
