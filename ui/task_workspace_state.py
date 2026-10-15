@@ -99,6 +99,7 @@ class TaskWorkspaceMixin:
             return {"workspaces": [], "path_available": False}
         source = Path(chat["root_path"])
         rows = []
+        git_available = True
         try:
             for row in list_worktrees(source):
                 rows.append({
@@ -108,8 +109,13 @@ class TaskWorkspaceMixin:
                     "is_main": bool(row.get("is_main")),
                 })
         except (OSError, WorktreeError):
+            git_available = False
             rows = [{"kind": "main", "path": str(source), "branch": "", "is_main": True}]
-        return {"workspaces": rows, "path_available": True}
+        return {
+            "workspaces": rows,
+            "path_available": True,
+            "git_available": git_available,
+        }
 
     def _prepare_task_workspace(
         self,
