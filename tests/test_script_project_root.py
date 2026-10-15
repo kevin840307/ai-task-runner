@@ -7,7 +7,7 @@ import pytest
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, StateStore
-from runner.script import build_script_item_config, execute_script, load_yaml_script, select_script_workflow
+from runner.script import build_script_item_config, execute_script, load_yaml_script, parse_yaml_script_text, select_script_workflow
 
 
 def base_config(tmp_path: Path) -> RuntimeConfig:
@@ -112,6 +112,39 @@ def test_yaml_goal_file_and_inline_prompt_are_mutually_exclusive(tmp_path):
     with pytest.raises(RunnerError, match="either prompt or goal_file"):
         load_yaml_script(script)
 
+
+
+def test_yaml_item_can_inherit_explicit_outer_workflow(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text("- prompt: inherited\n", encoding="utf-8")
+
+    with pytest.raises(RunnerError, match="supplies or inherits a workflow"):
+        load_yaml_script(script)
+
+    items = load_yaml_script(script, allow_inherited_workflow=True)
+    config = base_config(tmp_path)
+    config.workflow = [{"name": "outer"}]
+    config.workflow_explicit = True
+    child = build_script_item_config(config, items[0], 1)
+
+    assert child.validator is None
+    assert child.workflow == [{"name": "outer"}]
+    assert child.workflow_explicit is True
+
+
+def test_yaml_text_parser_matches_file_parser_with_inherited_workflow(tmp_path):
+    text = "- prompt: one\n- prompt: two\n"
+    script = tmp_path / "tasks.yaml"
+    script.write_text(text, encoding="utf-8")
+
+    from_file = load_yaml_script(script, allow_inherited_workflow=True)
+    from_text = parse_yaml_script_text(
+        text,
+        script,
+        allow_inherited_workflow=True,
+    )
+
+    assert from_text == from_file
 
 def test_yaml_item_workflow_precedence_is_item_then_outer_then_default(tmp_path):
     config = base_config(tmp_path)
