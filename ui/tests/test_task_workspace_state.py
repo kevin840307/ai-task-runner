@@ -261,6 +261,10 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         ]
         with patch.object(
             self.state,
+            "task_list_yaml_preview",
+            return_value={"canonical": "- prompt: first\n- prompt: second\n"},
+        ), patch.object(
+            self.state,
             "launch_script_task",
             side_effect=ValueError("temporary launch failure"),
         ):
