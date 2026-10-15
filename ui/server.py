@@ -157,7 +157,7 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("workflow", "")),
                 ))
             if parsed.path == "/api/tasks/list/parse":
-                return self._json(self.state.task_list_yaml_preview(str(body.get("chat_id", "")), str(body.get("content", ""))))
+                return self._json(self.state.task_list_yaml_preview(\n                    str(body.get("chat_id", "")),\n                    str(body.get("content", "")),\n                    str(body.get("workflow", "")),\n                ))
             if parsed.path == "/api/chats/turn":
                 return self._json(self.state.chat_turn(str(body.get("chat_id", "")), str(body.get("message", ""))))
             if parsed.path == "/api/tasks/create":
