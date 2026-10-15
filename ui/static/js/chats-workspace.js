@@ -111,11 +111,13 @@ async function selectChat(id) {
   element("archiveChat").disabled = !currentChat;
   element("copyChatPath").disabled = !currentChat?.root_path;
   element("archiveChat").textContent = currentChat?.archived ? t("workspace.restore_chat", "Restore Chat") : t("workspace.archive_chat", "Archive Chat");
-  element("chatNotice").textContent = currentChat && !writable
-    ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
-    : currentChat?.archived
-      ? "Archived · history is retained. Restore this Chat before starting new work."
-      : "Chat is read-only with project access. Use Tasks for file changes, execution, validation, and long-running work.";
+  element("chatNotice").textContent = !currentChat
+    ? ""
+    : !currentChat.path_available
+      ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
+      : currentChat.archived
+        ? "Archived · history is retained. Restore this Chat before starting new work."
+        : "Chat is read-only with project access. Use Tasks for file changes, execution, validation, and long-running work.";
   for (const button of element("chatList").querySelectorAll("button[data-id]")) {
     button.dataset.active = String(button.dataset.id === id);
   }
