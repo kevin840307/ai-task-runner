@@ -900,6 +900,40 @@ class TaskWorkspaceMixin:
             raise ValueError("Unknown Task action")
         return self.task_detail(task_id)
 
+    def _delete_task_ui_artifacts(self, task: dict) -> None:
+        import shutil
+
+        task_id = str(task.get("task_id") or "")
+        roots: set[Path] = set()
+        for value in (task.get("root_path"), task.get("source_root_path")):
+            if not value:
+                continue
+            path = Path(str(value)).expanduser()
+            if path.is_dir():
+                roots.add(path.resolve())
+
+        request_ids = {
+            str(execution.get("request_id") or "")
+            for execution in task.get("executions", [])
+            if isinstance(execution, dict) and str(execution.get("request_id") or "")
+        }
+        for root in roots:
+            ui_root = root / ".ai-task-runner" / "ui"
+            for request_id in request_ids:
+                shutil.rmtree(ui_root / "requests" / request_id, ignore_errors=True)
+            list_root = ui_root / "task-lists"
+            if list_root.is_dir():
+                for path in list_root.glob(f"{task_id}-*.yaml"):
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+
+        source = Path(str(task.get("source_root_path") or task.get("root_path") or "")).expanduser()
+        if source.is_dir():
+            archive = source.resolve() / ".ai-task-runner" / "ui" / "task-history" / task_id
+            shutil.rmtree(archive, ignore_errors=True)
+
     def delete_task(self, task_id: str) -> dict:
         task = self._sync_task(self.tasks.get(task_id))
         project = Path(task["root_path"])
@@ -908,5 +942,6 @@ class TaskWorkspaceMixin:
             if marker.get("task_id") == task_id and self.read_runtime(project).get("running"):
                 raise ValueError("Stop the active Task before deleting it")
             self._clear_task_marker(project, task_id)
+        self._delete_task_ui_artifacts(task)
         self.tasks.delete(task_id)
         return {"ok": True}
