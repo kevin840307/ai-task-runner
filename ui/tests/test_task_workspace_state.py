@@ -115,6 +115,16 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
             "workflow": str(self.state.workflow),
         })
 
+    def test_explicit_and_default_workflows_use_same_allowed_catalog(self):
+        self.assertEqual(
+            self.state._resolve_task_workflow(self.project, str(self.state.workflow)),
+            str(self.state.workflow.resolve()),
+        )
+        self.assertEqual(
+            self.state._resolve_task_workflow(self.project, ""),
+            str(self.state.workflow.resolve()),
+        )
+
     def test_historical_completed_task_reruns_from_its_frozen_inputs_when_path_is_free(self):
         task = self._completed_task()
         # Another terminal Task may be the latest runtime owner; this Task is history.
