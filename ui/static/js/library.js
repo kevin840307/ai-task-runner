@@ -41,3 +41,12 @@ $("workflowLibraryTab").addEventListener("click",()=>{mode="workflow";$("workflo
 $("promptLibraryTab").addEventListener("click",()=>{mode="prompt";$("workflowLibraryTab").setAttribute("aria-selected","false");$("promptLibraryTab").setAttribute("aria-selected","true");render()});
 $("libraryScope").addEventListener("change",loadAssets);$("librarySearch").addEventListener("input",render);
 boot();
+const libraryShell=document.querySelector(".library-shell");
+function setLibraryContextCollapsed(collapsed){
+  libraryShell.classList.toggle("context-collapsed",collapsed);
+  $("toggleLibraryContext").setAttribute("aria-expanded",String(!collapsed));
+  $("toggleLibraryContext").title=collapsed?"Expand Library sidebar":"Collapse Library sidebar";
+  try{localStorage.setItem("ai-task-runner.library.context-collapsed",String(collapsed))}catch(_){}
+}
+$("toggleLibraryContext").addEventListener("click",()=>setLibraryContextCollapsed(!libraryShell.classList.contains("context-collapsed")));
+try{setLibraryContextCollapsed(localStorage.getItem("ai-task-runner.library.context-collapsed")==="true")}catch(_){}
