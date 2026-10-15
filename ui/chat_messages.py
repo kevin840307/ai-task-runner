@@ -51,7 +51,9 @@ class ChatMessages:
         return {"chat": chat, "messages": messages[-limit:]}
 
     def append(self, chat_id: str, text: str, role: str = "user") -> dict:
-        self._chat(chat_id)
+        chat = self._chat(chat_id)
+        if not chat["path_available"]:
+            raise ValueError("Chat path unavailable; history is read-only")
         if role != "user":
             raise ValueError("Only user-authored messages can be appended through this API")
         if not isinstance(text, str) or not text.strip() or len(text) > 20000:
