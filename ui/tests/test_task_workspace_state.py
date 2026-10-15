@@ -127,6 +127,35 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         })
         return self.state.tasks.update(task["task_id"], last_status="completed")
 
+    def test_task_list_payload_is_bounded_summary_not_full_history(self):
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(self.project),
+            instruction="x" * 5000,
+            workflow=str(self.state.workflow),
+        )
+        task = self.state.tasks.append_execution(task["task_id"], {
+            "request_id": "req-summary",
+            "run_id": "run-summary",
+            "started_at": 123.0,
+            "instruction": "y" * 5000,
+            "workflow": str(self.state.workflow),
+            "evidence": {"stream_tail": "z" * 6000},
+        })
+        payload = self.state.tasks_payload(self.chat_id)
+        summary = payload["tasks"][0]
+
+        self.assertNotIn("executions", summary)
+        self.assertNotIn("items", summary)
+        self.assertNotIn("instruction", summary)
+        self.assertEqual(summary["latest_execution_started_at"], 123.0)
+        self.assertEqual(summary["execution_count"], 1)
+        self.assertNotIn("stream", summary.get("runtime") or {})
+
+        detail = self.state.task_detail(task["task_id"])
+        self.assertEqual(detail["executions"][0]["run_id"], "run-summary")
+        self.assertEqual(detail["instruction"], "x" * 5000)
+
     def test_task_history_limit_can_extend_beyond_legacy_500_cap(self):
         task = self.state.tasks.create(
             chat_id=self.chat_id,
