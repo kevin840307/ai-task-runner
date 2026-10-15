@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from ui.chat_index import ChatIndex
@@ -187,6 +188,49 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         self.assertTrue(source_file.is_file())
         with self.assertRaisesRegex(ValueError, "Task not found"):
             self.state.tasks.get(task["task_id"])
+
+    def test_failed_worktree_cleanup_keeps_archived_history_pointer(self):
+        source = self.root / "source"
+        source.mkdir()
+        workspace = self.root / "worktree"
+        workspace.mkdir()
+        runtime = workspace / ".ai-task-runner"
+        runtime.mkdir()
+        (runtime / "state.json").write_text("{}", encoding="utf-8")
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(workspace),
+            instruction="done in isolated workspace",
+            workflow=str(self.state.workflow),
+        )
+        task = self.state.tasks.update(
+            task["task_id"],
+            source_root_path=str(source),
+            workspace_kind="worktree",
+            workspace_managed=True,
+            last_status="completed",
+        )
+        archive = source / ".ai-task-runner" / "ui" / "task-history" / task["task_id"] / "runtime"
+
+        def fake_archive(worktree, target):
+            self.assertEqual(Path(worktree), workspace)
+            self.assertEqual(Path(target), archive)
+            target.mkdir(parents=True)
+            (target / "state.json").write_text("{}", encoding="utf-8")
+            return str(target)
+
+        with patch("ui.task_workspace_state.archive_runtime", side_effect=fake_archive), patch(
+            "ui.task_workspace_state.remove_task_worktree",
+            side_effect=ValueError("dirty worktree"),
+        ):
+            with self.assertRaisesRegex(ValueError, "dirty worktree"):
+                self.state.cleanup_task_workspace(task["task_id"])
+
+        persisted = self.state.tasks.get(task["task_id"])
+        self.assertEqual(persisted["runtime_archive"], str(archive))
+        self.assertFalse(persisted.get("workspace_removed", False))
+        self.assertTrue((archive / "state.json").is_file())
+
 
     def test_terminal_execution_evidence_is_persisted_before_future_runtime_reuse(self):
         task = self._completed_task()
