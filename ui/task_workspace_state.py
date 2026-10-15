@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+from project_registry import path_key
+
 try:
     from .task_index import TaskIndex
     from .task_worktree import (
