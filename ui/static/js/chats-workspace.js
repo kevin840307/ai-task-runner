@@ -298,6 +298,10 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   element("taskInstruction").value = prefill;
   element("taskTitle").value = "";
   element("taskListItems").replaceChildren();
+  element("taskListYaml").value = "";
+  element("taskListYamlStatus").textContent = "";
+  element("taskListYamlPanel").hidden = true;
+  element("taskListYamlToggle").setAttribute("aria-expanded", "false");
   addTaskListItem(prefill);
   element("taskForm").dataset.sourceMessageId = sourceMessageId;
   element("taskModal").hidden = false;
@@ -488,6 +492,14 @@ element("chatComposer").addEventListener("submit", async event => {
 element("newTask").addEventListener("click", () => openTaskModal().catch(report));
 element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
 element("addTaskListItem").addEventListener("click", () => addTaskListItem());
+element("taskListYamlToggle").addEventListener("click", async () => {
+  const panel = element("taskListYamlPanel");
+  panel.hidden = !panel.hidden;
+  element("taskListYamlToggle").setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden && !element("taskListYaml").value.trim()) await refreshTaskListYaml();
+});
+element("taskListYamlFromVisual").addEventListener("click", () => refreshTaskListYaml());
+element("taskListYamlApply").addEventListener("click", () => applyTaskListYaml());
 element("taskCancel").addEventListener("click", closeTaskModal);
 element("taskModal").addEventListener("click", event => { if (event.target === element("taskModal")) closeTaskModal(); });
 element("taskForm").addEventListener("submit", async event => {
@@ -496,12 +508,7 @@ element("taskForm").addEventListener("submit", async event => {
   const taskType = element("taskType").value;
   const instruction = element("taskInstruction").value.trim();
   const parentWorkflow = element("taskWorkflow").value;
-  const items = taskType === "sequential"
-    ? [...element("taskListItems").querySelectorAll(".task-list-item")].map(row => ({
-        instruction: row.querySelector("textarea").value.trim(),
-        workflow: row.querySelector("select").value || parentWorkflow
-      }))
-    : [];
+  const items = taskType === "sequential" ? taskListItemsPayload() : [];
   if (taskType === "single" && !instruction) return;
   if (taskType === "sequential" && (!items.length || items.some(item => !item.instruction))) {
     report(new Error("Every Task List item needs an instruction."));
