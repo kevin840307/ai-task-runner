@@ -253,7 +253,7 @@ def _parse_item(
     )
     validator = item.get("validator")
     explicit_workflow = bool(item.get("workflow_file") or item.get("workflow"))
-    if validator is None and explicit_workflow:
+    if validator is None and (explicit_workflow or allow_inherited_workflow):
         validator = ""
     if not isinstance(validator, str) or (
         not validator.strip() and not explicit_workflow and not allow_inherited_workflow
