@@ -8,23 +8,29 @@
 <style>
 .chat-shell{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);height:100vh;background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
 .chat-side{padding:20px;border-right:1px solid #bec6ce;overflow:auto;display:flex;flex-direction:column;gap:14px}
-.chat-side button,.chat-main button{padding:9px 14px;cursor:pointer}
+.chat-side button,.chat-main button,.chat-main select{padding:9px 14px;cursor:pointer}
 .chat-side button[data-active="true"]{font-weight:700;outline:2px solid currentColor}
-.chat-list{display:grid;gap:8px}.chat-list button{text-align:left}
+.chat-list,.task-list{display:grid;gap:8px}.chat-list button{text-align:left}
 .chat-main{min-width:0;display:flex;flex-direction:column;padding:20px;gap:14px}
+.chat-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chat-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+.chat-tabs,.task-filters{display:flex;gap:6px;flex-wrap:wrap}.chat-tabs button[aria-selected="true"],.task-filters button[aria-pressed="true"]{font-weight:700;outline:2px solid currentColor}
 .chat-scroll{overflow:auto;flex:1;display:flex;flex-direction:column;gap:10px}
 .chat-bubble{padding:12px;max-width:780px;border:1px solid #aab4bf;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-bubble-actions{display:flex;justify-content:flex-end;margin-top:8px}.chat-bubble-actions button{padding:4px 8px;font-size:.82rem}
 .chat-main textarea{width:100%;min-height:84px;resize:vertical;box-sizing:border-box;padding:12px}
 .chat-compose{display:flex;align-items:flex-end;gap:10px}.chat-compose textarea{flex:1}
-.chat-side select{width:100%;padding:8px}.chat-meta{overflow-wrap:anywhere;opacity:.8;font-size:.88rem}
+.chat-side select,.task-form select,.task-form input{width:100%;padding:8px;box-sizing:border-box}.chat-meta{overflow-wrap:anywhere;opacity:.8;font-size:.88rem}
 .chat-error{color:#a32222;min-height:1.4em}
-@media(max-width:680px){.chat-shell{grid-template-columns:1fr;height:auto;min-height:100vh}.chat-side{border-right:0;border-bottom:1px solid #bec6ce}.chat-main{min-height:65vh}}
+.task-panel{display:flex;flex-direction:column;gap:12px;min-height:0;flex:1}.task-list{overflow:auto}.task-card{border:1px solid #aab4bf;border-radius:12px;padding:12px;text-align:left;background:transparent}.task-card strong,.task-card small{display:block}.task-card small{margin-top:4px;opacity:.8}
+.task-detail{border:1px solid #aab4bf;border-radius:12px;padding:16px;overflow:auto;max-height:55vh}.task-detail-head{display:flex;justify-content:space-between;gap:12px}.task-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.task-history{display:grid;gap:8px}.task-history article{padding:10px;border-left:3px solid currentColor;white-space:pre-wrap}
+.modal-layer{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:18px;z-index:40}.modal-layer[hidden]{display:none}.task-form{background:var(--surface,#fff);color:var(--text,#18202a);width:min(680px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:14px;display:grid;gap:14px}.task-form textarea{min-height:140px}.task-form-actions{display:flex;justify-content:flex-end;gap:8px}.task-form-row{display:grid;gap:6px}.task-empty{padding:24px;text-align:center;opacity:.8}
+@media(max-width:680px){.chat-shell{grid-template-columns:1fr;height:auto;min-height:100vh}.chat-side{border-right:0;border-bottom:1px solid #bec6ce}.chat-main{min-height:65vh}.chat-head{flex-direction:column}.chat-compose{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
 <div class="chat-shell">
   <aside class="chat-side">
-    <a href="/" aria-label="Back to Tasks">← Tasks / Workflows / Prompts</a>
+    <a href="/" aria-label="Back to Tasks">← Workflows / Prompts / legacy Tasks</a>
     <h1>Chats</h1>
     <label for="chatProject">Project root</label>
     <select id="chatProject"><option value="">Select a project</option></select>
@@ -32,17 +38,57 @@
     <div id="chatList" class="chat-list" aria-label="Chat list"></div>
   </aside>
   <main class="chat-main">
-    <h2 id="chatTitle">Select or create a Chat</h2>
-    <p id="chatPath" class="chat-meta"></p>
+    <div class="chat-head">
+      <div><h2 id="chatTitle">Select or create a Chat</h2><p id="chatPath" class="chat-meta"></p></div>
+      <div class="chat-head-actions"><button id="newTask" type="button" disabled>+ New Task</button></div>
+    </div>
+    <div class="chat-tabs" role="tablist" aria-label="Chat workspace">
+      <button id="chatTab" type="button" role="tab" aria-selected="true">Chat</button>
+      <button id="tasksTab" type="button" role="tab" aria-selected="false">Tasks <span id="taskCount"></span></button>
+    </div>
     <p id="chatNotice" class="chat-meta">Chat notes are saved separately from Runner tasks. AI conversational replies are not yet supported in this workspace.</p>
-    <div id="chatMessages" class="chat-scroll" role="log" aria-live="polite"></div>
-    <form id="chatComposer" class="chat-compose">
-      <label for="chatText" class="sr-only">Message</label>
-      <textarea id="chatText" placeholder="Write a message…" maxlength="20000" disabled required></textarea>
-      <button id="chatSend" type="submit" disabled>Save message</button>
-    </form>
+
+    <section id="conversationPanel" class="chat-scroll" role="tabpanel">
+      <div id="chatMessages" class="chat-scroll" role="log" aria-live="polite"></div>
+      <form id="chatComposer" class="chat-compose">
+        <label for="chatText" class="sr-only">Message</label>
+        <textarea id="chatText" placeholder="Write a message…" maxlength="20000" disabled required></textarea>
+        <button id="chatSend" type="submit" disabled>Save message</button>
+      </form>
+    </section>
+
+    <section id="tasksPanel" class="task-panel" role="tabpanel" hidden>
+      <div class="task-filters" aria-label="Task filters">
+        <button type="button" data-task-filter="all" aria-pressed="true">All</button>
+        <button type="button" data-task-filter="active" aria-pressed="false">Active</button>
+        <button type="button" data-task-filter="attention" aria-pressed="false">Needs Attention</button>
+        <button type="button" data-task-filter="completed" aria-pressed="false">Completed</button>
+      </div>
+      <div id="taskList" class="task-list"></div>
+      <article id="taskDetail" class="task-detail" hidden></article>
+    </section>
     <p id="chatError" class="chat-error" role="alert"></p>
   </main>
+</div>
+
+<div id="taskModal" class="modal-layer" hidden>
+  <form id="taskForm" class="task-form" role="dialog" aria-modal="true" aria-labelledby="taskFormTitle">
+    <h2 id="taskFormTitle">New Task</h2>
+    <label class="task-form-row">Type
+      <select id="taskType"><option value="single">Task</option><option value="sequential" disabled>Task List · coming next</option></select>
+    </label>
+    <label class="task-form-row">Instruction / Prompt
+      <textarea id="taskInstruction" maxlength="20000" required placeholder="What should AI do?"></textarea>
+    </label>
+    <label class="task-form-row">Title <small>Optional · derived from the instruction by default</small>
+      <input id="taskTitle" maxlength="120">
+    </label>
+    <label class="task-form-row">Workflow
+      <select id="taskWorkflow"><option value="">Use default Workflow</option></select>
+    </label>
+    <div class="chat-meta">Main · <span id="mainAvailability">Checking…</span></div>
+    <div class="task-form-actions"><button id="taskCancel" type="button">Cancel</button><button id="taskRun" type="submit">Run Task</button></div>
+  </form>
 </div>
 <script type="module" src="/js/chats-workspace.js"></script>
 </body>
