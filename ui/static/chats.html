@@ -106,8 +106,11 @@
       <section id="taskListYamlPanel" hidden>
         <textarea id="taskListYaml" spellcheck="false" placeholder="- prompt: Fix backend discovery&#10;  workflow_file: ..."></textarea>
         <div class="chat-head-actions">
+          <input id="taskListYamlFile" type="file" accept=".yaml,.yml,text/yaml,text/plain" hidden>
+          <button id="taskListYamlImport" type="button">Import YAML file</button>
           <button id="taskListYamlFromVisual" type="button">Refresh YAML from Visual</button>
           <button id="taskListYamlApply" type="button">Validate & Apply YAML</button>
+          <button id="taskListYamlCopy" type="button">Copy YAML</button>
         </div>
         <small id="taskListYamlStatus"></small>
       </section>
