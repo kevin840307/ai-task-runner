@@ -14,28 +14,28 @@
 <body>
 <div class="library-shell">
 <nav class="library-global" aria-label="Global navigation">
-  <a href="/chats.html">Chats</a>
-  <a href="/library.html" aria-current="page">Library</a>
-  <a href="/settings.html">Settings</a>
-  <a class="legacy-link" href="/">Legacy</a>
+  <a href="/chats.html" data-i18n="workspace.chats">Chats</a>
+  <a href="/library.html" aria-current="page" data-i18n="workspace.library">Library</a>
+  <a href="/settings.html" data-i18n="workspace.settings">Settings</a>
+  <a class="legacy-link" href="/" data-i18n="workspace.legacy">Legacy</a>
 </nav>
 <aside class="library-nav" aria-label="Library context">
   <button id="toggleLibraryContext" type="button" aria-expanded="true" title="Collapse Library sidebar">☰</button>
-  <strong>Library</strong>
-  <button id="workflowLibraryTab" type="button" role="tab" aria-selected="true" aria-controls="assetList">Workflows</button>
-  <button id="promptLibraryTab" type="button" role="tab" aria-selected="false" aria-controls="assetList">Prompts</button>
+  <strong data-i18n="library.title">Library</strong>
+  <button id="workflowLibraryTab" type="button" role="tab" aria-selected="true" aria-controls="assetList" data-i18n="library.workflows">Workflows</button>
+  <button id="promptLibraryTab" type="button" role="tab" aria-selected="false" aria-controls="assetList" data-i18n="library.prompts">Prompts</button>
 </aside>
 <main class="library-main">
   <div class="library-head">
-    <div><h1>Library</h1><p>Reusable Workflow and Prompt assets. Scope is explicit and is not inherited from the selected Chat.</p></div>
+    <div><h1 data-i18n="library.title">Library</h1><p data-i18n="library.desc">Reusable Workflow and Prompt assets. Scope is explicit and is not inherited from the selected Chat.</p></div>
     <div class="library-controls">
-      <label>Scope <select id="libraryScope"><option value="">Global</option></select></label>
-      <input id="librarySearch" type="search" placeholder="Search assets…" aria-label="Search assets">
+      <label><span data-i18n="library.scope">Scope</span> <select id="libraryScope"><option value="" data-i18n="library.global">Global</option></select></label>
+      <input id="librarySearch" type="search" placeholder="Search assets…" data-i18n-placeholder="library.search" aria-label="Search assets">
     </div>
   </div>
   <div id="libraryStatus" role="status"></div>
   <div id="assetList" class="asset-list"></div>
 </main>
 </div>
-<script type="module" src="/js/library.js"></script>
+<script src="/js/i18n.js"></script>\n<script type="module" src="/js/library.js"></script>
 </body></html>
