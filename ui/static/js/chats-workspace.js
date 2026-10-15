@@ -732,12 +732,12 @@ async function openTask(taskId) {
   }
   const actions = document.createElement("div");
   actions.className = "task-actions";
-  const allowed = task.runtime?.actions || {};
+  const allowed = task.available_actions || task.runtime?.actions || {};
   if (allowed.stop) actions.append(makeAction("Stop", "stop"));
   if (allowed.resume) actions.append(makeAction("Resume", "resume"));
-  if (allowed.rerun || (task.task_type === "sequential" && !task.runtime?.running && allowed.run)) actions.append(makeAction("Rerun", "rerun", true));
+  if (allowed.rerun) actions.append(makeAction("Rerun", "rerun", true));
   const completed = Boolean(task.runtime?.completed) || statusText(task).toLowerCase().includes("completed");
-  if (completed) {
+  if (allowed.continue || (!task.available_actions && completed)) {
     const text = document.createElement("textarea");
     text.placeholder = "Continue Task with a new instruction…";
     text.setAttribute("aria-label", "Continue Task instruction");
@@ -754,7 +754,7 @@ async function openTask(taskId) {
     root.append(text);
     actions.append(continueButton);
   }
-  if (!task.runtime?.running && task.workspace_kind === "worktree" && task.workspace_managed && !task.workspace_removed) {
+  if (allowed.cleanup_workspace || (!task.available_actions && !task.runtime?.running && task.workspace_kind === "worktree" && task.workspace_managed && !task.workspace_removed)) {
     const cleanup = document.createElement("button");
     cleanup.type = "button";
     cleanup.textContent = "Cleanup Worktree";
@@ -767,7 +767,7 @@ async function openTask(taskId) {
     });
     actions.append(cleanup);
   }
-  if (!task.runtime?.running) {
+  if (allowed.delete !== false && !task.runtime?.running) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Delete Task";
@@ -791,10 +791,20 @@ async function openTask(taskId) {
   const executionList = document.createElement("div");
   executionList.className = "task-history";
   const executionEntries = [
-    ...(task.executions || []).map(execution => ({
-      kind: "execution",
-      text: `${execution.instruction || task.instruction || "Run"}\nrequest: ${execution.request_id || "pending"}${execution.run_id ? "\nrun: " + execution.run_id : ""}`
-    })),
+    ...(task.executions || []).map(execution => {
+      const evidence = execution.evidence || {};
+      const details = [
+        execution.instruction || task.instruction || "Run",
+        "request: " + (execution.request_id || "pending"),
+        execution.run_id ? "run: " + execution.run_id : "",
+        evidence.status ? "status: " + evidence.status : "",
+        evidence.stage ? "stage: " + evidence.stage : "",
+        evidence.last_error ? "error: " + evidence.last_error : "",
+        evidence.result ? "result: " + evidence.result : "",
+        evidence.stream_tail ? "output: " + evidence.stream_tail : "",
+      ].filter(Boolean);
+      return {kind: "execution", text: details.join("\n")};
+    }),
     ...(task.history || []).map(message => ({kind: "message", text: message.content || ""}))
   ];
   let visibleHistory = 20;
