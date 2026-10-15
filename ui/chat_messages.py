@@ -50,21 +50,34 @@ class ChatMessages:
             raise ValueError("Chat transcript is unreadable") from exc
         return {"chat": chat, "messages": messages[-limit:]}
 
-    def append(self, chat_id: str, text: str, role: str = "user") -> dict:
+    def _append_record(self, chat_id: str, text: str, role: str) -> dict:
         chat = self._chat(chat_id)
         if not chat["path_available"]:
             raise ValueError("Chat path unavailable; history is read-only")
-        if role != "user":
-            raise ValueError("Only user-authored messages can be appended through this API")
+        if role not in {"user", "assistant"}:
+            raise ValueError("Invalid Chat message role")
         if not isinstance(text, str) or not text.strip() or len(text) > 20000:
             raise ValueError("Message must contain 1-20000 characters")
-        record = {"message_id": uuid.uuid4().hex, "role": role, "text": text.strip(), "created_at": time.time()}
+        record = {
+            "message_id": uuid.uuid4().hex,
+            "role": role,
+            "text": text.strip(),
+            "created_at": time.time(),
+        }
         self.folder.mkdir(parents=True, exist_ok=True)
         path = self._file(chat_id)
         with project_file_lock(path):
-            # Append rather than overwrite: existing conversations survive every request.
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
         return record
+
+    def append(self, chat_id: str, text: str, role: str = "user") -> dict:
+        if role != "user":
+            raise ValueError("Only user-authored messages can be appended through this API")
+        return self._append_record(chat_id, text, "user")
+
+    def append_assistant(self, chat_id: str, text: str) -> dict:
+        """Internal-only assistant append used after a real backend response."""
+        return self._append_record(chat_id, text, "assistant")
