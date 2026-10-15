@@ -40,6 +40,10 @@ class ChatWorkspaceContract(unittest.TestCase):
         self.assertIn('/api/tasks?attention=1&limit=10', chat_module)
         self.assertIn('Load older Tasks', chat_module)
         self.assertIn('available_actions', chat_module)
+        self.assertGreater(chats.index('id="taskTitle"'), chats.index('id="taskAdvanced"'))
+        self.assertNotIn('</script>\\n<script', library)
+        self.assertNotIn('</script>\\n<script', settings)
+        self.assertIn('library.clear_search', library_module)
 
         self.assertIn('id="libraryScope"', library)
         self.assertIn('id="workflowLibraryTab"', library)
