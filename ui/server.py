@@ -165,6 +165,11 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("content", "")),
                     str(body.get("workflow", "")),
                 ))
+            if parsed.path == "/api/chats/archive":
+                return self._json(self.state.archive_chat(
+                    str(body.get("chat_id", "")),
+                    bool(body.get("archived", True)),
+                ))
             if parsed.path == "/api/chats/turn":
                 return self._json(self.state.chat_turn(str(body.get("chat_id", "")), str(body.get("message", ""))))
             if parsed.path == "/api/tasks/create":
