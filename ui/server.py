@@ -41,6 +41,7 @@ class UIState(ChatWorkspaceMixin, TaskWorkspaceMixin, ProjectRuntimeMixin, Workf
         self.chat_messages = ChatMessages(self.ui_root / "data" / "conversations", self.chats)
         self.tasks = TaskIndex(self.ui_root / "data" / "tasks.json")
         self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
+        self.ui_defaults_file = self.ui_root / "data" / "defaults.json"
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
         self._conversation_lock = threading.RLock()
@@ -56,6 +57,19 @@ class UIState(ChatWorkspaceMixin, TaskWorkspaceMixin, ProjectRuntimeMixin, Workf
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
+
+
+    def product_defaults(self) -> dict:
+        try:
+            payload = json.loads(self.ui_defaults_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("UI product defaults are unavailable") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("UI product defaults must be an object")
+        default_workflow = str(payload.get("default_workflow") or "").strip()
+        if not default_workflow:
+            raise ValueError("UI product default Workflow is missing")
+        return {"default_workflow": default_workflow}
 
 
 
@@ -96,6 +110,8 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/chats":
                 query = parse_qs(parsed.query)
                 return self._json({"chats": self.state.chats.list(query.get("root", [""])[0])})
+            if parsed.path == "/api/ui/defaults":
+                return self._json(self.state.product_defaults())
             if parsed.path == "/api/projects":
                 query = parse_qs(parsed.query)
                 return self._json(
