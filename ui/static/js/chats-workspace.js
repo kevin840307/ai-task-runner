@@ -11,6 +11,7 @@ let taskBackendCatalog = {backends: [], models: {}, default: ""};
 let taskGoalFile = "";
 const taskListRawByRow = new WeakMap();
 let draggedTaskListRow = null;
+let taskModalReturnFocus = null;
 
 async function request(url, payload) {
   const options = payload === undefined ? {} : {
@@ -93,6 +94,7 @@ async function selectChat(id) {
   element("chatSend").disabled = !writable;
   element("newTask").disabled = !writable || Boolean(currentChat?.archived);
   element("archiveChat").disabled = !currentChat;
+  element("copyChatPath").disabled = !currentChat?.root_path;
   element("archiveChat").textContent = currentChat?.archived ? "Restore Chat" : "Archive Chat";
   element("chatNotice").textContent = currentChat && !writable
     ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
@@ -498,7 +500,8 @@ function updateSelectedWorkspaceAvailability() {
   }
 }
 async function openTaskModal(prefill = "", sourceMessageId = "") {
-  if (!currentChat?.path_available) return;
+  if (!currentChat?.path_available || currentChat?.archived) return;
+  taskModalReturnFocus = document.activeElement;
   element("taskType").value = "single";
   setTaskType("single");
   taskGoalFile = "";
@@ -552,6 +555,8 @@ async function openSuggestedTaskList(requestText, sourceMessageId = "") {
 function closeTaskModal() {
   element("taskModal").hidden = true;
   element("taskForm").dataset.sourceMessageId = "";
+  if (taskModalReturnFocus && typeof taskModalReturnFocus.focus === "function") taskModalReturnFocus.focus();
+  taskModalReturnFocus = null;
 }
 function renderTasks() {
   const list = element("taskList");
@@ -611,6 +616,7 @@ function makeAction(label, action, secondary = false) {
   button.type = "button";
   button.textContent = label;
   if (secondary) button.className = "secondary";
+  if (label === "Stop") button.classList.add("danger");
   button.addEventListener("click", async () => {
     clearError();
     try {
@@ -743,6 +749,7 @@ async function openTask(taskId) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Delete Task";
+    remove.className = "danger";
     remove.addEventListener("click", async () => {
       if (!window.confirm("Delete this Task record? This does not merge or modify source control.")) return;
       try {
@@ -761,19 +768,57 @@ async function openTask(taskId) {
   root.append(executionTitle);
   const executionList = document.createElement("div");
   executionList.className = "task-history";
-  for (const execution of task.executions || []) {
-    const article = document.createElement("article");
-    article.textContent = `${execution.instruction || task.instruction || "Run"}\nrequest: ${execution.request_id || "pending"}${execution.run_id ? "\nrun: " + execution.run_id : ""}`;
-    executionList.append(article);
-  }
-  for (const message of task.history || []) {
-    const article = document.createElement("article");
-    article.textContent = message.content || "";
-    executionList.append(article);
-  }
+  const executionEntries = [
+    ...(task.executions || []).map(execution => ({
+      kind: "execution",
+      text: `${execution.instruction || task.instruction || "Run"}\nrequest: ${execution.request_id || "pending"}${execution.run_id ? "\nrun: " + execution.run_id : ""}`
+    })),
+    ...(task.history || []).map(message => ({kind: "message", text: message.content || ""}))
+  ];
+  let visibleHistory = 20;
+  const renderHistory = () => {
+    executionList.replaceChildren();
+    const start = Math.max(0, executionEntries.length - visibleHistory);
+    for (const entry of executionEntries.slice(start)) {
+      const article = document.createElement("article");
+      article.textContent = entry.text;
+      executionList.append(article);
+    }
+    if (start > 0) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "history-more";
+      more.textContent = `Load older (${start} remaining)`;
+      more.addEventListener("click", () => { visibleHistory += 20; renderHistory(); });
+      executionList.prepend(more);
+    }
+  };
+  renderHistory();
   root.append(executionList);
 }
 
+element("toggleSidebar").addEventListener("click", () => {
+  const shell = document.querySelector(".chat-shell");
+  const collapsed = !shell.classList.contains("sidebar-collapsed");
+  shell.classList.toggle("sidebar-collapsed", collapsed);
+  element("toggleSidebar").setAttribute("aria-expanded", String(!collapsed));
+  element("toggleSidebar").title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  try { localStorage.setItem("ai-task-runner.chats.sidebar-collapsed", String(collapsed)); } catch (_) {}
+});
+try {
+  if (localStorage.getItem("ai-task-runner.chats.sidebar-collapsed") === "true") {
+    document.querySelector(".chat-shell").classList.add("sidebar-collapsed");
+    element("toggleSidebar").setAttribute("aria-expanded", "false");
+  }
+} catch (_) {}
+element("copyChatPath").addEventListener("click", async () => {
+  if (!currentChat?.root_path) return;
+  try {
+    await navigator.clipboard.writeText(currentChat.root_path);
+    element("copyChatPath").textContent = "Copied";
+    setTimeout(() => { element("copyChatPath").textContent = "Copy path"; }, 1200);
+  } catch (error) { report(error); }
+});
 element("chatTab").addEventListener("click", () => setTab("chat"));
 element("archiveChat").addEventListener("click", async () => {
   if (!currentChat) return;
@@ -811,7 +856,7 @@ element("chatComposer").addEventListener("submit", async event => {
     element("chatText").value = "";
     await loadMessages();
   } catch (error) { report(error); }
-  finally { element("chatSend").disabled = !currentChat?.path_available; }
+  finally { element("chatSend").disabled = !currentChat?.path_available || Boolean(currentChat?.archived); }
 });
 element("newTask").addEventListener("click", () => openTaskModal().catch(report));
 element("taskUseFile").addEventListener("click", async () => {
