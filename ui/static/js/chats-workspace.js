@@ -162,12 +162,13 @@ function renderAttention(tasks) {
   root.replaceChildren();
   const attention = (tasks || []).filter(task => {
     const status = statusText(task).toLowerCase();
-    return status.includes("attention") || status.includes("error") || status.includes("unavailable");
-  }).slice(0, 5);
+    return ["running", "recovering", "launching", "stopping"].some(value => status.includes(value))
+      || status.includes("attention") || status.includes("error") || status.includes("unavailable");
+  }).slice(0, 8);
   if (!attention.length) {
     const empty = document.createElement("small");
     empty.className = "chat-meta";
-    empty.textContent = "Nothing needs attention.";
+    empty.textContent = "No active Tasks or attention needed.";
     root.append(empty);
     return;
   }
@@ -608,7 +609,8 @@ function renderTasks() {
       ? ` · Item ${runtime.script_index || 0}/${runtime.script_total}`
       : runtime.total ? ` · ${runtime.completed_count || 0}/${runtime.total}` : "";
     const stage = runtime.stage ? ` · ${runtime.stage}` : "";
-    status.textContent = `${statusText(task)}${stage}${progress}`;
+    const attention = runtime.attention_reason ? ` · ${runtime.attention_reason}` : "";
+    status.textContent = `${statusText(task)}${stage}${progress}${attention}`;
     const meta = document.createElement("small");
     const kind = task.task_type === "sequential" ? "Task List" : "Task";
     const freshness = relativeAge(task.updated_at || task.created_at);
