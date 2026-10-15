@@ -65,7 +65,8 @@ class ChatWorkspaceMixin:
         if archived:
             for task in self.tasks.list(chat_id=chat_id):
                 current = self._sync_task(task)
-                if current.get("runtime", {}).get("running"):
+                runtime = current.get("runtime")
+                if isinstance(runtime, dict) and runtime.get("running"):
                     raise ValueError("Stop the active Task before archiving this Chat")
         return self.chats.update(chat_id, archived=bool(archived))
 
