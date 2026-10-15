@@ -36,7 +36,7 @@ class ChatIndex:
 
     def update(self, chat_id: str, **changes) -> dict:
         chat_id = str(chat_id or "")
-        allowed = {"session_id", "backend", "model", "title"}
+        allowed = {"session_id", "backend", "model", "title", "archived"}
         unknown = set(changes) - allowed
         if unknown:
             raise ValueError("Unsupported Chat metadata update")
