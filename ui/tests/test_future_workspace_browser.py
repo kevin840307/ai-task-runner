@@ -206,10 +206,16 @@ def test_future_chat_task_and_task_list_browser_contract():
 
         # AI-assisted Task List creation is preview-only until the user explicitly runs it.
         page.locator(".chat-bubble-actions").first.get_by_role("button", name="Create Task List", exact=True).click()
-        page.get_by_text("Preview ready · review/reorder before Run List.", exact=True).wait_for()
         preview_rows = page.locator(".task-list-item textarea")
-        assert preview_rows.count() == 2
+        page.wait_for_function(
+            """() => {
+                const rows = [...document.querySelectorAll('.task-list-item textarea')];
+                return rows.length === 2 && rows[0].value === 'First' && rows[1].value === 'Second';
+            }"""
+        )
         assert [preview_rows.nth(i).input_value() for i in range(2)] == ["First", "Second"]
+        assert page.locator("#taskRun").is_enabled()
+        assert "Valid YAML" in page.locator("#taskListYamlStatus").inner_text()
         assert created_payloads == []
         page.locator("#taskCancel").click()
 
