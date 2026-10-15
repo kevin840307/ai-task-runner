@@ -708,8 +708,14 @@ class TaskWorkspaceMixin:
             raise ValueError("Task path unavailable")
         marker = self._read_task_marker(project)
         owns_runtime = marker.get("task_id") == task_id
-        runtime = self.read_runtime(project) if owns_runtime else {}
+        path_runtime = self.read_runtime(project)
+        runtime = path_runtime if owns_runtime else {}
         actions = runtime.get("actions") if isinstance(runtime.get("actions"), dict) else {}
+        path_actions = (
+            path_runtime.get("actions")
+            if isinstance(path_runtime.get("actions"), dict)
+            else {}
+        )
         sequential = task.get("task_type") == "sequential"
         executions = list(task.get("executions") or [])
         latest = executions[-1] if executions else {}
@@ -733,13 +739,21 @@ class TaskWorkspaceMixin:
             else:
                 self.resume(project)
         elif action == "rerun":
-            if not owns_runtime:
-                raise ValueError("Task cannot be rerun because it does not own the current runtime")
+            allowed = bool(
+                (owns_runtime and (actions.get("rerun") or actions.get("run")))
+                or (not owns_runtime and path_actions.get("run"))
+            )
+            if not allowed:
+                raise ValueError("Task cannot be rerun while its path is unavailable or busy")
+            self._sync_prior_tasks(project)
             if sequential:
-                if runtime.get("running") or not (actions.get("run") or actions.get("rerun")):
-                    raise ValueError("Task List cannot be rerun in its current state")
                 script = str(latest.get("script_file") or "")
-                parent_workflow = str(latest.get("default_workflow") or latest.get("workflow") or "")
+                parent_workflow = str(
+                    latest.get("default_workflow")
+                    or latest.get("workflow")
+                    or task.get("workflow")
+                    or ""
+                )
                 self.launch_script_task(
                     project,
                     script,
@@ -754,31 +768,39 @@ class TaskWorkspaceMixin:
                     "instruction": task.get("instruction") or "",
                     "workflow": parent_workflow,
                     "default_workflow": parent_workflow,
+                    "backend": str(latest.get("backend") or task.get("backend") or ""),
+                    "model": str(latest.get("model") or task.get("model") or ""),
                     "run_id": "",
                     "item_count": len(task.get("items") or []),
                 })
                 self._write_task_marker(project, task_id)
             else:
-                if not actions.get("rerun"):
-                    raise ValueError("Task cannot be rerun in its current state")
-                request = self.rerun_last(
+                resolved_workflow = self._resolve_task_workflow(
                     project,
-                    workflow=str(task.get("workflow") or workflow or ""),
+                    str(task.get("workflow") or workflow or ""),
+                )
+                request = self.launch_message(
+                    project,
+                    str(task.get("instruction") or ""),
+                    workflow=resolved_workflow,
                     backend=str(task.get("backend") or ""),
                     model=str(task.get("model") or ""),
                 )
-                request_id = str((request or {}).get("request_id") or "")
+                request_id = str(request.get("request_id") or "")
                 task = self.tasks.append_execution(task_id, {
                     "request_id": request_id,
                     "started_at": time.time(),
                     "instruction": task.get("instruction") or "",
-                    "workflow": str((request or {}).get("workflow") or ""),
+                    "workflow": str(request.get("workflow") or resolved_workflow),
+                    "backend": str(request.get("backend") or task.get("backend") or ""),
+                    "model": str(request.get("model") or task.get("model") or ""),
                     "run_id": "",
                 })
                 self._write_task_marker(project, task_id, request_id)
         elif action == "continue":
-            if owns_runtime and runtime.get("running"):
-                raise ValueError("Stop the active Task before Continue")
+            if not path_actions.get("run"):
+                raise ValueError("Task cannot continue while its path is unavailable or busy")
+            self._sync_prior_tasks(project)
             text = str(instruction or "").strip()
             if not text:
                 raise ValueError("Continue requires a new instruction")
