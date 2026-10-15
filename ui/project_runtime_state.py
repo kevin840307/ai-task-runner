@@ -952,7 +952,7 @@ class ProjectRuntimeMixin:
         tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> dict:
+    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore", goal_file: str = "") -> dict:
         """Start one Workflow task from an immutable UI request snapshot.
 
         A completed prior run is reset automatically. An interrupted/stopped run
@@ -979,6 +979,7 @@ class ProjectRuntimeMixin:
                 ai_validator_prompt_file=ai_validator_prompt_file,
                 readonly_safety=readonly_safety,
                 request_mode="workflow",
+                goal_file=goal_file,
             )
             try:
                 self.launch(
@@ -998,7 +999,7 @@ class ProjectRuntimeMixin:
                 # request snapshot, including nested validator resources.
                 shutil.rmtree(Path(request["request_dir"]), ignore_errors=True)
                 raise
-            self.append_message(project, "user", message)
+            self.append_message(project, "user", str(request.get("prompt_text") or message))
             return request
 
     def resume(self, project: Path) -> None:
@@ -1151,10 +1152,28 @@ class ProjectRuntimeMixin:
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
         request_mode: str = "workflow",
+        goal_file: str = "",
     ) -> dict:
         text = str(message or "").strip()
+        source_goal = str(goal_file or "").strip()
+        if text and source_goal:
+            raise ValueError("Use either Message or goal file, not both")
+        source_goal_path = None
+        if source_goal:
+            source_goal_path = Path(source_goal).expanduser()
+            source_goal_path = (
+                source_goal_path.resolve()
+                if source_goal_path.is_absolute()
+                else (project / source_goal_path).resolve()
+            )
+            if not source_goal_path.is_file():
+                raise ValueError(f"Goal file not found: {source_goal}")
+            try:
+                text = source_goal_path.read_text(encoding="utf-8-sig").strip()
+            except OSError as exc:
+                raise ValueError(f"Cannot read goal file: {exc}") from exc
         if not text:
-            raise ValueError("Message is empty")
+            raise ValueError("Message or goal file is required")
         workflow_path = Path(workflow).expanduser().resolve() if workflow else None
         if workflow_path is not None:
             allowed = {path_key(path) for path in self._known_workflow_paths(project)}
@@ -1218,6 +1237,7 @@ class ProjectRuntimeMixin:
             "mode": request_mode,
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
+            "source_goal_file": str(source_goal_path) if source_goal_path else "",
             "validator": validator_value,
             "ai_validator_prompt_file": ai_prompt_snapshot,
             "readonly_safety": readonly_safety_value,
@@ -1227,7 +1247,7 @@ class ProjectRuntimeMixin:
         tmp = request_dir / "request.json.tmp"
         tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, request_dir / "request.json")
-        return {**manifest, "request_dir": str(request_dir)}
+        return {**manifest, "request_dir": str(request_dir), "prompt_text": text}
 
     def stop(self, project: Path) -> dict:
         """Request stop only for an active owner; repeated/stale Stop is harmless."""
