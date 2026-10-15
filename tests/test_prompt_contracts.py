@@ -127,12 +127,10 @@ def test_ai_validator_stage_injects_yolo_validation_mode():
 def test_shared_stage_control_has_only_continue_retry_recover_modes():
     from types import SimpleNamespace
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages import StageExecution
+    from runner.workflow.stages import StageExecution, StageResult
 
     stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
-    task = SimpleNamespace(
-        last_review={"completed": False, "reason": "missing check", "missing_items": ["x"]}
-    )
+    task = SimpleNamespace(last_review=None)
     state = SimpleNamespace(validator_output="", tasks=[task], current=0)
     client = SimpleNamespace(session_id="session-1")
     ctx = SimpleNamespace(
@@ -142,10 +140,21 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
         scratch={"prompt_contracts": {"execute": ("common/execution.md", "session-1")}},
     )
 
-    continued = stage._shared_control_prompt(ctx, None, client)
+    review_failure = StageResult(
+        "review",
+        "fail",
+        data={
+            "completed": False,
+            "reason": "missing check",
+            "missing_items": ["x"],
+        },
+        kind="review",
+    )
+    continued = stage._shared_control_prompt(ctx, review_failure, client)
     assert "mode: continue" in continued
     assert "mode: repair" not in continued
     assert "feedback:" in continued
+    assert "Review: missing check" in continued
 
     ctx.execution = StageExecution(attempt=2, retry_mode="retry", previous_error="boom")
     retried = stage._shared_control_prompt(ctx, None, client)
