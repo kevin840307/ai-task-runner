@@ -4,20 +4,23 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Settings · AI Task Runner</title><link rel="stylesheet" href="/styles.css">
 <style>
-.settings-shell{min-height:100vh;display:grid;grid-template-columns:220px minmax(0,1fr);background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
-.settings-nav{padding:20px;border-right:1px solid #b9c2cb;display:flex;flex-direction:column;gap:12px}.settings-nav a{padding:9px;border-radius:8px}
+.settings-shell{min-height:100vh;display:grid;grid-template-columns:76px 210px minmax(0,1fr);background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
+.settings-global,.settings-nav{padding:16px 10px;border-right:1px solid #b9c2cb;display:flex;flex-direction:column;gap:12px}.settings-global a,.settings-nav a{padding:9px;border-radius:8px}.settings-global a{text-align:center}.settings-global .legacy-link{margin-top:auto;font-size:.78rem}
 .settings-main{padding:24px;max-width:760px}.settings-card{border:1px solid #b9c2cb;border-radius:12px;padding:18px;display:grid;gap:16px}.settings-row{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;align-items:center}.settings-row select{padding:9px}
-@media(max-width:700px){.settings-shell{grid-template-columns:1fr}.settings-nav{border-right:0;border-bottom:1px solid #b9c2cb;flex-direction:row;flex-wrap:wrap}.settings-row{grid-template-columns:1fr}}
+@media(max-width:700px){.settings-shell{grid-template-columns:1fr}.settings-global,.settings-nav{border-right:0;border-bottom:1px solid #b9c2cb;flex-direction:row;flex-wrap:wrap}.settings-global .legacy-link{margin-top:0;margin-left:auto}.settings-row{grid-template-columns:1fr}}
 </style>
 </head><body>
 <div class="settings-shell">
-<nav class="settings-nav" aria-label="Global navigation">
-<strong>AI Task Runner</strong><a href="/chats.html">Chats</a><a href="/library.html">Library</a><a href="/settings.html" aria-current="page">Settings</a><a href="/">Legacy workspace</a>
+<nav class="settings-global" aria-label="Global navigation">
+<a href="/chats.html">Chats</a><a href="/library.html">Library</a><a href="/settings.html" aria-current="page">Settings</a><a class="legacy-link" href="/">Legacy</a>
 </nav>
+<aside class="settings-nav" aria-label="Settings context">
+<strong>Settings</strong><a href="#interface" aria-current="page">Interface</a>
+</aside>
 <main class="settings-main">
 <h1>Settings</h1>
 <p>Interface preferences only. Runner, Workflow and Task execution settings stay with their existing owners.</p>
-<section class="settings-card">
+<section id="interface" class="settings-card">
 <label class="settings-row">Appearance <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
 <label class="settings-row">Accent <select id="theme"><option value="teal">Teal</option><option value="blue">Deep Blue</option><option value="violet">Violet</option><option value="amber">Amber</option><option value="rose">Rose</option></select></label>
 <label class="settings-row">Motion <select id="motion"><option value="full">Full</option><option value="system">System</option><option value="reduced">Reduced</option></select></label>
