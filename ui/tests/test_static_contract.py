@@ -378,3 +378,10 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
     assert "overflow: hidden !important" in css
     assert "#composePanel .options-button" in css
     assert "flex: 0 0 auto" in css
+
+
+def test_legacy_navigation_has_no_literal_newline_escape():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    assert "</a>\\n      <a" not in index
+    assert 'href="/library.html"' in index
+    assert 'href="/chats.html"' in index
