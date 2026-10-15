@@ -428,8 +428,14 @@ Implementation progress (2026-10-15, feature/future-chat-foundation):
   isolated per Chat and independent of Runner messages.jsonl / RunState. Assistant response
   generation remains intentionally unimplemented; user messages are not fake Runner Tasks.
 - [x] Added Chat transcript isolation/durability/rejection tests (ui/tests/test_chat_messages.py).
+- [x] Added an additive Chats workspace at /chats.html: project selection, multiple Chat
+  selection, message viewing and authoring, and read-only missing-path feedback.
+  This does not replace the existing Tasks execution UI. Static regression is in
+  ui/tests/test_chat_workspace_static.py; browser validation still required.
+- [x] Refuse message writes when the Chat root is unavailable; history remains readable.
 - [ ] Still required before Phase 1 is complete: real normal conversational AI interaction,
-  create/switch Chat controls, UI integration and browser tests. The existing Project run Chat
+  fully integrated global navigation/Chat UX, and browser tests. The current Chats page
+  deliberately stores authored messages only and never fabricates AI responses. The existing Project run Chat
   remains unchanged until its replacement is covered by regression tests.
 - [ ] Validation pending: run full existing UI/Runner regressions and Windows/Ubuntu CI on the
   implementation commit. No 24H/live-soak claim is made for this foundation slice.
