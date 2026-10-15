@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
             content,
             project / "task-list.yaml",
             allow_missing_files=bool(request.get("allow_missing_files", False)),
+            allow_inherited_workflow=bool(request.get("allow_inherited_workflow", False)),
         )
         canonical = yaml.safe_dump(raw, allow_unicode=True, sort_keys=False)
         print(json.dumps({
