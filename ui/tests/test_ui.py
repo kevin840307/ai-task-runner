@@ -58,6 +58,7 @@ class UIStateTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / "ui" / "data").mkdir(parents=True)
+        (self.root / "ui" / "data" / "defaults.json").write_text('{"default_workflow":"task.workflow.yaml"}\n', encoding="utf-8")
         self.project = self.root / "project"
         self.project.mkdir()
         assets = self.root / "runner" / "assets" / "workflows"
@@ -778,6 +779,26 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(Path(manifest["workflow"]).resolve(), self.workflow.resolve())
         self.assertTrue(Path(manifest["prompt_file"]).is_file())
         self.assertEqual(self.state.messages(self.project)[0]["content"], "run the task")
+
+    def test_goal_file_is_frozen_into_request_snapshot_before_launch(self) -> None:
+        goal = self.project / "goal.md"
+        goal.write_text("first version\n", encoding="utf-8")
+        with patch.object(self.state, "launch", return_value=None) as launch:
+            request = self.state.launch_message(
+                self.project,
+                "",
+                workflow=str(self.workflow),
+                goal_file=str(goal),
+            )
+        goal.write_text("changed later\n", encoding="utf-8")
+
+        snapshot = Path(request["prompt_file"])
+        self.assertEqual(snapshot.read_text(encoding="utf-8"), "first version\n")
+        self.assertEqual(Path(request["source_goal_file"]).resolve(), goal.resolve())
+        self.assertEqual(self.state.messages(self.project)[0]["content"], "first version")
+        self.assertEqual(Path(launch.call_args.kwargs["goal_file"]).resolve(), snapshot.resolve())
+        manifest = json.loads((snapshot.parent / "request.json").read_text(encoding="utf-8"))
+        self.assertEqual(Path(manifest["source_goal_file"]).resolve(), goal.resolve())
 
     def test_reset_runtime_preserves_ui_history_and_removes_runner_state(self) -> None:
         runtime = self.project / ".ai-task-runner"
