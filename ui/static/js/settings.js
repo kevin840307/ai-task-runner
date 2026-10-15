@@ -1,4 +1,5 @@
-const $=id=>document.getElementById(id);\nconst t=(key,fallback="")=>window.I18n?.t(key,fallback)??fallback??key;
+const $=id=>document.getElementById(id);
+const t=(key,fallback="")=>window.I18n?.t(key,fallback)??fallback??key;
 const keys={appearance:"ai-task-runner.appearance",theme:"ai-task-runner.theme",motion:"ai-task-runner.motion",language:"ai-task-runner.language"};
 function read(id,fallback){try{return localStorage.getItem(keys[id])||fallback}catch(_){return fallback}}
 function apply(){
