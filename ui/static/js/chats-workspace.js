@@ -124,10 +124,40 @@ async function loadMessages() {
     container.scrollTop = container.scrollHeight;
   } catch (error) { report(error); }
 }
+function renderAttention(tasks) {
+  const root = element("attentionList");
+  root.replaceChildren();
+  const attention = (tasks || []).filter(task => {
+    const status = statusText(task).toLowerCase();
+    return status.includes("attention") || status.includes("error") || status.includes("unavailable");
+  }).slice(0, 5);
+  if (!attention.length) {
+    const empty = document.createElement("small");
+    empty.className = "chat-meta";
+    empty.textContent = "Nothing needs attention.";
+    root.append(empty);
+    return;
+  }
+  for (const task of attention) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = (task.title || "Task") + " · " + statusText(task);
+    button.addEventListener("click", async () => {
+      element("showArchivedChats").checked = true;
+      await loadChats(false);
+      await selectChat(task.chat_id);
+      setTab("tasks");
+      await openTask(task.task_id);
+    });
+    root.append(button);
+  }
+}
+
 async function loadChats(keepSelection = true) {
   clearError();
   const [data, taskData] = await Promise.all([request("/api/chats"), request("/api/tasks")]);
   chats = data.chats;
+  renderAttention(taskData.tasks || []);
   const badges = taskBadgeCounts(taskData.tasks || []);
   const selectedProject = element("chatProject").value;
   const list = element("chatList");
