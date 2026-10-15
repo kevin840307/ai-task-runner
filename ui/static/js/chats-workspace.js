@@ -472,6 +472,7 @@ async function loadTaskWorkspaces() {
     const mainWorkspace = (data.workspaces || []).find(workspace => workspace.is_main);
     if (mainWorkspace) {
       main.dataset.busy = String(Boolean(mainWorkspace.busy));
+      main.disabled = Boolean(mainWorkspace.busy);
       main.dataset.ownerTaskId = mainWorkspace.owner_task_id || "";
       main.dataset.ownerChatId = mainWorkspace.owner_chat_id || "";
       main.textContent = mainWorkspace.busy
