@@ -1050,8 +1050,25 @@ element("taskListYamlToggle").addEventListener("click", async () => {
   element("taskListYamlToggle").setAttribute("aria-expanded", String(!panel.hidden));
   if (!panel.hidden && !element("taskListYaml").value.trim()) await refreshTaskListYaml();
 });
+element("taskListYamlImport").addEventListener("click", () => element("taskListYamlFile").click());
+element("taskListYamlFile").addEventListener("change", async () => {
+  const file = element("taskListYamlFile").files?.[0];
+  if (!file) return;
+  try {
+    element("taskListYaml").value = await file.text();
+    await applyTaskListYaml();
+  } catch (error) { report(error); }
+  finally { element("taskListYamlFile").value = ""; }
+});
 element("taskListYamlFromVisual").addEventListener("click", () => refreshTaskListYaml());
 element("taskListYamlApply").addEventListener("click", () => applyTaskListYaml());
+element("taskListYamlCopy").addEventListener("click", async () => {
+  try {
+    if (!element("taskListYaml").value.trim()) await refreshTaskListYaml();
+    await navigator.clipboard.writeText(element("taskListYaml").value);
+    element("taskListYamlStatus").textContent = "Copied canonical YAML";
+  } catch (error) { report(error); }
+});
 element("taskCancel").addEventListener("click", closeTaskModal);
 element("taskModal").addEventListener("click", event => { if (event.target === element("taskModal")) closeTaskModal(); });
 element("taskForm").addEventListener("submit", async event => {
