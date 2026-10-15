@@ -10,7 +10,17 @@ FORMAT = "PROJECT_BUNDLE_V1"
 DEFAULT_EXCLUDES = [
     ".git", ".git/**",
     ".pytest_cache", ".pytest_cache/**",
+    ".mypy_cache", "**/.mypy_cache", "**/.mypy_cache/**",
+    ".ruff_cache", "**/.ruff_cache", "**/.ruff_cache/**",
+    ".tox", "**/.tox", "**/.tox/**",
+    ".nox", "**/.nox", "**/.nox/**",
+    ".venv", "**/.venv", "**/.venv/**",
     "__pycache__", "**/__pycache__", "**/__pycache__/**",
+    "node_modules", "**/node_modules", "**/node_modules/**",
+    "build", "**/build", "**/build/**",
+    "dist", "**/dist", "**/dist/**",
+    "coverage", "**/coverage", "**/coverage/**",
+    "htmlcov", "**/htmlcov", "**/htmlcov/**",
     "*.pyc", "**/*.pyc",
     ".ai-task-runner", "**/.ai-task-runner", "**/.ai-task-runner/**",
     "validator-reports", "**/validator-reports", "**/validator-reports/**",
@@ -23,7 +33,11 @@ def sha256(data: bytes) -> str:
 
 def excluded(rel: str, patterns: list[str]) -> bool:
     p = Path(rel)
-    runtime_dirs = {".git", ".pytest_cache", "__pycache__", ".ai-task-runner", "validator-reports"}
+    runtime_dirs = {
+        ".git", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox",
+        ".venv", "__pycache__", "node_modules", "build", "dist", "coverage",
+        "htmlcov", ".ai-task-runner", "validator-reports",
+    }
     if any(part in runtime_dirs for part in p.parts) or p.suffix == ".pyc":
         return True
     return any(p.match(x) for x in patterns)
