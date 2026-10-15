@@ -10,11 +10,13 @@ from urllib.parse import parse_qs, urlparse
 
 
 try:
+    from .chat_index import ChatIndex
     from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
+    from chat_index import ChatIndex
     from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
@@ -27,6 +29,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.ui_root = self.repo_root / "ui"
         self.static_root = self.ui_root / "static"
         self.projects_file = self.ui_root / "data" / "projects.json"
+        self.chats = ChatIndex(self.ui_root / "data" / "chats.json")
         self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
@@ -61,6 +64,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/chats":
+                query = parse_qs(parsed.query)
+                return self._json({"chats": self.state.chats.list(query.get("root", [""])[0])})
             if parsed.path == "/api/projects":
                 query = parse_qs(parsed.query)
                 return self._json(
@@ -124,6 +130,8 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._body()
+            if parsed.path == "/api/chats/create":
+                return self._json(self.state.chats.create(str(body.get("root", "")), str(body.get("title", ""))))
             if parsed.path == "/api/projects/add":
                 return self._json(self.state.add_project(str(body.get("path", ""))))
             if parsed.path == "/api/projects/remove":
