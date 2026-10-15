@@ -3,6 +3,8 @@ let currentChat = null;
 let chats = [];
 let projects = [];
 let currentTasks = [];
+let currentTasksMeta = {total: 0, returned: 0, has_more: false};
+let taskVisibleLimit = 100;
 let currentTask = null;
 let taskFilter = "all";
 let activeTab = "chat";
@@ -116,7 +118,10 @@ async function selectChat(id) {
   for (const button of element("chatList").querySelectorAll("button[data-id]")) {
     button.dataset.active = String(button.dataset.id === id);
   }
-  await Promise.all([loadMessages(), loadTasks()]);
+  taskVisibleLimit = 100;
+  await loadMessages();
+  if (activeTab === "tasks") await loadTasks();
+  else { currentTasks = []; currentTasksMeta = {total: 0, returned: 0, has_more: false}; renderTasks(); }
   syncWorkspaceUrl();
 }
 async function loadMessages() {
@@ -183,7 +188,7 @@ function renderAttention(tasks) {
 
 async function loadChats(keepSelection = true) {
   clearError();
-  const [data, taskData] = await Promise.all([request("/api/chats"), request("/api/tasks")]);
+  const [data, taskData] = await Promise.all([request("/api/chats"), request("/api/tasks?attention=1&limit=10")]);
   chats = data.chats;
   renderAttention(taskData.tasks || []);
   const badges = taskBadgeCounts(taskData.tasks || []);
@@ -613,17 +618,42 @@ function renderTasks() {
     button.addEventListener("click", () => openTask(task.task_id).catch(report));
     list.append(button);
   }
+  if (currentTasksMeta.has_more) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "history-more";
+    more.textContent = `Load older Tasks (${Math.max(0, Number(currentTasksMeta.total || 0) - currentTasks.length)} remaining)`;
+    more.addEventListener("click", async () => {
+      taskVisibleLimit = Math.min(500, taskVisibleLimit + 100);
+      await loadTasks({preserveDetail: true});
+    });
+    list.append(more);
+  }
 }
-async function loadTasks() {
-  currentTasks = [];
-  currentTask = null;
-  element("taskDetail").hidden = true;
-  if (!currentChat) { renderTasks(); return; }
+async function loadTasks({preserveDetail = false} = {}) {
+  const openTaskId = preserveDetail ? currentTask?.task_id || "" : "";
+  if (!preserveDetail) {
+    currentTask = null;
+    element("taskDetail").hidden = true;
+  }
+  if (!currentChat) {
+    currentTasks = [];
+    currentTasksMeta = {total: 0, returned: 0, has_more: false};
+    renderTasks();
+    return;
+  }
   const id = currentChat.chat_id;
-  const data = await request("/api/tasks?chat_id=" + encodeURIComponent(id));
+  const data = await request(
+    "/api/tasks?chat_id=" + encodeURIComponent(id) + "&limit=" + encodeURIComponent(taskVisibleLimit)
+  );
   if (id !== currentChat?.chat_id) return;
   currentTasks = data.tasks || [];
+  currentTasksMeta = data.meta || {total: currentTasks.length, returned: currentTasks.length, has_more: false};
   renderTasks();
+  if (openTaskId) {
+    try { await openTask(openTaskId); }
+    catch (error) { report(error); }
+  }
 }
 function addDetailLine(root, label, value) {
   if (value === undefined || value === null || value === "") return;
@@ -650,8 +680,7 @@ function makeAction(label, action, secondary = false) {
 }
 async function refreshOpenTask() {
   if (!currentTask) return;
-  await openTask(currentTask.task_id);
-  await loadTasks();
+  await loadTasks({preserveDetail: true});
 }
 async function openTask(taskId) {
   const task = await request("/api/task?task_id=" + encodeURIComponent(taskId));
@@ -998,5 +1027,5 @@ document.addEventListener("keydown", event => { if (event.key === "Escape" && !e
 })().catch(report);
 setInterval(() => {
   if (document.hidden || !currentChat || activeTab !== "tasks") return;
-  loadTasks().catch(() => {});
+  loadTasks({preserveDetail: true}).catch(() => {});
 }, 3000);
