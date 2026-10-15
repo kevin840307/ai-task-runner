@@ -14,6 +14,52 @@ class ChatWorkspaceMixin:
             raise ValueError("Chat not found")
         return chat
 
+    def suggest_task_list(self, chat_id: str, request_text: str) -> dict:
+        chat = self._chat_record(chat_id)
+        if chat.get("archived"):
+            raise ValueError("Archived Chat is read-only")
+        if not chat.get("path_available"):
+            raise ValueError("Chat path unavailable")
+        text = str(request_text or "").strip()
+        if not text:
+            raise ValueError("Task List request is empty")
+        history = self.chat_messages.list(chat_id, limit=30)["messages"]
+        command = [
+            sys.executable,
+            str(self.repo_root / "tool" / "task_list_suggest.py"),
+            "--project-root",
+            str(chat["root_path"]),
+        ]
+        backend = str(chat.get("backend") or "")
+        model = str(chat.get("model") or "")
+        if backend:
+            command += ["--backend", backend]
+        if model:
+            command += ["--model", model]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(self.repo_root),
+                input=json.dumps({"request": text, "history": history}, ensure_ascii=False),
+                capture_output=True,
+                text=True,
+                timeout=210,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Task List suggestion unavailable: {exc}") from exc
+        try:
+            payload = json.loads((completed.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            detail = (completed.stderr or completed.stdout or "No output")[-2000:]
+            raise ValueError(f"Task List suggestion returned invalid output: {detail}") from exc
+        if completed.returncode != 0 or payload.get("error"):
+            raise ValueError(str(payload.get("error") or "Task List suggestion failed"))
+        items = payload.get("items")
+        if not isinstance(items, list) or not items:
+            raise ValueError("Task List suggestion returned no items")
+        return {"items": items}
+
     def archive_chat(self, chat_id: str, archived: bool = True) -> dict:
         chat = self._chat_record(chat_id)
         if archived:
