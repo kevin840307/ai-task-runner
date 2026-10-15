@@ -381,7 +381,8 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
 
 
 def test_legacy_navigation_has_no_literal_newline_escape():
-    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    index = (root / "static" / "index.html").read_text(encoding="utf-8")
     assert "</a>\\n      <a" not in index
     assert 'href="/library.html"' in index
     assert 'href="/chats.html"' in index
