@@ -106,3 +106,51 @@ Important coverage:
 - browser CRUD contracts;
 - static Studio source/bundle contract;
 - React Studio build in CI.
+
+
+## Product workspace
+
+Launching `python ui/main.py` opens `/chats.html`. The previous `/` workspace remains available as a compatibility/runtime surface while the product shell uses three scopes: global navigation (Chats / Library / Settings), a domain context sidebar, and main content.
+
+### Chats
+
+A Chat has a stable UI-owned `chat_id` and root path. Chat metadata and transcripts live under the UI data store and never enter Runner `state.json`. A Chat can be archived without deleting its Tasks or history; missing paths remain readable but cannot accept new work.
+
+Normal Chat turns use the registered backend through a bounded, read-only project-access adapter. A fresh backend session receives bounded durable conversation context; a same-session follow-up receives only the new message. Chat does not create a Workflow run, Stage state, retry loop, or Runner control state.
+
+### Tasks and Task Detail
+
+Tasks have durable UI-owned identity and execution references, but their live status is always projected from the existing Runner runtime. One canonical filesystem execution path may have at most one active Task; browser disabled states are UX only and backend/runtime ownership remains authoritative.
+
+The common New Task form keeps Type, Instruction, optional Title, Workflow, and Run visible. Goal files, Backend/Model, and workspace isolation are secondary/advanced choices. The resolved Workflow, prompt source, Backend/Model and workspace are frozen into the existing Runner request/script inputs before execution.
+
+Task Detail derives Stop / Resume / Rerun / Continue availability from the canonical runtime projection and current path availability. Terminal execution evidence is copied into bounded Task history before that path is reused, so an older Task never resolves to a newer `state.json`. Deleting a Task removes only its UI-owned Task record; it never performs Git integration.
+
+### Task List
+
+Task List is the UI adapter for the existing YAML List/script runner, not a browser scheduler. Visual items support add/remove/duplicate/reorder, goal-file inputs, inherited or per-item Workflow selection, and an advanced YAML view. Visual/YAML conversion is validated through the same `runner.script` parser used by CLI and preserves supported advanced fields.
+
+Stop and Resume remain the existing script runtime actions. The UI only projects the current item pointer and child evidence; it never manually launches the next item.
+
+### Library and Settings
+
+`/library.html` is the global reusable-asset domain. It exposes Workflow and Prompt assets with explicit Global or Project scope and opens the existing Full Designer / Prompt Editor. The Task Workflow picker reuses the same catalog and visibility metadata.
+
+`/settings.html` contains interface preferences only. Runner, Workflow, Stage and Task execution settings remain with their existing owners.
+
+### Worktree isolation
+
+Main remains the default Task workspace. For a Git project, the Task form may also offer New Worktree or an existing worktree. Every worktree is a separate canonical execution path and therefore a separate ownership domain.
+
+Task-created worktree cleanup is explicit and fail-closed: active Tasks cannot be cleaned up, runtime evidence is archived first, dirty worktrees are not force-removed, and the branch is retained. Task execution never merges, rebases, cherry-picks, or resolves integration conflicts.
+
+## Product workspace tests
+
+Important future-workspace coverage includes:
+
+- `tests/test_chat_turn.py`: bounded fresh/same-session read-only Chat behavior;
+- `ui/tests/test_chat_index.py` and `test_chat_messages.py`: durable Chat identity/transcripts and archive/path guards;
+- `ui/tests/test_task_index.py` and `test_task_workspace_state.py`: durable Task history, terminal evidence, and historical rerun;
+- `tests/test_script_project_root.py`: shared YAML List parsing, inheritance and CLI compatibility;
+- `ui/tests/test_task_worktree.py`: explicit non-merging worktree lifecycle;
+- `ui/tests/test_future_workspace_browser.py`: Chat → Task / Task List → canonical action browser flow.
