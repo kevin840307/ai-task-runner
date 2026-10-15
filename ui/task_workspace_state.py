@@ -512,10 +512,11 @@ class TaskWorkspaceMixin:
             self._sync_prior_tasks(project)
             request = self.launch_message(
                 project,
-                task_instruction,
+                "" if source_goal_file else task_instruction,
                 workflow=resolved_workflow,
                 backend=str(backend or ""),
                 model=str(model or ""),
+                goal_file=source_goal_file,
             )
         except Exception as exc:
             task = self.tasks.update(
