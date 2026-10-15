@@ -129,7 +129,9 @@ def archive_runtime(worktree: Path, archive: Path) -> str:
         return ""
     archive.parent.mkdir(parents=True, exist_ok=True)
     if archive.exists():
-        raise WorktreeError(f"Task runtime archive already exists: {archive}")
+        # Cleanup may be retried after a later Git worktree removal failure.
+        # Reuse the already archived evidence instead of failing the retry.
+        return str(archive)
     shutil.copytree(runtime, archive)
     return str(archive)
 
