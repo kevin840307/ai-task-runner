@@ -11,10 +11,10 @@
 .chat-side button,.chat-main button,.chat-main select{padding:9px 14px;cursor:pointer}
 .chat-side button[data-active="true"]{font-weight:700;outline:2px solid currentColor}
 .chat-list,.task-list{display:grid;gap:8px}.chat-list button{text-align:left}
-.chat-main{min-width:0;display:flex;flex-direction:column;padding:20px;gap:14px}
+.chat-main{min-width:0;min-height:0;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;padding:20px;gap:14px}
 .chat-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chat-head-actions{display:flex;gap:8px;flex-wrap:wrap}
 .chat-tabs,.task-filters{display:flex;gap:6px;flex-wrap:wrap}.chat-tabs button[aria-selected="true"],.task-filters button[aria-pressed="true"]{font-weight:700;outline:2px solid currentColor}
-.chat-scroll{overflow:auto;flex:1;display:flex;flex-direction:column;gap:10px}
+.chat-scroll{overflow:auto;min-height:0;flex:1;display:flex;flex-direction:column;gap:10px}#conversationPanel{min-height:0;overflow:hidden}
 .chat-bubble{padding:12px;max-width:780px;border:1px solid #aab4bf;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .chat-bubble-actions{display:flex;justify-content:flex-end;margin-top:8px}.chat-bubble-actions button{padding:4px 8px;font-size:.82rem}
 .chat-main textarea{width:100%;min-height:84px;resize:vertical;box-sizing:border-box;padding:12px}
@@ -116,9 +116,6 @@
       </section>
       <small>Items run sequentially through the existing YAML List runner. Advanced YAML fields are preserved.</small>
     </section>
-    <label class="task-form-row"><span data-i18n="task.title">Title</span> <small data-i18n="task.title_hint">Optional · derived from the instruction by default</small>
-      <input id="taskTitle" maxlength="120">
-    </label>
     <label class="task-form-row"><span data-i18n="task.workflow">Workflow</span>
       <select id="taskWorkflow"><option value="" data-i18n="task.default_workflow">Use default Workflow</option></select>
     </label>
@@ -128,6 +125,9 @@
     </label>
     <details id="taskAdvanced">
       <summary data-i18n="task.advanced">Advanced</summary>
+      <label class="task-form-row"><span data-i18n="task.title">Title</span> <small data-i18n="task.title_hint">Optional · derived from the instruction by default</small>
+        <input id="taskTitle" maxlength="120">
+      </label>
       <div class="task-form-row">
         <label><span data-i18n="task.backend">Backend</span> <select id="taskBackend"><option value="">Default backend</option></select></label>
         <label><span data-i18n="task.model">Model</span> <select id="taskModel" disabled><option value="">Backend default model</option></select></label>
