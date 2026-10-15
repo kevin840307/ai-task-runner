@@ -65,3 +65,24 @@ class ChatIndexTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_structurally_invalid_identity_records_fail_closed(tmp_path):
+    index_file = tmp_path / "chats.json"
+    index_file.write_text(
+        json.dumps([{"chat_id": "abc", "title": "missing root"}]),
+        encoding="utf-8",
+    )
+    index = ChatIndex(index_file)
+    with pytest.raises(ValueError, match="root_path"):
+        index.list()
+
+    index_file.write_text(
+        json.dumps([
+            {"chat_id": "dup", "root_path": str(tmp_path)},
+            {"chat_id": "dup", "root_path": str(tmp_path)},
+        ]),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate chat_id"):
+        index.list()
