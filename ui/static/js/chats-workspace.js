@@ -56,6 +56,18 @@ function relativeAge(timestamp) {
   return Math.floor(seconds / 86400) + "d ago";
 }
 
+function elapsedText(task) {
+  const latest = (task.executions || []).at(-1) || {};
+  const started = Number(latest.started_at || 0);
+  if (!started) return "";
+  const active = ["running", "recovering", "launching", "stopping"].some(value => statusText(task).toLowerCase().includes(value));
+  if (!active) return "";
+  const seconds = Math.max(0, Math.round(Date.now() / 1000 - started));
+  if (seconds < 60) return seconds + "s elapsed";
+  if (seconds < 3600) return Math.floor(seconds / 60) + "m elapsed";
+  return Math.floor(seconds / 3600) + "h elapsed";
+}
+
 function taskMatchesFilter(task) {
   const status = statusText(task).toLowerCase();
   if (taskFilter === "active") return ["running", "recovering", "launching", "stopping"].some(v => status.includes(v));
@@ -270,6 +282,12 @@ function addTaskListItem(value = "", workflow = "", index = null, raw = null) {
   const shown = value || rawInstruction(rawValue);
   text.value = shown;
   row.dataset.originalInstruction = shown;
+  text.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.shiftKey || element("taskType").value !== "sequential") return;
+    event.preventDefault();
+    const next = addTaskListItem("", "", [...row.parentElement.children].indexOf(row) + 1);
+    next.querySelector("textarea").focus();
+  });
   const override = document.createElement("select");
   override.setAttribute("aria-label", "Workflow override");
   fillWorkflowSelect(override, {inherited: true});
@@ -495,6 +513,9 @@ function updateSelectedWorkspaceAvailability() {
     ? "Selected path · Busy"
     : isNew ? "New Worktree · Available" : "Selected path · Available";
   element("taskRun").disabled = busy;
+  element("openOwningTask").hidden = !(busy && option?.dataset.ownerTaskId);
+  element("openOwningTask").dataset.taskId = option?.dataset.ownerTaskId || "";
+  element("openOwningTask").dataset.chatId = option?.dataset.ownerChatId || "";
   if (busy && option?.dataset.ownerTaskId) {
     element("taskWorkspaceHint").textContent = "Busy path is owned by another active Task. Open that Task or choose New Worktree.";
   }
@@ -586,7 +607,8 @@ function renderTasks() {
     const meta = document.createElement("small");
     const kind = task.task_type === "sequential" ? "Task List" : "Task";
     const freshness = relativeAge(task.updated_at || task.created_at);
-    meta.textContent = kind + (freshness ? " · " + freshness : "");
+    const elapsed = elapsedText(task);
+    meta.textContent = kind + (elapsed ? " · " + elapsed : "") + (freshness ? " · " + freshness : "");
     button.append(title, status, meta);
     button.addEventListener("click", () => openTask(task.task_id).catch(report));
     list.append(button);
@@ -887,6 +909,18 @@ element("taskClearFile").addEventListener("click", () => {
 element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
 element("taskBackend").addEventListener("change", renderTaskModels);
 element("taskWorkspace").addEventListener("change", updateSelectedWorkspaceAvailability);
+element("openOwningTask").addEventListener("click", async () => {
+  const taskId = element("openOwningTask").dataset.taskId || "";
+  const chatId = element("openOwningTask").dataset.chatId || "";
+  closeTaskModal();
+  if (chatId) {
+    element("showArchivedChats").checked = true;
+    await loadChats(false);
+    await selectChat(chatId);
+  }
+  setTab("tasks");
+  if (taskId) await openTask(taskId);
+});
 element("addTaskListItem").addEventListener("click", () => addTaskListItem());
 element("taskListYamlToggle").addEventListener("click", async () => {
   const panel = element("taskListYamlPanel");
