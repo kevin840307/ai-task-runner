@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
