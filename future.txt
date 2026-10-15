@@ -424,7 +424,11 @@ Implementation progress (2026-10-15, feature/future-chat-foundation):
   chat_id/root_path, multiple Chats per path, missing-path read-only visibility, and fail-closed
   malformed-index handling; list/create endpoints are additive under /api/chats.
 - [x] Added deterministic Chat-index regression tests (ui/tests/test_chat_index.py).
-- [ ] Still required before Phase 1 is complete: normal conversational Chat UI/message model,
+- [x] Added UI-owned Chat user-message transcripts (ui/chat_messages.py) and read/append APIs;
+  isolated per Chat and independent of Runner messages.jsonl / RunState. Assistant response
+  generation remains intentionally unimplemented; user messages are not fake Runner Tasks.
+- [x] Added Chat transcript isolation/durability/rejection tests (ui/tests/test_chat_messages.py).
+- [ ] Still required before Phase 1 is complete: real normal conversational AI interaction,
   create/switch Chat controls, UI integration and browser tests. The existing Project run Chat
   remains unchanged until its replacement is covered by regression tests.
 - [ ] Validation pending: run full existing UI/Runner regressions and Windows/Ubuntu CI on the
