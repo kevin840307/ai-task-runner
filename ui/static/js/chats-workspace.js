@@ -208,8 +208,12 @@ async function updateMainAvailability() {
 }
 async function openTaskModal(prefill = "", sourceMessageId = "") {
   if (!currentChat?.path_available) return;
+  element("taskType").value = "single";
+  setTaskType("single");
   element("taskInstruction").value = prefill;
   element("taskTitle").value = "";
+  element("taskListItems").replaceChildren();
+  addTaskListItem(prefill);
   element("taskForm").dataset.sourceMessageId = sourceMessageId;
   element("taskModal").hidden = false;
   await Promise.all([loadWorkflowOptions(), updateMainAvailability()]);
@@ -397,20 +401,36 @@ element("chatComposer").addEventListener("submit", async event => {
   finally { element("chatSend").disabled = !currentChat?.path_available; }
 });
 element("newTask").addEventListener("click", () => openTaskModal().catch(report));
+element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
+element("addTaskListItem").addEventListener("click", () => addTaskListItem());
 element("taskCancel").addEventListener("click", closeTaskModal);
 element("taskModal").addEventListener("click", event => { if (event.target === element("taskModal")) closeTaskModal(); });
 element("taskForm").addEventListener("submit", async event => {
   event.preventDefault();
   if (!currentChat) return;
+  const taskType = element("taskType").value;
   const instruction = element("taskInstruction").value.trim();
-  if (!instruction) return;
+  const parentWorkflow = element("taskWorkflow").value;
+  const items = taskType === "sequential"
+    ? [...element("taskListItems").querySelectorAll(".task-list-item")].map(row => ({
+        instruction: row.querySelector("textarea").value.trim(),
+        workflow: row.querySelector("select").value || parentWorkflow
+      }))
+    : [];
+  if (taskType === "single" && !instruction) return;
+  if (taskType === "sequential" && (!items.length || items.some(item => !item.instruction))) {
+    report(new Error("Every Task List item needs an instruction."));
+    return;
+  }
   element("taskRun").disabled = true;
   try {
     const task = await request("/api/tasks/create", {
       chat_id: currentChat.chat_id,
+      task_type: taskType,
       instruction,
+      items,
       title: element("taskTitle").value.trim(),
-      workflow: element("taskWorkflow").value,
+      workflow: parentWorkflow,
       source_message_id: element("taskForm").dataset.sourceMessageId || ""
     });
     closeTaskModal();
