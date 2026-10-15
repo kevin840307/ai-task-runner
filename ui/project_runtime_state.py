@@ -1050,6 +1050,29 @@ class ProjectRuntimeMixin:
                 raise
             return request
 
+    def launch_script_task(self, project: Path, script_file: str, *, resume: bool = False) -> None:
+        """Launch/resume one YAML List through the same process/runtime owner."""
+        script = Path(script_file).expanduser().resolve()
+        if not script.is_file():
+            raise ValueError("Task List YAML not found")
+        with self._runtime_lock:
+            runtime = self.read_runtime(project)
+            action = "resume" if resume else "run"
+            if not runtime.get("actions", {}).get(action):
+                if runtime.get("running"):
+                    raise ValueError("This project already has an active runtime")
+                if resume:
+                    raise ValueError("This Task List does not have a resumable run")
+                raise ValueError("Previous task is stopped or interrupted. Resume or Reset it before starting a new Task List.")
+            if not resume and (runtime.get("completed") or runtime.get("stale")):
+                self._reset_runtime_locked(project)
+            self.launch(
+                project,
+                None,
+                mode="resume" if resume else "run",
+                script_file=str(script),
+            )
+
     def launch(
         self,
         project: Path,
