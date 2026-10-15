@@ -35,12 +35,13 @@
     <label for="chatProject">Project root</label>
     <select id="chatProject"><option value="">Select a project</option></select>
     <button id="newChat" type="button">+ New Chat</button>
+    <label class="chat-meta"><input id="showArchivedChats" type="checkbox"> Show archived</label>
     <div id="chatList" class="chat-list" aria-label="Chat list"></div>
   </aside>
   <main class="chat-main">
     <div class="chat-head">
       <div><h2 id="chatTitle">Select or create a Chat</h2><p id="chatPath" class="chat-meta"></p></div>
-      <div class="chat-head-actions"><button id="newTask" type="button" disabled>+ New Task</button></div>
+      <div class="chat-head-actions"><button id="archiveChat" type="button" disabled>Archive Chat</button><button id="newTask" type="button" disabled>+ New Task</button></div>
     </div>
     <div class="chat-tabs" role="tablist" aria-label="Chat workspace">
       <button id="chatTab" type="button" role="tab" aria-selected="true">Chat</button>
