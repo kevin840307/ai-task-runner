@@ -118,8 +118,14 @@ def test_future_chat_task_and_task_list_browser_contract():
             return route.fulfill(status=200, content_type="text/html", body=(STATIC / "chats.html").read_text(encoding="utf-8"))
         if path == "/js/chats-workspace.js":
             return route.fulfill(status=200, content_type="text/javascript", body=(STATIC / "js/chats-workspace.js").read_text(encoding="utf-8"))
+        if path == "/js/i18n.js":
+            return route.fulfill(status=200, content_type="text/javascript", body=(STATIC / "js/i18n.js").read_text(encoding="utf-8"))
         if path == "/styles.css":
             return route.fulfill(status=200, content_type="text/css", body=(STATIC / "styles.css").read_text(encoding="utf-8"))
+        if path.startswith("/css/"):
+            css = (STATIC / path.lstrip("/")).resolve()
+            css.relative_to(STATIC.resolve())
+            return route.fulfill(status=200, content_type="text/css", body=css.read_text(encoding="utf-8"))
 
         body = json.loads(request.post_data or "{}") if request.method == "POST" else {}
         data: dict
