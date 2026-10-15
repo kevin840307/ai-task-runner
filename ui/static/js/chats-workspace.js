@@ -7,6 +7,7 @@ let currentTask = null;
 let taskFilter = "all";
 let activeTab = "chat";
 let workflowChoices = [];
+let taskGoalFile = "";
 const taskListRawByRow = new WeakMap();
 
 async function request(url, payload) {
@@ -276,7 +277,9 @@ function setTaskType(type) {
   const sequential = type === "sequential";
   element("singleInstructionRow").hidden = sequential;
   element("taskListEditor").hidden = !sequential;
-  element("taskInstruction").required = !sequential;
+  element("taskInstruction").required = !sequential && !taskGoalFile;
+  element("taskUseFile").hidden = sequential;
+  element("taskClearFile").hidden = sequential || !taskGoalFile;
   element("taskRun").textContent = sequential ? "Run List" : "Run Task";
   if (sequential && !element("taskListItems").children.length) addTaskListItem();
 }
@@ -295,7 +298,12 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   if (!currentChat?.path_available) return;
   element("taskType").value = "single";
   setTaskType("single");
+  taskGoalFile = "";
   element("taskInstruction").value = prefill;
+  element("taskInstruction").disabled = false;
+  element("taskInstruction").required = true;
+  element("taskGoalFileName").textContent = "";
+  element("taskClearFile").hidden = true;
   element("taskTitle").value = "";
   element("taskListItems").replaceChildren();
   element("taskListYaml").value = "";
@@ -512,6 +520,31 @@ element("chatComposer").addEventListener("submit", async event => {
   finally { element("chatSend").disabled = !currentChat?.path_available; }
 });
 element("newTask").addEventListener("click", () => openTaskModal().catch(report));
+element("taskUseFile").addEventListener("click", async () => {
+  if (!currentChat?.path_available) return;
+  try {
+    const picked = await request("/api/files/pick", {
+      kind: "file",
+      project: currentChat.root_path,
+      current: taskGoalFile
+    });
+    if (picked.cancelled || !picked.path) return;
+    taskGoalFile = picked.path;
+    element("taskInstruction").value = "";
+    element("taskInstruction").disabled = true;
+    element("taskInstruction").required = false;
+    element("taskGoalFileName").textContent = picked.path;
+    element("taskClearFile").hidden = false;
+  } catch (error) { report(error); }
+});
+element("taskClearFile").addEventListener("click", () => {
+  taskGoalFile = "";
+  element("taskInstruction").disabled = false;
+  element("taskInstruction").required = element("taskType").value === "single";
+  element("taskGoalFileName").textContent = "";
+  element("taskClearFile").hidden = true;
+  element("taskInstruction").focus();
+});
 element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
 element("addTaskListItem").addEventListener("click", () => addTaskListItem());
 element("taskListYamlToggle").addEventListener("click", async () => {
@@ -531,7 +564,7 @@ element("taskForm").addEventListener("submit", async event => {
   const instruction = element("taskInstruction").value.trim();
   const parentWorkflow = element("taskWorkflow").value;
   const items = taskType === "sequential" ? taskListItemsPayload() : [];
-  if (taskType === "single" && !instruction) return;
+  if (taskType === "single" && !instruction && !taskGoalFile) return;
   if (taskType === "sequential" && (!items.length || items.some(item => !item.instruction))) {
     report(new Error("Every Task List item needs an instruction."));
     return;
@@ -545,7 +578,8 @@ element("taskForm").addEventListener("submit", async event => {
       items,
       title: element("taskTitle").value.trim(),
       workflow: parentWorkflow,
-      source_message_id: element("taskForm").dataset.sourceMessageId || ""
+      source_message_id: element("taskForm").dataset.sourceMessageId || "",
+      goal_file: taskType === "single" ? taskGoalFile : ""
     });
     closeTaskModal();
     setTab("tasks");
