@@ -57,6 +57,29 @@ SCRIPT_ITEM_BASE_FIELDS = frozenset({
 })
 
 
+def parse_yaml_script_text(
+    text: str,
+    source: Path,
+    *,
+    allow_missing_files: bool = False,
+) -> list[dict[str, Any]]:
+    """Parse YAML List text through the same canonical item contract as CLI files."""
+    try:
+        import yaml
+    except ImportError as error:
+        raise RunnerError("YAML script requires PyYAML: pip install PyYAML") from error
+    try:
+        data = yaml.safe_load(text)
+    except Exception as error:
+        raise RunnerError(f"invalid YAML script: {error}") from error
+    if not isinstance(data, list) or not data:
+        raise RunnerError("YAML script must be a non-empty array")
+    return [
+        _parse_item(source, item, index, allow_missing_files=allow_missing_files)
+        for index, item in enumerate(data, 1)
+    ]
+
+
 def load_yaml_script(
     path: Path,
     *,
@@ -64,19 +87,14 @@ def load_yaml_script(
 ) -> list[dict[str, Any]]:
     """Load and normalize one YAML List batch file."""
     try:
-        import yaml
-    except ImportError as error:
-        raise RunnerError("YAML script requires PyYAML: pip install PyYAML") from error
-    try:
-        data = yaml.safe_load(io_path(path).read_text(encoding="utf-8"))
-    except Exception as error:
+        text = io_path(path).read_text(encoding="utf-8")
+    except OSError as error:
         raise RunnerError(f"invalid YAML script: {error}") from error
-    if not isinstance(data, list) or not data:
-        raise RunnerError("YAML script must be a non-empty array")
-    return [
-        _parse_item(path, item, index, allow_missing_files=allow_missing_files)
-        for index, item in enumerate(data, 1)
-    ]
+    return parse_yaml_script_text(
+        text,
+        path,
+        allow_missing_files=allow_missing_files,
+    )
 
 
 def execute_script(config: RuntimeConfig, execute_one: ExecuteOne) -> int:
