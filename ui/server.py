@@ -78,6 +78,9 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/task":
                 query = parse_qs(parsed.query)
                 return self._json(self.state.task_detail(query.get("task_id", [""])[0]))
+            if parsed.path == "/api/workspaces":
+                query = parse_qs(parsed.query)
+                return self._json(self.state.workspaces_payload(query.get("chat_id", [""])[0]))
             if parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
                 return self._json(self.state.tasks_payload(query.get("chat_id", [""])[0]))
@@ -172,6 +175,8 @@ class Handler(SimpleHTTPRequestHandler):
                         items=body.get("items", []),
                         title=str(body.get("title", "")),
                         default_workflow=str(body.get("workflow", "")),
+                        workspace_mode=str(body.get("workspace_mode", "main")),
+                        workspace_path=str(body.get("workspace_path", "")),
                     ))
                 if task_type != "single":
                     raise ValueError("Task type must be single or sequential")
@@ -182,6 +187,8 @@ class Handler(SimpleHTTPRequestHandler):
                     workflow=str(body.get("workflow", "")),
                     source_message_id=str(body.get("source_message_id", "")),
                     goal_file=str(body.get("goal_file", "")),
+                    workspace_mode=str(body.get("workspace_mode", "main")),
+                    workspace_path=str(body.get("workspace_path", "")),
                 ))
             if parsed.path == "/api/tasks/action":
                 return self._json(self.state.task_action(
@@ -190,6 +197,8 @@ class Handler(SimpleHTTPRequestHandler):
                     instruction=str(body.get("instruction", "")),
                     workflow=str(body.get("workflow", "")),
                 ))
+            if parsed.path == "/api/tasks/workspace/cleanup":
+                return self._json(self.state.cleanup_task_workspace(str(body.get("task_id", ""))))
             if parsed.path == "/api/tasks/delete":
                 return self._json(self.state.delete_task(str(body.get("task_id", ""))))
             if parsed.path == "/api/chats/messages/add":
