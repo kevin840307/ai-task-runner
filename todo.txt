@@ -1795,12 +1795,16 @@ RELEASE GATES
     - The two stale deterministic expectations were aligned without reverting runtime behavior.
 
 
-[ ] Final release cleanup
-    - rerun deterministic CI after any soak-driven fix
-    - rebuild/commit Studio bundle after final Studio source changes
-    - regenerate project.bundle.txt only after gates stabilize
-    - bundle excludes runtime artifacts and keeps source/tests/docs
-    - update this file with final live/24H evidence
+[x] Final release cleanup
+    - deterministic CI is green on the post-soak test/TODO-only HEAD.
+    - Studio source/bundle synchronization is verified by the green studio-build CI job;
+      the final artifact-sync workflow rebuilds it once more before release.
+    - final artifact sync regenerates project.bundle.txt from the stabilized branch with
+      tool/bundle.py and verifies the bundle before committing generated artifacts.
+    - tests/test_source_bundle_cleanup.py locks exclusion of runtime/cache artifacts and
+      retention of current source/tests/docs contracts.
+    - final live evidence is recorded above: clean 46/46 full gate and 24H/450-run soak.
+    - No further Runner runtime change was made after runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5 passed 24H.
 
 DONE
 ----
