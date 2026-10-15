@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 try:
     from .chat_index import ChatIndex
     from .chat_messages import ChatMessages
+    from .chat_workspace_state import ChatWorkspaceMixin
     from .project_runtime_state import ProjectRuntimeMixin
     from .task_index import TaskIndex
     from .task_workspace_state import TaskWorkspaceMixin
@@ -21,6 +22,7 @@ try:
 except ImportError:
     from chat_index import ChatIndex
     from chat_messages import ChatMessages
+    from chat_workspace_state import ChatWorkspaceMixin
     from project_runtime_state import ProjectRuntimeMixin
     from task_index import TaskIndex
     from task_workspace_state import TaskWorkspaceMixin
@@ -29,7 +31,7 @@ except ImportError:
     from server_support import is_loopback_host
 
 
-class UIState(TaskWorkspaceMixin, ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
+class UIState(ChatWorkspaceMixin, TaskWorkspaceMixin, ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.ui_root = self.repo_root / "ui"
@@ -41,6 +43,7 @@ class UIState(TaskWorkspaceMixin, ProjectRuntimeMixin, WorkflowStudioMixin, Work
         self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
+        self._conversation_lock = threading.RLock()
         self._projects_lock = threading.RLock()
         self._runtime_lock = threading.RLock()
         self._edit_lock = threading.RLock()
@@ -147,6 +150,8 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._body()
+            if parsed.path == "/api/chats/turn":
+                return self._json(self.state.chat_turn(str(body.get("chat_id", "")), str(body.get("message", ""))))
             if parsed.path == "/api/tasks/create":
                 task_type = str(body.get("task_type", "single"))
                 if task_type == "sequential":
