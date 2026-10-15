@@ -15,6 +15,11 @@ Document precedence while this roadmap is not yet implemented:
 
 Core principles
 ---------------
+Product UX principle: simple by default, full power on demand.
+- The normal path should feel like: describe the work -> optionally choose Workflow -> Run.
+- Do not require users to understand Stage, validator, backend, model, YAML or runtime internals for ordinary work.
+- Preserve advanced power through collapsed Advanced / YAML views instead of putting every supported field in the primary form.
+- Prefer sensible inherited/default values over repeated selection, but freeze the resolved inputs at execution start.
 - Keep Runner Core authoritative. UI must not create another runtime state machine, retry engine,
   recovery engine, Workflow representation, or canonical run history.
 - Chat / Task / Library are product/UI concepts around the existing Runner.
@@ -432,27 +437,75 @@ PHASE 1 - Normal Chat workspace
 
 PHASE 2 - Task creation from Chat
 ---------------------------------
-[ ] Add New Task entry points.
+[ ] Add simple New Task entry points.
     - Chat header: + New Task.
-    - Optional message-level "Create Task" to create a Task from a useful conversation point.
+    - Optional message-level "Create Task" to prefill the instruction from useful conversation context.
     - Tasks page: + New Task.
+    - Keep one creation surface; entry points must not create separate Task forms/contracts.
 
-[ ] Use a lightweight right-side Task creation sheet.
-    - Keep Chat visible while creating the Task.
-    - Minimum fields:
-      task title / goal,
-      current execution path/status (Main in the initial release),
-      Workflow.
-    - Do not render a workspace chooser until there is more than one supported workspace choice.
-    - Advanced backend/model/etc. stays collapsed unless needed.
-    - Prompt selection should normally come from Workflow/Stage configuration, not become another
-      permanent top-level Task field.
+[ ] Optimize the primary form for the common case.
+    - Visible fields should normally be only:
+      * Task type: Task / Task List,
+      * Instruction / Prompt,
+      * Workflow (optional),
+      * Run.
+    - "Task" is the user-facing name for Single Task.
+    - "Task List" is the user-facing name for Sequential Task.
+    - Internal docs/code may still use Single/Sequential where useful, but avoid engineering terminology in normal UI.
+    - Task title is optional: derive a readable title from the instruction by default and allow editing.
+    - If Main is the only workspace, show "Main · Available/Busy" as compact status text instead of a selector.
 
-[ ] Freeze the Task's initial execution inputs at creation/start.
+[ ] Make Instruction / Prompt the main input.
+    - Direct text maps to the existing canonical goal/prompt input.
+    - Support "Use file" as a secondary option mapping to existing goal_file semantics.
+    - Do not invent a second task-prompt format or separate prompt execution engine.
+    - A Task must use either direct Instruction/Prompt or a goal file according to the existing runtime contract.
+    - Prompt Library assets remain Stage/Workflow resources unless the shared Runner later gains an explicit
+      task-level prompt-asset reference; do not fake that only in UI.
+
+[ ] Make Workflow selectable but optional.
+    - Default choice is "Use default Workflow" and must resolve through the same current Runner/default contract.
+    - User may explicitly choose any compatible visible Workflow from the existing Workflow Library/catalog.
+    - Remembering the last-used Workflow for a project/Chat is allowed as UI convenience, but the resolved Workflow
+      is frozen/snapshotted when execution starts so later preference/library changes cannot mutate a running Task.
+    - Advanced users may use existing workflow_file / inline Workflow capabilities through Advanced/YAML surfaces.
+    - Do not require Workflow selection when the Runner already has a valid default.
+
+[ ] Keep advanced controls collapsed.
+    - Advanced may expose only capabilities already supported by the shared Runner, such as:
+      goal_file / workflow_file,
+      validator / validator prompt,
+      backend / model or agent arguments where applicable,
+      sandbox / plugins / runtime limits.
+    - Do not duplicate Stage-level settings at Task level when Workflow already owns them.
+    - Advanced defaults should inherit the existing project/runtime configuration rather than forcing repeated input.
+
+[ ] Freeze resolved execution inputs at start.
     - source_chat_id / source_message references are metadata only.
-    - freeze root-path / goal / resolved Workflow and Prompt inputs needed for reproducible execution.
-    - Later Chat conversation or Library edits must not silently mutate an already-running Task.
+    - freeze root path, Instruction/Prompt source, resolved Workflow and other canonical inputs required for reproducible execution.
+    - Later Chat conversation, remembered defaults or Library edits must not silently mutate an already-running Task.
     - Reuse existing durable snapshot behavior where possible; do not create a second snapshot system.
+
+Illustrative common-case form:
+
++--------------------------------------------------------------+
+| New Task                                                     |
+|                                                              |
+| [ Task ]  [ Task List ]                                      |
+|                                                              |
+| What should AI do?                                           |
+| +----------------------------------------------------------+ |
+| | Fix backend model discovery and add regression tests.    | |
+| +----------------------------------------------------------+ |
+| [ Use file ]                                                 |
+|                                                              |
+| Workflow   Use default Workflow  v                           |
+| Main       Available                                         |
+|                                                              |
+| Advanced >                                      [ Run Task ] |
++--------------------------------------------------------------+
+
+The common path should require no knowledge of validator/backend/model/YAML.
 
 PHASE 3 - Tasks page scoped to the current Chat
 -----------------------------------------------
@@ -462,13 +515,12 @@ PHASE 3 - Tasks page scoped to the current Chat
     - Tasks here means only Tasks created under the selected Chat.
 
 [ ] Use status-oriented Task cards (Azure/cloud-resource style, not a Kanban workflow engine).
-    - Card should stay compact and show only useful summary:
+    - Card should stay compact and prioritize only:
       title,
-      status,
-      current Stage / attention reason,
-      workspace,
-      Workflow,
-      elapsed / last activity.
+      status + current Stage / attention reason,
+      elapsed / last activity,
+      Task List progress such as 2/4 when applicable.
+    - Workspace and Workflow are secondary metadata; show them compactly or in detail rather than making cards mini dashboards.
     - Entire card is clickable.
     - Runtime internals such as PID/session IDs/debug trace remain inside Task detail.
 
@@ -482,8 +534,12 @@ PHASE 3 - Tasks page scoped to the current Chat
 
 [ ] Surface cross-Chat attention without inventing a global Task management product.
     - Chat rows may show small Running / Needs Attention badges.
-    - Goal: user can notice a 24H Task that needs attention even while viewing another Chat.
-    - Keep the authoritative status from the existing runtime projection.
+    - Add one lightweight global Activity/Attention entry only if needed for long-running work:
+      * show Running / Recovering / Needs Attention Tasks across Chats,
+      * clicking an entry navigates back to the owning Chat/Task,
+      * do not add queue management, priorities, scheduling or another canonical Task status store.
+    - Goal: a 24H Task must be easy to find even after the user switches Chats.
+    - Keep authoritative status from the existing runtime projection.
 
 PHASE 4 - Task Detail reuses the pre-redesign execution Chat
 ------------------------------------------------------------
@@ -501,8 +557,16 @@ PHASE 4 - Task Detail reuses the pre-redesign execution Chat
     - AI execution output,
     - review/validator results,
     - tests/results,
-    - existing/defined allowed actions such as Stop / Continue / Resume / Rerun when valid,
-    - composer for additional instructions to that Task.
+    - existing/defined allowed actions such as Stop / Continue / Resume / Rerun when valid.
+
+[ ] Keep Task actions obvious and state-specific.
+    - Running / Recovering: primary action is Stop. Do not show a free-form "additional instruction" composer
+      unless the shared Runner has an explicit, durable live-instruction contract.
+    - Interrupted / resumable: primary action is Resume.
+    - Completed / terminal: "Continue Task" may accept a new Instruction/Prompt and optional Workflow, then append
+      a new execution segment under the same Task identity after path ownership is reacquired.
+    - Rerun means fresh execution from resolved inputs and should live in the overflow/secondary actions.
+    - Never make Continue, Resume and Rerun look interchangeable.
 
 [ ] All Task actions must use the existing canonical runtime projection / allowed_actions.
     - Browser disabled state is UX only.
@@ -545,30 +609,62 @@ Architecture / ownership:
     - Do not allow another Single/Sequential Task to start on the same canonical path while it is active.
 
 Creation UX:
-[ ] Add Task type selection in New Task:
-    - Single Task
-    - Sequential Task
-    - Keep Single Task as the simple/default path unless usage proves another default is better.
+[ ] Present this simply as "Task List" in normal UI.
+    - The user should think "run these tasks in order", not "configure a YAML batch scheduler".
+    - Internal implementation may still call it Sequential Task/YAML List.
 
-[ ] Sequential Task creation sheet/editor should support:
-    - ordered item list,
-    - add / remove / duplicate item,
-    - drag to reorder before execution,
-    - per-item title/goal,
-    - Workflow selection per item when supported by the existing YAML List contract,
-    - Advanced section only for existing canonical YAML/script fields,
-    - preview/edit canonical YAML for advanced users where practical.
-    - Do not expose fields that the shared runner does not actually support.
+[ ] Keep Task List creation minimal.
+    - Parent fields:
+      * optional list title (auto-derived when omitted),
+      * Default Workflow (optional; "Use default Workflow" by default).
+    - Each item normally shows only:
+      * Instruction / Prompt,
+      * optional Workflow override.
+    - Every item inherits the parent/default Workflow unless explicitly overridden.
+    - Do not make the user select the same Workflow repeatedly.
+    - Support direct Prompt text and existing goal_file through a secondary "Use file" action.
+    - Validator/backend/model/plugins/runtime options stay in item/list Advanced only when the existing YAML contract supports them.
 
-[ ] Support convenient bulk creation without inventing another format.
+[ ] Make list editing obvious.
+    - add item,
+    - remove,
+    - duplicate,
+    - drag reorder before execution,
+    - expand an item only when setting a Workflow override or Advanced options.
+    - Pressing Enter/add should make adding several short tasks fast.
+    - Running list structure is frozen: do not reorder/edit completed/current/pending canonical inputs while execution is active.
+      If future Runner semantics explicitly support safe pending-item edits, expose that through the shared contract rather
+      than implementing UI-only mutation.
+
+[ ] Preserve full YAML power without making YAML the normal experience.
+    - "YAML" is an optional advanced view/import/export surface.
     - Paste/import existing YAML List.
-    - Optional "Create Sequential Task" from Chat-selected messages/AI-generated plan.
-    - AI-assisted creation must produce the same canonical YAML List structure and always show a preview
-      before launch/edit.
-    - Visual editor <-> YAML representation must round-trip without silently dropping supported fields.
+    - Visual editor <-> YAML representation must round-trip all supported fields without silent loss.
+    - AI-assisted "Create Task List" from Chat or a plan produces the same canonical YAML List and shows a simple preview before Run.
+
+Illustrative common Task List form:
+
++------------------------------------------------------------------+
+| New Task List                                                    |
+|                                                                  |
+| Default Workflow   Use default Workflow  v                       |
+| Main               Available                                     |
+|                                                                  |
+| 1  Fix backend discovery                                         |
+|    Workflow: inherited                                           |
+|                                                                  |
+| 2  Update API tests                                              |
+|    Workflow: inherited                                           |
+|                                                                  |
+| 3  Update UI                                                     |
+|    Workflow: custom only if needed                               |
+|                                                                  |
+| [ + Add task ]                         [ YAML ] [ Advanced ]      |
+|                                                    [ Run List ]   |
++------------------------------------------------------------------+
 
 Execution UX:
-[ ] Sequential Task Detail should show compact ordered progress, for example:
+[ ] Task List Detail should show compact ordered progress, for example:
       1  ✓ Analyze architecture       Completed
       2  ● Refactor backend          Running / Execute
       3  ○ Update UI                 Waiting
@@ -603,7 +699,7 @@ History / durability:
 Cards / list UX:
 [ ] Tasks page should distinguish Single vs Sequential without creating a separate scheduler dashboard.
     - Example Single card: "Completed · ralphy_ai_validate".
-    - Example Sequential card: "Sequential · 2/4 · Running".
+    - Example Task List card: "Task List · 2/4 · Running".
     - Existing filters remain status-oriented: All / Active / Needs Attention / Completed.
     - Do not add priority queues, automatic reordering, dependencies or background scheduling.
 
@@ -620,7 +716,7 @@ Illustrative UI sketch (direction only):
 +--------------------------------------------------------------------------------+
 | New Task                                                                       |
 |                                                                                |
-| Type          ( ) Single Task   (*) Sequential Task                            |
+| Type          ( ) Task          (*) Task List                                  |
 | Path          C:\repo\ai-task-runner          Available                       |
 |                                                                                |
 | Tasks                                                                          |
@@ -636,7 +732,7 @@ Illustrative UI sketch (direction only):
 Running detail:
 
 +--------------------------------------------------------------------------------+
-| Backend modernization        Sequential · Running · Item 2 / 4        [ Stop ] |
+| Backend modernization        Task List · Running · Item 2 / 4         [ Stop ] |
 |--------------------------------------------------------------------------------|
 | ✓ 1  Analyze backend architecture      Completed · 12m                        |
 | ● 2  Refactor backend discovery        Running · Execute · 8m                 |
@@ -648,6 +744,10 @@ Running detail:
 
 PHASE 6 - Global Library
 ------------------------
+Implementation dependency note:
+- Task / Task List Workflow selection may reuse the existing Workflow catalog/picker before this navigation redesign is finished.
+- Do not block Task List UI on the new Library shell; Phase 6 reorganizes asset navigation, not the underlying Workflow capability.
+
 [ ] Move reusable assets into a global Library navigation domain.
     - Library is not owned by the selected Chat.
     - Preserve existing Global + Project asset scopes; "global navigation" does not mean every asset becomes global.
@@ -772,6 +872,13 @@ Non-goals
 
 Implementation review checklist
 -------------------------------
+Usability target for normal operation:
+- Can a new user start a normal Task with only one instruction and one Run click after opening New Task?
+- Can Workflow be selected when wanted without being mandatory?
+- Can a Task List reuse one default Workflow without repeated configuration?
+- Are direct Prompt text, file-based input and advanced YAML available without cluttering the default screen?
+- Does every visible action have one obvious meaning for the current state?
+
 Before each phase is merged, verify:
 - Scope: is this Global, Chat-owned, Task-owned, Project-asset, or Runner-owned?
 - Identity: after refresh or a newer same-path Task, can the UI still open the correct historical object?
