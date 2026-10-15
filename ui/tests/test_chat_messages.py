@@ -51,6 +51,19 @@ class ChatMessageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "1-20000"):
                 messages.append(chat_id, "")
 
+    def test_archived_chat_is_read_only_at_storage_boundary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "root"
+            root.mkdir()
+            index = ChatIndex(Path(temp) / "chats.json")
+            chat_id = index.create(str(root))["chat_id"]
+            messages = ChatMessages(Path(temp) / "messages", index)
+            messages.append(chat_id, "before archive")
+            index.update(chat_id, archived=True)
+            self.assertEqual(messages.list(chat_id)["messages"][0]["text"], "before archive")
+            with self.assertRaisesRegex(ValueError, "Archived Chat is read-only"):
+                messages.append(chat_id, "after archive")
+
     def test_rejects_invalid_identity_and_bounds(self):
         with tempfile.TemporaryDirectory() as temp:
             index = ChatIndex(Path(temp) / "chats.json")
