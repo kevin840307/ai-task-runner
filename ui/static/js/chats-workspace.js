@@ -62,7 +62,7 @@ async function selectChat(id) {
   element("newTask").disabled = !writable;
   element("chatNotice").textContent = currentChat && !writable
     ? "Path unavailable · Chat and Task history remain readable; new work is disabled."
-    : "Chat messages are UI-owned notes. Tasks run through the existing Runner; normal conversational AI replies are not enabled yet.";
+    : "Chat is read-only with project access. Use Tasks for file changes, execution, validation, and long-running work.";
   for (const button of element("chatList").querySelectorAll("button[data-id]")) {
     button.dataset.active = String(button.dataset.id === id);
   }
@@ -394,7 +394,7 @@ element("chatComposer").addEventListener("submit", async event => {
   if (!text) return;
   element("chatSend").disabled = true;
   try {
-    await request("/api/chats/messages/add", {chat_id: id, text});
+    await request("/api/chats/turn", {chat_id: id, message: text});
     element("chatText").value = "";
     await loadMessages();
   } catch (error) { report(error); }
