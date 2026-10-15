@@ -1,4 +1,5 @@
 """Durable Task index regression tests."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,41 @@ class TaskIndexTests(unittest.TestCase):
             second = index.create(chat_id="c1", root_path=str(root), instruction="second")
             index.delete(first["task_id"])
             self.assertEqual([x["task_id"] for x in index.list()], [second["task_id"]])
+
+    def test_structurally_invalid_task_identities_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "tasks.json"
+            index = TaskIndex(path)
+            path.write_text(
+                json.dumps([{
+                    "task_id": "a" * 32,
+                    "chat_id": "c1",
+                    "executions": [],
+                }]),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "root_path"):
+                index.list()
+
+            path.write_text(
+                json.dumps([
+                    {
+                        "task_id": "b" * 32,
+                        "chat_id": "c1",
+                        "root_path": temp,
+                        "executions": [],
+                    },
+                    {
+                        "task_id": "b" * 32,
+                        "chat_id": "c2",
+                        "root_path": temp,
+                        "executions": [],
+                    },
+                ]),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate task_id"):
+                index.list()
 
     def test_invalid_index_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
