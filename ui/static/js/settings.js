@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);
+const $=id=>document.getElementById(id);\nconst t=(key,fallback="")=>window.I18n?.t(key,fallback)??fallback??key;
 const keys={appearance:"ai-task-runner.appearance",theme:"ai-task-runner.theme",motion:"ai-task-runner.motion",language:"ai-task-runner.language"};
 function read(id,fallback){try{return localStorage.getItem(keys[id])||fallback}catch(_){return fallback}}
 function apply(){
@@ -9,7 +9,7 @@ function apply(){
   document.documentElement.dataset.theme=$("theme").value;
   document.documentElement.dataset.motion=$("motion").value;
 }
-for(const [id,fallback] of Object.entries({appearance:"system",theme:"teal",motion:"full",language:"zh-TW"})){$(id).value=read(id,fallback);$(id).addEventListener("change",()=>{try{localStorage.setItem(keys[id],$(id).value);$("settingsStatus").textContent="Saved";apply()}catch(e){$("settingsStatus").textContent=e.message}})}
+for(const [id,fallback] of Object.entries({appearance:"system",theme:"teal",motion:"full",language:"zh-TW"})){$(id).value=read(id,fallback);$(id).addEventListener("change",()=>{try{localStorage.setItem(keys[id],$(id).value);if(id==="language")window.I18n?.setLanguage($(id).value,{persist:true});$("settingsStatus").textContent=t("settings.saved","Saved");apply()}catch(e){$("settingsStatus").textContent=e.message}})}
 apply();
 const settingsShell=document.querySelector(".settings-shell");
 function setSettingsContextCollapsed(collapsed){
@@ -20,3 +20,5 @@ function setSettingsContextCollapsed(collapsed){
 }
 $("toggleSettingsContext").addEventListener("click",()=>setSettingsContextCollapsed(!settingsShell.classList.contains("context-collapsed")));
 try{setSettingsContextCollapsed(localStorage.getItem("ai-task-runner.settings.context-collapsed")==="true")}catch(_){}
+
+window.addEventListener("app-language-changed",()=>{$("settingsStatus").textContent="";});
