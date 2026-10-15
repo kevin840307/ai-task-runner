@@ -197,10 +197,10 @@ class TaskWorkspaceMixin:
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{task_id}-{segment:03d}.yaml"
         payload = [
-            {
+            dict(item.get("raw") or {
                 "prompt": item["instruction"],
                 "workflow_file": item["workflow"],
-            }
+            })
             for item in items
         ]
         temporary = path.with_suffix(".tmp")
@@ -248,6 +248,7 @@ class TaskWorkspaceMixin:
         chat_id: str,
         items: list,
         title: str = "",
+        default_workflow: str = "",
     ) -> dict:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
@@ -255,20 +256,52 @@ class TaskWorkspaceMixin:
         if not isinstance(items, list) or not 1 <= len(items) <= MAX_TASK_LIST_ITEMS:
             raise ValueError(f"Task List requires 1-{MAX_TASK_LIST_ITEMS} items")
         project = Path(chat["root_path"])
+        inherited_workflow = self._resolve_task_workflow(project, default_workflow)
         normalized: list[dict] = []
-        for index, raw in enumerate(items, 1):
-            if not isinstance(raw, dict):
+        for index, submitted in enumerate(items, 1):
+            if not isinstance(submitted, dict):
                 raise ValueError(f"Task List item {index} is invalid")
-            instruction = str(raw.get("instruction") or "").strip()
-            if not instruction:
-                raise ValueError(f"Task List item {index} instruction is required")
+            raw_item = submitted.get("raw")
+            item = dict(raw_item) if isinstance(raw_item, dict) else {}
+            instruction = str(submitted.get("instruction") or "").strip()
             if len(instruction) > 20000:
                 raise ValueError(f"Task List item {index} instruction is too long")
+            if not item:
+                if not instruction:
+                    raise ValueError(f"Task List item {index} instruction is required")
+                item["prompt"] = instruction
+            elif not any(str(item.get(key) or "").strip() for key in ("prompt", "goal", "goal_file")):
+                if not instruction:
+                    raise ValueError(f"Task List item {index} instruction is required")
+                item["prompt"] = instruction
+
+            override = str(submitted.get("workflow") or "").strip()
+            if override:
+                item.pop("workflow", None)
+                item["workflow_file"] = self._resolve_task_workflow(project, override)
+            elif not item.get("workflow") and not item.get("workflow_file") and not item.get("validator"):
+                item["workflow_file"] = inherited_workflow
+
+            display_instruction = (
+                str(item.get("prompt") or item.get("goal") or "").strip()
+                or (f"Use file: {item.get('goal_file')}" if item.get("goal_file") else f"Task {index}")
+            )
             normalized.append({
-                "instruction": instruction,
-                "workflow": self._resolve_task_workflow(project, str(raw.get("workflow") or "")),
+                "instruction": display_instruction,
+                "workflow": str(item.get("workflow_file") or ""),
+                "raw": item,
             })
 
+        try:
+            import yaml
+        except ImportError as exc:
+            raise ValueError("Task List requires PyYAML") from exc
+        candidate_yaml = yaml.safe_dump(
+            [item["raw"] for item in normalized],
+            allow_unicode=True,
+            sort_keys=False,
+        )
+        self.task_list_yaml_preview(chat_id, candidate_yaml)
         self._sync_prior_tasks(project)
         task = self.tasks.create(
             chat_id=chat_id,
