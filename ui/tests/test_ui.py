@@ -866,6 +866,30 @@ class UIStateTests(unittest.TestCase):
             self.assertIn("--force-new", rerun)
             self.assertIn("again", rerun)
 
+    def test_single_and_yaml_list_share_busy_path_guard(self) -> None:
+        script = self.project / "tasks.yaml"
+        script.write_text("- prompt: one\n  validator: ai\n", encoding="utf-8")
+        busy = {
+            "running": True,
+            "completed": False,
+            "stale": False,
+            "actions": {"run": False, "resume": False},
+        }
+        with patch.object(self.state, "read_runtime", return_value=busy), patch.object(self.state, "launch") as launch:
+            with self.assertRaisesRegex(ValueError, "active runtime"):
+                self.state.launch_message(
+                    self.project,
+                    "single",
+                    workflow=str(self.workflow),
+                )
+            with self.assertRaisesRegex(ValueError, "active runtime"):
+                self.state.launch_script_task(
+                    self.project,
+                    str(script),
+                    workflow=str(self.workflow),
+                )
+        launch.assert_not_called()
+
     def test_launch_reservation_blocks_duplicate_before_runner_marker_exists(self) -> None:
         process = type("Process", (), {"pid": 24680})()
         with patch("ui.server.subprocess.Popen", return_value=process) as popen, patch.object(
