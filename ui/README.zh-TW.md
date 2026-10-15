@@ -104,3 +104,51 @@ UI 只透過正式 runtime/state/control contract 判斷執行狀態，不應因
 - browser CRUD；
 - static source/bundle contract；
 - CI React Studio build。
+
+
+## 產品工作區
+
+執行 `python ui/main.py` 時預設開啟 `/chats.html`。舊的 `/` 工作區仍保留為相容／runtime 介面；新的產品 shell 分成三層 scope：Global navigation（Chats / Library / Settings）、各 domain 的 context sidebar，以及 main content。
+
+### Chats
+
+每個 Chat 都有固定、由 UI 擁有的 `chat_id` 與 root path。Chat metadata 與 transcript 儲存在 UI data store，不會寫進 Runner `state.json`。Chat 可以 Archive，但不會刪除其 Tasks 或歷史；原路徑遺失時歷史仍可讀，但不能再開始新工作。
+
+一般 Chat 對話透過已註冊 Backend 的 bounded、唯讀 project-access adapter 執行。Fresh backend session 會取得 bounded durable conversation context；同一 session 的 follow-up 只送新的訊息。Chat 不會建立 Workflow run、Stage state、retry loop 或 Runner control state。
+
+### Tasks 與 Task Detail
+
+Task 有 durable、由 UI 擁有的 identity 與 execution references，但 live status 一律投影自既有 Runner runtime。同一 canonical filesystem execution path 同時間最多只能有一個 Active Task；瀏覽器 disabled state 只是 UX，真正權威仍是 backend/runtime ownership guard。
+
+常用 New Task 表單只直接顯示 Type、Instruction、可選 Title、Workflow 與 Run。Goal file、Backend/Model 與 workspace isolation 都屬於 secondary/advanced 選項。開始執行前，resolved Workflow、prompt source、Backend/Model 與 workspace 會凍結到既有 Runner request/script input。
+
+Task Detail 的 Stop / Resume / Rerun / Continue 可用性來自 canonical runtime projection 與目前 path availability。Path 被後續 Task 重用前，terminal execution evidence 會先保存到 bounded Task history，因此舊 Task 不會誤讀新的 `state.json`。Delete Task 只刪 UI-owned Task record，不執行任何 Git integration。
+
+### Task List
+
+Task List 是既有 YAML List/script runner 的 UI adapter，不是瀏覽器端 scheduler。Visual items 支援新增／刪除／複製／重排、goal-file input、繼承或 item-level Workflow，以及 Advanced YAML view。Visual/YAML 轉換會走與 CLI 相同的 `runner.script` parser 驗證，並保留所有已支援的 advanced fields。
+
+Stop 與 Resume 仍使用既有 script runtime action。UI 只投影 current item pointer 與 child evidence，不會自行啟動下一個 item。
+
+### Library 與 Settings
+
+`/library.html` 是全域 reusable-asset domain，明確顯示 Workflow / Prompt 的 Global 或 Project scope，並開啟既有 Full Designer / Prompt Editor。New Task 的 Workflow picker 重用同一份 catalog 與 visibility metadata。
+
+`/settings.html` 只管理介面偏好；Runner、Workflow、Stage 與 Task execution 設定仍由原本 owner 管理。
+
+### Worktree isolation
+
+Main 永遠是預設 Task workspace。Git project 的 Task form 另外可以提供 New Worktree 或既有 worktree。每個 worktree 都是獨立 canonical execution path，因此也是獨立 ownership domain。
+
+Task-created worktree cleanup 必須明確操作且 fail-closed：Active Task 不可 cleanup、先 archive runtime evidence、dirty worktree 不會被 force-remove，而且 branch 會保留。Task execution 永遠不會自動 merge、rebase、cherry-pick 或處理 integration conflict。
+
+## 產品工作區測試
+
+重要 coverage 包含：
+
+- `tests/test_chat_turn.py`：bounded Fresh/Same Session 唯讀 Chat 行為；
+- `ui/tests/test_chat_index.py`、`test_chat_messages.py`：durable Chat identity/transcript 與 archive/path guards；
+- `ui/tests/test_task_index.py`、`test_task_workspace_state.py`：durable Task history、terminal evidence 與 historical rerun；
+- `tests/test_script_project_root.py`：共用 YAML List parsing、inheritance 與 CLI compatibility；
+- `ui/tests/test_task_worktree.py`：明確、不可自動 merge 的 worktree lifecycle；
+- `ui/tests/test_future_workspace_browser.py`：Chat → Task / Task List → canonical action browser flow。
