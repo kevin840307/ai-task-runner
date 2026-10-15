@@ -120,7 +120,7 @@ UI 只透過正式 runtime/state/control contract 判斷執行狀態，不應因
 
 Task 有 durable、由 UI 擁有的 identity 與 execution references，但 live status 一律投影自既有 Runner runtime。同一 canonical filesystem execution path 同時間最多只能有一個 Active Task；瀏覽器 disabled state 只是 UX，真正權威仍是 backend/runtime ownership guard。
 
-常用 New Task 表單只直接顯示 Type、Instruction、可選 Title、Workflow 與 Run。Goal file、Backend/Model 與 workspace isolation 都屬於 secondary/advanced 選項。開始執行前，resolved Workflow、prompt source、Backend/Model 與 workspace 會凍結到既有 Runner request/script input。
+常用 New Task 表單只直接顯示 Type、Instruction、Workflow 與 Run。可選 Title、Goal file、Backend/Model 與 workspace isolation 都屬於 secondary/advanced 選項。開始執行前，resolved Workflow、prompt source、Backend/Model 與 workspace 會凍結到既有 Runner request/script input。
 
 Task Detail 的 Stop / Resume / Rerun / Continue 可用性來自 canonical runtime projection 與目前 path availability。Path 被後續 Task 重用前，terminal execution evidence 會先保存到 bounded Task history，因此舊 Task 不會誤讀新的 `state.json`。Delete Task 只刪 UI-owned Task record，不執行任何 Git integration。
 
