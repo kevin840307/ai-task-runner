@@ -157,6 +157,8 @@ def _bridge_for(state: UIState):
                     ]
                 elif path == "/api/workflow/catalog":
                     data = {"stage_types": {}, "node_options": {}}
+                elif path == "/api/ui/defaults":
+                    data = {"default_workflow": "ralphy_ai_validate.yaml"}
                 elif path == "/api/backends":
                     data = state.backend_catalog()
                 elif path == "/api/studio/files":
