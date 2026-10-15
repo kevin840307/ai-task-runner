@@ -2,6 +2,8 @@
 import json
 import tempfile
 import unittest
+
+import pytest
 from pathlib import Path
 
 from ui.chat_index import ChatIndex
