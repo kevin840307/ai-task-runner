@@ -12,22 +12,22 @@
 </head><body>
 <div class="settings-shell">
 <nav class="settings-global" aria-label="Global navigation">
-<a href="/chats.html">Chats</a><a href="/library.html">Library</a><a href="/settings.html" aria-current="page">Settings</a><a class="legacy-link" href="/">Legacy</a>
+<a href="/chats.html" data-i18n="workspace.chats">Chats</a><a href="/library.html" data-i18n="workspace.library">Library</a><a href="/settings.html" aria-current="page" data-i18n="workspace.settings">Settings</a><a class="legacy-link" href="/" data-i18n="workspace.legacy">Legacy</a>
 </nav>
 <aside class="settings-nav" aria-label="Settings context">
 <button id="toggleSettingsContext" type="button" aria-expanded="true" title="Collapse Settings sidebar">☰</button>
-<strong>Settings</strong><a href="#interface" aria-current="page">Interface</a>
+<strong data-i18n="settings.title">Settings</strong><a href="#interface" aria-current="page" data-i18n="settings.interface">Interface</a>
 </aside>
 <main class="settings-main">
-<h1>Settings</h1>
-<p>Interface preferences only. Runner, Workflow and Task execution settings stay with their existing owners.</p>
+<h1 data-i18n="settings.title">Settings</h1>
+<p data-i18n="settings.desc">Interface preferences only. Runner, Workflow and Task execution settings stay with their existing owners.</p>
 <section id="interface" class="settings-card">
-<label class="settings-row">Appearance <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-<label class="settings-row">Accent <select id="theme"><option value="teal">Teal</option><option value="blue">Deep Blue</option><option value="violet">Violet</option><option value="amber">Amber</option><option value="rose">Rose</option></select></label>
-<label class="settings-row">Motion <select id="motion"><option value="full">Full</option><option value="system">System</option><option value="reduced">Reduced</option></select></label>
-<label class="settings-row">Language <select id="language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
+<label class="settings-row"><span data-i18n="settings.appearance">Appearance</span> <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+<label class="settings-row"><span data-i18n="settings.accent">Accent</span> <select id="theme"><option value="teal">Teal</option><option value="blue">Deep Blue</option><option value="violet">Violet</option><option value="amber">Amber</option><option value="rose">Rose</option></select></label>
+<label class="settings-row"><span data-i18n="settings.motion">Motion</span> <select id="motion"><option value="full">Full</option><option value="system">System</option><option value="reduced">Reduced</option></select></label>
+<label class="settings-row"><span data-i18n="settings.language">Language</span> <select id="language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
 <p id="settingsStatus" role="status"></p>
 </section>
 </main></div>
-<script type="module" src="/js/settings.js"></script>
+<script src="/js/i18n.js"></script>\n<script type="module" src="/js/settings.js"></script>
 </body></html>
