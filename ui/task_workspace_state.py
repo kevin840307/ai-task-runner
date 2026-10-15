@@ -336,12 +336,58 @@ class TaskWorkspaceMixin:
             "owns_runtime": owns_visible_runtime,
         }
 
-    def tasks_payload(self, chat_id: str = "") -> dict:
+    def tasks_payload(
+        self,
+        chat_id: str = "",
+        *,
+        limit: int = 100,
+        attention_only: bool = False,
+    ) -> dict:
         if chat_id:
             self._chat_for_task(chat_id)
-        rows = [self._sync_task(task) for task in self.tasks.list(chat_id=chat_id)]
-        rows.sort(key=lambda item: float(item.get("updated_at") or item.get("created_at") or 0), reverse=True)
-        return {"tasks": rows}
+        if not 1 <= int(limit) <= 500:
+            raise ValueError("Task list limit must be 1-500")
+        rows = list(self.tasks.list(chat_id=chat_id))
+        rows.sort(
+            key=lambda item: float(item.get("updated_at") or item.get("created_at") or 0),
+            reverse=True,
+        )
+        total = len(rows)
+        if attention_only:
+            candidate_statuses = {
+                "launching", "running", "recovering", "stopping",
+                "needs_attention", "error", "failed", "path_unavailable",
+            }
+            rows = [
+                item for item in rows
+                if str(item.get("last_status") or "").lower() in candidate_statuses
+            ]
+            synced = [self._sync_task(task) for task in rows]
+            synced = [
+                item for item in synced
+                if str(item.get("last_status") or "").lower() in candidate_statuses
+                or (
+                    isinstance(item.get("runtime"), dict)
+                    and (
+                        item["runtime"].get("running")
+                        or item["runtime"].get("attention_reason")
+                    )
+                )
+            ][: int(limit)]
+            return {
+                "tasks": synced,
+                "meta": {"total": total, "returned": len(synced), "has_more": False},
+            }
+        selected = rows[: int(limit)]
+        synced = [self._sync_task(task) for task in selected]
+        return {
+            "tasks": synced,
+            "meta": {
+                "total": total,
+                "returned": len(synced),
+                "has_more": total > len(selected),
+            },
+        }
 
     def task_detail(self, task_id: str) -> dict:
         task = self._sync_task(self.tasks.get(task_id))
