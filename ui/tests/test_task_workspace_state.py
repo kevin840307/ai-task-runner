@@ -229,6 +229,33 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Task not found"):
             self.state.tasks.get(task["task_id"])
 
+    def test_task_list_launch_failure_preserves_frozen_parent_inputs(self):
+        items = [
+            {"instruction": "first", "workflow": "", "raw": {"prompt": "first"}},
+            {"instruction": "second", "workflow": "", "raw": {"prompt": "second"}},
+        ]
+        with patch.object(
+            self.state,
+            "launch_script_task",
+            side_effect=ValueError("temporary launch failure"),
+        ):
+            task = self.state.create_task_list(
+                chat_id=self.chat_id,
+                items=items,
+                default_workflow=str(self.state.workflow),
+                backend="qwen",
+                model="model-a",
+            )
+
+        self.assertEqual(task["last_status"], "needs_attention")
+        self.assertEqual(task["workflow"], str(self.state.workflow))
+        self.assertEqual(task["backend"], "qwen")
+        self.assertEqual(task["model"], "model-a")
+        self.assertEqual(
+            [item["instruction"] for item in task["items"]],
+            ["first", "second"],
+        )
+
     def test_sequential_rerun_uses_original_frozen_items_not_latest_continue_segment(self):
         frozen_items = [
             {"instruction": "first", "workflow": "", "raw": {"prompt": "first"}},
