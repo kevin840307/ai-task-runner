@@ -7,6 +7,7 @@ let currentTask = null;
 let taskFilter = "all";
 let activeTab = "chat";
 let workflowChoices = [];
+let taskBackendCatalog = {backends: [], models: {}, default: ""};
 let taskGoalFile = "";
 const taskListRawByRow = new WeakMap();
 let draggedTaskListRow = null;
@@ -337,6 +338,53 @@ function setTaskType(type) {
   element("taskRun").textContent = sequential ? "Run List" : "Run Task";
   if (sequential && !element("taskListItems").children.length) addTaskListItem();
 }
+function renderTaskModels() {
+  const backend = element("taskBackend").value;
+  const model = element("taskModel");
+  model.replaceChildren();
+  const fallback = document.createElement("option");
+  fallback.value = "";
+  fallback.textContent = backend ? "Backend default model" : "Select Backend first";
+  model.append(fallback);
+  for (const value of (taskBackendCatalog.models?.[backend] || [])) {
+    const option = document.createElement("option");
+    option.value = String(value);
+    option.textContent = String(value);
+    model.append(option);
+  }
+  model.disabled = !backend;
+}
+async function loadTaskBackends() {
+  const backend = element("taskBackend");
+  backend.replaceChildren();
+  const fallback = document.createElement("option");
+  fallback.value = "";
+  fallback.textContent = "Default backend";
+  backend.append(fallback);
+  element("taskModel").replaceChildren();
+  element("taskModel").disabled = true;
+  if (!currentChat?.path_available) return;
+  try {
+    const data = await request("/api/backends?models=1&project=" + encodeURIComponent(currentChat.root_path));
+    taskBackendCatalog = {
+      backends: Array.isArray(data.backends) ? data.backends : [],
+      models: data.models && typeof data.models === "object" ? data.models : {},
+      default: String(data.default || "")
+    };
+    fallback.textContent = taskBackendCatalog.default ? "Default · " + taskBackendCatalog.default : "Default backend";
+    for (const name of taskBackendCatalog.backends) {
+      const option = document.createElement("option");
+      option.value = String(name);
+      option.textContent = String(name);
+      backend.append(option);
+    }
+    renderTaskModels();
+  } catch (error) {
+    taskBackendCatalog = {backends: [], models: {}, default: ""};
+    report(error);
+  }
+}
+
 async function loadTaskWorkspaces() {
   const select = element("taskWorkspace");
   select.replaceChildren();
@@ -405,7 +453,7 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   addTaskListItem(prefill);
   element("taskForm").dataset.sourceMessageId = sourceMessageId;
   element("taskModal").hidden = false;
-  await Promise.all([loadWorkflowOptions(), loadTaskWorkspaces(), updateMainAvailability()]);
+  await Promise.all([loadWorkflowOptions(), loadTaskBackends(), loadTaskWorkspaces(), updateMainAvailability()]);
   element("taskInstruction").focus();
 }
 function closeTaskModal() {
@@ -667,6 +715,7 @@ element("taskClearFile").addEventListener("click", () => {
   element("taskInstruction").focus();
 });
 element("taskType").addEventListener("change", () => setTaskType(element("taskType").value));
+element("taskBackend").addEventListener("change", renderTaskModels);
 element("addTaskListItem").addEventListener("click", () => addTaskListItem());
 element("taskListYamlToggle").addEventListener("click", async () => {
   const panel = element("taskListYamlPanel");
@@ -701,6 +750,8 @@ element("taskForm").addEventListener("submit", async event => {
       workflow: parentWorkflow,
       source_message_id: element("taskForm").dataset.sourceMessageId || "",
       goal_file: taskType === "single" ? taskGoalFile : "",
+      backend: element("taskBackend").value,
+      model: element("taskModel").value,
       ...selectedTaskWorkspace()
     });
     closeTaskModal();
