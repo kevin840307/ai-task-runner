@@ -57,29 +57,6 @@ class ChatIndex:
                 return {**value, "path_available": Path(value["root_path"]).is_dir()}
         raise ValueError("Chat not found")
 
-    def update(self, chat_id: str, **changes) -> dict:
-        chat_id = str(chat_id or "")
-        allowed = {"session_id", "backend", "model", "title"}
-        unknown = set(changes) - allowed
-        if unknown:
-            raise ValueError("Unsupported Chat metadata update")
-        self.file.parent.mkdir(parents=True, exist_ok=True)
-        with project_file_lock(self.file):
-            rows = self._read()
-            for index, row in enumerate(rows):
-                if row.get("chat_id") != chat_id:
-                    continue
-                value = {**row, **changes, "updated_at": time.time()}
-                rows[index] = value
-                temporary = self.file.with_name(self.file.name + "." + chat_id + ".tmp")
-                try:
-                    temporary.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-                    os.replace(temporary, self.file)
-                finally:
-                    temporary.unlink(missing_ok=True)
-                return {**value, "path_available": Path(value["root_path"]).is_dir()}
-        raise ValueError("Chat not found")
-
     def create(self, root: str, title: str = "") -> dict:
         if not str(root).strip():
             raise ValueError("Chat root path is required")
