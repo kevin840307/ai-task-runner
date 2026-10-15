@@ -283,6 +283,44 @@ function setTaskType(type) {
   element("taskRun").textContent = sequential ? "Run List" : "Run Task";
   if (sequential && !element("taskListItems").children.length) addTaskListItem();
 }
+async function loadTaskWorkspaces() {
+  const select = element("taskWorkspace");
+  select.replaceChildren();
+  const main = document.createElement("option");
+  main.value = "main";
+  main.textContent = "Main";
+  select.append(main);
+  if (!currentChat?.path_available) return;
+  try {
+    const data = await request("/api/workspaces?chat_id=" + encodeURIComponent(currentChat.chat_id));
+    if (data.git_available) {
+      const fresh = document.createElement("option");
+      fresh.value = "new";
+      fresh.textContent = "New Worktree";
+      select.append(fresh);
+      for (const workspace of data.workspaces || []) {
+        if (workspace.is_main) continue;
+        const option = document.createElement("option");
+        option.value = "existing:" + workspace.path;
+        option.textContent = "Existing · " + (workspace.branch || workspace.path);
+        select.append(option);
+      }
+      element("taskWorkspaceHint").textContent = "Main or an isolated Git worktree. Task never merges branches.";
+    } else {
+      element("taskWorkspaceHint").textContent = "This project is not available as a Git repository; Main only.";
+    }
+  } catch (error) {
+    element("taskWorkspaceHint").textContent = "Workspace discovery unavailable; Main remains usable.";
+    report(error);
+  }
+}
+function selectedTaskWorkspace() {
+  const value = element("taskWorkspace").value || "main";
+  if (value === "new") return {workspace_mode: "new", workspace_path: ""};
+  if (value.startsWith("existing:")) return {workspace_mode: "existing", workspace_path: value.slice("existing:".length)};
+  return {workspace_mode: "main", workspace_path: ""};
+}
+
 async function updateMainAvailability() {
   if (!currentChat?.path_available) { element("mainAvailability").textContent = "Path unavailable"; return; }
   try {
@@ -313,7 +351,7 @@ async function openTaskModal(prefill = "", sourceMessageId = "") {
   addTaskListItem(prefill);
   element("taskForm").dataset.sourceMessageId = sourceMessageId;
   element("taskModal").hidden = false;
-  await Promise.all([loadWorkflowOptions(), updateMainAvailability()]);
+  await Promise.all([loadWorkflowOptions(), loadTaskWorkspaces(), updateMainAvailability()]);
   element("taskInstruction").focus();
 }
 function closeTaskModal() {
@@ -405,6 +443,8 @@ async function openTask(taskId) {
   head.append(title, state);
   root.append(head);
   addDetailLine(root, "Workspace", task.root_path);
+  addDetailLine(root, "Workspace type", task.workspace_kind || "main");
+  addDetailLine(root, "Branch", task.workspace_branch);
   addDetailLine(root, "Workflow", task.workflow || "Runner default");
   if (task.runtime) {
     addDetailLine(root, "Stage", task.runtime.stage);
@@ -457,6 +497,19 @@ async function openTask(taskId) {
     });
     root.append(text);
     actions.append(continueButton);
+  }
+  if (!task.runtime?.running && task.workspace_kind === "worktree" && task.workspace_managed && !task.workspace_removed) {
+    const cleanup = document.createElement("button");
+    cleanup.type = "button";
+    cleanup.textContent = "Cleanup Worktree";
+    cleanup.addEventListener("click", async () => {
+      if (!window.confirm("Archive Task runtime evidence and remove this worktree? The branch is kept and nothing is merged.")) return;
+      try {
+        await request("/api/tasks/workspace/cleanup", {task_id: task.task_id});
+        await refreshOpenTask();
+      } catch (error) { report(error); }
+    });
+    actions.append(cleanup);
   }
   if (!task.runtime?.running) {
     const remove = document.createElement("button");
@@ -579,7 +632,8 @@ element("taskForm").addEventListener("submit", async event => {
       title: element("taskTitle").value.trim(),
       workflow: parentWorkflow,
       source_message_id: element("taskForm").dataset.sourceMessageId || "",
-      goal_file: taskType === "single" ? taskGoalFile : ""
+      goal_file: taskType === "single" ? taskGoalFile : "",
+      ...selectedTaskWorkspace()
     });
     closeTaskModal();
     setTab("tasks");
