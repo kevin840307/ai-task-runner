@@ -64,7 +64,9 @@ class StaticContractTests(unittest.TestCase):
             self.assertIn(token, self.js)
 
     def test_workflow_visibility_controls_chat_picker(self):
-        self.assertIn('DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml"', self.app_js)
+        self.assertIn('/api/ui/defaults', self.app_js)
+        self.assertIn("defaultWorkflowName()", self.app_js)
+        self.assertNotIn('DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml"', self.app_js)
         self.assertIn("setWorkflowVisibility", self.app_js)
         self.assertIn("workflowContextVisibility", self.app_js)
         self.assertIn("assets.show_in_chat", self.app_js)
