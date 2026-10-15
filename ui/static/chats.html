@@ -83,8 +83,19 @@
     <section id="taskListEditor" class="task-form-row" hidden>
       <span>Ordered items</span>
       <div id="taskListItems"></div>
-      <button id="addTaskListItem" type="button">+ Add item</button>
-      <small>Items run sequentially through the existing YAML List runner.</small>
+      <div class="chat-head-actions">
+        <button id="addTaskListItem" type="button">+ Add item</button>
+        <button id="taskListYamlToggle" type="button" aria-expanded="false">YAML</button>
+      </div>
+      <section id="taskListYamlPanel" hidden>
+        <textarea id="taskListYaml" spellcheck="false" placeholder="- prompt: Fix backend discovery&#10;  workflow_file: ..."></textarea>
+        <div class="chat-head-actions">
+          <button id="taskListYamlFromVisual" type="button">Refresh YAML from Visual</button>
+          <button id="taskListYamlApply" type="button">Validate & Apply YAML</button>
+        </div>
+        <small id="taskListYamlStatus"></small>
+      </section>
+      <small>Items run sequentially through the existing YAML List runner. Advanced YAML fields are preserved.</small>
     </section>
     <label class="task-form-row">Title <small>Optional · derived from the instruction by default</small>
       <input id="taskTitle" maxlength="120">
