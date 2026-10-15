@@ -387,7 +387,30 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
-[ ] Revalidate YAML List endurance with production-like unattended recovery.
+[x] Full 24H Windows live reliability gate passed on runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5.
+    - SOURCE_REVISION=7b239c300a482519bab72ebdbcf86045ef01c8f5, DIRTY=False.
+    - All 46/46 probes passed before and through the final long-running soak.
+    - yaml-list-endurance passed with 8 items, confirming the production-like
+      unattended retry policy and single-process item isolation under real Qwen.
+    - Final soak completed 450 runs over 86443.578 seconds (>24H).
+    - High-density coverage during soak:
+      * mixed Final AI runs=57;
+      * transient recovery runs=225;
+      * HTTP 429/502/503 each recovered 75 times;
+      * timeout recovery runs=75;
+      * YAML List soak runs=64;
+      * Qwen sandbox soak runs=64.
+    - Recovery backoff was exercised 537 times and reached the configured 30s cap.
+    - Resource/state observations remained bounded: active process markers ended at 0,
+      stage sessions/dynamic groups/review failures ended at 0, transition history max=40,
+      expanded workflow max=6, debug history max=153564 bytes.
+    - Long HTTP 45s recovery and API disconnect/180s recovery both passed.
+    - Example smoke matrix passed all 6 cases.
+    - Dynamic Handoff final recovery, HTTP 503 recovery and stop/resume all passed.
+    - Commits after this runtime source are test/TODO-only CI-alignment changes; no
+      Runner runtime behavior has been changed after the successful 24H gate.
+
+[x] Revalidate YAML List endurance with production-like unattended recovery.
     - 2026-10-13 live rerun passed [34/46] api-disconnect, [35/46]
       multi-todo-resume and [36/46] yaml-list-resume, then [37/46]
       yaml-list-endurance returned process exit=1.
@@ -412,7 +435,7 @@ LIVE REGRESSION NOTES
       that an exit=1 identifies the exact failed child with durable evidence.
     - fail-start now resumes at probe 37 (yaml-list-endurance).
 
-[ ] Revalidate final soak after sandbox host-path projection fix.
+[x] Revalidate final soak after sandbox host-path projection fix.
     - 2026-10-13 live rerun reached [45/46] PASS dynamic-handoff-stop-resume;
       therefore probes 28 validator-failure-routing, 40 example-smoke and 41-45
       Dynamic Handoff all completed before the final soak failure.
@@ -1765,10 +1788,14 @@ RELEASE GATES
     - frozen Workflow/Prompt resources stable across Resume
 
 [ ] Current HEAD deterministic CI green
-    - HEAD 349dc6215823b2acd0f96ad5b9e5ed71bb812943.
-    - GitHub Actions runs 38239446080 and 38239453215 completed successfully.
-    - This includes the deterministic writer-to-approval-gate closure regression,
-      fail-start probe-44 alignment, and the existing shipped-workflow dependency checks.
+    - Runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5 passed the full 24H gate.
+    - CI on 7b239c failed only two deterministic tests whose expectations were stale:
+      sandbox goal-reference test omitted the policy it asserted, and shared-control
+      mode test still depended on ambient task.last_review after transition-owned
+      feedback intentionally removed that behavior.
+    - Both tests are now aligned without reverting runtime behavior.
+    - Await GitHub Actions on current test-only HEAD before checking this item.
+
 
 [ ] Final release cleanup
     - rerun deterministic CI after any soak-driven fix
