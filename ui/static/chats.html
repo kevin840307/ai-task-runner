@@ -113,6 +113,13 @@
       <select id="taskWorkspace"><option value="main">Main</option></select>
       <small id="taskWorkspaceHint">Main is always available. Worktrees are optional isolation.</small>
     </label>
+    <details id="taskAdvanced">
+      <summary>Advanced</summary>
+      <div class="task-form-row">
+        <label>Backend <select id="taskBackend"><option value="">Default backend</option></select></label>
+        <label>Model <select id="taskModel" disabled><option value="">Backend default model</option></select></label>
+      </div>
+    </details>
     <div class="chat-meta"><span id="mainAvailability">Checking…</span></div>
     <div class="task-form-actions"><button id="taskCancel" type="button">Cancel</button><button id="taskRun" type="submit">Run Task</button></div>
   </form>
