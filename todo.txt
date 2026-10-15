@@ -1787,14 +1787,12 @@ RELEASE GATES
     - no unbounded state/log/history growth
     - frozen Workflow/Prompt resources stable across Resume
 
-[ ] Current HEAD deterministic CI green
+[x] Current HEAD deterministic CI green
     - Runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5 passed the full 24H gate.
-    - CI on 7b239c failed only two deterministic tests whose expectations were stale:
-      sandbox goal-reference test omitted the policy it asserted, and shared-control
-      mode test still depended on ambient task.last_review after transition-owned
-      feedback intentionally removed that behavior.
-    - Both tests are now aligned without reverting runtime behavior.
-    - Await GitHub Actions on current test-only HEAD before checking this item.
+    - Current HEAD e3438d7b794361a55cea055f6afc467b00738019 is test/TODO-only relative to that runtime source.
+    - GitHub Actions runs 38725845291 and 38725853605 both completed successfully.
+    - Windows/Linux deterministic tests, Studio build verification and Browser E2E are green.
+    - The two stale deterministic expectations were aligned without reverting runtime behavior.
 
 
 [ ] Final release cleanup
