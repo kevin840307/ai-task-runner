@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/styles.css">
 <style>
 .chat-shell{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);height:100vh;background:var(--surface,#f7f8fa);color:var(--text,#18202a)}
-.chat-side{padding:20px;border-right:1px solid #bec6ce;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.chat-side{padding:20px;border-right:1px solid #bec6ce;overflow:auto;display:flex;flex-direction:column;gap:14px}.chat-shell.sidebar-collapsed{grid-template-columns:64px minmax(0,1fr)}.chat-shell.sidebar-collapsed .chat-side{padding:12px}.chat-shell.sidebar-collapsed .chat-side>:not(#toggleSidebar){display:none}
 .chat-side button,.chat-main button,.chat-main select{padding:9px 14px;cursor:pointer}
 .chat-side button[data-active="true"]{font-weight:700;outline:2px solid currentColor}
 .chat-list,.task-list{display:grid;gap:8px}.chat-list button{text-align:left}
@@ -23,13 +23,14 @@
 .chat-error{color:#a32222;min-height:1.4em}
 .task-panel{display:flex;flex-direction:column;gap:12px;min-height:0;flex:1}.task-list{overflow:auto}.task-card{border:1px solid #aab4bf;border-radius:12px;padding:12px;text-align:left;background:transparent}.task-card strong,.task-card small{display:block}.task-card small{margin-top:4px;opacity:.8}
 .task-detail{border:1px solid #aab4bf;border-radius:12px;padding:16px;overflow:auto;max-height:55vh}.task-detail-head{display:flex;justify-content:space-between;gap:12px}.task-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.task-history{display:grid;gap:8px}.task-history article{padding:10px;border-left:3px solid currentColor;white-space:pre-wrap}
-.modal-layer{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:18px;z-index:40}.modal-layer[hidden]{display:none}.task-form{background:var(--surface,#fff);color:var(--text,#18202a);width:min(680px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:14px;display:grid;gap:14px}.task-form textarea{min-height:140px}.task-form-actions{display:flex;justify-content:flex-end;gap:8px}.task-form-row{display:grid;gap:6px}.task-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:start;margin:8px 0}.task-list-item textarea{min-height:86px}.task-list-item button{padding:8px}.task-list-item .move-buttons{display:flex;flex-direction:column;gap:4px}.task-empty{padding:24px;text-align:center;opacity:.8}
+.modal-layer{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;padding:18px;z-index:40}.modal-layer[hidden]{display:none}.task-form{background:var(--surface,#fff);color:var(--text,#18202a);width:min(680px,100%);max-height:90vh;overflow:auto;padding:20px;border-radius:14px;display:grid;gap:14px}.task-form textarea{min-height:140px}.task-form-actions{display:flex;justify-content:flex-end;gap:8px}.danger{margin-left:auto}.history-more{align-self:flex-start}.task-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}.task-form-row{display:grid;gap:6px}.task-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:start;margin:8px 0}.task-list-item textarea{min-height:86px}.task-list-item button{padding:8px}.task-list-item .move-buttons{display:flex;flex-direction:column;gap:4px}.task-empty{padding:24px;text-align:center;opacity:.8}
 @media(max-width:680px){.chat-shell{grid-template-columns:1fr;height:auto;min-height:100vh}.chat-side{border-right:0;border-bottom:1px solid #bec6ce}.chat-main{min-height:65vh}.chat-head{flex-direction:column}.chat-compose{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
 <div class="chat-shell">
   <aside class="chat-side">
+    <button id="toggleSidebar" type="button" aria-expanded="true" title="Collapse sidebar">☰</button>
     <a href="/">← Legacy workspace</a><a href="/library.html">Library</a><a href="/settings.html">Settings</a>
     <h1>Chats</h1>
     <label for="chatProject">Project root</label>
@@ -45,7 +46,7 @@
   <main class="chat-main">
     <div class="chat-head">
       <div><h2 id="chatTitle">Select or create a Chat</h2><p id="chatPath" class="chat-meta"></p></div>
-      <div class="chat-head-actions"><button id="archiveChat" type="button" disabled>Archive Chat</button><button id="newTask" type="button" disabled>+ New Task</button></div>
+      <div class="chat-head-actions"><button id="copyChatPath" type="button" disabled>Copy path</button><button id="archiveChat" type="button" disabled>Archive Chat</button><button id="newTask" type="button" disabled>+ New Task</button></div>
     </div>
     <div class="chat-tabs" role="tablist" aria-label="Chat workspace">
       <button id="chatTab" type="button" role="tab" aria-selected="true">Chat</button>
