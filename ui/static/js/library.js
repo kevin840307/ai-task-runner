@@ -17,17 +17,26 @@ function render(){
   const root=$("assetList"), q=$("librarySearch").value.trim().toLowerCase();
   root.replaceChildren();
   const rows=(mode==="workflow"?data.workflows:data.prompts).filter(x=>!q||String(x.name||"").toLowerCase().includes(q)||String(x.path||"").toLowerCase().includes(q));
-  if(!rows.length){const e=document.createElement("div");e.className="asset-empty";e.textContent=q?t("library.no_results","No results. Clear search to see all assets."):mode==="workflow"?t("library.no_workflows","No Workflows. Open the existing Workflow editor to create one."):t("library.no_prompts","No Prompts. Open the existing Prompt editor to create one.");root.append(e);return}
+  if(!rows.length){
+    const e=document.createElement("div");e.className="asset-empty";
+    const message=document.createElement("p");
+    message.textContent=q?t("library.no_results","No results. Clear search to see all assets."):mode==="workflow"?t("library.no_workflows","No Workflows. Open the existing Workflow editor to create one."):t("library.no_prompts","No Prompts. Open the existing Prompt editor to create one.");
+    const action=document.createElement("button");action.type="button";
+    if(q){action.textContent=t("library.clear_search","Clear search");action.addEventListener("click",()=>{$("librarySearch").value="";render()})}
+    else if(mode==="workflow"){action.textContent=t("library.open_workflows","Open Workflow editor");action.addEventListener("click",()=>{window.location.href="/?view=workflow"})}
+    else{action.textContent=t("library.open_prompts","Open Prompt editor");action.addEventListener("click",()=>{window.location.href="/?view=workflow&source=prompt"})}
+    e.append(message,action);root.append(e);return
+  }
   for(const item of rows){
     const b=document.createElement("button");b.type="button";b.className="asset-row";
     const name=document.createElement("strong");name.textContent=item.name||item.id;
-    const scope=document.createElement("span");scope.textContent=item.scope==="project"?"Project":"Global";
-    const meta=document.createElement("span");meta.textContent=item.kind==="workflow"?(item.hidden?"Hidden from Task picker":"Visible in Task picker"):"Prompt";
+    const scope=document.createElement("span");scope.textContent=item.scope==="project"?t("library.project","Project"):t("library.global","Global");
+    const meta=document.createElement("span");meta.textContent=item.kind==="workflow"?(item.hidden?t("library.hidden_task_picker","Hidden from Task picker"):t("library.visible_task_picker","Visible in Task picker")):t("library.prompt_asset","Prompt");
     b.title=item.path||item.name||"";b.append(name,scope,meta);b.addEventListener("click",()=>{window.location.href=editorUrl(item)});root.append(b);
   }
 }
 async function loadAssets(){
-  status("Loading…");
+  status(t("library.loading","Loading…"));
   const project=selectedProject(), query=project?"&project="+encodeURIComponent(project):"";
   try{data=await api("/api/studio/files?x=1"+query);render();status("")}catch(e){status(e.message,true);data={workflows:[],prompts:[]};render()}
 }
