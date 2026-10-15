@@ -189,6 +189,73 @@ class TaskWorkspaceHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Task not found"):
             self.state.tasks.get(task["task_id"])
 
+    def test_historical_sequential_task_keeps_child_evidence_after_new_runtime_owner(self):
+        task = self.state.tasks.create(
+            chat_id=self.chat_id,
+            root_path=str(self.project),
+            instruction="Task List · 2 items",
+            task_type="sequential",
+            workflow=str(self.state.workflow),
+        )
+        task = self.state.tasks.append_execution(task["task_id"], {
+            "request_id": "req-list",
+            "script_file": str(self.project / ".ai-task-runner" / "ui" / "task-lists" / "list.yaml"),
+            "instruction": task["instruction"],
+            "workflow": str(self.state.workflow),
+            "run_id": "",
+        })
+        marker = self.project / ".ai-task-runner" / "ui" / "active-task.json"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps({"task_id": task["task_id"], "request_id": "req-list"}),
+            encoding="utf-8",
+        )
+        script_root = self.project / ".ai-task-runner" / "script"
+        for index, run_id, result in (
+            (1, "child-one", "one result"),
+            (2, "child-two", "two result"),
+        ):
+            child = script_root / f"{index:03d}"
+            (child / "debug").mkdir(parents=True)
+            (child / "state.json").write_text(
+                json.dumps({
+                    "run_id": run_id,
+                    "completed": True,
+                    "stage": "completed",
+                    "last_error": "",
+                }),
+                encoding="utf-8",
+            )
+            (child / "debug" / "last-result.txt").write_text(result, encoding="utf-8")
+        self.state.runtime = {
+            **self.state.runtime,
+            "request_id": "req-list",
+            "completed": True,
+            "running": False,
+            "status": "completed",
+            "script_index": 2,
+            "script_total": 2,
+        }
+
+        synced = self.state._sync_task(task)
+        self.assertEqual(
+            [child["run_id"] for child in synced["executions"][-1]["children"]],
+            ["child-one", "child-two"],
+        )
+
+        marker.write_text(
+            json.dumps({"task_id": "f" * 32, "request_id": "new-runtime"}),
+            encoding="utf-8",
+        )
+        historical = self.state.task_detail(task["task_id"])
+
+        self.assertIsNone(historical["runtime"])
+        self.assertEqual(
+            [child["result"] for child in historical["executions"][-1]["children"]],
+            ["one result", "two result"],
+        )
+
+
     def test_failed_worktree_cleanup_keeps_archived_history_pointer(self):
         source = self.root / "source"
         source.mkdir()
