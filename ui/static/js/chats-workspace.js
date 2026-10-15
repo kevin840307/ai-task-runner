@@ -332,7 +332,9 @@ function renderTasks() {
     title.textContent = task.title || "Task";
     const status = document.createElement("small");
     const runtime = task.runtime || {};
-    const progress = runtime.total ? ` · ${runtime.completed_count || 0}/${runtime.total}` : "";
+    const progress = task.task_type === "sequential" && runtime.script_total
+      ? ` · Item ${runtime.script_index || 0}/${runtime.script_total}`
+      : runtime.total ? ` · ${runtime.completed_count || 0}/${runtime.total}` : "";
     const stage = runtime.stage ? ` · ${runtime.stage}` : "";
     status.textContent = `${statusText(task)}${stage}${progress}`;
     const meta = document.createElement("small");
@@ -404,12 +406,32 @@ async function openTask(taskId) {
   } else {
     addDetailLine(root, "Last error", task.last_error);
   }
+  if (task.task_type === "sequential") {
+    const listTitle = document.createElement("h4");
+    listTitle.textContent = "Ordered Task List";
+    root.append(listTitle);
+    const ordered = document.createElement("div");
+    ordered.className = "task-history";
+    const currentIndex = Number(task.runtime?.script_index || 0);
+    const allCompleted = Boolean(task.runtime?.completed) || statusText(task).toLowerCase().includes("completed");
+    (task.items || []).forEach((item, index) => {
+      const row = document.createElement("article");
+      const number = index + 1;
+      const state = allCompleted || (currentIndex && number < currentIndex)
+        ? "Completed"
+        : currentIndex === number ? `${statusText(task)}${task.runtime?.stage ? " · " + task.runtime.stage : ""}`
+        : "Waiting";
+      row.textContent = `${number}. ${item.instruction || "Task"}\n${state}`;
+      ordered.append(row);
+    });
+    root.append(ordered);
+  }
   const actions = document.createElement("div");
   actions.className = "task-actions";
   const allowed = task.runtime?.actions || {};
   if (allowed.stop) actions.append(makeAction("Stop", "stop"));
   if (allowed.resume) actions.append(makeAction("Resume", "resume"));
-  if (allowed.rerun) actions.append(makeAction("Rerun", "rerun", true));
+  if (allowed.rerun || (task.task_type === "sequential" && !task.runtime?.running && allowed.run)) actions.append(makeAction("Rerun", "rerun", true));
   const completed = Boolean(task.runtime?.completed) || statusText(task).toLowerCase().includes("completed");
   if (completed) {
     const text = document.createElement("textarea");
