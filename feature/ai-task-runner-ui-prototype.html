@@ -423,7 +423,7 @@ function renderChat(key){
     box.appendChild(el);
   });
 }
-document.getElementById('chatPreset').addEventListener('change',e=>renderChat(e.target.value));
+// Chat session change handler is installed by the refined multi-session block.
 document.getElementById('newChat').onclick=()=>{document.getElementById('chatMessages').innerHTML='<div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>新的 mock Chat 已建立。這仍然不會建立 Runner Task。</div>';showToast('New Chat')};
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput');const text=input.value.trim();if(!text)return;
@@ -1114,7 +1114,7 @@ const WORKFLOW_CAPABILITIES={
   'ralphy_ai_validate.yaml':{file:false,ai:true,label:'AI validation'},
   'mixed.yaml':{file:true,ai:true,label:'File + AI validation'},
   'file.yaml':{file:true,ai:false,label:'File validation'},
-  'dynamic_handoff.yaml':{file:false,ai:false,label:'No extra validator input'}
+  'dynamic_handoff.yaml':{file:false,ai:true,label:'AI validation'}
 };
 function workflowCaps(name){return WORKFLOW_CAPABILITIES[basename(name)]||{file:false,ai:false,label:'Workflow-owned validation'}}
 function workflowCapsHtml(name){
