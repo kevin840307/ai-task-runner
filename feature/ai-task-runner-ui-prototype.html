@@ -1401,7 +1401,6 @@ function yamlSourceTabs(i,field,value,modes){
   return sourceTabs(value,modes,`data-yaml-source data-item="${i}" data-field="${field}"`);
 }
 function renderBatchDraft(){
-  clearInterval(batchRunTimer);batchState={status:'idle',index:0,recovered:false};setBatchControls();
   const form=document.getElementById('formList');
   if(!batchDraft.length){
     form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 YAML Task。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
