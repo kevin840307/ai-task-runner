@@ -227,6 +227,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 .single-plan-strip{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 10px;border:1px solid #e1e7ee;border-radius:10px;background:#fbfcfd}
 .single-plan-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#eef3f5;color:#64748b;font-size:9px;font-weight:900}.single-plan-copy strong{display:block;font-size:10px}.single-plan-copy small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.single-plan-state{padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}.single-plan-state.running{background:#e9f6f4;color:#0f766e}.single-plan-state.done{background:#eaf8ee;color:#15803d}.single-plan-state.recover{background:#fff3e5;color:#9a5b00}
+
+.edit-task-scope-note{margin:0 0 10px;padding:9px 10px;border:1px solid #dfe5fb;border-radius:9px;background:#f7f8ff;color:#59617f;font-size:9px;line-height:1.45}.edit-task-scope-note strong{color:#4338ca}
+.task-edit-lock{margin-left:auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}
+#editTaskDemo:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -383,7 +387,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   </section></div>
       <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
     </div>
-    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo">Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
+    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="editTaskDemo">Edit Task</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo">Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
   </aside>
 </div>
 
@@ -399,6 +403,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
+      <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
       <div id="newTaskListSetup" class="task-list-setup" hidden></div>
       <div class="workspace-selector-wrap">
         <div class="workspace-selector-title"><div><strong>Workspace isolation</strong><small>同一個實際路徑最多一個 Running Task</small></div><span class="workspace-recommended">Auto recommended</span></div>
