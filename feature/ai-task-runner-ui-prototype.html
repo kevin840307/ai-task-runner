@@ -210,6 +210,15 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .sequence-item .request-body{display:none;margin-left:47px;padding:10px 11px 12px;border:1px solid #e1e7ee;border-radius:10px;background:#fff}.sequence-item.expanded .request-body{display:block}
 .sequence-add-row{position:relative;z-index:1;display:flex;align-items:center;gap:7px;margin:2px 0 0 47px}.sequence-add-row .btn{height:31px;font-size:9px}
 .existing-task-picker{display:grid;gap:6px}.existing-task-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:left;color:var(--text)}.existing-task-option:hover{border-color:#aebbc7;background:#fbfcfd}.existing-task-option strong{display:block;font-size:10px}.existing-task-option small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.existing-task-option span{font-size:8px;font-weight:900;color:var(--accent-dark)}
+
+/* Unified Task Details: Steps are edited in-place; no separate Task List editor page. */
+.drawer.steps-mode{width:min(760px,94vw)}
+.steps-section{margin:0}.steps-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}.steps-toolbar h3{margin:0!important}.steps-toolbar p{margin:3px 0 0;color:var(--muted);font-size:8px}.steps-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.steps-summary{margin:0 0 10px;padding:8px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#f8fafb;color:#64748b;font-size:8px}
+.steps-mode-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.tabs.compact{height:32px;border:1px solid var(--line);border-radius:8px;background:#f6f8fa;padding:2px}.tabs.compact .tab{height:26px;padding:0 9px;border:0;border-radius:6px}.tabs.compact .tab.active{background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.08)}
+#drawer-items .formlist{gap:2px}#drawer-items .sequence-composer{padding-bottom:0}#drawer-items .sequence-add-row{margin-left:47px;padding-top:4px}
+#drawer-items .request-body{background:#fbfcfe}#drawer-items .source-card{background:#fff}
+#drawer-items .code{min-height:420px;max-height:60vh}
 </style>
 </head>
 <body>
@@ -290,28 +299,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="listview" id="taskListView"></div>
     </section>
 
-    <!-- Task List Editor: opened from Tasks, no standalone sidebar entry -->
-    <section class="view page" id="view-yaml">
-      <header class="header">
-        <div class="title"><h1 id="taskListEditorTitle">Task Sequence</h1><p>一張 Task 裡的 ordered tasks · 展開 item 才顯示完整設定，YAML 是 Advanced mode</p></div>
-        <div class="actions"><button class="btn" id="backToTasks">← Tasks</button><select class="mockselect" id="batchPreset"><option value="ui">Mock: UI list</option><option value="reliability">Mock: Reliability list</option><option value="multi">Mock: Multi-project list</option><option value="empty">Mock: Empty list</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Pause</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn" id="resetBatch" hidden>Reset current</button><button class="btn primary" id="runBatch">Run List</button></div>
-      </header>
-      <div class="yamlbody">
-        <section class="yamlleft">
-          <div class="tabs"><button class="tab active" data-yamltab="form">Sequence</button><button class="tab" data-yamltab="code">YAML</button></div>
-          <div class="yamlpane" id="yaml-form"><div class="formlist" id="formList"></div></div>
-          <div class="yamlpane hidden" id="yaml-code"><textarea class="code" id="yamlEditor"></textarea></div>
-        </section>
-        <section class="yamlright">
-          <div class="batchintro"><div><h2>Execution order</h2><p>Board 仍只有這一張 Task；下面只是它的執行步驟，不是第二個 Board。</p></div><span class="pill">Sequential</span></div>
-          <div class="yaml-contract-note"><strong>Task List = Task kind</strong><span>不是另一套 Runner。Paused 時可編輯未完成 items；完成項目保留。</span></div>
-          <div class="yaml-parent-hint"><span>▦</span><div><strong id="taskListParentHint">Parent Task</strong><br><span id="taskListEditHint">Running 時鎖定；Paused / New 可修改剩餘清單。</span></div></div>
-          <div class="preview" id="batchPreview"></div>
-          <div class="batch-log" id="batchLog">Task List is idle. Edit items, Validate, then Run List.</div>
-        </section>
-      </div>
-    </section>
-
+    <!-- Existing Workflows / Prompts: intentionally unchanged -->
     <!-- Existing Workflows / Prompts: intentionally unchanged -->
     <section class="view page" id="view-workflows">
       <header class="header">
@@ -354,14 +342,39 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
       <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
-    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Items</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items">Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
       <div class="drawer-pane active" id="drawer-overview">
         <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
         <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
       </div>
-      <div class="drawer-pane" id="drawer-items"><section class="section"><div class="task-list-pane-head"><h3>Task List items</h3><button class="btn" id="editTaskListDemo">Edit List</button></div><div id="drawerListItems"></div></section></div>
+      <div class="drawer-pane" id="drawer-items">
+        <section class="section steps-section">
+          <div class="steps-toolbar">
+            <div><h3>Steps</h3><p id="taskListEditHint">Single Task · add another step only when needed</p></div>
+            <div class="steps-actions">
+              <button class="btn" id="drawerAddStep" type="button">+ Add step</button>
+              <button class="btn ghost" id="drawerAddExisting" type="button">Add existing</button>
+              <button class="btn ghost" id="stepsAdvanced" type="button">⋯ Advanced</button>
+              <button class="btn" id="editTaskListDemo" type="button" hidden>Edit</button>
+            </div>
+          </div>
+          <div class="steps-summary" id="taskListParentHint">1 step · same Task</div>
+          <div class="steps-mode-row" id="stepsModeRow" hidden>
+            <div class="tabs compact"><button class="tab active" data-yamltab="form">Visual</button><button class="tab" data-yamltab="code">YAML</button></div>
+            <button class="btn" id="validateYaml" type="button">Validate YAML</button>
+          </div>
+          <div id="yaml-form"><div class="formlist" id="formList"></div></div>
+          <div class="hidden" id="yaml-code"><textarea class="code" id="yamlEditor"></textarea></div>
+          <div id="drawerListItems" hidden></div>
+          <div id="batchPreview" hidden></div>
+          <div id="batchLog" hidden>Task is idle.</div>
+          <select id="batchPreset" hidden><option value="ui">UI list</option><option value="reliability">Reliability list</option><option value="multi">Multi-project list</option><option value="empty">Empty</option></select>
+          <select id="batchOutcome" hidden><option value="success">Success</option><option value="recover">Recover once</option><option value="fail">Fail item 2</option></select>
+          <button id="runBatch" hidden type="button"></button><button id="stopBatch" hidden type="button"></button><button id="resumeBatch" hidden type="button"></button><button id="resetBatch" hidden type="button"></button><button id="backToTasks" hidden type="button"></button><span id="taskListEditorTitle" hidden></span>
+        </section>
+      </div>
       <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
     <article class="task-live-activity">
@@ -380,7 +393,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
-    <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 Task Lists 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-head"><div><h2>New Task</h2><p>先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
@@ -396,10 +409,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
-      <div class="sequence-starter">
-        <div class="sequence-starter-copy"><span class="sequence-index">1</span><div><strong>Single task</strong><small>Add another task only when this work needs an ordered sequence.</small></div></div>
-        <div class="sequence-starter-actions"><button class="btn" type="button" id="addNextTaskFromNew">+ Add next task</button><button class="btn ghost" type="button" id="addExistingTaskFromNew">Add existing</button></div>
-      </div>
+      <div hidden><button type="button" id="addNextTaskFromNew"></button><button type="button" id="addExistingTaskFromNew"></button></div>
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
       <div class="state-hint">建立後先放在 <strong>New</strong>。Workflow 需要的驗證欄位才會出現；不需要的設定不佔畫面。</div>
     </div>
