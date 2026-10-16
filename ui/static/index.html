@@ -66,9 +66,6 @@
       </section>
     </div>
     <nav class="project-nav" aria-label="Application navigation">
-      <a href="/settings.html" class="project-nav-link" title="Settings" aria-label="Open Settings"><span class="nav-icon" aria-hidden="true">⚙</span><strong>Settings</strong></a>
-      <a href="/library.html" class="project-nav-link" title="Library" aria-label="Open Library"><span class="nav-icon" aria-hidden="true">▦</span><strong>Library</strong></a>
-      <a href="/chats.html" class="project-nav-link" title="Chats" aria-label="Open Chats workspace"><span class="nav-icon" aria-hidden="true">◎</span><strong>Chats</strong></a>
       <button id="chatNav" class="project-nav-link active" type="button" title="任務" data-i18n-title="nav.tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13.5h5"/></svg></span><strong>Tasks</strong></button>
       <button id="workflowNav" class="project-nav-link" type="button" title="工作流程" data-i18n-title="nav.workflows"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.4 8.1l3.3 7.6M16.6 8.1l-3.3 7.6"/></svg></span><strong data-i18n="nav.workflows">Workflows</strong></button>
       <button id="promptNav" class="project-nav-link" type="button" title="Prompts" data-i18n-title="nav.prompts"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 4.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 12.5h8M8 16h5"/></svg></span><strong data-i18n="nav.prompts">Prompts</strong></button>
@@ -82,11 +79,18 @@
     <section id="chatView" class="view-shell">
       <header class="header">
         <div class="title-block">
-          <div class="title-line"><h1 id="projectName" data-i18n="project.select">選擇專案</h1></div>
+          <div class="title-line">
+            <h1 id="projectName" data-i18n="project.select">選擇專案</h1>
+            <div id="conversationTools" class="conversation-tools" hidden>
+              <select id="conversationSelect" class="conversation-select" aria-label="Conversation"></select>
+              <button id="newConversationButton" class="mini-button conversation-new" type="button" title="New chat" aria-label="New chat">+</button>
+            </div>
+          </div>
           <p id="projectPath" data-i18n="project.open_hint">開啟本機專案資料夾以開始。</p>
           <p id="runtimeHeadline" class="runtime-headline" hidden></p>
         </div>
         <div class="runtime-actions">
+          <button id="taskHistoryButton" class="action-button" type="button" title="Task history" hidden>History</button>
           <button id="clearHistoryButton" class="action-button clear-history-button" type="button" title="清除聊天紀錄" data-i18n-title="history.clear" data-i18n="history.clear">清除紀錄</button>
           <span id="statusBadge" class="runtime-badge" data-i18n="status.idle">閒置</span>
         </div>
@@ -118,6 +122,10 @@
         <div class="composer-box">
           <div id="optionsPanel" class="options-panel" role="dialog" aria-label="Run options" hidden>
             <div class="options-popover-head"><strong data-i18n="options.title">執行選項</strong><button id="optionsCloseButton" type="button" aria-label="Close options" title="Close options">×</button></div>
+            <div id="workspaceOptionField" class="options-popover-field" hidden><span>Workspace</span>
+              <select id="taskWorkspaceSelect" class="designer-select"><option value="main">Main</option></select>
+              <small id="taskWorkspaceHint">Main</small>
+            </div>
             <div class="options-popover-field backend-option-field"><span>Backend</span>
               <div id="backendPicker" class="backend-picker">
                 <select id="backend" hidden aria-hidden="true"></select>
@@ -151,6 +159,10 @@
           <textarea id="messageInput" rows="2" placeholder="描述要完成的功能或修復內容..."></textarea>
           <div class="composer-footer">
             <div class="composer-left">
+              <div id="composerMode" class="composer-mode-toggle" role="group" aria-label="Composer mode">
+                <button id="taskModeButton" class="composer-mode-button active" type="button" aria-pressed="true">Task</button>
+                <button id="chatModeButton" class="composer-mode-button" type="button" aria-pressed="false">Chat</button>
+              </div>
               <div class="workflow-picker composer-workflow-picker" id="workflowPicker">
                 <span class="workflow-picker-label">Workflow</span>
                 <select id="workflowSelect" class="workflow-native-select" aria-hidden="true" tabindex="-1"></select>
@@ -161,6 +173,7 @@
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
+              <button id="taskListButton" class="options-button" type="button" title="Create Task List">Task List</button>
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">
