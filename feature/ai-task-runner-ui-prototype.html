@@ -998,8 +998,3 @@ document.getElementById('runBatch').onclick=()=>{
 };
 document.getElementById('stopBatch').onclick=()=>{
   if(batchState.status!=='running')return;
-  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
-  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
-  if(item)item.querySelector('.orderchip').textContent='Stopped';
-  document.getElementById('batchLog').textContent+='\n[user] batch stop requested · current child durable state preserved';
-  showToast('Mock Batch stopped');
