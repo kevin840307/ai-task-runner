@@ -134,6 +134,33 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 
 @media(max-width:900px){:root{--rail:205px}.board{grid-template-columns:repeat(4,260px)}.yamlbody{grid-template-columns:1fr}.yamlleft{border-right:0}.yamlright{display:none}}
 @media(max-width:620px){:root{--rail:155px}.brand span:last-child{display:none}.navbtn{padding:0 8px}.navbtn .navbadge{display:none}.messages{padding-left:12px;padding-right:12px}.header{padding:0 10px}.title p{display:none}}
+
+/* Prototype refinement: compact navigation, shared source picker, current Task live-output language. */
+.navgroup-label{margin:12px 9px 5px;color:#8a95a5;font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.nav.nav-compact{gap:2px;margin:0;padding:0;border:0}.nav.nav-compact.asset-nav{padding-bottom:10px;border-bottom:1px solid rgba(216,222,232,.72)}
+.nav.nav-compact .navbtn{min-height:36px;padding:0 9px;border-color:transparent;border-radius:9px;background:transparent;box-shadow:none;font-size:12px}
+.nav.nav-compact .navbtn:hover,.nav.nav-compact .navbtn.active{transform:none;border-color:rgba(15,118,110,.14);background:rgba(255,255,255,.88);box-shadow:none}
+.nav.nav-compact .navico{width:22px;height:22px;border-radius:7px}.navcount{margin-left:auto;color:#8a95a5;font-size:9px;font-weight:850}
+.project-switcher{margin-top:auto;padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.78)}
+.project-switcher-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;color:var(--muted);font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}
+.project-select{width:100%;height:34px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);font-size:10px;font-weight:800}
+.project-switcher small{display:block;margin-top:6px;color:var(--muted);font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-select{min-width:210px;max-width:300px}.chat-session-actions{flex-wrap:nowrap}
+.task-live-activity{width:100%;padding:12px 14px;border:1px solid rgba(15,118,110,.22);border-radius:12px;background:#f4fbf9}
+.task-live-head{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:850}.task-live-head small{color:var(--muted);font-size:9px}.task-live-head small:first-of-type{margin-left:auto}
+.task-live-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}.task-live-dot.running{background:var(--accent-dark);animation:livePulse 1.6s infinite}.task-live-dot.recover{background:#d97706;animation:livePulse 1.2s infinite}.task-live-dot.done{background:#16a34a}.task-live-dot.failed{background:#dc2626}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(15,118,110,.28)}70%{box-shadow:0 0 0 6px rgba(15,118,110,0)}100%{box-shadow:0 0 0 0 rgba(15,118,110,0)}}
+.task-runtime-activity{margin-top:9px;padding:8px 9px;border-radius:8px;background:rgba(255,255,255,.72);color:var(--muted);font-size:9px}.task-runtime-activity>span{display:block;margin-bottom:5px;color:#475569;font-weight:850}.task-runtime-activity div{display:grid;gap:3px}.task-runtime-activity div div:before{content:"•";margin-right:6px;color:var(--accent)}
+.task-cli-output{max-height:210px;margin:9px 0 0;padding-top:9px;overflow:auto;border-top:1px solid var(--line);color:#4b5563;white-space:pre-wrap;font:10px/1.58 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.task-live-footer{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:8px;border-top:1px solid rgba(216,222,232,.72);color:var(--muted);font-size:9px}.task-live-indicator{font-weight:900;color:var(--accent-dark)}.task-live-indicator.stopped{color:#b42318}.task-live-indicator.done{color:#15803d}.task-live-indicator.recover{color:#9a5b00}
+.yamlbody{grid-template-columns:minmax(520px,58%) minmax(360px,42%)}.yamlleft{grid-template-rows:42px minmax(0,1fr)}.yamlpane{padding:14px}.formlist{gap:12px}.request{padding:0;border-radius:12px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.03)}.reqhead{min-height:44px;margin:0;padding:0 12px;border-bottom:1px solid #edf1f5;background:#fbfcfe}.request-body{padding:12px}.workflow-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.workflow-caps{display:flex;align-items:center;gap:6px;min-height:26px;margin:7px 0 2px;flex-wrap:wrap}.cap-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;background:#eef6f5;color:#0f766e;font-size:8px;font-weight:850}.cap-chip.neutral{background:#f1f5f9;color:#64748b}
+.source-card{margin-top:10px;padding:0;border:1px solid #e1e7ee;border-radius:10px;background:#fbfdff;overflow:hidden}.source-head{min-height:40px;padding:7px 9px;border-bottom:1px solid #edf1f5;background:#fff}.source-head>div:first-child{min-width:0}.source-head strong{font-size:10px}.source-head small{margin-left:5px;color:var(--muted);font-size:8px}.source-body{padding:9px}
+.source-tabs{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:8px;background:#f6f8fa}.source-tabs button{height:25px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:8px;font-weight:850}.source-tabs button.active{background:#fff;color:var(--accent-dark);box-shadow:0 1px 3px rgba(15,23,42,.08)}
+.validation-grid.one{grid-template-columns:1fr}.validation-empty{margin-top:10px;padding:10px;border:1px dashed #ccd5df;border-radius:9px;color:var(--muted);font-size:9px;text-align:center}
+.yaml-contract-note{display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;padding:9px 10px;border:1px solid rgba(15,118,110,.18);border-radius:9px;background:#f7fcfb;font-size:9px;line-height:1.45}.yaml-contract-note span{color:var(--muted)}
+.task-create-modal{width:min(760px,94vw)}.task-basics{margin-bottom:4px}#newTaskPromptSource,#newTaskValidationSource{margin-top:8px}.task-source-card{margin-top:8px}
+@media(max-width:1050px){.yamlbody{grid-template-columns:minmax(430px,55%) minmax(330px,45%)}}@media(max-width:850px){.yamlbody{grid-template-columns:1fr}.yamlright{display:none}.session-select{min-width:150px}.chat-session-actions{gap:5px}}
 </style>
 </head>
 <body>
@@ -143,35 +170,41 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       <div class="brand"><span class="brandmark">A</span><span>Agent Workflow</span></div>
       <button class="iconbtn" id="themeBtn" title="外觀">◐</button>
     </div>
-    <nav class="nav">
+    <div class="navgroup-label">Work</div>
+    <nav class="nav nav-compact">
       <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
-      <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navbadge" id="taskNavCount">6</span></button>
-      <button class="navbtn" data-view="yaml"><span class="navico">≡</span><span>YAML Tasks</span><span class="navbadge">BATCH</span></button>
+      <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
+      <button class="navbtn" data-view="yaml"><span class="navico">≡</span><span>YAML Tasks</span></button>
+    </nav>
+    <div class="navgroup-label">Assets</div>
+    <nav class="nav nav-compact asset-nav">
       <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
       <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
     </nav>
-    <div class="sectionlabel"><span>專案</span><button class="addsmall" title="新增 / 開啟專案">+</button></div>
-    <div class="projects">
-      <div class="project active" data-project="ai-task-runner"><span class="dot running"></span><div><strong>ai-task-runner</strong><small>Running · feature/ui</small></div></div>
-      <div class="project" data-project="game-client"><span class="dot done"></span><div><strong>game-client</strong><small>Completed</small></div></div>
-      <div class="project" data-project="lab-tools"><span class="dot"></span><div><strong>lab-tools</strong><small>Idle</small></div></div>
+    <div class="project-switcher">
+      <div class="project-switcher-head"><span>Current project</span><button class="addsmall" title="新增 / 開啟專案">+</button></div>
+      <select id="projectSelect" class="project-select">
+        <option value="ai-task-runner">ai-task-runner · feature/ui</option>
+        <option value="game-client">game-client · main</option>
+        <option value="lab-tools">lab-tools · dev</option>
+      </select>
+      <small id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</small>
     </div>
-    <div class="sidefoot">Project、Workflow、Runtime contract 仍沿用目前 Runner。這份頁面只示範 UI / UX。</div>
   </aside>
 
   <main class="workspace">
     <!-- Chat -->
     <section class="view page" id="view-chat">
-      <header class="header">
-        <div class="title"><h1>Chat</h1><p>C:\Users\kevin\ai-task-runner · 一般對話，不建立 Runner Task</p></div>
-        <div class="actions"><span class="mocknote">可切換對話</span><select class="mockselect" id="chatPreset"><option value="design">UI 設計討論</option><option value="debug">Bug investigation</option><option value="review">Code review</option><option value="long">Long conversation</option><option value="empty">Empty chat</option></select><button class="btn" id="newChat">New Chat</button></div>
+      <header class="header chat-header">
+        <div class="title"><h1>Chat</h1><p id="chatProjectLine">C:\Users\kevin\ai-task-runner · 一般對話，不建立 Runner Task</p></div>
+        <div class="actions chat-session-actions">
+          <select class="mockselect session-select" id="chatPreset"></select>
+          <button class="btn" id="renameChat">Rename</button>
+          <button class="btn primary" id="newChat">+ New Chat</button>
+        </div>
       </header>
       <div class="chatbody">
-        <div class="messages" id="chatMessages">
-          <div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>這裡是一般 Chat。你可以問程式、討論設計或請我閱讀目前專案內容；只有在你明確建立 Task 時，才會交給 Workflow Runner。</div>
-          <div class="msg user"><div class="msgmeta">You</div>幫我看目前 feature/ui 的 Task UI 有沒有更簡潔的做法。</div>
-          <div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>可以。建議把「討論」和「長時間執行」分開：Chat 專注互動，Tasks 專注可追蹤的工作，Workflow 則維持既有執行契約。</div>
-        </div>
+        <div class="messages" id="chatMessages"></div>
         <div class="composerwrap">
           <div class="composer">
             <textarea id="chatInput" placeholder="傳訊息給 AI…"></textarea>
@@ -192,13 +225,13 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
-        <div class="actions"><span class="move-rule">拖曳時只亮可移動狀態；Running / Recovering 需先 Stop 才能 Pause / Close</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
+        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；執行中不可直接 Closed</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
         <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
         <section class="col" data-status="ongoing"><div class="colhead"><strong>Ongoing</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
-        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
-        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
+        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">0</span></div><div class="dropzone"></div></section>
+        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">0</span></div><div class="dropzone"></div></section>
       </div>
       <div class="listview" id="taskListView"></div>
     </section>
@@ -221,7 +254,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
         </section>
         <section class="yamlright">
           <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
-          <div class="callout"><strong>設計原則：</strong> Form 和 YAML 是同一份 batch draft。Task Prompt、File Validator、AI Validator Prompt 都支援「直接輸入 / 檔案路徑 / 選擇資產」；Inline 內容會先存成 batch-managed 檔案，再用現有 <code>goal_file</code> / <code>ai_validator_prompt_file</code> 交給 Runner。執行前仍使用既有 loader / validation。</div>
+          <div class="yaml-contract-note"><strong>同一份 RunRequest draft</strong><span>Workflow 會決定需要哪些驗證欄位；Form / YAML 隨時可切換。</span></div>
           <div class="preview" id="batchPreview"></div>
           <div class="batch-log" id="batchLog">Mock batch is idle. Choose a preset/outcome and press Run Batch.</div>
         </section>
@@ -278,7 +311,14 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
       </div>
       <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
-      <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3><div class="console" id="drawerConsole"></div></section></div>
+      <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
+    <article class="task-live-activity">
+      <div class="task-live-head"><span class="task-live-dot" id="drawerLiveDot" aria-hidden="true"></span><strong>CLI Runtime</strong><small id="drawerLiveProgress">same runtime state</small><small id="drawerLiveUpdated">Last update now</small></div>
+      <div class="task-runtime-activity" id="drawerLiveActivity"><span>AI Activity</span><div id="drawerLiveActivityList"></div></div>
+      <pre class="task-cli-output" id="drawerConsole"></pre>
+      <div class="task-live-footer"><span class="task-live-indicator" id="drawerLiveIndicator">Running</span><span>Elapsed <strong id="drawerLiveElapsed">00:00:00</strong></span></div>
+    </article>
+  </section></div>
       <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
     </div>
     <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo">Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
@@ -287,18 +327,29 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 
 
 <div class="modal-overlay" id="newTaskModal">
-  <div class="modal-card">
-    <div class="modal-head"><div><h2>New Task</h2><p>這是 Board Task + Runner run request 的 mock 建立流程。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+  <div class="modal-card task-create-modal">
+    <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 YAML Tasks 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
-      <div class="modal-grid">
+      <div class="modal-grid task-basics">
         <div class="field full"><label>Task title</label><input id="newTaskTitle" value="Implement mock interaction"></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option></select></div>
-        <div class="field"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>dynamic_handoff.yaml</option></select></div>
-        <div class="field full"><label>Goal / Prompt</label><textarea id="newTaskGoal">Implement the requested change and run focused verification.</textarea></div>
+        <div class="field"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
-      <div class="state-hint">建立後先放在 <strong>New</strong>。按 Task 詳細頁的 Run 才啟動 mock runtime；不會因為單純拖到 Ongoing 就偷偷啟動 Runner。</div>
+      <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
+      <div id="newTaskPromptSource"></div>
+      <div id="newTaskValidationSource"></div>
+      <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
+      <div class="state-hint">建立後先放在 <strong>New</strong>。Workflow 需要的驗證欄位才會出現；不需要的設定不佔畫面。</div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="renameChatModal">
+  <div class="modal-card" style="width:min(460px,94vw)">
+    <div class="modal-head"><div><h2>Rename Chat</h2><p>只修改目前 Chat session 的顯示名稱。</p></div><button class="close" data-close-modal="renameChatModal">×</button></div>
+    <div class="modal-body"><div class="field"><label>Chat name</label><input id="renameChatInput" maxlength="80"></div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="renameChatModal">Cancel</button><button class="btn primary" id="renameChatConfirm">Rename</button></div>
   </div>
 </div>
 
