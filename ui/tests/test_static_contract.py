@@ -380,9 +380,12 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
     assert "flex: 0 0 auto" in css
 
 
-def test_legacy_navigation_has_no_literal_newline_escape():
+def test_primary_navigation_keeps_original_tasks_workflows_prompts():
     root = Path(__file__).resolve().parents[1]
     index = (root / "static" / "index.html").read_text(encoding="utf-8")
     assert "</a>\\n      <a" not in index
-    assert 'href="/library.html"' in index
-    assert 'href="/chats.html"' in index
+    for token in ('id="chatNav"', 'id="workflowNav"', 'id="promptNav"'):
+        assert token in index
+    assert 'href="/library.html"' not in index
+    assert 'href="/chats.html"' not in index
+    assert 'href="/settings.html"' not in index
