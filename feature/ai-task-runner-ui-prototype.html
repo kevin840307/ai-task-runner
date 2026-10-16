@@ -183,6 +183,12 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .source-body textarea,.field textarea{min-height:86px;padding:10px 11px!important;resize:vertical!important}.composer textarea{min-height:82px;height:82px;padding:14px 15px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;resize:none!important}.code{padding:14px 15px!important;tab-size:2}
 .yaml-parent-hint{display:flex;align-items:center;gap:8px;margin-top:10px;padding:9px 10px;border:1px solid #dfe5fb;border-radius:9px;background:#f6f7ff;color:#535a7a;font-size:9px}.yaml-parent-hint strong{color:#4338ca}
 @media(max-width:900px){.workspace-options{grid-template-columns:1fr}.workspace-option{min-height:58px}}
+
+.sidebar{overflow:hidden}
+.new-project-fixed{flex:0 0 auto;margin:8px 0 4px}
+.sidebar-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+.sidebar-scroll::-webkit-scrollbar{width:6px}.sidebar-scroll::-webkit-scrollbar-track{background:transparent}.sidebar-scroll::-webkit-scrollbar-thumb{border-radius:999px;background:#cbd5e1}.sidebar-scroll::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+.project-area{display:block;margin-top:10px;overflow:visible}.project-list{display:grid;gap:1px}.project-current-path{margin-top:6px}
 </style>
 </head>
 <body>
@@ -192,29 +198,30 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="brand"><span class="brandmark">A</span><span>Agent Workflow</span></div>
       <button class="iconbtn" id="themeBtn" title="外觀">◐</button>
     </div>
-    <div class="navgroup-label">Work</div>
-    <nav class="nav nav-compact">
-      <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
-      <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
-      <button class="navbtn" data-view="yaml"><span class="navico">≡</span><span>YAML Tasks</span></button>
-    </nav>
-    <div class="navgroup-label">Assets</div>
-    <nav class="nav nav-compact asset-nav">
-      <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
-      <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
-    </nav>
-    <div class="project-area">
-      <button class="new-project-fixed" id="newProjectDemo" type="button"><span>＋</span><strong>New Project</strong></button>
-      <div class="project-list-head"><span>Projects</span><small>scroll</small></div>
-      <div class="project-scroll" id="projectScroll">
-        <button class="project project-list-item active" type="button" data-project="ai-task-runner"><span class="dot running"></span><span class="project-copy"><strong>ai-task-runner</strong><small>feature/ui · 2 active workspaces</small></span></button>
-        <button class="project project-list-item" type="button" data-project="game-client"><span class="dot done"></span><span class="project-copy"><strong>game-client</strong><small>main · Completed</small></span></button>
-        <button class="project project-list-item" type="button" data-project="lab-tools"><span class="dot"></span><span class="project-copy"><strong>lab-tools</strong><small>dev · Idle</small></span></button>
-        <button class="project project-list-item" type="button" data-project="demo-api"><span class="dot"></span><span class="project-copy"><strong>demo-api</strong><small>main · Idle</small></span></button>
-        <button class="project project-list-item" type="button" data-project="web-console"><span class="dot done"></span><span class="project-copy"><strong>web-console</strong><small>feature/dashboard · Completed</small></span></button>
-        <button class="project project-list-item" type="button" data-project="sandbox-lab"><span class="dot"></span><span class="project-copy"><strong>sandbox-lab</strong><small>main · Idle</small></span></button>
+    <button class="new-project-fixed" id="newProjectDemo" type="button"><span>＋</span><strong>New Project</strong></button>
+    <div class="sidebar-scroll">
+      <div class="navgroup-label">Work</div>
+      <nav class="nav nav-compact">
+        <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
+        <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
+      </nav>
+      <div class="navgroup-label">Assets</div>
+      <nav class="nav nav-compact asset-nav">
+        <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
+        <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
+      </nav>
+      <div class="project-area">
+        <div class="project-list-head"><span>Projects</span></div>
+        <div class="project-list" id="projectScroll">
+          <button class="project project-list-item active" type="button" data-project="ai-task-runner"><span class="dot running"></span><span class="project-copy"><strong>ai-task-runner</strong><small>feature/ui · 2 active workspaces</small></span></button>
+          <button class="project project-list-item" type="button" data-project="game-client"><span class="dot done"></span><span class="project-copy"><strong>game-client</strong><small>main · Completed</small></span></button>
+          <button class="project project-list-item" type="button" data-project="lab-tools"><span class="dot"></span><span class="project-copy"><strong>lab-tools</strong><small>dev · Idle</small></span></button>
+          <button class="project project-list-item" type="button" data-project="demo-api"><span class="dot"></span><span class="project-copy"><strong>demo-api</strong><small>main · Idle</small></span></button>
+          <button class="project project-list-item" type="button" data-project="web-console"><span class="dot done"></span><span class="project-copy"><strong>web-console</strong><small>feature/dashboard · Completed</small></span></button>
+          <button class="project project-list-item" type="button" data-project="sandbox-lab"><span class="dot"></span><span class="project-copy"><strong>sandbox-lab</strong><small>main · Idle</small></span></button>
+        </div>
+        <div class="project-current-path" id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</div>
       </div>
-      <div class="project-current-path" id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</div>
     </div>
   </aside>
 
