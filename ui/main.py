@@ -26,7 +26,7 @@ def main() -> int:
     args = parser.parse_args()
 
     server = UIServer(Path(__file__).resolve().parents[1], args.host, args.port, allow_remote=args.allow_remote)
-    url = f"http://{args.host}:{server.port}/chats.html"
+    url = f"http://{args.host}:{server.port}/"
     print(f"AI Task Runner UI: {url}")
     print(f"UI backend: {Path(ui_server.__file__).resolve()}")
     print("Stage Test API: /api/studio/stage/test")
