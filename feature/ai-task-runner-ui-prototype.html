@@ -94,6 +94,44 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 .batch-log{margin-top:12px;max-height:170px;overflow:auto;padding:10px;border:1px solid #d9e2ec;border-radius:9px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:9px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .req-actions{display:flex;gap:5px;margin-left:auto}.req-actions button{width:24px;height:24px;padding:0;border:0;background:transparent;color:var(--muted)}
 
+
+/* Interaction completeness */
+.dropzone.allowed{background:rgba(15,118,110,.055);outline:2px dashed rgba(15,118,110,.34);outline-offset:-5px;border-radius:10px}
+.dropzone.blocked{background:rgba(180,35,24,.035);outline:2px dashed rgba(180,35,24,.20);outline-offset:-5px;border-radius:10px;cursor:not-allowed}
+.dropzone.blocked:after{content:"不可移到此狀態";display:block;margin:auto;padding:6px 9px;border-radius:999px;background:#fff1ef;color:var(--fail);font-size:9px;font-weight:850}
+.move-rule{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:9px;font-weight:800}
+.move-rule:before{content:"↔";color:var(--accent)}
+.source-card{margin-top:8px;padding:9px;border:1px solid #e1e7ee;border-radius:9px;background:#fff}
+.source-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.source-head strong{font-size:10px}.source-head small{color:var(--muted);font-size:8px}
+.source-mode{height:30px;min-width:150px;padding:0 24px 0 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--text);font-size:9px;font-weight:800}
+.source-body{display:grid;gap:6px}.source-body textarea{height:66px}.source-note{padding:6px 8px;border-radius:7px;background:#f6faf9;color:#58706d;font-size:8px;line-height:1.45}
+.pathrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.pathrow input,.pathrow select{width:100%;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--text);font-size:9px}
+.mini-btn{height:32px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--accent-dark);font-size:9px;font-weight:850}
+.mini-btn:hover{border-color:var(--accent)}
+.validation-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.batch-controls{display:flex;align-items:center;gap:6px}
+.state-hint{margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fbfdff;color:var(--muted);font-size:9px;line-height:1.45}
+.existing-shell{min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr);background:#f5f7fa}
+.existing-sidebar{min-height:0;padding:12px;border-right:1px solid var(--line);background:#fff}
+.existing-sidebar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.existing-sidebar-head strong{font-size:11px}
+.existing-search{width:100%;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);font-size:10px}
+.existing-list-placeholder{margin-top:10px;display:grid;gap:6px}.existing-list-line{height:42px;border:1px solid #e5eaf0;border-radius:9px;background:#fbfcfe}
+.existing-main{min-height:0;overflow:auto;padding:18px}
+.existing-note{max-width:760px;padding:16px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow-sm)}
+.existing-note h2{margin:0 0 7px;font-size:14px}.existing-note p{margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+.modal-overlay{position:fixed;inset:0;z-index:170;display:none;place-items:center;padding:20px;background:rgba(14,23,38,.30);backdrop-filter:blur(2px)}
+.modal-overlay.open{display:grid}
+.modal-card{width:min(620px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow-pop)}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.modal-head h2{margin:0;font-size:14px}.modal-head p{margin:4px 0 0;color:var(--muted);font-size:9px}
+.modal-body{padding:14px 16px}.modal-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;border-top:1px solid var(--line);background:#fbfcfe}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.modal-grid .full{grid-column:1/-1}
+.picker-options{display:grid;gap:7px}.picker-option{padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:left}.picker-option:hover{border-color:var(--accent);background:#f7fcfb}.picker-option strong{display:block;font-size:10px}.picker-option small{display:block;margin-top:3px;color:var(--muted);font-size:8px}
+.empty-panel{display:grid;place-items:center;min-height:180px;padding:28px;text-align:center;color:var(--muted);font-size:10px}
+@media(max-width:1050px){.validation-grid{grid-template-columns:1fr}}
+
 @media(max-width:900px){:root{--rail:205px}.board{grid-template-columns:repeat(4,260px)}.yamlbody{grid-template-columns:1fr}.yamlleft{border-right:0}.yamlright{display:none}}
 @media(max-width:620px){:root{--rail:155px}.brand span:last-child{display:none}.navbtn{padding:0 8px}.navbtn .navbadge{display:none}.messages{padding-left:12px;padding-right:12px}.header{padding:0 10px}.title p{display:none}}
 </style>
@@ -126,7 +164,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <section class="view page" id="view-chat">
       <header class="header">
         <div class="title"><h1>Chat</h1><p>C:\Users\kevin\ai-task-runner · 一般對話，不建立 Runner Task</p></div>
-        <div class="actions"><span class="mocknote">可切換對話</span><select class="mockselect" id="chatPreset"><option value="design">UI 設計討論</option><option value="debug">Bug investigation</option><option value="review">Code review</option></select><button class="btn" id="newChat">New Chat</button></div>
+        <div class="actions"><span class="mocknote">可切換對話</span><select class="mockselect" id="chatPreset"><option value="design">UI 設計討論</option><option value="debug">Bug investigation</option><option value="review">Code review</option><option value="long">Long conversation</option><option value="empty">Empty chat</option></select><button class="btn" id="newChat">New Chat</button></div>
       </header>
       <div class="chatbody">
         <div class="messages" id="chatMessages">
@@ -138,7 +176,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
           <div class="composer">
             <textarea id="chatInput" placeholder="傳訊息給 AI…"></textarea>
             <div class="composerfoot">
-              <div class="chips"><span class="chip">Project context</span><span class="chip">Default backend</span></div>
+              <div class="chips"><span class="chip">Project context</span><span class="chip">Default backend</span><button class="btn ghost" id="chatToTask" type="button">建立 Task</button></div>
               <button class="btn primary" id="chatSend">傳送</button>
             </div>
           </div>
@@ -150,11 +188,11 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
         <div class="title"><h1>Tasks</h1><p>C:\Users\kevin\ai-task-runner · Board 管理狀態與 Runner runtime 分離</p></div>
-        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
+        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
-        <div class="actions"><span class="pill">拖曳卡片改 Board 狀態</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
+        <div class="actions"><span class="move-rule">拖曳時只亮可移動狀態；Running / Recovering 需先 Stop 才能 Pause / Close</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
         <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
@@ -169,7 +207,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <section class="view page" id="view-yaml">
       <header class="header">
         <div class="title"><h1>YAML Tasks</h1><p>同一個 YAML List / RunRequest contract 的 UI builder，不建立第二套 Runner</p></div>
-        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn primary" id="runBatch">Run Batch</button></div>
+        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option><option value="empty">Empty batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Stop</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn primary" id="runBatch">Run Batch</button></div>
       </header>
       <div class="yamlbody">
         <section class="yamlleft">
@@ -183,26 +221,44 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
         </section>
         <section class="yamlright">
           <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
-          <div class="callout"><strong>設計原則：</strong> Form 和 YAML 只是同一份 batch draft 的兩種視圖；執行前用既有 loader / validation 驗證，不在 UI 重新發明 workflow schema。</div>
+          <div class="callout"><strong>設計原則：</strong> Form 和 YAML 是同一份 batch draft。Task Prompt、File Validator、AI Validator Prompt 都支援「直接輸入 / 檔案路徑 / 選擇資產」；Inline 內容會先存成 batch-managed 檔案，再用現有 <code>goal_file</code> / <code>ai_validator_prompt_file</code> 交給 Runner。執行前仍使用既有 loader / validation。</div>
           <div class="preview" id="batchPreview"></div>
           <div class="batch-log" id="batchLog">Mock batch is idle. Choose a preset/outcome and press Run Batch.</div>
         </section>
       </div>
     </section>
 
-    <!-- Existing sections -->
+    <!-- Existing Workflows / Prompts: intentionally unchanged -->
     <section class="view page" id="view-workflows">
-      <header class="header"><div class="title"><h1>Workflows</h1><p>既有 Workflow Studio；此處只放 mock assets 方便整體導覽試用</p></div><div class="actions"><span class="mocknote">mock assets</span><button class="btn">Import</button><button class="btn primary" id="generateMockWorkflow">Generate with AI</button></div></header>
-      <div class="asset-demo">
-        <aside class="asset-list"><div class="asset-list-head"><strong>Workflows</strong><button class="addsmall">+</button></div><div id="workflowMockList"></div></aside>
-        <main class="asset-editor"><div class="asset-preview-card"><div class="asset-preview-head"><div><h2 id="workflowMockTitle">ralphy_ai_validate.yaml</h2><p id="workflowMockMeta">Global · Shown in Chat</p></div><div class="actions"><button class="btn">Open Editor</button><button class="btn primary">Run</button></div></div><div class="asset-preview-body"><div class="asset-code" id="workflowMockCode"></div></div></div></main>
+      <header class="header">
+        <div class="title"><h1>Workflows</h1><p>維持目前 feature/ui 的 Workflow workspace / Workflow Editor 樣式與操作，不在這份 prototype 重新設計。</p></div>
+        <div class="actions"><span class="pill">UNCHANGED</span><button class="btn">Import</button><button class="btn primary">Generate with AI</button></div>
+      </header>
+      <div class="existing-shell">
+        <aside class="existing-sidebar">
+          <div class="existing-sidebar-head"><strong>Workflows</strong><button class="addsmall">+</button></div>
+          <input class="existing-search" placeholder="Search workflows..." disabled>
+          <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
+        </aside>
+        <main class="existing-main">
+          <div class="existing-note"><h2>Workflow 頁面沿用目前正式 UI</h2><p>這頁不放新的 mock schema、第二個 Designer 或新的 asset manager。正式實作時直接保留目前 Workflows → Workflow Editor → Designer / YAML，以及 Stage Form / YAML / Routing / Test 的既有結構。</p></div>
+        </main>
       </div>
     </section>
     <section class="view page" id="view-prompts">
-      <header class="header"><div class="title"><h1>Prompts</h1><p>既有 Prompt workspace；此處提供可點選 mock 資料</p></div><div class="actions"><span class="mocknote">mock assets</span><button class="btn primary" id="newMockPrompt">+ New Prompt</button></div></header>
-      <div class="asset-demo">
-        <aside class="asset-list"><div class="asset-list-head"><strong>Prompts</strong><button class="addsmall">+</button></div><div id="promptMockList"></div></aside>
-        <main class="asset-editor"><div class="asset-preview-card"><div class="asset-preview-head"><div><h2 id="promptMockTitle">common/review.md</h2><p id="promptMockMeta">Global prompt</p></div><div class="actions"><button class="btn">Duplicate</button><button class="btn primary">Save</button></div></div><div class="asset-preview-body"><div class="asset-code" id="promptMockCode"></div></div></div></main>
+      <header class="header">
+        <div class="title"><h1>Prompts</h1><p>維持目前 feature/ui 的 Prompt workspace / Prompt Editor 樣式與操作，不在這份 prototype 重新設計。</p></div>
+        <div class="actions"><span class="pill">UNCHANGED</span><button class="btn primary">+ New Prompt</button></div>
+      </header>
+      <div class="existing-shell">
+        <aside class="existing-sidebar">
+          <div class="existing-sidebar-head"><strong>Prompts</strong><button class="addsmall">+</button></div>
+          <input class="existing-search" placeholder="Search prompts..." disabled>
+          <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
+        </aside>
+        <main class="existing-main">
+          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>YAML Tasks 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 YAML Tasks 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
+        </main>
       </div>
     </section>
   </main>
@@ -212,7 +268,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
   <aside class="drawer">
     <div class="drawerhead">
       <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
-      <p>#T-103 · ai-task-runner · Board: <span id="drawerBoardStatus">Ongoing</span></p>
+      <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
     <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
@@ -225,8 +281,33 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3><div class="console" id="drawerConsole"></div></section></div>
       <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
     </div>
-    <div class="drawerfoot"><button class="btn danger" id="stopDemo">Stop</button><button class="btn">Open Workflow</button><button class="btn primary">Open Full Runtime</button></div>
+    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo">Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
   </aside>
+</div>
+
+
+<div class="modal-overlay" id="newTaskModal">
+  <div class="modal-card">
+    <div class="modal-head"><div><h2>New Task</h2><p>這是 Board Task + Runner run request 的 mock 建立流程。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="field full"><label>Task title</label><input id="newTaskTitle" value="Implement mock interaction"></div>
+        <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option></select></div>
+        <div class="field"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>dynamic_handoff.yaml</option></select></div>
+        <div class="field full"><label>Goal / Prompt</label><textarea id="newTaskGoal">Implement the requested change and run focused verification.</textarea></div>
+      </div>
+      <div class="state-hint">建立後先放在 <strong>New</strong>。按 Task 詳細頁的 Run 才啟動 mock runtime；不會因為單純拖到 Ongoing 就偷偷啟動 Runner。</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pathPickerModal">
+  <div class="modal-card" style="width:min(520px,94vw)">
+    <div class="modal-head"><div><h2 id="pathPickerTitle">Choose file</h2><p id="pathPickerHelp">Mock file picker</p></div><button class="close" data-close-modal="pathPickerModal">×</button></div>
+    <div class="modal-body"><div class="picker-options" id="pathPickerOptions"></div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="pathPickerModal">Cancel</button></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -271,7 +352,17 @@ const chatPresets={
   review:[
     ['user','幫我 review 這次 UI 修改，先只指出問題。'],
     ['assistant','可以。我會把問題分成 UX、runtime ownership、state consistency 與維護性；若要實際修改，再由你建立 Task 或明確要求執行。']
-  ]
+  ],
+  long:[
+    ['assistant','這個情境用來測試長對話。'],
+    ['user','我希望 Task、YAML Task、Workflow、Prompt 都能一起用，但不要讓 UI 變得很複雜。'],
+    ['assistant','建議把互動責任分清楚：Chat 負責討論；Task 負責工作管理與 runtime projection；YAML Tasks 負責 batch RunRequest；Workflows / Prompts 維持原本資產管理。'],
+    ['user','那從 Chat 轉成 Task 呢？'],
+    ['assistant','可以提供「建立 Task」明確動作，把目前輸入帶入 New Task 表單，但不應自動執行。這樣操作快速，也不會讓一般聊天誤觸 Runner。'],
+    ['user','如果 Task 正在 Recovering，能直接拖 Closed 嗎？'],
+    ['assistant','不建議。Running / Recovering 代表 Runner 還在處理，應先 Stop，再允許 Board 移到 Paused / Closed，避免工作管理狀態和真實 runtime 打架。']
+  ],
+  empty:[]
 };
 function renderChat(key){
   const box=document.getElementById('chatMessages');box.innerHTML='';
@@ -293,6 +384,13 @@ document.getElementById('chatSend').onclick=()=>{
   input.value='';box.scrollTop=box.scrollHeight;
 };
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();
+  document.getElementById('newTaskGoal').value=input||'Convert the current Chat discussion into a tracked Runner Task.';
+  document.getElementById('newTaskTitle').value=input ? input.slice(0,72) : 'Task from Chat';
+  document.getElementById('newTaskModal').classList.add('open');
+};
+
 
 const taskPresets={
   today:[
@@ -314,7 +412,8 @@ const taskPresets={
     {id:'T-302',status:'closed',title:'Dynamic Handoff regression',runtime:'done',desc:'Role session reuse 與 Final Review PASS。',tags:['handoff','PASS'],workflow:'dynamic_handoff.yaml',project:'ai-task-runner',progress:[7,7],elapsed:'34m',stage:'Completed',session:'role + fresh',goal:'驗證 Dynamic Handoff 不建立第二個 orchestrator。'},
     {id:'T-303',status:'closed',title:'YAML list endurance 8 items',runtime:'done',desc:'8 個 child RunRequests 依序完成。',tags:['YAML','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[8,8],elapsed:'2h 6m',stage:'Completed',session:'mixed',goal:'驗證 YAML List sequential execution 與 durable resume。'},
     {id:'T-304',status:'closed',title:'Final AI quorum 3/2',runtime:'done',desc:'3 fresh votes，2 PASS，quorum satisfied。',tags:['validator','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,3],elapsed:'8m',stage:'Completed',session:'fresh votes',goal:'驗證 Final AI 每票獨立 Fresh Session。'}
-  ]
+  ],
+  empty:[]
 };
 let currentPreset='today';
 let taskMap={};
@@ -339,22 +438,63 @@ function renderBoard(preset=currentPreset){
   (taskPresets[preset]||[]).forEach(t=>{taskMap[t.id]={...t};const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t))});
   bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
 }
+const BOARD_TRANSITIONS={
+  new:new Set(['ongoing','closed']),
+  ongoing:new Set(['paused','closed']),
+  paused:new Set(['ongoing','closed']),
+  closed:new Set(['ongoing'])
+};
+function boardMoveAllowed(t,target){
+  if(!t||!target)return {ok:false,reason:'Unknown target'};
+  if(t.status===target)return {ok:true,reason:'Same status'};
+  if(['running','recover'].includes(t.runtime)&&['paused','closed'].includes(target)){
+    return {ok:false,reason:`${runtimeLabel(t.runtime)} 中，請先 Stop 再移到 ${statusLabel(target)}`};
+  }
+  if(!BOARD_TRANSITIONS[t.status]?.has(target)){
+    return {ok:false,reason:`${statusLabel(t.status)} 不允許直接移到 ${statusLabel(target)}`};
+  }
+  return {ok:true,reason:''};
+}
+function clearDropHints(){
+  document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over','allowed','blocked'));
+}
+function paintDropHints(t){
+  document.querySelectorAll('.dropzone').forEach(zone=>{
+    const target=zone.closest('.col')?.dataset.status;
+    const rule=boardMoveAllowed(t,target);
+    zone.classList.toggle('allowed',rule.ok&&target!==t.status);
+    zone.classList.toggle('blocked',!rule.ok);
+  });
+}
 function bindTaskCards(){
   document.querySelectorAll('.taskcard').forEach(card=>{
     card.onclick=()=>{if(!card.classList.contains('dragging'))openTask(card)};
-    card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});
-    card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over'));updateCounts();renderTaskList()});
+    card.addEventListener('dragstart',e=>{
+      dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move';
+      paintDropHints(taskMap[card.dataset.id]);
+    });
+    card.addEventListener('dragend',()=>{
+      card.classList.remove('dragging');dragged=null;clearDropHints();updateCounts();renderTaskList();
+    });
   });
 }
 document.querySelectorAll('.dropzone').forEach(zone=>{
-  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('over');e.dataTransfer.dropEffect='move'});
+  zone.addEventListener('dragover',e=>{
+    if(!dragged)return;
+    const t=taskMap[dragged.dataset.id],target=zone.closest('.col')?.dataset.status,rule=boardMoveAllowed(t,target);
+    if(rule.ok){e.preventDefault();zone.classList.add('over');e.dataTransfer.dropEffect='move'}
+    else{e.dataTransfer.dropEffect='none'}
+  });
   zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
   zone.addEventListener('drop',e=>{
     e.preventDefault();zone.classList.remove('over');
     if(!dragged)return;
-    const id=dragged.dataset.id,old=taskMap[id]?.status,now=zone.closest('.col')?.dataset.status;
-    zone.appendChild(dragged);if(taskMap[id])taskMap[id].status=now;
-    showToast(`Board status: ${statusLabel(old)} → ${statusLabel(now)}（Runner runtime 保持 ${runtimeLabel(taskMap[id]?.runtime)}）`);
+    const id=dragged.dataset.id,t=taskMap[id],old=t?.status,now=zone.closest('.col')?.dataset.status;
+    const rule=boardMoveAllowed(t,now);
+    if(!rule.ok){showToast(`不可移動：${rule.reason}`);return}
+    if(old===now){showToast(`Task 已在 ${statusLabel(now)}`);return}
+    zone.appendChild(dragged);t.status=now;
+    showToast(`Board status: ${statusLabel(old)} → ${statusLabel(now)}（Runtime 仍是 ${runtimeLabel(t.runtime)}）`);
     updateCounts();renderTaskList();
   });
 });
@@ -374,11 +514,27 @@ document.getElementById('taskSearch').addEventListener('input',applyTaskFilter);
 document.getElementById('filterBtn').addEventListener('click',e=>{runningOnly=!runningOnly;e.currentTarget.textContent=runningOnly?'顯示全部':'只看執行中';applyTaskFilter()});
 document.getElementById('boardPreset').addEventListener('change',e=>{runningOnly=false;document.getElementById('filterBtn').textContent='只看執行中';document.getElementById('taskSearch').value='';renderBoard(e.target.value);showToast(`載入 mock board：${e.target.options[e.target.selectedIndex].text}`)});
 document.querySelectorAll('.coladd').forEach(b=>b.onclick=()=>document.getElementById('newTask').click());
+let taskSequence=420;
+function openModal(id){document.getElementById(id)?.classList.add('open')}
+function closeModal(id){document.getElementById(id)?.classList.remove('open')}
+document.querySelectorAll('[data-close-modal]').forEach(b=>b.onclick=()=>closeModal(b.dataset.closeModal));
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 document.getElementById('newTask').addEventListener('click',()=>{
-  const id='T-'+Math.floor(400+Math.random()*500);
-  const t={id,status:'new',title:'New mock Task',runtime:'idle',desc:'尚未開始，可拖曳到不同 Board 欄位。',tags:['workflow'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal:'這是新增 Task 的 mock 資料。'};
-  taskMap[id]=t;document.querySelector('.col[data-status="new"] .dropzone').insertAdjacentHTML('afterbegin',taskCardHtml(t));bindTaskCards();renderTaskList();updateCounts();showToast('已建立 mock Task');
+  document.getElementById('newTaskTitle').value='New Task';
+  document.getElementById('newTaskGoal').value='Implement the requested change and run focused verification.';
+  openModal('newTaskModal');
 });
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const title=document.getElementById('newTaskTitle').value.trim(),goal=document.getElementById('newTaskGoal').value.trim();
+  if(!title||!goal){showToast('Task title / Goal 不可空白');return}
+  const id='T-'+(++taskSequence);
+  const project=document.getElementById('newTaskProject').value,workflow=document.getElementById('newTaskWorkflow').value;
+  const t={id,status:'new',title,runtime:'idle',desc:'尚未開始；Board 狀態與 Runner runtime 分開。',tags:['workflow'],workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal};
+  taskMap[id]=t;
+  document.querySelector('.col[data-status="new"] .dropzone').insertAdjacentHTML('afterbegin',taskCardHtml(t));
+  bindTaskCards();renderTaskList();updateCounts();closeModal('newTaskModal');showToast('已建立 mock Task · 尚未執行');
+  openTaskById(id);
+};
 function renderTaskList(){
   const host=document.getElementById('taskListView');
   host.innerHTML=Object.values(taskMap).map(t=>`<div class="taskrow" data-taskrow="${t.id}"><span class="pill">${statusLabel(t.status)}</span><strong>${escapeHtml(t.title)}</strong><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span><span>${escapeHtml(t.workflow)}</span><span>${t.progress[0]} / ${t.progress[1]}</span></div>`).join('');
@@ -389,10 +545,37 @@ document.getElementById('listMode').onclick=e=>{
   e.currentTarget.classList.toggle('active',listMode);e.currentTarget.previousElementSibling.classList.toggle('active',!listMode);
 };
 
+function renderBoardFromMap(){
+  document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
+  Object.values(taskMap).forEach(t=>{
+    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+    if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
+  });
+  bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
+}
+function pushTaskHistory(t,message){
+  t.history=t.history||[];
+  const now=new Date(),hh=String(now.getHours()).padStart(2,'0'),mm=String(now.getMinutes()).padStart(2,'0');
+  t.history.push([`${hh}:${mm}`,message]);
+}
+let currentTaskId='';
+function renderDrawerActions(t){
+  const primary=document.getElementById('taskPrimaryDemo');
+  const reset=document.getElementById('taskResetDemo');
+  const rerun=document.getElementById('taskSecondaryDemo');
+  primary.hidden=false;reset.hidden=true;rerun.hidden=true;
+  primary.className='btn primary';
+  if(t.runtime==='idle'){primary.textContent='Run'}
+  else if(['running','recover'].includes(t.runtime)){primary.textContent='Stop';primary.className='btn danger'}
+  else if(['stopped','attention'].includes(t.runtime)){primary.textContent='Resume';reset.hidden=false}
+  else{primary.hidden=true}
+  if(['failed','done'].includes(t.runtime)){rerun.hidden=false;rerun.textContent='Rerun'}
+  if(t.runtime==='failed')reset.hidden=false;
+}
 function taskDetails(t){
-  const generic=[
+  const generic=(t.history&&t.history.length?t.history:[
     ['20:01','Task created'],['20:02','Workflow snapshot frozen'],['20:07',`${t.stage} · ${runtimeLabel(t.runtime)}`]
-  ];
+  ]);
   const timeline=t.runtime==='done'
     ?[['planning','PASS · 20:01','done'],['execute','PASS · 20:07','done'],['review','PASS · 20:12','done'],['final_validate','PASS · 20:15','done']]
     :t.runtime==='failed'
@@ -418,7 +601,10 @@ function taskDetails(t){
 function openTask(card){openTaskById(card.dataset.id)}
 function openTaskById(id){
   const t=taskMap[id];if(!t)return;
+  currentTaskId=id;
   const d=taskDetails(t);
+  document.getElementById('drawerTaskId').textContent=t.id;
+  document.getElementById('drawerProjectName').textContent=t.project;
   document.getElementById('drawerTitle').textContent=t.title;
   document.getElementById('drawerBoardStatus').textContent=statusLabel(t.status);
   document.getElementById('drawerStatusValue').textContent=statusLabel(t.status);
@@ -437,6 +623,7 @@ function openTaskById(id){
   document.getElementById('drawerTimeline').innerHTML=d.timeline.map(([n,m,c])=>`<div class="event ${c}"><strong>${escapeHtml(n)}</strong><small>${escapeHtml(m)}</small></div>`).join('');
   document.getElementById('drawerConsole').textContent=d.output;
   document.getElementById('drawerHistory').innerHTML=d.history.map(([time,msg])=>`<div class="history-row"><time>${time}</time><span>${escapeHtml(msg)}</span></div>`).join('');
+  renderDrawerActions(t);
   document.querySelectorAll('.drawertab').forEach((b,i)=>b.classList.toggle('active',i===0));document.querySelectorAll('.drawer-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
   document.getElementById('taskOverlay').classList.add('open');
 }
@@ -447,56 +634,300 @@ document.querySelectorAll('[data-drawertab]').forEach(b=>b.onclick=()=>{
 document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
 document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
-document.getElementById('stopDemo').onclick=()=>showToast('Mock Stop：正式版仍必須走既有 server-side action guard / Runner control contract');
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(t.runtime==='idle'){
+    t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';t.desc='Runner 已啟動；Board 與 runtime 仍由不同狀態來源顯示。';
+    if(t.status==='new')t.status='ongoing';
+    pushTaskHistory(t,'Run started · server-side action guard accepted');
+    showToast('Mock Run started');
+  }else if(['running','recover'].includes(t.runtime)){
+    t.runtime='stopped';t.desc='User stop；durable state 保留，可 Resume / Reset。';
+    pushTaskHistory(t,'Stopped by user · resumable');
+    showToast('Mock Stop · 現在可拖到 Paused / Closed');
+  }else if(['stopped','attention'].includes(t.runtime)){
+    t.runtime='running';t.desc='Resume from durable state；沿用既有 Workflow snapshot。';
+    if(t.status==='paused')t.status='ongoing';
+    pushTaskHistory(t,'Resume accepted · continuing saved state');
+    showToast('Mock Resume');
+  }
+  renderBoardFromMap();openTaskById(t.id);
+};
+document.getElementById('taskResetDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  t.runtime='idle';t.stage='Idle';t.session='—';t.progress=[0,t.progress[1]||4];t.elapsed='—';t.desc='Runtime 已 Reset；Board 狀態不自動改寫。';
+  pushTaskHistory(t,'Runtime reset · board status preserved');
+  renderBoardFromMap();openTaskById(t.id);showToast('Mock Reset');
+};
+document.getElementById('taskSecondaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.progress=[0,t.progress[1]||4];t.elapsed='0m';t.desc='Rerun started from a new run; previous history remains visible.';
+  pushTaskHistory(t,'Rerun started · new run identity');
+  renderBoardFromMap();openTaskById(t.id);showToast('Mock Rerun');
+};
+document.getElementById('deleteTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Stop');return}
+  delete taskMap[currentTaskId];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast('Mock Task deleted');
+};
+document.getElementById('openWorkflowDemo').onclick=()=>showToast('正式版會開啟目前既有 Workflow Editor，不新增第二套編輯器');
 
+const PROMPT_ASSETS=[
+  'common/ai_validator.md',
+  'common/review.md',
+  'ralphy/ralphy.md',
+  'workflow/generate.md'
+];
 const batchPresets={
   ui:[
-    {prompt:'Fix feature/ui Task board',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
-    {prompt:'Review UI/UX and tests',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
+    {
+      prompt:'Fix feature/ui Task board',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'file',validator:'C:\\Users\\kevin\\ai-task-runner\\ai_task_runner_validator.py',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Review UI/UX and tests',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'inline',aiPrompt:'嚴格檢查 UI/UX、runtime ownership、錯誤狀態與 focused tests；只回傳驗證判斷。',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
   ],
   reliability:[
-    {prompt:'Run API disconnect probe',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'mixed.yaml',validator:'ai'},
-    {prompt:'Run HTTP 503 recovery probe',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
-    {prompt:'Run final AI quorum validation',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
+    {
+      prompt:'Run API disconnect probe',goalMode:'file',goalFile:'C:\\Users\\kevin\\ai-task-runner\\tool\\prompts\\api-disconnect.md',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'mixed.yaml',
+      validatorMode:'file',validator:'C:\\Users\\kevin\\ai-task-runner\\ai_task_runner_validator.py',
+      aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Run HTTP 503 recovery probe',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'ai',validator:'',
+      aiMode:'file',aiPrompt:'',aiFile:'C:\\Users\\kevin\\ai-task-runner\\runner\\assets\\prompts\\common\\ai_validator.md',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Run final AI quorum validation',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
   ],
   multi:[
-    {prompt:'Update runner core docs',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
-    {prompt:'Refactor packet parser',project:'D:\\dev\\game-client',workflow:'mixed.yaml',validator:'validation.py'},
-    {prompt:'Review automation scripts',project:'D:\\lab\\tools',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
-  ]
+    {
+      prompt:'Update runner core docs',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Refactor packet parser',goalMode:'file',goalFile:'D:\\dev\\game-client\\tasks\\packet-parser.md',goalAsset:'common/review.md',
+      project:'D:\\dev\\game-client',workflow:'mixed.yaml',
+      validatorMode:'file',validator:'D:\\dev\\game-client\\validation.py',
+      aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Review automation scripts',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',
+      project:'D:\\lab\\tools',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'file',validator:'D:\\lab\\tools\\validator.py',
+      aiMode:'inline',aiPrompt:'確認自動化腳本符合驗收條件，禁止修改檔案。',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
+  ],
+  empty:[]
 };
+let batchDraft=[];
 let batchRunTimer=null;
-function batchToYaml(items){return items.map(x=>`- prompt: ${x.prompt}\n  project_root: ${x.project}\n  workflow_file: ${x.workflow}\n  validator: ${x.validator}\n  stage_retries: -1`).join('\n\n')}
-function renderBatch(key){
-  clearInterval(batchRunTimer);const items=batchPresets[key]||[];
+let batchState={status:'idle',index:0,recovered:false};
+let pickerTarget=null;
+
+function cloneBatch(items){return JSON.parse(JSON.stringify(items||[]))}
+function basename(path){return String(path||'').split(/[\\/]/).filter(Boolean).pop()||path||'Untitled'}
+function managedDraftPath(item,index,kind){
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const suffix=kind==='ai'?`${String(index+1).padStart(3,'0')}-ai-validator.md`:`${String(index+1).padStart(3,'0')}-goal.md`;
+  return `${root}\\.ai-task-runner\\drafts\\yaml-tasks\\ui-prototype\\${suffix}`;
+}
+function promptAssetPath(item,asset){
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  return `${root}\\.ai-task-runner\\assets\\prompts\\${String(asset||'common/review.md').replaceAll('/','\\')}`;
+}
+function effectiveGoalFile(item,index){
+  if(item.goalMode==='inline')return managedDraftPath(item,index,'goal');
+  if(item.goalMode==='asset')return promptAssetPath(item,item.goalAsset);
+  return item.goalFile||'';
+}
+function effectiveAiPromptFile(item,index){
+  if(item.aiMode==='inline')return managedDraftPath(item,index,'ai');
+  if(item.aiMode==='asset')return promptAssetPath(item,item.aiAsset);
+  if(item.aiMode==='file')return item.aiFile||'';
+  return '';
+}
+function itemTitle(item,index){
+  if(item.goalMode==='inline')return item.prompt||`RunRequest ${index+1}`;
+  if(item.goalMode==='asset')return `Prompt asset · ${item.goalAsset||'Select asset'}`;
+  return `Prompt file · ${basename(item.goalFile)}`;
+}
+function yamlScalar(value){
+  const s=String(value??'');
+  if(!s)return '""';
+  if(/[\n#]/.test(s))return JSON.stringify(s);
+  return s;
+}
+function batchToYaml(items){
+  return items.map((x,i)=>{
+    const lines=[`- goal_file: ${yamlScalar(effectiveGoalFile(x,i))}`,`  project_root: ${yamlScalar(x.project)}`,`  workflow_file: ${yamlScalar(x.workflow)}`];
+    if(x.validatorMode==='file'&&x.validator)lines.push(`  validator: ${yamlScalar(x.validator)}`);
+    else if(x.validatorMode==='ai')lines.push('  validator: ai');
+    const aiFile=effectiveAiPromptFile(x,i);
+    if(aiFile)lines.push(`  ai_validator_prompt_file: ${yamlScalar(aiFile)}`);
+    lines.push('  stage_retries: -1');
+    return lines.join('\n');
+  }).join('\n\n');
+}
+function modeOptions(value,options){
+  return options.map(([v,label])=>`<option value="${v}" ${value===v?'selected':''}>${label}</option>`).join('');
+}
+function assetOptions(value){
+  return PROMPT_ASSETS.map(x=>`<option value="${escapeAttr(x)}" ${value===x?'selected':''}>${escapeHtml(x)}</option>`).join('');
+}
+function goalSourceBody(x,i){
+  if(x.goalMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="goalFile" data-pick-kind="goal">Choose</button></div><div class="source-note">Runner contract：使用 <strong>goal_file</strong>。可直接貼絕對/相對路徑，正式版由後端驗證檔案是否存在。</div>`;
+  if(x.goalMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="goalAsset">${assetOptions(x.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選擇既有 Prompt asset；執行時解析成檔案路徑，再走 <strong>goal_file</strong>。</div>`;
+  return `<textarea data-item="${i}" data-field="prompt" placeholder="輸入本次 Task Prompt">${escapeHtml(x.prompt||'')}</textarea><div class="source-note">Inline 會先存成受管檔案：<strong>${escapeHtml(managedDraftPath(x,i,'goal'))}</strong><br>Runner 最後仍讀 <strong>goal_file</strong>，不另外發明 inline runtime path。</div>`;
+}
+function validatorSourceBody(x,i){
+  if(x.validatorMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div><div class="source-note">File Validator 使用既有 <strong>validator</strong> 欄位。</div>`;
+  if(x.validatorMode==='ai')return `<div class="source-note">使用 <strong>validator: ai</strong>；AI 驗證 Stage 仍由選定 Workflow 決定。</div>`;
+  return `<div class="source-note">不額外指定 run-level validator；因為已有明確 <strong>workflow_file</strong>，是否有 File / AI Validator 由 Workflow 本身決定。</div>`;
+}
+function aiSourceBody(x,i){
+  if(x.aiMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="aiFile" data-pick-kind="ai">Choose</button></div><div class="source-note">Runner contract：<strong>ai_validator_prompt_file</strong>。</div>`;
+  if(x.aiMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="aiAsset">${assetOptions(x.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選現有 Prompt asset，解析成 <strong>ai_validator_prompt_file</strong>。</div>`;
+  if(x.aiMode==='inline')return `<textarea data-item="${i}" data-field="aiPrompt" placeholder="AI Validator instructions">${escapeHtml(x.aiPrompt||'')}</textarea><div class="source-note">Inline 先存成：<strong>${escapeHtml(managedDraftPath(x,i,'ai'))}</strong>，再用 <strong>ai_validator_prompt_file</strong>。</div>`;
+  return `<div class="source-note">Default：不覆寫 AI Validator Prompt，沿用 Workflow / Runner 既有預設。</div>`;
+}
+function renderBatchDraft(){
+  clearInterval(batchRunTimer);batchState={status:'idle',index:0,recovered:false};setBatchControls();
   const form=document.getElementById('formList');
-  form.innerHTML=items.map((x,i)=>`<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(x.prompt)}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="field"><label>Prompt</label><textarea data-field="prompt">${escapeHtml(x.prompt)}</textarea></div><div class="row2"><div class="field"><label>Project root</label><input data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option></select></div></div></div>`).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
-  document.getElementById('yamlEditor').value=batchToYaml(items);
-  document.getElementById('batchPreview').innerHTML=items.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(x.prompt)}</strong><small>${escapeHtml(x.project.split('\\\\').pop())} · ${escapeHtml(x.workflow)} · validator: ${escapeHtml(x.validator)}</small></div><span class="orderchip">Waiting</span></div>`).join('');
-  document.getElementById('batchLog').textContent='Mock batch is idle. Choose an outcome and press Run Batch.';
+  if(!batchDraft.length){
+    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 YAML Task。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }else{
+    form.innerHTML=batchDraft.map((x,i)=>`<div class="request" data-req="${i}">
+      <div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div>
+      <div class="row2"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div>
+      <div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small> prompt / goal_file</small></div><select class="source-mode" data-item="${i}" data-field="goalMode">${modeOptions(x.goalMode,[['inline','Inline · managed file'],['file','File path'],['asset','Prompt asset']])}</select></div><div class="source-body">${goalSourceBody(x,i)}</div></div>
+      <div class="validation-grid">
+        <div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small> validator</small></div><select class="source-mode" data-item="${i}" data-field="validatorMode">${modeOptions(x.validatorMode,[['none','None / Workflow owns'],['file','File path'],['ai','AI']])}</select></div><div class="source-body">${validatorSourceBody(x,i)}</div></div>
+        <div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small> ai_validator_prompt_file</small></div><select class="source-mode" data-item="${i}" data-field="aiMode">${modeOptions(x.aiMode,[['default','Default'],['inline','Inline · managed file'],['file','File path'],['asset','Prompt asset']])}</select></div><div class="source-body">${aiSourceBody(x,i)}</div></div>
+      </div>
+    </div>`).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }
   bindBatchForm();
+  syncBatchViews();
 }
-function readFormBatch(){
-  return [...document.querySelectorAll('.request[data-req]')].map(r=>({prompt:r.querySelector('[data-field="prompt"]').value,project:r.querySelector('[data-field="project"]').value,workflow:r.querySelector('[data-field="workflow"]').value,validator:'ai'}));
+function renderBatch(key){
+  batchDraft=cloneBatch(batchPresets[key]||[]);
+  renderBatchDraft();
+  document.getElementById('batchLog').textContent=batchDraft.length?'Mock batch is idle. Edit sources, Validate, then Run Batch.':'Empty batch · add a RunRequest to begin.';
 }
-function syncFormToYamlAndPreview(){
-  const items=readFormBatch();document.getElementById('yamlEditor').value=batchToYaml(items);
-  document.getElementById('batchPreview').innerHTML=items.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(x.prompt)}</strong><small>${escapeHtml(x.project.split('\\\\').pop())} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">Waiting</span></div>`).join('');
+function previewSummary(x,i){
+  const goal=x.goalMode==='inline'?'Inline → managed goal_file':x.goalMode==='asset'?`Prompt asset: ${x.goalAsset}`:`goal_file: ${basename(x.goalFile)}`;
+  const validator=x.validatorMode==='file'?`file validator: ${basename(x.validator)}`:x.validatorMode==='ai'?'validator: ai':'validator: workflow';
+  const ai=x.aiMode==='default'?'AI prompt: default':x.aiMode==='asset'?`AI prompt asset: ${x.aiAsset}`:x.aiMode==='file'?`AI prompt file: ${basename(x.aiFile)}`:'AI prompt: inline → managed file';
+  return `${goal} · ${validator} · ${ai}`;
+}
+function syncBatchViews(){
+  document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const preview=document.getElementById('batchPreview');
+  if(!batchDraft.length){preview.innerHTML='<div class="empty-panel">No child RunRequests</div>';return}
+  preview.innerHTML=batchDraft.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}<br>${escapeHtml(previewSummary(x,i))}</small></div><span class="orderchip">Waiting</span></div>`).join('');
 }
 function bindBatchForm(){
-  document.querySelectorAll('.request textarea,.request input,.request select').forEach(el=>el.addEventListener('input',syncFormToYamlAndPreview));
-  const add=document.getElementById('addRequest');if(add)add.onclick=()=>{
-    const items=readFormBatch();items.push({prompt:'New child RunRequest',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'});
-    batchPresets.custom=items;document.getElementById('batchPreset').value=document.querySelector('#batchPreset option[value="custom"]')?'custom':document.getElementById('batchPreset').value;
-    renderBatchFromItems(items);showToast('新增 mock child RunRequest');
+  document.querySelectorAll('[data-item][data-field]').forEach(el=>{
+    const handler=()=>{
+      const i=+el.dataset.item,field=el.dataset.field;
+      batchDraft[i][field]=el.value;
+      if(['goalMode','validatorMode','aiMode'].includes(field))renderBatchDraft();
+      else syncBatchViews();
+    };
+    el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
+  });
+  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind));
+  document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
+  const add=document.getElementById('addRequest');
+  if(add)add.onclick=()=>{
+    batchDraft.push({
+      prompt:'New child RunRequest',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    });
+    renderBatchDraft();showToast('新增 mock child RunRequest');
   };
-  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const items=readFormBatch();items.splice(+b.dataset.remove,1);renderBatchFromItems(items)});
-  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;const items=readFormBatch();[items[i-1],items[i]]=[items[i],items[i-1]];renderBatchFromItems(items)});
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{batchDraft.splice(+b.dataset.remove,1);renderBatchDraft()});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];renderBatchDraft()});
+  document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];renderBatchDraft()});
 }
-function renderBatchFromItems(items){
-  batchPresets.custom=items;
-  if(!document.querySelector('#batchPreset option[value="custom"]'))document.getElementById('batchPreset').insertAdjacentHTML('beforeend','<option value="custom">Edited draft</option>');
-  document.getElementById('batchPreset').value='custom';renderBatch('custom');
+function openPathPicker(index,field,kind){
+  pickerTarget={index,field};
+  const item=batchDraft[index]||{};
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const options=kind==='validator'
+    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    :kind==='ai'
+      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai-validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
+      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
+  document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
+  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以關閉後直接在輸入框貼路徑。';
+  document.getElementById('pathPickerOptions').innerHTML=options.map((path,i)=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
+  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
+    if(pickerTarget&&batchDraft[pickerTarget.index])batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
+    closeModal('pathPickerModal');renderBatchDraft();showToast('已選擇 mock 路徑');
+  });
+  openModal('pathPickerModal');
+}
+function parseSimpleYamlList(source){
+  const lines=String(source||'').split(/\r?\n/),items=[];let current=null;
+  for(const raw of lines){
+    if(!raw.trim()||raw.trimStart().startsWith('#'))continue;
+    let m=raw.match(/^\s*-\s+([A-Za-z_][\w]*):\s*(.*)$/);
+    if(m){current={};items.push(current);current[m[1]]=m[2].trim().replace(/^["']|["']$/g,'');continue}
+    m=raw.match(/^\s+([A-Za-z_][\w]*):\s*(.*)$/);
+    if(m&&current)current[m[1]]=m[2].trim().replace(/^["']|["']$/g,'');
+  }
+  return items.map((raw,i)=>{
+    const goalFile=raw.goal_file||'',prompt=raw.prompt||raw.goal||'';
+    const aiFile=raw.ai_validator_prompt_file||'';
+    return {
+      prompt:prompt||`Loaded from ${basename(goalFile)}`,
+      goalMode:prompt?'inline':'file',goalFile,goalAsset:'common/review.md',
+      project:raw.project_root||'C:\\Users\\kevin\\ai-task-runner',
+      workflow:raw.workflow_file||'ralphy_ai_validate.yaml',
+      validatorMode:raw.validator?raw.validator==='ai'?'ai':'file':'none',
+      validator:raw.validator&&raw.validator!=='ai'?raw.validator:'',
+      aiMode:aiFile?'file':'default',aiPrompt:'',aiFile,aiAsset:'common/ai_validator.md'
+    };
+  });
+}
+function batchValidationErrors(items){
+  const errors=[];
+  items.forEach((x,i)=>{
+    if(!x.project?.trim())errors.push(`item ${i+1}: project_root is required`);
+    if(!x.workflow?.trim())errors.push(`item ${i+1}: workflow_file is required`);
+    if(x.goalMode==='inline'&&!x.prompt?.trim())errors.push(`item ${i+1}: inline Task Prompt is empty`);
+    if(x.goalMode==='file'&&!x.goalFile?.trim())errors.push(`item ${i+1}: goal_file is empty`);
+    if(x.validatorMode==='file'&&!x.validator?.trim())errors.push(`item ${i+1}: validator path is empty`);
+    if(x.aiMode==='inline'&&!x.aiPrompt?.trim())errors.push(`item ${i+1}: inline AI Validator Prompt is empty`);
+    if(x.aiMode==='file'&&!x.aiFile?.trim())errors.push(`item ${i+1}: ai_validator_prompt_file is empty`);
+  });
+  return errors;
+}
+function setBatchControls(){
+  document.getElementById('stopBatch').hidden=batchState.status!=='running';
+  document.getElementById('resumeBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('runBatch').disabled=batchState.status==='running';
+}
+function resetBatchRuntime(){
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState={status:'idle',index:0,recovered:false};setBatchControls();
 }
 document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('[data-yamltab]').forEach(x=>x.classList.toggle('active',x===t));
@@ -504,64 +935,66 @@ document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click
   document.getElementById('yaml-code').classList.toggle('hidden',t.dataset.yamltab!=='code');
 }));
 document.getElementById('batchPreset').onchange=e=>{renderBatch(e.target.value);showToast(`載入 ${e.target.options[e.target.selectedIndex].text}`)};
-document.getElementById('yamlEditor').addEventListener('input',()=>{document.getElementById('batchLog').textContent='YAML edited manually. Mock parser will validate the current text when you press Validate.'});
+document.getElementById('yamlEditor').addEventListener('input',()=>{
+  resetBatchRuntime();
+  document.getElementById('batchLog').textContent='YAML edited manually. Press Validate to parse known RunRequest fields back into Form.';
+});
 document.getElementById('validateYaml').onclick=()=>{
-  const y=document.getElementById('yamlEditor').value;
-  const count=(y.match(/^- prompt:/gm)||[]).length;
-  if(count){showToast(`YAML List valid · ${count} child RunRequests`);document.getElementById('batchLog').textContent=`[validate] PASS · parsed ${count} child RunRequests\n[validate] Formal implementation should call the existing backend YAML/schema path.`}
-  else{showToast('YAML invalid · no "- prompt:" entries');document.getElementById('batchLog').textContent='[validate] FAIL · no child RunRequests detected'}
+  const current=document.getElementById('yamlEditor').value.trim(),generated=batchToYaml(batchDraft).trim();
+  let items=batchDraft;
+  if(current!==generated){
+    items=parseSimpleYamlList(current);
+    if(items.length)batchDraft=items;
+  }
+  const errors=batchValidationErrors(items);
+  if(!items.length)errors.push('batch must contain at least one child RunRequest');
+  if(errors.length){
+    showToast(`YAML invalid · ${errors.length} issue(s)`);
+    document.getElementById('batchLog').textContent='[validate] FAIL\n- '+errors.join('\n- ');
+    return;
+  }
+  if(current!==generated)renderBatchDraft();
+  showToast(`YAML List valid · ${items.length} child RunRequests`);
+  document.getElementById('batchLog').textContent=`[validate] PASS · ${items.length} child RunRequests\n[validate] goal_file / validator / ai_validator_prompt_file mapped to current RunRequest contract\n[validate] Formal implementation calls the existing backend loader/schema path.`;
 };
+function finishBatch(status,message){
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status=status;setBatchControls();
+  if(message)document.getElementById('batchLog').textContent+=`\n${message}`;
+}
+function batchTick(){
+  if(batchState.status!=='running')return;
+  const items=[...document.querySelectorAll('.previewitem')],log=document.getElementById('batchLog');
+  if(batchState.index>=items.length){finishBatch('completed','[done] batch completed');showToast('Mock batch completed');return}
+  const item=items[batchState.index],outcome=document.getElementById('batchOutcome').value;
+  items.forEach((x,n)=>{if(n!==batchState.index)x.classList.remove('active')});
+  item.classList.add('active');item.querySelector('.orderchip').textContent='Running';
+  if(outcome==='recover'&&batchState.index===0&&!batchState.recovered){
+    batchState.recovered=true;item.querySelector('.orderchip').textContent='Recovering';
+    log.textContent+='\n[00:05] item 1 · HTTP 503\n[00:10] StageExecutor same-session retry';return;
+  }
+  if(outcome==='fail'&&batchState.index===1){
+    item.classList.remove('active');item.querySelector('.orderchip').textContent='Failed';
+    finishBatch('failed','[00:12] item 2 · deterministic validation FAIL\n[00:12] batch stopped');
+    showToast('Mock batch failed at item 2');return;
+  }
+  item.classList.remove('active');item.classList.add('done');item.querySelector('.orderchip').textContent='PASS';
+  log.textContent+=`\n[00:${String((batchState.index+1)*6).padStart(2,'0')}] item ${batchState.index+1} PASS`;
+  batchState.index++;
+}
 document.getElementById('runBatch').onclick=()=>{
+  const errors=batchValidationErrors(batchDraft);
+  if(!batchDraft.length)errors.push('batch is empty');
+  if(errors.length){document.getElementById('batchLog').textContent='[run] BLOCKED\n- '+errors.join('\n- ');showToast('請先修正 Batch 設定');return}
   clearInterval(batchRunTimer);
-  const items=[...document.querySelectorAll('.previewitem')],outcome=document.getElementById('batchOutcome').value,log=document.getElementById('batchLog');
-  items.forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
-  log.textContent='[00:00] batch started · sequential child RunRequests';
-  let i=0,recovered=false;
-  const tick=()=>{
-    if(i>=items.length){log.textContent+='\n[done] batch completed';showToast('Mock batch completed');clearInterval(batchRunTimer);return}
-    const item=items[i];items.forEach(x=>x.classList.remove('active'));item.classList.add('active');item.querySelector('.orderchip').textContent='Running';
-    if(outcome==='recover'&&i===0&&!recovered){
-      recovered=true;item.querySelector('.orderchip').textContent='Recovering';log.textContent+='\n[00:05] item 1 · HTTP 503\n[00:10] StageExecutor same-session retry';return
-    }
-    if(outcome==='fail'&&i===1){
-      item.querySelector('.orderchip').textContent='Failed';log.textContent+='\n[00:12] item 2 · deterministic validation FAIL\n[00:12] batch stopped';showToast('Mock batch failed at item 2');clearInterval(batchRunTimer);return
-    }
-    item.classList.remove('active');item.classList.add('done');item.querySelector('.orderchip').textContent='PASS';log.textContent+=`\n[00:${String((i+1)*6).padStart(2,'0')}] item ${i+1} PASS`;i++;
-  };
-  tick();batchRunTimer=setInterval(tick,900);
+  document.querySelectorAll('.previewitem').forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
+  batchState={status:'running',index:0,recovered:false};setBatchControls();
+  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
+  batchTick();batchRunTimer=setInterval(batchTick,900);
 };
-
-const workflowMocks=[
-  {name:'ralphy_ai_validate.yaml',meta:'Global · Shown in Chat',code:'stages:\\n  planning:\\n    type: plan\\n  execute:\\n    type: base\\n    profile: execute\\n  review:\\n    type: base\\n    profile: review\\n    routes:\\n      fail: execute\\n  final_validate:\\n    type: ai_validator\\n\\nflow: [planning, execute, review, final_validate]'},
-  {name:'mixed.yaml',meta:'Global · Hidden from Chat',code:'stages:\\n  prepare:\\n    type: command\\n  implement:\\n    type: base\\n    profile: execute\\n  verify:\\n    type: base\\n    profile: review\\n\\nflow: [prepare, implement, verify]'},
-  {name:'dynamic_handoff.yaml',meta:'Project · Shown in Chat',code:'stages:\\n  lead:\\n    type: handoff\\n    targets: [implementer, verifier]\\n  implementer:\\n    type: base\\n  verifier:\\n    type: base\\n    profile: review\\n\\nflow: [lead, implementer, verifier]'}
-];
-const promptMocks=[
-  {name:'common/review.md',meta:'Global prompt',code:'# Review\\nReview only the requested scope.\\nReturn exactly PASS or FAIL with concise evidence.'},
-  {name:'common/validator.md',meta:'Global prompt',code:'# Validator\\nValidate semantics in a fresh session.\\nDo not modify project files.'},
-  {name:'workflow/generate.md',meta:'Global prompt',code:'# Workflow Generator\\nGenerate the smallest valid Stage graph for the requested goal.'},
-  {name:'ralphy/execute.md',meta:'Project-style prompt',code:'# Execute\\nImplement the current bounded task.\\nPreserve unrelated behavior.'}
-];
-function renderAssetList(kind,data){
-  const list=document.getElementById(kind+'MockList');
-  list.innerHTML=data.map((x,i)=>`<button class="asset-item ${i===0?'active':''}" data-${kind}="${i}"><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.meta)}</small></button>`).join('');
-  list.querySelectorAll('.asset-item').forEach(b=>b.onclick=()=>selectAsset(kind,data,+b.dataset[kind]));
-  selectAsset(kind,data,0);
-}
-function selectAsset(kind,data,i){
-  document.querySelectorAll(`#${kind}MockList .asset-item`).forEach((b,n)=>b.classList.toggle('active',n===i));
-  document.getElementById(kind+'MockTitle').textContent=data[i].name;document.getElementById(kind+'MockMeta').textContent=data[i].meta;document.getElementById(kind+'MockCode').textContent=data[i].code.replaceAll('\\n','\n');
-}
-document.getElementById('generateMockWorkflow').onclick=()=>showToast('Mock: Generate with AI would open the existing generator flow');
-document.getElementById('newMockPrompt').onclick=()=>showToast('Mock: New Prompt');
-renderAssetList('workflow',workflowMocks);renderAssetList('prompt',promptMocks);
-
-function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
-
-renderChat('design');
-renderBoard('today');
-renderBatch('ui');
-</script>
-</body>
-</html>
+document.getElementById('stopBatch').onclick=()=>{
+  if(batchState.status!=='running')return;
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
+  if(item)item.querySelector('.orderchip').textContent='Stopped';
+  document.getElementById('batchLog').textContent+='\n[user] batch stop requested · current child durable state preserved';
+  showToast('Mock Batch stopped');
