@@ -193,6 +193,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-kind-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.task-kind-switch button{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;text-align:left;color:var(--text)}.task-kind-switch button:hover{border-color:#aebbc7}.task-kind-switch button.active{border-color:var(--accent);background:#f5fbfa;box-shadow:0 0 0 2px rgba(15,118,110,.07)}.task-kind-switch strong{font-size:11px}.task-kind-switch small{color:var(--muted);font-size:8px}
 .task-list-setup{margin-top:9px;padding:11px;border:1px solid #dfe5fb;border-radius:10px;background:#f8f9ff}.task-list-setup-copy{display:flex;align-items:center;gap:8px}.task-list-setup-copy strong{font-size:11px;color:#4338ca}.task-list-setup-copy span{color:var(--muted);font-size:9px}.task-list-mini-preview{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.task-list-mini-preview span{padding:4px 7px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:8px;font-weight:850}
 .task-list-pane-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.task-list-pane-head h3{margin:0}.drawer-list-items{display:grid;gap:6px}.drawer-list-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:#fbfdff}.drawer-list-item.done{opacity:.68}.drawer-list-item .n{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900}.drawer-list-item strong{display:block;font-size:9px}.drawer-list-item small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.drawer-list-item .state{font-size:8px;font-weight:900;color:var(--accent-dark)}
+
+.request.completed-lock{opacity:.62;background:#f7f9fb}.request.completed-lock .reqhead:after{content:"PASS · locked";margin-left:auto;padding:3px 6px;border-radius:999px;background:#e9f8ed;color:#15803d;font-size:7px;font-weight:900}
 </style>
 </head>
 <body>
@@ -1504,8 +1506,221 @@ document.getElementById('chatSend').onclick=()=>{
   session.messages.push(['assistant',reply]);input.value='';renderChatSession();
 };
 
+// --- Unified Task / Task List mock behavior ---
+function defaultTaskListItems(projectKey){
+  const root=projectMeta[projectKey]?.path||projectKey||'C:\\project';
+  return [
+    {prompt:'Implement the requested change',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'},
+    {prompt:'Review and verify the result',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}
+  ];
+}
+
+let newTaskKind='task';
+function renderTaskKindUi(){
+  document.querySelectorAll('[data-task-kind]').forEach(b=>b.classList.toggle('active',b.dataset.taskKind===newTaskKind));
+  const isList=newTaskKind==='list';
+  document.getElementById('newTaskWorkflowField').hidden=isList;
+  document.getElementById('newTaskWorkflowCaps').hidden=isList;
+  document.querySelector('.workspace-selector-wrap').hidden=isList;
+  document.getElementById('newTaskPromptSource').hidden=isList;
+  document.getElementById('newTaskValidationSource').hidden=isList;
+  document.getElementById('newTaskListSetup').hidden=!isList;
+  document.getElementById('createTaskConfirm').textContent=isList?'Create Task List':'Create Task';
+}
+document.querySelectorAll('[data-task-kind]').forEach(b=>b.onclick=()=>{
+  newTaskKind=b.dataset.taskKind;
+  if(newTaskKind==='list'&&document.getElementById('newTaskTitle').value==='New Task')document.getElementById('newTaskTitle').value='New Task List';
+  renderTaskKindUi();
+});
+
+const originalNewTaskClick=()=>{};
+document.getElementById('newTask').addEventListener('click',()=>{newTaskKind='task';renderTaskKindUi()});
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',()=>{newTaskKind='task';renderTaskKindUi()}));
+
+function createTaskListParent(){
+  const title=document.getElementById('newTaskTitle').value.trim();
+  const project=document.getElementById('newTaskProject').value;
+  if(!title){showToast('Task List title 不可空白');return null}
+  const id='T-'+(++taskSequence),items=defaultTaskListItems(project);
+  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} child RunRequests · ready to edit`,tags:['Task List',`${items.length} items`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using the existing YAML List / RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child workspaces',listItems:cloneBatch(items)};
+  taskMap[id]=t;renderBoardFromMap();
+  return t;
+}
+
+document.getElementById('createTaskConfirm').onclick=()=>{
+  if(newTaskKind==='list'){
+    const t=createTaskListParent();if(!t)return;
+    closeModal('newTaskModal');openTaskListEditor(t.id);showToast('Task List created · New');return;
+  }
+  captureNewTaskSources();
+  const title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let goal='';
+  if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
+  else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+  if(!title||!goal){showToast('Task title / Prompt 不可空白');return}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
+  const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
+  if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
+  const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
+  const t={id,kind:'task',status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspacePolicy:newTaskWorkspaceMode,workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
+  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
+};
+
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();newTaskKind='task';
+  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderTaskKindUi();openModal('newTaskModal');
+};
+
+function syncTaskListDraftToParent(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
+  t.kind='list';t.listItems=cloneBatch(batchDraft);t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];
+  t.tags=['Task List',`${batchDraft.length} items`];
+  t.executionRoot=`${batchDraft.length} child workspaces`;
+  if(t.runtime==='idle')t.desc=`Task List · ${batchDraft.length} child RunRequests · ready to edit`;
+}
+
+function openTaskListEditor(id){
+  const t=taskMap[id];if(!t||!(t.kind==='list'||t.workspaceKind==='batch'))return;
+  document.getElementById('taskOverlay').classList.remove('open');
+  batchParentTaskId=id;
+  batchDraft=cloneBatch(t.listItems?.length?t.listItems:defaultTaskListItems(t.project));
+  if(t.runtime==='running'||t.runtime==='recover'){batchState={status:'running',index:t.progress?.[0]||0,recovered:t.runtime==='recover',currentDirty:false}}
+  else if(t.runtime==='stopped'||t.runtime==='failed'||t.status==='paused'){batchState={status:'stopped',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
+  else if(t.runtime==='done'){batchState={status:'completed',index:batchDraft.length,recovered:false,currentDirty:false}}
+  else{batchState={status:'idle',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
+  document.getElementById('taskListEditorTitle').textContent=t.title;
+  document.getElementById('taskListParentHint').textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
+  renderBatchDraft();showView('yaml');
+}
+document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
+document.getElementById('editTaskListDemo').onclick=()=>openTaskListEditor(currentTaskId);
+
+const baseOpenTaskById=openTaskById;
+openTaskById=function(id){
+  baseOpenTaskById(id);
+  const t=taskMap[id],isList=!!t&&(t.kind==='list'||t.workspaceKind==='batch');
+  const tab=document.getElementById('drawerItemsTab');tab.hidden=!isList;
+  document.getElementById('editTaskListDemo').hidden=!isList;
+  const host=document.getElementById('drawerListItems');
+  if(!isList){host.innerHTML='';return}
+  const items=t.listItems||[];host.className='drawer-list-items';
+  host.innerHTML=items.map((x,i)=>{
+    const state=i<(t.progress?.[0]||0)?'PASS':(i===(t.progress?.[0]||0)&&['running','recover','stopped','failed'].includes(t.runtime)?runtimeLabel(t.runtime):'Waiting');
+    return `<div class="drawer-list-item ${state==='PASS'?'done':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(state)}</span></div>`;
+  }).join('')||'<div class="empty-panel">No items</div>';
+  document.getElementById('editTaskListDemo').textContent=['running','recover'].includes(t.runtime)?'View List':'Edit List';
+};
+
+const baseRenderDrawerActions=renderDrawerActions;
+renderDrawerActions=function(t){
+  baseRenderDrawerActions(t);
+  if(t.kind==='list'||t.workspaceKind==='batch'){
+    const p=document.getElementById('taskPrimaryDemo');
+    if(t.runtime==='idle'){p.hidden=false;p.className='btn primary';p.textContent='Open List'}
+  }
+};
+
+// Task List editor: Running is locked. Paused/New can edit unfinished items.
+const baseRenderBatchDraft=renderBatchDraft;
+const baseSyncBatchViews=syncBatchViews;
+renderBatchDraft=function(){
+  const saved={...batchState},timer=batchRunTimer;
+  baseRenderBatchDraft();
+  batchState=saved;batchRunTimer=timer;setBatchControls();syncTaskListDraftToParent();
+};
+setBatchControls=function(){
+  const running=batchState.status==='running';
+  document.getElementById('stopBatch').hidden=!running;
+  document.getElementById('resumeBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('resetBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('runBatch').disabled=running||batchState.status==='stopped'||batchState.status==='completed';
+  document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=running);
+  document.getElementById('yamlEditor').disabled=running||(batchState.status==='stopped'&&batchState.index>0);
+  document.querySelectorAll('[data-yamltab]').forEach(el=>el.disabled=false);
+  document.querySelectorAll('.request[data-req]').forEach(row=>{
+    const i=+row.dataset.req,completed=i<batchState.index,current=i===batchState.index;
+    row.classList.toggle('completed-lock',completed);
+    if(completed)row.querySelectorAll('input,textarea,select,button').forEach(el=>el.disabled=true);
+    if(batchState.status==='stopped'&&current)row.querySelectorAll('[data-remove],[data-moveup],[data-movedown]').forEach(el=>el.disabled=true);
+  });
+  const add=document.getElementById('addRequest');if(add)add.disabled=running;
+  const hint=document.getElementById('taskListEditHint');
+  if(hint)hint.textContent=running?'Running · list locked':batchState.status==='stopped'?(batchState.index>0?'Paused · completed prefix locked; edit current/future items':'Paused · list editable'):'New / idle · list editable';
+};
+
+syncBatchViews=function(){
+  baseSyncBatchViews();
+  syncTaskListDraftToParent();
+  document.querySelectorAll('.previewitem').forEach((row,i)=>{
+    const chip=row.querySelector('.orderchip');
+    if(i<batchState.index){row.classList.add('done');chip.textContent='PASS'}
+    else if(i===batchState.index&&batchState.status==='running'){row.classList.add('active');chip.textContent=batchState.recovered?'Recovering':'Running'}
+    else if(i===batchState.index&&batchState.status==='stopped'){chip.textContent=batchState.currentDirty?'Restart on resume':'Stopped'}
+  });
+};
+
+const baseBindBatchForm=bindBatchForm;
+bindBatchForm=function(){
+  baseBindBatchForm();
+  document.querySelectorAll('[data-item][data-field]').forEach(el=>{
+    el.addEventListener(el.tagName==='SELECT'?'change':'input',()=>{
+      const i=+el.dataset.item;
+      if(batchState.status==='stopped'&&i===batchState.index){batchState.currentDirty=true;document.getElementById('batchLog').textContent+='\n[edit] current paused item changed · Resume will fresh restart this item'}
+      syncTaskListDraftToParent();
+    });
+  });
+  setBatchControls();
+};
+
+document.getElementById('batchPreset').onchange=e=>{
+  if(batchState.status==='running'){showToast('Running 時不能替換 Task List');return}
+  batchDraft=cloneBatch(batchPresets[e.target.value]||[]);
+  if(batchState.status==='stopped'){batchState.currentDirty=true}
+  renderBatchDraft();showToast(`套用 ${e.target.options[e.target.selectedIndex].text}`);
+};
+
+document.getElementById('runBatch').onclick=()=>{
+  const errors=batchValidationErrors(batchDraft);if(!batchDraft.length)errors.push('Task List is empty');
+  if(errors.length){document.getElementById('batchLog').textContent='[run] BLOCKED\n- '+errors.join('\n- ');showToast('請先修正 Task List');return}
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){t=createTaskListParent();if(!t)return;batchParentTaskId=t.id}
+  t.listItems=cloneBatch(batchDraft);
+  clearInterval(batchRunTimer);document.querySelectorAll('.previewitem').forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
+  batchState={status:'running',index:0,recovered:false,currentDirty:false};setBatchControls();
+  updateBatchParentTask('running','ongoing',0);
+  document.getElementById('batchLog').textContent='[00:00] Task List started · parent Task is Ongoing\n[00:00] child RunRequests stay nested inside the Task';
+  batchTick();batchRunTimer=setInterval(batchTick,900);
+};
+
+document.getElementById('stopBatch').onclick=()=>{
+  if(batchState.status!=='running')return;clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';batchState.currentDirty=false;setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);if(item)item.querySelector('.orderchip').textContent='Stopped';
+  updateBatchParentTask('stopped','paused',batchState.index);syncTaskListDraftToParent();
+  document.getElementById('batchLog').textContent+='\n[user] Task List paused · completed items locked, remaining items editable';showToast('Task List Paused · 可編輯剩餘 items');
+};
+
+document.getElementById('resumeBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  const restart=batchState.currentDirty;batchState.status='running';batchState.recovered=false;batchState.currentDirty=false;setBatchControls();updateBatchParentTask('running','ongoing',batchState.index);
+  document.getElementById('batchLog').textContent+=restart?'\n[user] Resume · current edited item starts with a fresh child run':'\n[user] Resume · continue current child durable state';
+  batchRunTimer=setInterval(batchTick,900);showToast(restart?'Resume · current item fresh restart':'Task List resumed');
+};
+
+document.getElementById('resetBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;batchState.currentDirty=false;batchState.recovered=false;
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(t){t.runtime='stopped';t.status='paused';t.stage=`Item ${batchState.index+1} ready to restart`;pushTaskHistory(t,'Current Task List item reset · completed prefix preserved')}
+  setBatchControls();syncBatchViews();document.getElementById('batchLog').textContent+='\n[reset] current item reset · completed prefix preserved';showToast('Current item reset');
+};
+
+document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
+
 renderChatSession();
 renderBoard('today');
+renderTaskKindUi();
 renderBatch('ui');
 </script>
 </body>
