@@ -1422,7 +1422,7 @@ function bindBatchForm(){
     };
     el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
   });
-  document.querySelectorAll('[data-yaml-source]').forEach(b=>b.onclick=()=>{const i=+b.dataset.item,field=b.dataset.field;batchDraft[i][field]=b.dataset.sourceValue;renderBatchDraft()});
+  document.querySelectorAll('[data-yaml-source]').forEach(b=>b.onclick=()=>{const i=+b.dataset.item,field=b.dataset.field;if(batchState.status==='stopped'&&i===batchState.index)batchState.currentDirty=true;batchDraft[i][field]=b.dataset.sourceValue;renderBatchDraft()});
   document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind,'batch'));
   document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
   const add=document.getElementById('addRequest');
@@ -1516,6 +1516,25 @@ document.getElementById('chatSend').onclick=()=>{
   session.messages.push(['assistant',reply]);input.value='';renderChatSession();
 };
 
+// Task List is the only batch-facing UI concept; YAML is an editor mode only.
+ensureBatchParentTask=function(){
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){
+    const id='T-'+(++taskSequence),items=cloneBatch(batchDraft.length?batchDraft:defaultTaskListItems(currentProjectKey));
+    batchParentTaskId=id;
+    t={id,kind:'list',status:'new',title:'New Task List',runtime:'idle',desc:`Task List · ${items.length} child RunRequests`,tags:[`${items.length} items`],workflow:'Task List',project:currentProjectKey,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using existing RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${items.length} child workspaces`,listItems:items};
+    taskMap[id]=t;
+  }
+  return t;
+};
+updateBatchParentTask=function(runtime,status,index=batchState.index){
+  const t=ensureBatchParentTask();
+  t.kind='list';t.runtime=runtime;t.status=status;t.progress=[Math.min(index,batchDraft.length),batchDraft.length];
+  t.stage=batchDraft.length?`Item ${Math.min(index+1,batchDraft.length)} / ${batchDraft.length}`:'Task List';
+  t.desc=`Task List · ${batchDraft.length} child RunRequests · ${runtimeLabel(runtime)}`;
+  t.tags=[`${batchDraft.length} items`];t.workflow='Task List';t.listItems=cloneBatch(batchDraft);t.executionRoot=`${batchDraft.length} child workspaces`;
+  renderBoardFromMap();return t;
+};
 // --- Unified Task / Task List mock behavior ---
 function defaultTaskListItems(projectKey){
   const root=projectMeta[projectKey]?.path||projectKey||'C:\\project';
@@ -1552,7 +1571,7 @@ function createTaskListParent(){
   const project=document.getElementById('newTaskProject').value;
   if(!title){showToast('Task List title 不可空白');return null}
   const id='T-'+(++taskSequence),items=defaultTaskListItems(project);
-  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} child RunRequests · ready to edit`,tags:['Task List',`${items.length} items`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using the existing YAML List / RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child workspaces',listItems:cloneBatch(items)};
+  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} child RunRequests · ready to edit`,tags:[`${items.length} items`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using the existing YAML List / RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child workspaces',listItems:cloneBatch(items)};
   taskMap[id]=t;renderBoardFromMap();
   return t;
 }
@@ -1588,7 +1607,7 @@ document.getElementById('chatToTask').onclick=()=>{
 function syncTaskListDraftToParent(){
   const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
   t.kind='list';t.listItems=cloneBatch(batchDraft);t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];
-  t.tags=['Task List',`${batchDraft.length} items`];
+  t.tags=[`${batchDraft.length} items`];
   t.executionRoot=`${batchDraft.length} child workspaces`;
   if(t.runtime==='idle')t.desc=`Task List · ${batchDraft.length} child RunRequests · ready to edit`;
 }
@@ -1727,6 +1746,14 @@ document.getElementById('resetBatch').onclick=()=>{
 };
 
 document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
+
+const baseDeleteTaskAction=document.getElementById('deleteTaskDemo').onclick;
+document.getElementById('deleteTaskDemo').onclick=()=>{
+  const id=currentTaskId,t=taskMap[id];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
+  if(id===batchParentTaskId){clearInterval(batchRunTimer);batchRunTimer=null;batchParentTaskId=null;batchState={status:'idle',index:0,recovered:false,currentDirty:false}}
+  delete taskMap[id];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast(t.kind==='list'?'Task List deleted':'Mock Task deleted');
+};
 
 renderChatSession();
 renderBoard('today');
