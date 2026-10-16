@@ -1436,7 +1436,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 };
 
 function openPathPicker(index,field,kind,context='batch'){
-  pickerTarget=context==='task'?{context:'task',field}:{context:'batch',index,field};
+  pickerTarget=context==='task'?{context:'task',field}:context==='plan'?{context:'plan',index,field}:{context:'batch',index,field};
   const item=context==='task'?{project:projectMeta[document.getElementById('newTaskProject').value]?.path||'C:\\project'}:(batchDraft[index]||{});
   const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
   const options=kind==='validator'
@@ -1448,8 +1448,15 @@ function openPathPicker(index,field,kind,context='batch'){
   document.getElementById('pathPickerHelp').textContent='Mock picker：也可以直接貼絕對或相對路徑。';
   document.getElementById('pathPickerOptions').innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
   document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
-    if(pickerTarget?.context==='task'){newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources()}
-    else if(pickerTarget&&batchDraft[pickerTarget.index]){batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;renderBatchDraft()}
+    if(pickerTarget?.context==='task'){
+      newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources();
+    }else if(pickerTarget?.context==='plan'&&batchDraft[pickerTarget.index]){
+      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
+      const t=taskMap[currentTaskId];
+      if(t){commitPlanDraft(t,{markDirty:t.status==='paused'&&pickerTarget.index===batchState.index});renderBoardFromMap();renderExecutionPlan(t);}
+    }else if(pickerTarget&&batchDraft[pickerTarget.index]){
+      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;renderBatchDraft();
+    }
     closeModal('pathPickerModal');showToast('已選擇 mock 路徑');
   });
   openModal('pathPickerModal');
@@ -2342,7 +2349,7 @@ function bindFullPlan(t){
     });
   });
   document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'batch'));
+  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'plan'));
   document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
   document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
