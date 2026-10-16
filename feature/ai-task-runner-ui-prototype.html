@@ -2146,12 +2146,12 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     let goal='';if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
     if(!goal){showToast('Task Prompt 不可空白');return}
     if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
-    const workspace=resolveTaskWorkspace(project,t.id,newTaskWorkspaceMode);if(!workspace.ok&&t.status==='new'){showToast(workspace.reason);return}
+    const workspace=resolveTaskWorkspace(project,t.id,newTaskWorkspaceMode);if(!workspace.ok){showToast(workspace.reason);return}
     t.workflow=workflow;t.goal=goal;t.promptSource={...newTaskDraft};t.workspacePolicy=newTaskWorkspaceMode;
     if(workspace.ok){t.workspaceKind=workspace.kind;t.branch=workspace.branch;t.executionRoot=workspace.root}
     const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');t.tags=tags;
   }
-  const runtimeChanged=before!==taskRuntimeFingerprint(t);
+  const runtimeChanged=!isSequenceTask(t)&&before!==taskRuntimeFingerprint(t);
   if(t.status==='paused'&&runtimeChanged){
     t.configDirty=true;t.desc='Paused Task 已修改執行設定 · 下一次將 fresh restart 目前工作。';
     pushTaskHistory(t,'Task edited while Paused · restart required');
