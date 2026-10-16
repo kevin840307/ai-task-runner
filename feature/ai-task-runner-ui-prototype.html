@@ -224,6 +224,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .execution-plan-section{margin-top:2px}.execution-plan-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.execution-plan-head h3{margin:0!important}.execution-plan-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.execution-plan-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .execution-plan-section .steps-summary{margin-bottom:7px}.execution-plan-section .sequence-composer{padding:0}.execution-plan-section .sequence-item .reqhead{min-height:43px}.execution-plan-section .sequence-item .request-body{margin-left:42px}.execution-plan-section .sequence-add-row{display:none}
 .yaml-plan-modal{width:min(760px,94vw)}.yaml-plan-editor{width:100%;min-height:430px;max-height:62vh;resize:vertical}.yaml-plan-status{margin-top:8px;padding:8px 10px;border-radius:8px;background:#f7f9fb;color:var(--muted);font-size:9px}.yaml-plan-status.ok{background:#f0faf4;color:#15803d}.yaml-plan-status.bad{background:#fff4f2;color:#b42318}
+
+.single-plan-strip{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 10px;border:1px solid #e1e7ee;border-radius:10px;background:#fbfcfd}
+.single-plan-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#eef3f5;color:#64748b;font-size:9px;font-weight:900}.single-plan-copy strong{display:block;font-size:10px}.single-plan-copy small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.single-plan-state{padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}.single-plan-state.running{background:#e9f6f4;color:#0f766e}.single-plan-state.done{background:#eaf8ee;color:#15803d}.single-plan-state.recover{background:#fff3e5;color:#9a5b00}
 </style>
 </head>
 <body>
@@ -1997,6 +2000,84 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
 
 // Normal Task creation is now always one Task; composition happens later in Details > Steps.
 newTaskKind='task';renderTaskKindUi();
+
+// --- Final execution-plan UX: no mode switching; YAML is modal only ---
+let pendingYamlPlan=null;
+function isSinglePlainTask(){
+  const t=taskMap[currentTaskId];return !!t&&!isSequenceTask(t)&&batchDraft.length<=1;
+}
+const visualRenderBatchDraft=renderBatchDraft;
+renderBatchDraft=function(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:taskMap[currentTaskId];
+  const form=document.getElementById('formList');
+  if(t&&!isSequenceTask(t)&&batchDraft.length===1){
+    const x=batchDraft[0],locked=['running','recover'].includes(t.runtime);
+    form.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>Single task</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${runtimeClass(t.runtime)}">${escapeHtml(runtimeLabel(t.runtime))}</span></div>`;
+    document.getElementById('taskListParentHint').textContent='Runs once · add another task only if this work needs a sequence';
+    document.getElementById('drawerAddStep').disabled=locked;document.getElementById('drawerAddExisting').disabled=locked;
+    document.getElementById('stepsAdvanced').disabled=locked;
+    syncBatchViews();syncTaskListDraftToParent();return;
+  }
+  visualRenderBatchDraft();
+  const count=batchDraft.length;
+  document.getElementById('taskListParentHint').textContent=`${count} tasks · executed top to bottom · one Board Task`;
+  const locked=t&&['running','recover'].includes(t.runtime);
+  document.getElementById('drawerAddStep').disabled=locked;document.getElementById('drawerAddExisting').disabled=locked;
+};
+
+function openYamlPlanModal(){
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  pendingYamlPlan=null;
+  document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const status=document.getElementById('yamlPlanStatus');status.className='yaml-plan-status';status.textContent='Editing the same execution plan. Validate before Apply.';
+  document.getElementById('applyYamlPlan').disabled=true;
+  openModal('yamlPlanModal');
+}
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+document.getElementById('yamlEditor').oninput=()=>{
+  pendingYamlPlan=null;document.getElementById('applyYamlPlan').disabled=true;
+  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Changed · validate before Apply.';
+};
+document.getElementById('validateYaml').onclick=()=>{
+  const source=document.getElementById('yamlEditor').value.trim(),items=parseSimpleYamlList(source),errors=batchValidationErrors(items);
+  if(!items.length)errors.push('execution plan must contain at least one task');
+  const status=document.getElementById('yamlPlanStatus');
+  if(errors.length){pendingYamlPlan=null;document.getElementById('applyYamlPlan').disabled=true;status.className='yaml-plan-status bad';status.textContent='Invalid · '+errors.join(' · ');showToast(`YAML invalid · ${errors.length} issue(s)`);return}
+  pendingYamlPlan=items;document.getElementById('applyYamlPlan').disabled=false;status.className='yaml-plan-status ok';status.textContent=`Valid · ${items.length} task${items.length===1?'':'s'} ready to apply.`;showToast('YAML valid');
+};
+document.getElementById('applyYamlPlan').onclick=()=>{
+  if(!pendingYamlPlan)return;
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時不能修改 execution plan');return}
+  const previousCount=batchDraft.length;batchDraft=cloneBatch(pendingYamlPlan);
+  batchState.currentDirty=batchState.status==='stopped';sequenceExpandedIndex=-1;syncTaskListDraftToParent();
+  if(batchDraft.length>1){t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);t.tags=[`${batchDraft.length} steps`];}
+  else if(previousCount>1&&batchDraft.length===1){
+    const x=batchDraft[0];t.kind='task';t.workspaceKind='main';t.workflow=x.workflow;t.goal=x.prompt||t.goal;t.listItems=null;t.tags=['workflow'];
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+  }
+  renderBatchDraft();renderBoardFromMap();closeModal('yamlPlanModal');pendingYamlPlan=null;showToast('Execution plan YAML applied');
+};
+
+// New Task always creates one Task. Composition happens later from Overview.
+document.getElementById('addNextTaskFromNew').onclick=()=>{};
+document.getElementById('addExistingTaskFromNew').onclick=()=>{};
+
+// Keep the drawer on Overview; composition never navigates away.
+document.getElementById('drawerAddStep').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 execution plan 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push({prompt:'Next task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+  sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;syncTaskListDraftToParent();renderBatchDraft();renderBoardFromMap();showToast('Next task added');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 execution plan 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
+};
 
 renderChatSession();
 renderBoard('today');
