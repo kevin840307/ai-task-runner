@@ -12,5 +12,7 @@
 @import url("./css/workflow-studio.css");
 @import url("./css/workflow-generator.css");
 
+@import url("./css/future-integrated.css");
+
 /* Palette / appearance overrides must load last. */
 @import url("./css/theme.css");
