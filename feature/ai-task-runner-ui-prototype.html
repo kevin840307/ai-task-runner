@@ -231,6 +231,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .edit-task-scope-note{margin:0 0 10px;padding:9px 10px;border:1px solid #dfe5fb;border-radius:9px;background:#f7f8ff;color:#59617f;font-size:9px;line-height:1.45}.edit-task-scope-note strong{color:#4338ca}
 .task-edit-lock{margin-left:auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}
 #editTaskDemo:disabled{opacity:.5;cursor:not-allowed}
+
+.task-edit-notice{margin:-4px 0 12px;padding:9px 10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed;color:#8a5500;font-size:9px;line-height:1.45}.task-edit-notice strong{color:#7a4800}
 </style>
 </head>
 <body>
@@ -360,6 +362,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
         <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
+        <div class="task-edit-notice" id="taskEditNotice" hidden></div>
         <section class="section execution-plan-section">
           <div class="execution-plan-head">
             <div><h3>Execution plan</h3><p id="taskListEditHint">1 task · runs as one Task</p></div>
@@ -394,7 +397,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
-    <div class="modal-head"><div><h2>New Task</h2><p>先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-head"><div><h2 id="taskFormTitle">New Task</h2><p id="taskFormHelp">先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
