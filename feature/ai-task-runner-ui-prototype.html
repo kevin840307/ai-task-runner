@@ -326,7 +326,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
           <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
         </aside>
         <main class="existing-main">
-          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>YAML Tasks 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 YAML Tasks 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
+          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>Task Lists 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 Task Lists 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
         </main>
       </div>
     </section>
@@ -365,7 +365,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
-    <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 YAML Tasks 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 Task Lists 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="task-kind-switch"><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
@@ -452,8 +452,8 @@ const chatPresets={
   ],
   long:[
     ['assistant','這個情境用來測試長對話。'],
-    ['user','我希望 Task、YAML Task、Workflow、Prompt 都能一起用，但不要讓 UI 變得很複雜。'],
-    ['assistant','建議把互動責任分清楚：Chat 負責討論；Task 負責工作管理與 runtime projection；YAML Tasks 負責 batch RunRequest；Workflows / Prompts 維持原本資產管理。'],
+    ['user','我希望 Task、Task List、Workflow、Prompt 都能一起用，但不要讓 UI 變得很複雜。'],
+    ['assistant','建議把互動責任分清楚：Chat 負責討論；Task 負責工作管理與 runtime projection；Task Lists 負責 batch RunRequest；Workflows / Prompts 維持原本資產管理。'],
     ['user','那從 Chat 轉成 Task 呢？'],
     ['assistant','可以提供「建立 Task」明確動作，把目前輸入帶入 New Task 表單，但不應自動執行。這樣操作快速，也不會讓一般聊天誤觸 Runner。'],
     ['user','如果 Task 正在 Recovering，能直接拖 Closed 嗎？'],
@@ -491,9 +491,9 @@ document.getElementById('chatToTask').onclick=()=>{
 
 const taskPresets={
   today:[
-    {id:'T-104',status:'new',title:'新增 YAML Task UI',runtime:'idle',desc:'讓 YAML List 能用 Form / YAML 兩種方式編排與執行。',tags:['ralphy_ai_validate','UI'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,5],elapsed:'—',stage:'Idle',session:'—',goal:'新增 YAML List 的 UI builder，維持同一套 RunRequest / Runner contract。'},
+    {id:'T-104',status:'new',title:'新增 Task List UI',runtime:'idle',desc:'讓 YAML List 能用 Form / YAML 兩種方式編排與執行。',tags:['ralphy_ai_validate','UI'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,5],elapsed:'—',stage:'Idle',session:'—',goal:'新增 YAML List 的 UI builder，維持同一套 RunRequest / Runner contract。'},
     {id:'T-105',status:'new',title:'重整 README Workflow 說明',runtime:'idle',desc:'文件同步目前 Stage / PASS / FAIL contract。',tags:['docs'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal:'更新文件但不引入 legacy contract。'},
-    {id:'T-103',status:'ongoing',title:'完成 feature/ui 新 Task 介面',runtime:'running',desc:'Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。',tags:['feature/ui','review'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,5],elapsed:'12m',stage:'review',session:'same',goal:'保持目前 UI 風格，加入 Chat、YAML Tasks 與 Azure-style Task board。'},
+    {id:'T-103',status:'ongoing',title:'完成 feature/ui 新 Task 介面',runtime:'running',desc:'Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。',tags:['feature/ui','review'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,5],elapsed:'12m',stage:'review',session:'same',goal:'保持目前 UI 風格，加入 Chat、Task Lists 與 Azure-style Task board。'},
     {id:'T-102',status:'ongoing',title:'修正 Studio stage test',runtime:'recover',desc:'API 暫時錯誤，StageExecutor 正在 same-session retry。',tags:['studio','API'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[2,5],elapsed:'4m',stage:'execute',session:'same retry',goal:'修正 Stage Test API 502 並保持正式 runtime contract。'},
     {id:'T-099',status:'paused',title:'24H reliability review',runtime:'stopped',desc:'User stop；可從 Task 詳細頁 Resume / Reset。',tags:['reliability','live'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[2,6],elapsed:'3h 18m',stage:'execute',session:'role',goal:'跑完整 reliability review；使用者手動停止後保留可 Resume 狀態。'},
     {id:'T-091',status:'closed',title:'移除舊 Discussion 模式',runtime:'done',desc:'舊契約與 UI 已清理，測試通過。',tags:['cleanup'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[5,5],elapsed:'28m',stage:'Completed',session:'fresh final',goal:'移除 Discussion / legacy runtime paths。'}
@@ -586,11 +586,11 @@ function syncRuntimeForBoardMove(t,oldStatus,newStatus){
     if(newStatus==='paused'&&batchState.status==='running'){
       clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
       const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);if(item)item.querySelector('.orderchip').textContent='Stopped';
-      t.runtime='stopped';pushTaskHistory(t,'Board pause · YAML Batch stopped · child state preserved');return;
+      t.runtime='stopped';pushTaskHistory(t,'Board pause · Task List stopped · child state preserved');return;
     }
     if(oldStatus==='paused'&&newStatus==='ongoing'&&batchState.status==='stopped'){
       batchState.status='running';setBatchControls();batchRunTimer=setInterval(batchTick,900);
-      t.runtime='running';pushTaskHistory(t,'Board resume · YAML Batch continued');return;
+      t.runtime='running';pushTaskHistory(t,'Board resume · Task List continued');return;
     }
   }
   if(newStatus==='paused'&&['running','recover'].includes(t.runtime)){
@@ -1007,7 +1007,7 @@ function renderBatchDraft(){
   clearInterval(batchRunTimer);batchState={status:'idle',index:0,recovered:false};setBatchControls();
   const form=document.getElementById('formList');
   if(!batchDraft.length){
-    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 YAML Task。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
+    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 Task List。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
   }else{
     form.innerHTML=batchDraft.map((x,i)=>`<div class="request" data-req="${i}">
       <div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div>
@@ -1167,7 +1167,7 @@ function ensureBatchParentTask(){
   if(!t){
     const id='YAML-'+(++taskSequence),preset=document.getElementById('batchPreset');
     batchParentTaskId=id;
-    t={id,status:'ongoing',title:`YAML Batch · ${preset.options[preset.selectedIndex]?.text||'Batch'}`,runtime:'running',desc:`Sequential YAML List · ${batchDraft.length} child RunRequests`,tags:['YAML Batch',`${batchDraft.length} items`],workflow:'YAML List',project:currentProjectKey||'ai-task-runner',progress:[0,batchDraft.length],elapsed:'0m',stage:`Item 1 / ${batchDraft.length}`,session:'batch',goal:'Execute the current YAML Tasks batch through the existing YAML List / RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${batchDraft.length} child RunRequest workspaces`};
+    t={id,status:'ongoing',title:`Task List · ${preset.options[preset.selectedIndex]?.text||'Batch'}`,runtime:'running',desc:`Sequential YAML List · ${batchDraft.length} child RunRequests`,tags:['Task List',`${batchDraft.length} items`],workflow:'YAML List',project:currentProjectKey||'ai-task-runner',progress:[0,batchDraft.length],elapsed:'0m',stage:`Item 1 / ${batchDraft.length}`,session:'batch',goal:'Execute the current Task Lists batch through the existing YAML List / RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${batchDraft.length} child RunRequest workspaces`};
     taskMap[id]=t;
   }
   return t;
@@ -1177,7 +1177,7 @@ function updateBatchParentTask(runtime,status,index=batchState.index){
   t.runtime=runtime;t.status=status;t.progress=[Math.min(index,batchDraft.length),batchDraft.length];
   t.stage=batchDraft.length?`YAML item ${Math.min(index+1,batchDraft.length)} / ${batchDraft.length}`:'Batch';
   t.desc=`Sequential YAML List · ${batchDraft.length} child RunRequests · ${runtimeLabel(runtime)}`;
-  t.tags=['YAML Batch',`${batchDraft.length} items`];
+  t.tags=['Task List',`${batchDraft.length} items`];
   t.executionRoot=`${batchDraft.length} child RunRequest workspaces`;
   renderBoardFromMap();
   return t;
@@ -1219,7 +1219,7 @@ document.getElementById('runBatch').onclick=()=>{
   batchState={status:'running',index:0,recovered:false};setBatchControls();
   batchParentTaskId=null;
   updateBatchParentTask('running','ongoing',0);
-  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] one YAML Batch parent Task created in Tasks\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
+  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] one Task List parent Task created in Tasks\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
   batchTick();batchRunTimer=setInterval(batchTick,900);
 };
 document.getElementById('stopBatch').onclick=()=>{
@@ -1246,7 +1246,7 @@ document.getElementById('resetBatch').onclick=()=>{
   resetBatchRuntime();
   syncBatchViews();
   if(batchParentTaskId&&taskMap[batchParentTaskId]){
-    const t=taskMap[batchParentTaskId];t.runtime='idle';t.status='new';t.progress=[0,batchDraft.length];t.stage='Batch draft';t.desc='YAML Batch reset；draft unlocked for editing.';renderBoardFromMap();
+    const t=taskMap[batchParentTaskId];t.runtime='idle';t.status='new';t.progress=[0,batchDraft.length];t.stage='Batch draft';t.desc='Task List reset；draft unlocked for editing.';renderBoardFromMap();
   }
   document.getElementById('batchLog').textContent='[reset] stopped batch abandoned · draft unlocked for editing';
   showToast('Mock Batch reset · parent Task moved to New');
@@ -1403,7 +1403,7 @@ function yamlSourceTabs(i,field,value,modes){
 function renderBatchDraft(){
   const form=document.getElementById('formList');
   if(!batchDraft.length){
-    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 YAML Task。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
+    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 Task List。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
   }else{
     form.innerHTML=batchDraft.map((x,i)=>{
       const caps=workflowCaps(x.workflow),validation=[];
