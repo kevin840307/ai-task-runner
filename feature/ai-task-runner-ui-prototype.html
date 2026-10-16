@@ -207,7 +207,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <section class="view page" id="view-yaml">
       <header class="header">
         <div class="title"><h1>YAML Tasks</h1><p>同一個 YAML List / RunRequest contract 的 UI builder，不建立第二套 Runner</p></div>
-        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option><option value="empty">Empty batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Stop</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn primary" id="runBatch">Run Batch</button></div>
+        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option><option value="empty">Empty batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Stop</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn" id="resetBatch" hidden>Reset</button><button class="btn primary" id="runBatch">Run Batch</button></div>
       </header>
       <div class="yamlbody">
         <section class="yamlleft">
@@ -554,7 +554,7 @@ function renderBoardFromMap(){
   bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
 }
 function pushTaskHistory(t,message){
-  t.history=t.history||[];
+  if(!t.history)t.history=[['20:01','Task created'],['20:02','Workflow snapshot frozen']];
   const now=new Date(),hh=String(now.getHours()).padStart(2,'0'),mm=String(now.getMinutes()).padStart(2,'0');
   t.history.push([`${hh}:${mm}`,message]);
 }
@@ -922,9 +922,14 @@ function batchValidationErrors(items){
   return errors;
 }
 function setBatchControls(){
+  const locked=['running','stopped'].includes(batchState.status);
   document.getElementById('stopBatch').hidden=batchState.status!=='running';
   document.getElementById('resumeBatch').hidden=batchState.status!=='stopped';
-  document.getElementById('runBatch').disabled=batchState.status==='running';
+  document.getElementById('resetBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('runBatch').disabled=locked;
+  document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=locked);
+  document.getElementById('yamlEditor').disabled=locked;
+  document.querySelectorAll('[data-yamltab]').forEach(el=>el.disabled=locked);
 }
 function resetBatchRuntime(){
   clearInterval(batchRunTimer);batchRunTimer=null;batchState={status:'idle',index:0,recovered:false};setBatchControls();
