@@ -189,6 +189,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .sidebar-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
 .sidebar-scroll::-webkit-scrollbar{width:6px}.sidebar-scroll::-webkit-scrollbar-track{background:transparent}.sidebar-scroll::-webkit-scrollbar-thumb{border-radius:999px;background:#cbd5e1}.sidebar-scroll::-webkit-scrollbar-thumb:hover{background:#94a3b8}
 .project-area{display:block;margin-top:10px;overflow:visible}.project-list{display:grid;gap:1px}.project-current-path{margin-top:6px}
+
+.task-kind-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.task-kind-switch button{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;text-align:left;color:var(--text)}.task-kind-switch button:hover{border-color:#aebbc7}.task-kind-switch button.active{border-color:var(--accent);background:#f5fbfa;box-shadow:0 0 0 2px rgba(15,118,110,.07)}.task-kind-switch strong{font-size:11px}.task-kind-switch small{color:var(--muted);font-size:8px}
+.task-list-setup{margin-top:9px;padding:11px;border:1px solid #dfe5fb;border-radius:10px;background:#f8f9ff}.task-list-setup-copy{display:flex;align-items:center;gap:8px}.task-list-setup-copy strong{font-size:11px;color:#4338ca}.task-list-setup-copy span{color:var(--muted);font-size:9px}.task-list-mini-preview{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.task-list-mini-preview span{padding:4px 7px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:8px;font-weight:850}
+.task-list-pane-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.task-list-pane-head h3{margin:0}.drawer-list-items{display:grid;gap:6px}.drawer-list-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:#fbfdff}.drawer-list-item.done{opacity:.68}.drawer-list-item .n{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900}.drawer-list-item strong{display:block;font-size:9px}.drawer-list-item small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.drawer-list-item .state{font-size:8px;font-weight:900;color:var(--accent-dark)}
 </style>
 </head>
 <body>
@@ -269,28 +273,24 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="listview" id="taskListView"></div>
     </section>
 
-    <!-- YAML Tasks -->
+    <!-- Task List Editor: opened from Tasks, no standalone sidebar entry -->
     <section class="view page" id="view-yaml">
       <header class="header">
-        <div class="title"><h1>YAML Tasks</h1><p>同一個 YAML List / RunRequest contract 的 UI builder，不建立第二套 Runner</p></div>
-        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option><option value="empty">Empty batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Stop</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn" id="resetBatch" hidden>Reset</button><button class="btn primary" id="runBatch">Run Batch</button></div>
+        <div class="title"><h1 id="taskListEditorTitle">Task List Editor</h1><p>Task 的批次型態 · Form / YAML 都編輯同一份 ordered child RunRequests</p></div>
+        <div class="actions"><button class="btn" id="backToTasks">← Tasks</button><select class="mockselect" id="batchPreset"><option value="ui">Mock: UI list</option><option value="reliability">Mock: Reliability list</option><option value="multi">Mock: Multi-project list</option><option value="empty">Mock: Empty list</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Pause</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn" id="resetBatch" hidden>Reset current</button><button class="btn primary" id="runBatch">Run List</button></div>
       </header>
       <div class="yamlbody">
         <section class="yamlleft">
           <div class="tabs"><button class="tab active" data-yamltab="form">Form</button><button class="tab" data-yamltab="code">YAML</button></div>
-          <div class="yamlpane" id="yaml-form">
-            <div class="formlist" id="formList"></div>
-          </div>
-          <div class="yamlpane hidden" id="yaml-code">
-<textarea class="code" id="yamlEditor"></textarea>
-          </div>
+          <div class="yamlpane" id="yaml-form"><div class="formlist" id="formList"></div></div>
+          <div class="yamlpane hidden" id="yaml-code"><textarea class="code" id="yamlEditor"></textarea></div>
         </section>
         <section class="yamlright">
-          <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
-          <div class="yaml-contract-note"><strong>同一份 RunRequest draft</strong><span>Workflow 會決定需要哪些驗證欄位；Form / YAML 隨時可切換。</span></div>
-          <div class="yaml-parent-hint"><span>▦</span><div><strong>Tasks 只顯示 1 張 YAML Batch 父 Task</strong><br>子 RunRequest 的進度、停止、恢復都彙總到這張 Task，不把每個 item 變成 Board 卡片。</div></div>
+          <div class="batchintro"><div><h2>List execution</h2><p>Board 上只有父 Task；children 依序走既有 YAML List / RunRequest runtime。</p></div><span class="pill">Sequential</span></div>
+          <div class="yaml-contract-note"><strong>Task List = Task kind</strong><span>不是另一套 Runner。Paused 時可編輯未完成 items；完成項目保留。</span></div>
+          <div class="yaml-parent-hint"><span>▦</span><div><strong id="taskListParentHint">Parent Task</strong><br><span id="taskListEditHint">Running 時鎖定；Paused / New 可修改剩餘清單。</span></div></div>
           <div class="preview" id="batchPreview"></div>
-          <div class="batch-log" id="batchLog">Mock batch is idle. Choose a preset/outcome and press Run Batch.</div>
+          <div class="batch-log" id="batchLog">Task List is idle. Edit items, Validate, then Run List.</div>
         </section>
       </div>
     </section>
@@ -337,13 +337,14 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
       <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
-    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Items</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
       <div class="drawer-pane active" id="drawer-overview">
         <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
         <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
       </div>
+      <div class="drawer-pane" id="drawer-items"><section class="section"><div class="task-list-pane-head"><h3>Task List items</h3><button class="btn" id="editTaskListDemo">Edit List</button></div><div id="drawerListItems"></div></section></div>
       <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
     <article class="task-live-activity">
@@ -364,12 +365,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="modal-card task-create-modal">
     <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 YAML Tasks 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
+      <div class="task-kind-switch"><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
         <div class="field full"><label>Task title</label><input id="newTaskTitle" value="Implement mock interaction"></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
-        <div class="field"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
+        <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
+      <div id="newTaskListSetup" class="task-list-setup" hidden>
+        <div class="task-list-setup-copy"><strong>Task List</strong><span>建立後仍是一張 Board Task；items 只在 Task 內展開。</span></div>
+        <div class="task-list-mini-preview"><span>2 starter items</span><span>Form / YAML</span><span>Sequential</span><span>Pause to edit</span></div>
+      </div>
       <div class="workspace-selector-wrap">
         <div class="workspace-selector-title"><div><strong>Workspace isolation</strong><small>同一個實際路徑最多一個 Running Task</small></div><span class="workspace-recommended">Auto recommended</span></div>
         <div id="newTaskWorkspace"></div>
