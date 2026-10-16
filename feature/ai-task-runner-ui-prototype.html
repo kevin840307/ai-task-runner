@@ -1935,7 +1935,7 @@ function singleTaskItem(t){
 function deriveStepState(t){
   const multi=isSequenceTask(t),index=multi?(t.progress?.[0]||0):(t.runtime==='done'?1:0);
   if(t.runtime==='running'||t.runtime==='recover')return {status:'running',index,recovered:t.runtime==='recover',currentDirty:false};
-  if(t.runtime==='stopped'||t.runtime==='attention'||t.runtime==='failed'||t.status==='paused')return {status:'stopped',index,recovered:false,currentDirty:false};
+  if(t.runtime==='stopped'||t.runtime==='attention'||t.runtime==='failed'||t.status==='paused')return {status:'stopped',index,recovered:false,currentDirty:!!t.configDirty};
   if(t.runtime==='done')return {status:'completed',index:multi?(t.listItems?.length||1):1,recovered:false,currentDirty:false};
   return {status:'idle',index:0,recovered:false,currentDirty:false};
 }
@@ -2271,7 +2271,7 @@ function setPlanDraftForTask(t){
   batchState=deriveStepState(t);
   if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
 }
-function commitPlanDraft(t,{markDirty=true}={}){
+function commitPlanDraft(t,{markDirty=false}={}){
   batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
   if(batchDraft.length<=1){
     const x=batchDraft[0]||planItemDefaults({},t,0);
@@ -2286,7 +2286,7 @@ function commitPlanDraft(t,{markDirty=true}={}){
     t.tags=[`${batchDraft.length} tasks`];t.progress=[Math.min(t.progress?.[0]||0,batchDraft.length),batchDraft.length];
     t.executionRoot=`${batchDraft.length} child workspaces`;t.desc=`${batchDraft.length} ordered tasks · ${runtimeLabel(t.runtime)}`;
   }
-  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;}
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused Task · current task changed · restart required.';}
 }
 function planizeSourceHtml(html,i){
   return String(html||'')
@@ -2324,8 +2324,10 @@ function renderFullPlan(t){
   document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   host.innerHTML=items.map((x,i)=>{
     const s=planStateFor(t,i,items.length),expanded=i===sequenceExpandedIndex,completed=s.done;
+    const currentLocked=t.status==='paused'&&s.current;
     const canMutate=editable&&!completed;
-    return `<article class="plan-row ${expanded?'expanded':''} ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-plan-expand="${i}">${expanded?'Close':'Edit'}</button><button type="button" data-plan-up="${i}" ${!canMutate||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canMutate||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canMutate||items.length<=1?'disabled':''}>×</button></div></div></div><div class="plan-row-body">${planRowBody(x,i,editable)}</div></article>`;
+    const canRestructure=canMutate&&!currentLocked;
+    return `<article class="plan-row ${expanded?'expanded':''} ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-plan-expand="${i}">${expanded?'Close':'Edit'}</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure||items.length<=1?'disabled':''}>×</button></div></div></div><div class="plan-row-body">${planRowBody(x,i,editable)}</div></article>`;
   }).join('');
   ['planAddTask','planAddExisting','planEditYaml'].forEach(id=>document.getElementById(id).disabled=!editable);
   bindFullPlan(t);
@@ -2336,15 +2338,15 @@ function bindFullPlan(t){
     el.disabled=!taskEditable(t)||(+el.dataset.planItem)<batchState.index;
     const ev=el.tagName==='SELECT'?'change':'input';el.addEventListener(ev,()=>{
       const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;batchDraft[i][field]=el.value;
-      commitPlanDraft(t);if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
+      commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
     });
   });
-  document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'batch'));
   document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
-  document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 }
 function renderExecutionPlan(t){
   if(!t)return;
@@ -2366,7 +2368,7 @@ function addPlanTask(t,{openPlan=true}={}){
   if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
   if(batchParentTaskId!==t.id)setPlanDraftForTask(t);
   const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
-  batchDraft.push(planItemDefaults({prompt:'Next task',project:root},t,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(t);renderBoardFromMap();renderExecutionPlan(t);
+  batchDraft.push(planItemDefaults({prompt:'Next task',project:root},t,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(t,{markDirty:false});renderBoardFromMap();renderExecutionPlan(t);
   if(openPlan)openFullPlanPage(t.id);
 }
 function openFullPlanPage(id=currentTaskId){
@@ -2388,7 +2390,7 @@ openExistingTaskPicker=function(context){
   host.innerHTML=candidates.length?candidates.map(t=>`<button type="button" class="existing-task-option" data-existing-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>${escapeHtml(runtimeLabel(t.runtime))}</span></button>`).join(''):'<div class="empty-panel">No standalone Tasks available.</div>';
   host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
     const owner=taskMap[currentTaskId],source=taskMap[b.dataset.existingId];if(!owner||!source||!taskEditable(owner))return;
-    if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);batchDraft.push(planItemDefaults(taskToListItem(source),owner,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner);closeModal('existingTaskModal');renderBoardFromMap();renderExecutionPlan(owner);
+    if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);batchDraft.push(planItemDefaults(taskToListItem(source),owner,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});closeModal('existingTaskModal');renderBoardFromMap();renderExecutionPlan(owner);
     if(context==='drawer')openFullPlanPage(owner.id);else if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(owner);showToast('Existing Task copied into execution plan');
   });openModal('existingTaskModal');
 };
@@ -2397,13 +2399,14 @@ document.getElementById('planAddExisting').onclick=()=>{const t=taskMap[currentT
 
 function openPlanYamlForTask(t){
   if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
+  if(t.status==='paused'&&(t.progress?.[0]||0)>0){showToast('已有完成 tasks；請用 Full Plan 編輯 current / future tasks，避免改寫 PASS 歷史');return}
   if(batchParentTaskId!==t.id)setPlanDraftForTask(t);pendingYamlPlan=null;document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
   const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Editing the same execution plan. Validate before Apply.';document.getElementById('applyYamlPlan').disabled=true;openModal('yamlPlanModal');
 }
 openYamlPlanModal=function(){const t=taskMap[currentTaskId];if(t)openPlanYamlForTask(t)};
 document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;document.getElementById('planEditYaml').onclick=openYamlPlanModal;
 document.getElementById('applyYamlPlan').onclick=()=>{
-  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t);pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Execution plan YAML applied');
+  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t,{markDirty:t.status==='paused'});pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Execution plan YAML applied');
 };
 
 // Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
