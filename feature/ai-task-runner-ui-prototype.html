@@ -1891,6 +1891,106 @@ bindBatchForm=function(){
 };
 
 // Re-render using the sequence composer after binding override.
+// --- In-place Steps editor behavior ---
+function isSequenceTask(t){return !!t&&(t.kind==='list'||t.workspaceKind==='batch'||(t.listItems&&t.listItems.length>1))}
+function singleTaskItem(t){
+  const p=t.promptSource||{};
+  return {prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'};
+}
+function deriveStepState(t){
+  const multi=isSequenceTask(t),index=multi?(t.progress?.[0]||0):(t.runtime==='done'?1:0);
+  if(t.runtime==='running'||t.runtime==='recover')return {status:'running',index,recovered:t.runtime==='recover',currentDirty:false};
+  if(t.runtime==='stopped'||t.runtime==='attention'||t.runtime==='failed'||t.status==='paused')return {status:'stopped',index,recovered:false,currentDirty:false};
+  if(t.runtime==='done')return {status:'completed',index:multi?(t.listItems?.length||1):1,recovered:false,currentDirty:false};
+  return {status:'idle',index:0,recovered:false,currentDirty:false};
+}
+function prepareStepsForTask(t){
+  if(!t)return;
+  batchParentTaskId=t.id;
+  batchDraft=cloneBatch(isSequenceTask(t)&&t.listItems?.length?t.listItems:[singleTaskItem(t)]);
+  batchState=deriveStepState(t);
+  sequenceExpandedIndex=-1;
+  document.getElementById('taskListParentHint').textContent=batchDraft.length===1?'1 step · this Task':`${batchDraft.length} steps · one Board Task`;
+  renderBatchDraft();
+}
+
+// A single step stays a normal Task. Adding step 2 upgrades the same Task in place.
+syncTaskListDraftToParent=function(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
+  if(batchDraft.length<=1&&!isSequenceTask(t)){
+    const x=batchDraft[0];if(x){
+      t.workflow=x.workflow;t.goal=x.prompt||t.goal;
+      t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    }
+    return;
+  }
+  t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);
+  t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];t.tags=[`${batchDraft.length} steps`];
+  t.executionRoot=`${batchDraft.length} child workspaces`;t.desc=`${batchDraft.length} ordered steps · ${runtimeLabel(t.runtime)}`;
+};
+
+openTaskListEditor=function(id){
+  const t=taskMap[id];if(!t)return;
+  prepareStepsForTask(t);
+  document.querySelectorAll('.drawertab').forEach(b=>b.classList.toggle('active',b.dataset.drawertab==='items'));
+  document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-items'));
+  document.querySelector('#taskOverlay .drawer').classList.add('steps-mode');
+};
+
+const finalBaseOpenTaskById=openTaskById;
+openTaskById=function(id){
+  finalBaseOpenTaskById(id);
+  const t=taskMap[id];if(!t)return;
+  document.getElementById('drawerItemsTab').hidden=false;
+  document.getElementById('editTaskListDemo').hidden=true;
+  prepareStepsForTask(t);
+  document.querySelector('#taskOverlay .drawer').classList.remove('steps-mode');
+};
+
+document.querySelectorAll('[data-drawertab]').forEach(b=>b.addEventListener('click',()=>{
+  const drawer=document.querySelector('#taskOverlay .drawer');
+  if(b.dataset.drawertab==='items'){prepareStepsForTask(taskMap[currentTaskId]);drawer.classList.add('steps-mode')}
+  else drawer.classList.remove('steps-mode');
+}));
+
+document.getElementById('drawerAddStep').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push({prompt:'New step',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+  sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;syncTaskListDraftToParent();renderBatchDraft();renderBoardFromMap();showToast('Step added · same Task upgraded in place');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
+};
+document.getElementById('stepsAdvanced').onclick=()=>{
+  const row=document.getElementById('stepsModeRow'),show=row.hidden;row.hidden=!show;
+  document.getElementById('stepsAdvanced').textContent=show?'Hide advanced':'⋯ Advanced';
+};
+
+// Task footer remains the single Run / Stop / Resume control for both 1-step and multi-step Tasks.
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(isSequenceTask(t)){
+    if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+    if(t.runtime==='idle'){document.getElementById('runBatch').click();openTaskById(t.id);return}
+    if(['running','recover'].includes(t.runtime)){document.getElementById('stopBatch').click();openTaskById(t.id);return}
+    if(['stopped','attention','failed'].includes(t.runtime)){document.getElementById('resumeBatch').click();openTaskById(t.id);return}
+  }
+  if(t.runtime==='idle'){
+    if(t.workspaceKind==='main'){const busy=mainBusyTask(t.project);if(busy&&busy.id!==t.id){if(t.workspacePolicy==='auto'){t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id)}else{showToast(`Main workspace 正被 ${busy.id} 使用`);return}}}
+    t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';if(t.status==='new')t.status='ongoing';pushTaskHistory(t,'Run started');showToast('Mock Run started');
+  }else if(['running','recover'].includes(t.runtime)){t.runtime='stopped';t.status='paused';pushTaskHistory(t,'Paused by user');showToast('Mock Pause')}
+  else if(['stopped','attention','failed'].includes(t.runtime)){t.runtime='running';t.status='ongoing';pushTaskHistory(t,'Resume accepted');showToast('Mock Resume')}
+  renderBoardFromMap();openTaskById(t.id);
+};
+
+// Normal Task creation is now always one Task; composition happens later in Details > Steps.
+newTaskKind='task';renderTaskKindUi();
+
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
