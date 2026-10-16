@@ -557,7 +557,7 @@ function runtimeClass(rt){return ['running','recover','stopped','done','failed',
 function progressPct(t){return t.progress[1]?Math.round(t.progress[0]/t.progress[1]*100):0}
 function workspaceName(t){
   if(t.workspaceKind==='worktree')return `Worktree · ${t.branch||('task/'+t.id)}`;
-  if(t.workspaceKind==='batch')return 'Task List';
+  if(t.workspaceKind==='batch')return 'Multi-step';
   return 'Main workspace';
 }
 function worktreeRootFor(project,id){
@@ -1682,7 +1682,9 @@ renderDrawerActions=function(t){
   baseRenderDrawerActions(t);
   if(t.kind==='list'||t.workspaceKind==='batch'){
     const p=document.getElementById('taskPrimaryDemo');
-    if(t.runtime==='idle'){p.hidden=false;p.className='btn primary';p.textContent='Open List'}
+    if(t.runtime==='idle'){p.hidden=false;p.className='btn primary';p.textContent='Run'}
+    else if(['running','recover'].includes(t.runtime)){p.hidden=false;p.className='btn primary';p.textContent='Pause'}
+    else if(['stopped','attention','failed'].includes(t.runtime)){p.hidden=false;p.className='btn primary';p.textContent='Resume'}
   }
 };
 
