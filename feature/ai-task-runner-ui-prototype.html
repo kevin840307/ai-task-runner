@@ -56,6 +56,44 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 /* toast */
 .toast{position:fixed;left:50%;bottom:18px;z-index:150;transform:translate(-50%,12px);opacity:0;pointer-events:none;padding:9px 12px;border-radius:999px;background:#17202c;color:#fff;font-size:10px;font-weight:800;box-shadow:var(--shadow-pop);transition:.18s}.toast.show{opacity:1;transform:translate(-50%,0)}
 .proto{position:fixed;left:12px;bottom:10px;z-index:20;padding:4px 7px;border:1px solid rgba(15,118,110,.18);border-radius:999px;background:rgba(255,255,255,.88);color:var(--accent-dark);font-size:8px;font-weight:900;backdrop-filter:blur(6px)}
+
+/* Mock-demo controls */
+.mockselect{
+  height:34px;max-width:190px;padding:0 28px 0 9px;border:1px solid var(--line);border-radius:8px;
+  background:#fff;color:var(--text);font-size:10px;font-weight:800
+}
+.mocknote{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:9px;font-weight:800}
+.mocknote:before{content:"MOCK";padding:2px 5px;border-radius:999px;background:#e9eef4;color:#64748b;font-size:7px;letter-spacing:.08em}
+.taskcard.attention{border-color:#f4c56a;background:#fffdf6}
+.taskcard.failed{border-color:#f2b0a7;background:#fffafa}
+.runtime.failed{background:#fee4df;color:#b42318}
+.runtime.attention{background:#fff7df;color:#9a5b00}
+.drawer-pane{display:none}.drawer-pane.active{display:block}
+.drawer-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.metric{padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}
+.metric span{display:block;color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}
+.metric strong{display:block;margin-top:4px;font-size:12px}
+.history-list{display:grid;gap:7px}
+.history-row{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fbfdff;font-size:10px}
+.history-row time{color:var(--muted);font:9px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.asset-demo{min-height:0;display:grid;grid-template-columns:240px minmax(0,1fr);background:var(--bg)}
+.asset-list{min-height:0;overflow:auto;padding:12px;border-right:1px solid var(--line);background:#fff}
+.asset-list-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}.asset-list-head strong{font-size:11px}
+.asset-item{width:100%;display:grid;gap:3px;margin-bottom:6px;padding:9px 10px;border:1px solid transparent;border-radius:9px;background:transparent;text-align:left}
+.asset-item:hover,.asset-item.active{border-color:rgba(15,118,110,.20);background:#f6fbfa}
+.asset-item strong{font-size:10px}.asset-item small{color:var(--muted);font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asset-editor{min-height:0;overflow:auto;padding:18px}
+.asset-preview-card{max-width:820px;border:1px solid var(--line);border-radius:13px;background:#fff;box-shadow:var(--shadow-sm);overflow:hidden}
+.asset-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.asset-preview-head h2{margin:0;font-size:13px}.asset-preview-head p{margin:3px 0 0;color:var(--muted);font-size:9px}
+.asset-preview-body{padding:14px}.asset-code{padding:12px;border:1px solid #e0e7ef;border-radius:9px;background:#f8fafc;color:#334155;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.listview{display:none;min-height:0;overflow:auto;padding:12px 18px}
+.listview.active{display:block}.board.hiddenboard{display:none}
+.taskrow{display:grid;grid-template-columns:86px minmax(220px,1fr) 120px 130px 90px;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #e7ecf1;background:#fff;font-size:10px;cursor:pointer}
+.taskrow:first-child{border-radius:10px 10px 0 0}.taskrow:last-child{border-radius:0 0 10px 10px}.taskrow:hover{background:#f7fbfa}
+.batch-log{margin-top:12px;max-height:170px;overflow:auto;padding:10px;border:1px solid #d9e2ec;border-radius:9px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:9px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.req-actions{display:flex;gap:5px;margin-left:auto}.req-actions button{width:24px;height:24px;padding:0;border:0;background:transparent;color:var(--muted)}
+
 @media(max-width:900px){:root{--rail:205px}.board{grid-template-columns:repeat(4,260px)}.yamlbody{grid-template-columns:1fr}.yamlleft{border-right:0}.yamlright{display:none}}
 @media(max-width:620px){:root{--rail:155px}.brand span:last-child{display:none}.navbtn{padding:0 8px}.navbtn .navbadge{display:none}.messages{padding-left:12px;padding-right:12px}.header{padding:0 10px}.title p{display:none}}
 </style>
@@ -74,11 +112,11 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
       <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
     </nav>
-    <div class="sectionlabel"><span>專曈</span><button class="addsmall" title="新增 / 開啟專曈">+</button></div>
+    <div class="sectionlabel"><span>專案</span><button class="addsmall" title="新增 / 開啟專案">+</button></div>
     <div class="projects">
-      <div class="project active"><span class="dot running"></span><div><strong>ai-task-runner</strong><small>Running · feature/ui</small></div></div>
-      <div class="project"><span class="dot done"></span><div><strong>game-client</strong><small>Completed</small></div></div>
-      <div class="project"><span class="dot"></span><div><strong>lab-tools</strong><small>Idle</small></div></div>
+      <div class="project active" data-project="ai-task-runner"><span class="dot running"></span><div><strong>ai-task-runner</strong><small>Running · feature/ui</small></div></div>
+      <div class="project" data-project="game-client"><span class="dot done"></span><div><strong>game-client</strong><small>Completed</small></div></div>
+      <div class="project" data-project="lab-tools"><span class="dot"></span><div><strong>lab-tools</strong><small>Idle</small></div></div>
     </div>
     <div class="sidefoot">Project、Workflow、Runtime contract 仍沿用目前 Runner。這份頁面只示範 UI / UX。</div>
   </aside>
@@ -87,8 +125,8 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <!-- Chat -->
     <section class="view page" id="view-chat">
       <header class="header">
-        <div class="title"><h1>Chat</h1><p>C:\Users\kevin\ai-task-runner · 一般對評，不建立 Runner Task</p></div>
-        <div class="actions"><span class="pill">Project context</span><button class="btn">清除對話</button></div>
+        <div class="title"><h1>Chat</h1><p>C:\Users\kevin\ai-task-runner · 一般對話，不建立 Runner Task</p></div>
+        <div class="actions"><span class="mocknote">可切換對話</span><select class="mockselect" id="chatPreset"><option value="design">UI 設計討論</option><option value="debug">Bug investigation</option><option value="review">Code review</option></select><button class="btn" id="newChat">New Chat</button></div>
       </header>
       <div class="chatbody">
         <div class="messages" id="chatMessages">
@@ -112,87 +150,60 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
         <div class="title"><h1>Tasks</h1><p>C:\Users\kevin\ai-task-runner · Board 管理狀態與 Runner runtime 分離</p></div>
-        <div class="actions"><span class="pill run">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
+        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
         <div class="actions"><span class="pill">拖曳卡片改 Board 狀態</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
-        <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">2</span><button class="coladd">+</button></div><div class="dropzone">
-          <article class="taskcard" draggable="true" data-title="新增 YAML Task UI" data-runtime="idle"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">新增 YAML Task UI</div><span class="runtime">Idle</span></div><div class="carddesc">讓 YAML List 能用 Form / YAML 兩種方式編排與執行。</div><div class="cardmeta"><span class="tag">ralphy_ai_validate</span><span class="tag">UI</span></div><div class="cardfoot"><span>#T-104</span><span>今天</span></div></article>
-          <article class="taskcard" draggable="true" data-title="重整 README Workflow 說明" data-runtime="idle"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">重整 README Workflow 說明</div><span class="runtime">Idle</span></div><div class="carddesc">文件同步目前 Stage / PASS / FAIL contract。</div><div class="cardmeta"><span class="tag">docs</span></div><div class="cardfoot"><span>#T-105</span><span>昨天</span></div></article>
-        </div></section>
-        <section class="col" data-status="ongoing"><div class="colhead"><strong>Ongoing</strong><span class="count">2</span><button class="coladd">+</button></div><div class="dropzone">
-          <article class="taskcard" draggable="true" data-title="完成 feature/ui 新 Task 介面" data-runtime="running"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">完成 feature/ui 新 Task 介面</div><span class="runtime running">Running</span></div><div class="carddesc">Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。</div><div class="cardmeta"><span class="tag">feature/ui</span><span class="tag">review</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:64%"></i></span>3 / 5</span><span>12m</span></div></article>
-          <article class="taskcard" draggable="true" data-title="修正 Studio stage test" data-runtime="recover"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">修正 Studio stage test</div><span class="runtime recover">Recovering</span></div><div class="carddesc">API 暫時錯誤，StageExecutor 正在 same-session retry。</div><div class="cardmeta"><span class="tag">studio</span><span class="tag">API</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:42%"></i></span>2 / 5</span><span>4m</span></div></article>
-        </div></section>
-        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">1</span><button class="coladd">+</button></div><div class="dropzone">
-          <article class="taskcard" draggable="true" data-title="24H reliability review" data-runtime="stopped"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">24H reliability review</div><span class="runtime stopped">Stopped</span></div><div class="carddesc">User stop；可從 Task 詳細頁 Resume / Reset。</div><div class="cardmeta"><span class="tag">reliability</span><span class="tag">live</span></div><div class="cardfoot"><span>#T-099</span><span>1d</span></div></article>
-        </div></section>
-        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">1</span><button class="coladd">+</button></div><div class="dropzone">
-          <article class="taskcard" draggable="true" data-title="移除舊 Discussion 模式" data-runtime="done"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">移除舊 Discussion 模式</div><span class="runtime done">Completed</span></div><div class="carddesc">舊契約與 UI 已清理，測試通過。</div><div class="cardmeta"><span class="tag">cleanup</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:100%"></i></span>5 / 5</span><span>2d</span></div></article>
-        </div></section>
+        <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
+        <section class="col" data-status="ongoing"><div class="colhead"><strong>Ongoing</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
+        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
+        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
       </div>
+      <div class="listview" id="taskListView"></div>
     </section>
 
     <!-- YAML Tasks -->
     <section class="view page" id="view-yaml">
       <header class="header">
         <div class="title"><h1>YAML Tasks</h1><p>同一個 YAML List / RunRequest contract 的 UI builder，不建立第二套 Runner</p></div>
-        <div class="actions"><button class="btn">Import YAML</button><button class="btn" id="validateYaml">Validate</button><button class="btn primary" id="runBatch">Run Batch</button></div>
+        <div class="actions"><select class="mockselect" id="batchPreset"><option value="ui">UI batch</option><option value="reliability">Reliability batch</option><option value="multi">Multi-project batch</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn primary" id="runBatch">Run Batch</button></div>
       </header>
       <div class="yamlbody">
         <section class="yamlleft">
           <div class="tabs"><button class="tab active" data-yamltab="form">Form</button><button class="tab" data-yamltab="code">YAML</button></div>
           <div class="yamlpane" id="yaml-form">
-            <div class="formlist" id="formList">
-              <div class="request">
-                <div class="reqhead"><span class="reqnum">1</span><strong>Fix task A</strong><button>⋮</button></div>
-                <div class="field"><label>Prompt</label><textarea>修正 feature/ui 的 Task board，保持目前視覺風格。</textarea></div>
-                <div class="row2"><div class="field"><label>Project root</label><input value="C:\Users\kevin\ai-task-runner"></div><div class="field"><label>Workflow</label><select><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option></select></div></div>
-              </div>
-              <div class="request">
-                <div class="reqhead"><span class="reqnum">2</span><strong>Review UI</strong><button>⋮</button></div>
-                <div class="field"><label>Prompt</label><textarea>Review UI/UX、測試與舊契約，必要時修正。</textarea></div>
-                <div class="row2"><div class="field"><label>Project root</label><input value="C:\Users\kevin\ai-task-runner"></div><div class="field"><label>Workflow</label><select><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option></select></div></div>
-              </div>
-              <button class="addreq" id="addRequest">+ Add RunRequest</button>
-            </div>
+            <div class="formlist" id="formList"></div>
           </div>
           <div class="yamlpane hidden" id="yaml-code">
-<textarea class="code" id="yamlEditor">- prompt: Fix feature/ui Task board
-  project_root: C:\Users\kevin\ai-task-runner
-  workflow_file: ralphy_ai_validate.yaml
-  validator: ai
-  stage_retries: -1
-
-- prompt: Review UI/UX and tests
-  project_root: C:\Users\kevin\ai-task-runner
-  workflow_file: ralphy_ai_validate.yaml
-  validator: ai
-</textarea>
+<textarea class="code" id="yamlEditor"></textarea>
           </div>
         </section>
         <section class="yamlright">
           <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
           <div class="callout"><strong>設計原則：</strong> Form 和 YAML 只是同一份 batch draft 的兩種視圖；執行前用既有 loader / validation 驗證，不在 UI 重新發明 workflow schema。</div>
-          <div class="preview" id="batchPreview">
-            <div class="previewitem"><span class="step">1</span><div><strong>Fix feature/ui Task board</strong><small>ai-task-runner · ralphy_ai_validate.yaml · validator: ai</small></div><span class="orderchip">Waiting</span></div>
-            <div class="previewitem"><span class="step">2</span><div><strong>Review UI/UX and tests</strong><small>ai-task-runner · ralphy_ai_validate.yaml · validator: ai</small></div><span class="orderchip">Waiting</span></div>
-          </div>
+          <div class="preview" id="batchPreview"></div>
+          <div class="batch-log" id="batchLog">Mock batch is idle. Choose a preset/outcome and press Run Batch.</div>
         </section>
       </div>
     </section>
 
     <!-- Existing sections -->
     <section class="view page" id="view-workflows">
-      <header class="header"><div class="title"><h1>Workflows</h1><p>既有 Workflow Studio 保持原樣</p></div><div class="actions"><button class="btn">Import</button><button class="btn primary">Generate with AI</button></div></header>
-      <div class="assetbody"><div class="assetcard"><h2>這裡不重畫你現有的 Workflow Studio</h2><p>Prototype 只示範新增/調整的三個區域。正式實作仍保留目前 Workflows → Workflow Editor → Designer / YAML ownership。</p></div></div>
+      <header class="header"><div class="title"><h1>Workflows</h1><p>既有 Workflow Studio；此處只放 mock assets 方便整體導覽試用</p></div><div class="actions"><span class="mocknote">mock assets</span><button class="btn">Import</button><button class="btn primary" id="generateMockWorkflow">Generate with AI</button></div></header>
+      <div class="asset-demo">
+        <aside class="asset-list"><div class="asset-list-head"><strong>Workflows</strong><button class="addsmall">+</button></div><div id="workflowMockList"></div></aside>
+        <main class="asset-editor"><div class="asset-preview-card"><div class="asset-preview-head"><div><h2 id="workflowMockTitle">ralphy_ai_validate.yaml</h2><p id="workflowMockMeta">Global · Shown in Chat</p></div><div class="actions"><button class="btn">Open Editor</button><button class="btn primary">Run</button></div></div><div class="asset-preview-body"><div class="asset-code" id="workflowMockCode"></div></div></div></main>
+      </div>
     </section>
     <section class="view page" id="view-prompts">
-      <header class="header"><div class="title"><h1>Prompts</h1><p>既有 Prompt workspace 保持原樣</p></div><div class="actions"><button class="btn primary">+ New Prompt</button></div></header>
-      <div class="assetbody"><div class="assetcard"><h2>Prompts 不需要因新 Task UI 改動</h2><p>Task / YAML Task 只引用現有 Prompt / Workflow assets，避免出現第二套資產管理。</p></div></div>
+      <header class="header"><div class="title"><h1>Prompts</h1><p>既有 Prompt workspace；此處提供可點選 mock 資料</p></div><div class="actions"><span class="mocknote">mock assets</span><button class="btn primary" id="newMockPrompt">+ New Prompt</button></div></header>
+      <div class="asset-demo">
+        <aside class="asset-list"><div class="asset-list-head"><strong>Prompts</strong><button class="addsmall">+</button></div><div id="promptMockList"></div></aside>
+        <main class="asset-editor"><div class="asset-preview-card"><div class="asset-preview-head"><div><h2 id="promptMockTitle">common/review.md</h2><p id="promptMockMeta">Global prompt</p></div><div class="actions"><button class="btn">Duplicate</button><button class="btn primary">Save</button></div></div><div class="asset-preview-body"><div class="asset-code" id="promptMockCode"></div></div></div></main>
+      </div>
     </section>
   </main>
 </div>
@@ -203,24 +214,23 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
       <p>#T-103 · ai-task-runner · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
-    <div class="drawertabs"><button class="drawertab active">Overview</button><button class="drawertab">Runtime</button><button class="drawertab">Output</button><button class="drawertab">History</button></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
-      <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong>ralphy_ai_validate.yaml</strong><span>Backend</span><strong>Default backend</strong><span>Project</span><strong>C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
-      <section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong>Stage: review</strong><span class="runtime running">Running</span></div><div class="stagerow"><div class="stagebar"><i></i></div><small>3 / 5</small></div><div class="timeline"><div class="event done"><strong>planning</strong><small>PASS · 20:01</small></div><div class="event done"><strong>execute</strong><small>PASS · 20:07</small></div><div class="event now"><strong>review</strong><small>Running · same session</small></div><div class="event"><strong>final_validate</strong><small>Waiting</small></div></div></div></section>
-      <section class="section"><h3>Live output</h3><div class="console">[20:07:11] review: inspecting modified UI files
-[20:07:12] review: checking navigation ownership
-[20:07:15] review: validating Task board interactions
-[20:07:19] stage session active · bounded output shown here
-
-This remains the Runner-owned runtime projection.
-Board drag-and-drop does not synthesize runtime state.</div></section>
+      <div class="drawer-pane active" id="drawer-overview">
+        <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
+        <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
+        <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
+      </div>
+      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
+      <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3><div class="console" id="drawerConsole"></div></section></div>
+      <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
     </div>
     <div class="drawerfoot"><button class="btn danger" id="stopDemo">Stop</button><button class="btn">Open Workflow</button><button class="btn primary">Open Full Runtime</button></div>
   </aside>
 </div>
 
 <div class="toast" id="toast"></div>
-<div class="proto">STANDALONE UI PROTOTYPE · no repo changes</div>
+<div class="proto">INTERACTIVE MOCK PROTOTYPE · local-only interactions</div>
 
 <script>
 const views=[...document.querySelectorAll('.view')];
@@ -233,90 +243,325 @@ nav.forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
 
 const toast=document.getElementById('toast');
 let toastTimer;
-function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1800)}
+function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1900)}
+document.getElementById('themeBtn').addEventListener('click',()=>showToast('Mock demo 保持目前 Teal light theme，不另外改設計語言'));
 
-document.getElementById('themeBtn').addEventListener('click',()=>showToast('Prototype 目前鎖定現有 Teal light theme'));
+const projectMeta={
+  'ai-task-runner':{path:'C:\\Users\\kevin\\ai-task-runner',branch:'feature/ui'},
+  'game-client':{path:'D:\\dev\\game-client',branch:'main'},
+  'lab-tools':{path:'D:\\lab\\tools',branch:'dev'}
+};
+document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
+  document.querySelectorAll('.project').forEach(x=>x.classList.remove('active'));p.classList.add('active');
+  showToast(`切換 mock project：${p.dataset.project}`);
+}));
 
-function openTask(card){
-  const title=card.dataset.title||'Task';
-  const status=card.closest('.col')?.dataset.status||'new';
-  const runtime=card.dataset.runtime||'idle';
-  document.getElementById('drawerTitle').textContent=title;
-  const statusName={new:'New',ongoing:'Ongoing',paused:'Paused',closed:'Closed'}[status]||status;
-  document.getElementById('drawerBoardStatus').textContent=statusName;
-  document.getElementById('drawerStatusValue').textContent=statusName;
-  const badge=document.getElementById('drawerRuntime');
-  const runtimeName={running:'Running',recover:'Recovering',stopped:'Stopped',done:'Completed',idle:'Idle'}[runtime]||runtime;
-  badge.textContent=runtimeName;
-  badge.className='pill '+(runtime==='done'?'pass':runtime==='stopped'?'fail':(runtime==='running'||runtime==='recover')?'run':'');
-  document.getElementById('taskOverlay').classList.add('open');
+const chatPresets={
+  design:[
+    ['assistant','這裡是一般 Chat。你可以討論設計、程式或目前 Project；只有明確建立 Task 才交給 Workflow Runner。'],
+    ['user','Task board 要怎樣才不會跟 runtime state 混在一起？'],
+    ['assistant','把 Board status 當工作管理狀態；Running / Recovering / Stopped / Completed 則只讀 Runner projection。拖卡片不直接改 process。']
+  ],
+  debug:[
+    ['user','Stage test 偶爾 502，先幫我分析可能是哪一層。'],
+    ['assistant','我會先看 backend adapter、StageExecutor technical retry 與 server endpoint；這是互動式除錯，不會自動建立長時間 Task。'],
+    ['user','如果確認是 API transient error 呢？'],
+    ['assistant','就應沿用 StageExecutor 的 same-session retry / fresh rotation 與 seconds-based backoff，不在 Chat UI 另造 recovery。']
+  ],
+  review:[
+    ['user','幫我 review 這次 UI 修改，先只指出問題。'],
+    ['assistant','可以。我會把問題分成 UX、runtime ownership、state consistency 與維護性；若要實際修改，再由你建立 Task 或明確要求執行。']
+  ]
+};
+function renderChat(key){
+  const box=document.getElementById('chatMessages');box.innerHTML='';
+  (chatPresets[key]||[]).forEach(([who,body])=>{
+    const el=document.createElement('div');el.className='msg '+who;
+    el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);
+    box.appendChild(el);
+  });
 }
-function bindCards(){document.querySelectorAll('.taskcard').forEach(card=>{card.onclick=(e)=>{if(!card.classList.contains('dragging'))openTask(card)}})}
-bindCards();
-document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
-document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
+document.getElementById('chatPreset').addEventListener('change',e=>renderChat(e.target.value));
+document.getElementById('newChat').onclick=()=>{document.getElementById('chatMessages').innerHTML='<div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>新的 mock Chat 已建立。這仍然不會建立 Runner Task。</div>';showToast('New Chat')};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput');const text=input.value.trim();if(!text)return;
+  const box=document.getElementById('chatMessages');
+  const u=document.createElement('div');u.className='msg user';u.innerHTML='<div class="msgmeta">You</div>'+escapeHtml(text);box.appendChild(u);
+  const a=document.createElement('div');a.className='msg assistant';
+  const reply=/task|執行|run/i.test(text)?'這是一般 Chat。若你真的要執行，我會建議把內容送到 New Task，而不是在 Chat 裡偷偷啟動 Runner。':'收到。這個 mock 回覆用來測試一般 Chat 的閱讀密度、輸入體驗與長訊息排列。';
+  a.innerHTML='<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>'+reply;box.appendChild(a);
+  input.value='';box.scrollTop=box.scrollHeight;
+};
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
 
+const taskPresets={
+  today:[
+    {id:'T-104',status:'new',title:'新增 YAML Task UI',runtime:'idle',desc:'讓 YAML List 能用 Form / YAML 兩種方式編排與執行。',tags:['ralphy_ai_validate','UI'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,5],elapsed:'—',stage:'Idle',session:'—',goal:'新增 YAML List 的 UI builder，維持同一套 RunRequest / Runner contract。'},
+    {id:'T-105',status:'new',title:'重整 README Workflow 說明',runtime:'idle',desc:'文件同步目前 Stage / PASS / FAIL contract。',tags:['docs'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal:'更新文件但不引入 legacy contract。'},
+    {id:'T-103',status:'ongoing',title:'完成 feature/ui 新 Task 介面',runtime:'running',desc:'Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。',tags:['feature/ui','review'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,5],elapsed:'12m',stage:'review',session:'same',goal:'保持目前 UI 風格，加入 Chat、YAML Tasks 與 Azure-style Task board。'},
+    {id:'T-102',status:'ongoing',title:'修正 Studio stage test',runtime:'recover',desc:'API 暫時錯誤，StageExecutor 正在 same-session retry。',tags:['studio','API'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[2,5],elapsed:'4m',stage:'execute',session:'same retry',goal:'修正 Stage Test API 502 並保持正式 runtime contract。'},
+    {id:'T-099',status:'paused',title:'24H reliability review',runtime:'stopped',desc:'User stop；可從 Task 詳細頁 Resume / Reset。',tags:['reliability','live'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[2,6],elapsed:'3h 18m',stage:'execute',session:'role',goal:'跑完整 reliability review；使用者手動停止後保留可 Resume 狀態。'},
+    {id:'T-091',status:'closed',title:'移除舊 Discussion 模式',runtime:'done',desc:'舊契約與 UI 已清理，測試通過。',tags:['cleanup'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[5,5],elapsed:'28m',stage:'Completed',session:'fresh final',goal:'移除 Discussion / legacy runtime paths。'}
+  ],
+  recovery:[
+    {id:'T-212',status:'ongoing',title:'Qwen HTTP 503 recovery probe',runtime:'recover',desc:'第 2 次 same-session attempt；下一次將 rotate fresh session。',tags:['Qwen','503'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[1,4],elapsed:'7m',stage:'execute',session:'same retry',goal:'確認 transient API failure 不會中斷 24H unattended run。'},
+    {id:'T-213',status:'ongoing',title:'Runtime heartbeat stale',runtime:'attention',desc:'UI projection 顯示 Needs Attention；等待使用者選 Resume / Reset。',tags:['runtime','attention'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[2,5],elapsed:'16m',stage:'review',session:'role',goal:'驗證 stale heartbeat 時 UI action guard 與 runtime projection 一致。'},
+    {id:'T-214',status:'paused',title:'Deterministic config failure',runtime:'failed',desc:'Workflow schema 不合法，fail closed，不做無限 retry。',tags:['schema','fail-closed'],workflow:'invalid-demo.yaml',project:'ai-task-runner',progress:[0,3],elapsed:'1m',stage:'load',session:'—',goal:'確認 deterministic configuration error 不進 technical retry。'},
+    {id:'T-208',status:'closed',title:'API disconnect probe',runtime:'done',desc:'Same-session recovery PASS，fresh rotation 未觸發。',tags:['live','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[4,4],elapsed:'9m',stage:'Completed',session:'same',goal:'模擬 API disconnect 並驗證 bounded-session recovery。'}
+  ],
+  history:[
+    {id:'T-301',status:'closed',title:'Workflow Studio CRUD browser test',runtime:'done',desc:'Create / rename / duplicate / delete 全部通過。',tags:['UI','PASS'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[5,5],elapsed:'11m',stage:'Completed',session:'fresh final',goal:'Browser CRUD coverage。'},
+    {id:'T-302',status:'closed',title:'Dynamic Handoff regression',runtime:'done',desc:'Role session reuse 與 Final Review PASS。',tags:['handoff','PASS'],workflow:'dynamic_handoff.yaml',project:'ai-task-runner',progress:[7,7],elapsed:'34m',stage:'Completed',session:'role + fresh',goal:'驗證 Dynamic Handoff 不建立第二個 orchestrator。'},
+    {id:'T-303',status:'closed',title:'YAML list endurance 8 items',runtime:'done',desc:'8 個 child RunRequests 依序完成。',tags:['YAML','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[8,8],elapsed:'2h 6m',stage:'Completed',session:'mixed',goal:'驗證 YAML List sequential execution 與 durable resume。'},
+    {id:'T-304',status:'closed',title:'Final AI quorum 3/2',runtime:'done',desc:'3 fresh votes，2 PASS，quorum satisfied。',tags:['validator','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,3],elapsed:'8m',stage:'Completed',session:'fresh votes',goal:'驗證 Final AI 每票獨立 Fresh Session。'}
+  ]
+};
+let currentPreset='today';
+let taskMap={};
+let runningOnly=false;
 let dragged=null;
-document.querySelectorAll('.taskcard').forEach(card=>{
-  card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});
-  card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over'));updateCounts()});
-});
+let listMode=false;
+
+function runtimeLabel(rt){return {running:'Running',recover:'Recovering',stopped:'Stopped',done:'Completed',idle:'Idle',failed:'Failed',attention:'Needs Attention'}[rt]||rt}
+function statusLabel(st){return {new:'New',ongoing:'Ongoing',paused:'Paused',closed:'Closed'}[st]||st}
+function runtimeClass(rt){return ['running','recover','stopped','done','failed','attention'].includes(rt)?rt:''}
+function progressPct(t){return t.progress[1]?Math.round(t.progress[0]/t.progress[1]*100):0}
+function taskCardHtml(t){
+  const progress=t.progress[1]?`<span class="progress"><span class="bar"><i style="width:${progressPct(t)}%"></i></span>${t.progress[0]} / ${t.progress[1]}</span>`:`<span>#${t.id}</span>`;
+  return `<article class="taskcard ${t.runtime==='attention'?'attention':''} ${t.runtime==='failed'?'failed':''}" draggable="true" data-id="${t.id}" data-title="${escapeHtml(t.title)}" data-runtime="${t.runtime}">
+    <div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">${escapeHtml(t.title)}</div><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span></div>
+    <div class="carddesc">${escapeHtml(t.desc)}</div><div class="cardmeta">${t.tags.map(x=>`<span class="tag">${escapeHtml(x)}</span>`).join('')}</div>
+    <div class="cardfoot">${progress}<span>${escapeHtml(t.elapsed)}</span></div></article>`;
+}
+function renderBoard(preset=currentPreset){
+  currentPreset=preset;taskMap={};
+  document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
+  (taskPresets[preset]||[]).forEach(t=>{taskMap[t.id]={...t};const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t))});
+  bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
+}
+function bindTaskCards(){
+  document.querySelectorAll('.taskcard').forEach(card=>{
+    card.onclick=()=>{if(!card.classList.contains('dragging'))openTask(card)};
+    card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});
+    card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over'));updateCounts();renderTaskList()});
+  });
+}
 document.querySelectorAll('.dropzone').forEach(zone=>{
   zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('over');e.dataTransfer.dropEffect='move'});
   zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
-  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('over');if(dragged){const old=dragged.closest('.col')?.dataset.status;zone.appendChild(dragged);const now=zone.closest('.col')?.dataset.status;showToast(`Board status: ${old} → ${now}（不改 Runner runtime）`);updateCounts()}});
+  zone.addEventListener('drop',e=>{
+    e.preventDefault();zone.classList.remove('over');
+    if(!dragged)return;
+    const id=dragged.dataset.id,old=taskMap[id]?.status,now=zone.closest('.col')?.dataset.status;
+    zone.appendChild(dragged);if(taskMap[id])taskMap[id].status=now;
+    showToast(`Board status: ${statusLabel(old)} → ${statusLabel(now)}（Runner runtime 保持 ${runtimeLabel(taskMap[id]?.runtime)}）`);
+    updateCounts();renderTaskList();
+  });
 });
 function updateCounts(){
   document.querySelectorAll('.col').forEach(c=>c.querySelector('.count').textContent=c.querySelectorAll('.taskcard:not([hidden])').length);
-  document.getElementById('taskNavCount').textContent=document.querySelectorAll('.taskcard').length;
+  document.getElementById('taskNavCount').textContent=Object.keys(taskMap).length;
+  const n=Object.values(taskMap).filter(t=>['running','recover'].includes(t.runtime)).length;
+  document.getElementById('runningCount').textContent=`${n} Running`;
 }
-document.getElementById('taskSearch').addEventListener('input',e=>{
-  const q=e.target.value.trim().toLowerCase();
-  document.querySelectorAll('.taskcard').forEach(c=>c.hidden=q&&!c.textContent.toLowerCase().includes(q));
-  updateCounts();
-});
-let runningOnly=false;
-document.getElementById('filterBtn').addEventListener('click',e=>{
-  runningOnly=!runningOnly;e.currentTarget.textContent=runningOnly?'顯示全部':'只看執行中';
-  document.querySelectorAll('.taskcard').forEach(c=>c.hidden=runningOnly&&!['running','recover'].includes(c.dataset.runtime));
-  updateCounts();
-});
+function applyTaskFilter(){
+  const q=document.getElementById('taskSearch').value.trim().toLowerCase();
+  document.querySelectorAll('.taskcard').forEach(c=>{
+    const t=taskMap[c.dataset.id];c.hidden=!!((q&&!c.textContent.toLowerCase().includes(q))||(runningOnly&&!['running','recover'].includes(t?.runtime)));
+  });updateCounts();
+}
+document.getElementById('taskSearch').addEventListener('input',applyTaskFilter);
+document.getElementById('filterBtn').addEventListener('click',e=>{runningOnly=!runningOnly;e.currentTarget.textContent=runningOnly?'顯示全部':'只看執行中';applyTaskFilter()});
+document.getElementById('boardPreset').addEventListener('change',e=>{runningOnly=false;document.getElementById('filterBtn').textContent='只看執行中';document.getElementById('taskSearch').value='';renderBoard(e.target.value);showToast(`載入 mock board：${e.target.options[e.target.selectedIndex].text}`)});
+document.querySelectorAll('.coladd').forEach(b=>b.onclick=()=>document.getElementById('newTask').click());
 document.getElementById('newTask').addEventListener('click',()=>{
-  const zone=document.querySelector('.col[data-status="new"] .dropzone');
-  const id=106+document.querySelectorAll('.taskcard').length;
-  const card=document.createElement('article');
-  card.className='taskcard';card.draggable=true;card.dataset.title='New Task';card.dataset.runtime='idle';
-  card.innerHTML=`<div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">New Task</div><span class="runtime">Idle</span></div><div class="carddesc">從這裡建立長時間 Runner Task。</div><div class="cardmeta"><span class="tag">workflow</span></div><div class="cardfoot"><span>#T-${id}</span><span>now</span></div>`;
-  zone.prepend(card);showToast('已在 New 建立示意 Task');location.hash='task-created';location.hash='';
-  card.addEventListener('click',()=>openTask(card));card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;updateCounts()});updateCounts();
+  const id='T-'+Math.floor(400+Math.random()*500);
+  const t={id,status:'new',title:'New mock Task',runtime:'idle',desc:'尚未開始，可拖曳到不同 Board 欄位。',tags:['workflow'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal:'這是新增 Task 的 mock 資料。'};
+  taskMap[id]=t;document.querySelector('.col[data-status="new"] .dropzone').insertAdjacentHTML('afterbegin',taskCardHtml(t));bindTaskCards();renderTaskList();updateCounts();showToast('已建立 mock Task');
 });
-document.getElementById('listMode').onclick=()=>showToast('Prototype 先示範你要求的 Azure-style Board；正式版可保留 List secondary view');
+function renderTaskList(){
+  const host=document.getElementById('taskListView');
+  host.innerHTML=Object.values(taskMap).map(t=>`<div class="taskrow" data-taskrow="${t.id}"><span class="pill">${statusLabel(t.status)}</span><strong>${escapeHtml(t.title)}</strong><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span><span>${escapeHtml(t.workflow)}</span><span>${t.progress[0]} / ${t.progress[1]}</span></div>`).join('');
+  host.querySelectorAll('[data-taskrow]').forEach(r=>r.onclick=()=>openTaskById(r.dataset.taskrow));
+}
+document.getElementById('listMode').onclick=e=>{
+  listMode=!listMode;document.getElementById('board').classList.toggle('hiddenboard',listMode);document.getElementById('taskListView').classList.toggle('active',listMode);
+  e.currentTarget.classList.toggle('active',listMode);e.currentTarget.previousElementSibling.classList.toggle('active',!listMode);
+};
 
+function taskDetails(t){
+  const generic=[
+    ['20:01','Task created'],['20:02','Workflow snapshot frozen'],['20:07',`${t.stage} · ${runtimeLabel(t.runtime)}`]
+  ];
+  const timeline=t.runtime==='done'
+    ?[['planning','PASS · 20:01','done'],['execute','PASS · 20:07','done'],['review','PASS · 20:12','done'],['final_validate','PASS · 20:15','done']]
+    :t.runtime==='failed'
+    ?[['load','FAIL CLOSED · schema error','now'],['execute','Not started','']]
+    :t.runtime==='attention'
+    ?[['planning','PASS · 20:01','done'],['execute','PASS · 20:06','done'],['review','Heartbeat stale · Needs Attention','now'],['final_validate','Waiting','']]
+    :t.runtime==='recover'
+    ?[['planning','PASS · 20:01','done'],['execute','HTTP 503 · retrying same session','now'],['review','Waiting',''],['final_validate','Waiting','']]
+    :t.runtime==='stopped'
+    ?[['planning','PASS · 18:01','done'],['execute','Stopped by user · resumable','now'],['review','Waiting','']]
+    :[['planning','PASS · 20:01','done'],['execute','PASS · 20:07','done'],[t.stage||'review',`${runtimeLabel(t.runtime)} · ${t.session}`,'now'],['final_validate','Waiting','']];
+  const output=t.runtime==='recover'
+    ?'[20:07:11] backend: HTTP 503 service unavailable\n[20:07:16] StageExecutor: retry delay 5s\n[20:07:21] same-session attempt 2/2\n[20:07:22] next failure will rotate only this Stage session'
+    :t.runtime==='failed'
+    ?'[20:07:11] workflow loader: invalid target "repair"\n[20:07:11] deterministic configuration error\n[20:07:11] fail closed · technical retry disabled for this error'
+    :t.runtime==='attention'
+    ?'[20:07:11] runtime projection: heartbeat stale\n[20:07:11] allowed actions: Resume / Reset\n[20:07:11] UI must not infer Running from stale browser flags'
+    :t.runtime==='done'
+    ?'[20:15:03] final_validate vote 1 PASS\n[20:15:08] final_validate vote 2 PASS\n[20:15:08] quorum satisfied\n[20:15:09] run completed'
+    :'[20:07:11] stage: inspecting modified files\n[20:07:12] checking runtime ownership\n[20:07:15] validating UI interactions\n[20:07:19] bounded live output continues...';
+  return {timeline,output,history:generic};
+}
+function openTask(card){openTaskById(card.dataset.id)}
+function openTaskById(id){
+  const t=taskMap[id];if(!t)return;
+  const d=taskDetails(t);
+  document.getElementById('drawerTitle').textContent=t.title;
+  document.getElementById('drawerBoardStatus').textContent=statusLabel(t.status);
+  document.getElementById('drawerStatusValue').textContent=statusLabel(t.status);
+  document.getElementById('drawerWorkflow').textContent=t.workflow;
+  document.getElementById('drawerProject').textContent=projectMeta[t.project]?.path||t.project;
+  document.getElementById('drawerBackend').textContent=t.runtime==='recover'?'Qwen · qwen3-coder-plus':'Default backend';
+  document.getElementById('drawerGoal').textContent=t.goal;
+  document.getElementById('metricProgress').textContent=`${t.progress[0]} / ${t.progress[1]}`;
+  document.getElementById('metricElapsed').textContent=t.elapsed;
+  document.getElementById('metricSession').textContent=t.session;
+  document.getElementById('drawerStage').textContent='Stage: '+t.stage;
+  document.getElementById('drawerProgressText').textContent=`${t.progress[0]} / ${t.progress[1]}`;
+  document.getElementById('drawerStageProgress').style.width=progressPct(t)+'%';
+  const badge=document.getElementById('drawerRuntime'),inline=document.getElementById('drawerRuntimeInline');
+  [badge,inline].forEach(x=>{x.textContent=runtimeLabel(t.runtime);x.className=(x===badge?'pill ':'runtime ')+(t.runtime==='done'?'pass':t.runtime==='stopped'||t.runtime==='failed'?'fail':t.runtime==='idle'?'':t.runtime==='attention'||t.runtime==='recover'||t.runtime==='running'?'run':'')});
+  document.getElementById('drawerTimeline').innerHTML=d.timeline.map(([n,m,c])=>`<div class="event ${c}"><strong>${escapeHtml(n)}</strong><small>${escapeHtml(m)}</small></div>`).join('');
+  document.getElementById('drawerConsole').textContent=d.output;
+  document.getElementById('drawerHistory').innerHTML=d.history.map(([time,msg])=>`<div class="history-row"><time>${time}</time><span>${escapeHtml(msg)}</span></div>`).join('');
+  document.querySelectorAll('.drawertab').forEach((b,i)=>b.classList.toggle('active',i===0));document.querySelectorAll('.drawer-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
+  document.getElementById('taskOverlay').classList.add('open');
+}
+document.querySelectorAll('[data-drawertab]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-drawertab]').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-'+b.dataset.drawertab));
+});
+document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
+document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
+document.getElementById('stopDemo').onclick=()=>showToast('Mock Stop：正式版仍必須走既有 server-side action guard / Runner control contract');
+
+const batchPresets={
+  ui:[
+    {prompt:'Fix feature/ui Task board',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
+    {prompt:'Review UI/UX and tests',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
+  ],
+  reliability:[
+    {prompt:'Run API disconnect probe',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'mixed.yaml',validator:'ai'},
+    {prompt:'Run HTTP 503 recovery probe',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
+    {prompt:'Run final AI quorum validation',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
+  ],
+  multi:[
+    {prompt:'Update runner core docs',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'},
+    {prompt:'Refactor packet parser',project:'D:\\dev\\game-client',workflow:'mixed.yaml',validator:'validation.py'},
+    {prompt:'Review automation scripts',project:'D:\\lab\\tools',workflow:'ralphy_ai_validate.yaml',validator:'ai'}
+  ]
+};
+let batchRunTimer=null;
+function batchToYaml(items){return items.map(x=>`- prompt: ${x.prompt}\n  project_root: ${x.project}\n  workflow_file: ${x.workflow}\n  validator: ${x.validator}\n  stage_retries: -1`).join('\n\n')}
+function renderBatch(key){
+  clearInterval(batchRunTimer);const items=batchPresets[key]||[];
+  const form=document.getElementById('formList');
+  form.innerHTML=items.map((x,i)=>`<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(x.prompt)}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="field"><label>Prompt</label><textarea data-field="prompt">${escapeHtml(x.prompt)}</textarea></div><div class="row2"><div class="field"><label>Project root</label><input data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option></select></div></div></div>`).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  document.getElementById('yamlEditor').value=batchToYaml(items);
+  document.getElementById('batchPreview').innerHTML=items.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(x.prompt)}</strong><small>${escapeHtml(x.project.split('\\\\').pop())} · ${escapeHtml(x.workflow)} · validator: ${escapeHtml(x.validator)}</small></div><span class="orderchip">Waiting</span></div>`).join('');
+  document.getElementById('batchLog').textContent='Mock batch is idle. Choose an outcome and press Run Batch.';
+  bindBatchForm();
+}
+function readFormBatch(){
+  return [...document.querySelectorAll('.request[data-req]')].map(r=>({prompt:r.querySelector('[data-field="prompt"]').value,project:r.querySelector('[data-field="project"]').value,workflow:r.querySelector('[data-field="workflow"]').value,validator:'ai'}));
+}
+function syncFormToYamlAndPreview(){
+  const items=readFormBatch();document.getElementById('yamlEditor').value=batchToYaml(items);
+  document.getElementById('batchPreview').innerHTML=items.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(x.prompt)}</strong><small>${escapeHtml(x.project.split('\\\\').pop())} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">Waiting</span></div>`).join('');
+}
+function bindBatchForm(){
+  document.querySelectorAll('.request textarea,.request input,.request select').forEach(el=>el.addEventListener('input',syncFormToYamlAndPreview));
+  const add=document.getElementById('addRequest');if(add)add.onclick=()=>{
+    const items=readFormBatch();items.push({prompt:'New child RunRequest',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validator:'ai'});
+    batchPresets.custom=items;document.getElementById('batchPreset').value=document.querySelector('#batchPreset option[value="custom"]')?'custom':document.getElementById('batchPreset').value;
+    renderBatchFromItems(items);showToast('新增 mock child RunRequest');
+  };
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const items=readFormBatch();items.splice(+b.dataset.remove,1);renderBatchFromItems(items)});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;const items=readFormBatch();[items[i-1],items[i]]=[items[i],items[i-1]];renderBatchFromItems(items)});
+}
+function renderBatchFromItems(items){
+  batchPresets.custom=items;
+  if(!document.querySelector('#batchPreset option[value="custom"]'))document.getElementById('batchPreset').insertAdjacentHTML('beforeend','<option value="custom">Edited draft</option>');
+  document.getElementById('batchPreset').value='custom';renderBatch('custom');
+}
 document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('[data-yamltab]').forEach(x=>x.classList.toggle('active',x===t));
   document.getElementById('yaml-form').classList.toggle('hidden',t.dataset.yamltab!=='form');
   document.getElementById('yaml-code').classList.toggle('hidden',t.dataset.yamltab!=='code');
 }));
-document.getElementById('validateYaml').onclick=()=>showToast('YAML List valid · 2 child RunRequests');
+document.getElementById('batchPreset').onchange=e=>{renderBatch(e.target.value);showToast(`載入 ${e.target.options[e.target.selectedIndex].text}`)};
+document.getElementById('yamlEditor').addEventListener('input',()=>{document.getElementById('batchLog').textContent='YAML edited manually. Mock parser will validate the current text when you press Validate.'});
+document.getElementById('validateYaml').onclick=()=>{
+  const y=document.getElementById('yamlEditor').value;
+  const count=(y.match(/^- prompt:/gm)||[]).length;
+  if(count){showToast(`YAML List valid · ${count} child RunRequests`);document.getElementById('batchLog').textContent=`[validate] PASS · parsed ${count} child RunRequests\n[validate] Formal implementation should call the existing backend YAML/schema path.`}
+  else{showToast('YAML invalid · no "- prompt:" entries');document.getElementById('batchLog').textContent='[validate] FAIL · no child RunRequests detected'}
+};
 document.getElementById('runBatch').onclick=()=>{
-  const items=[...document.querySelectorAll('.previewitem')];
+  clearInterval(batchRunTimer);
+  const items=[...document.querySelectorAll('.previewitem')],outcome=document.getElementById('batchOutcome').value,log=document.getElementById('batchLog');
   items.forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
-  if(items[0]){items[0].classList.add('active');items[0].querySelector('.orderchip').textContent='Running'}
-  showToast('Demo: Batch 開始執行第 1 個 child RunRequest');
+  log.textContent='[00:00] batch started · sequential child RunRequests';
+  let i=0,recovered=false;
+  const tick=()=>{
+    if(i>=items.length){log.textContent+='\n[done] batch completed';showToast('Mock batch completed');clearInterval(batchRunTimer);return}
+    const item=items[i];items.forEach(x=>x.classList.remove('active'));item.classList.add('active');item.querySelector('.orderchip').textContent='Running';
+    if(outcome==='recover'&&i===0&&!recovered){
+      recovered=true;item.querySelector('.orderchip').textContent='Recovering';log.textContent+='\n[00:05] item 1 · HTTP 503\n[00:10] StageExecutor same-session retry';return
+    }
+    if(outcome==='fail'&&i===1){
+      item.querySelector('.orderchip').textContent='Failed';log.textContent+='\n[00:12] item 2 · deterministic validation FAIL\n[00:12] batch stopped';showToast('Mock batch failed at item 2');clearInterval(batchRunTimer);return
+    }
+    item.classList.remove('active');item.classList.add('done');item.querySelector('.orderchip').textContent='PASS';log.textContent+=`\n[00:${String((i+1)*6).padStart(2,'0')}] item ${i+1} PASS`;i++;
+  };
+  tick();batchRunTimer=setInterval(tick,900);
 };
-document.getElementById('addRequest').onclick=()=>showToast('正式版：新增一個 child RunRequest，Form/YAML 同步');
 
-document.getElementById('chatSend').onclick=()=>{
-  const input=document.getElementById('chatInput');const text=input.value.trim();if(!text)return;
-  const box=document.getElementById('chatMessages');
-  const u=document.createElement('div');u.className='msg user';u.innerHTML='<div class="msgmeta">You</div>'+escapeHtml(text);box.appendChild(u);
-  const a=document.createElement('div');a.className='msg assistant';a.innerHTML='<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>這是一般 Chat 示意；這則訊息不會建立 Workflow Run。';box.appendChild(a);
-  input.value='';box.scrollTop=box.scrollHeight;
-};
-document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
-function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-document.getElementById('stopDemo').onclick=()=>showToast('Demo only：正式版仍呼叫既有 server-side action guard / Stop contract');
+const workflowMocks=[
+  {name:'ralphy_ai_validate.yaml',meta:'Global · Shown in Chat',code:'stages:\\n  planning:\\n    type: plan\\n  execute:\\n    type: base\\n    profile: execute\\n  review:\\n    type: base\\n    profile: review\\n    routes:\\n      fail: execute\\n  final_validate:\\n    type: ai_validator\\n\\nflow: [planning, execute, review, final_validate]'},
+  {name:'mixed.yaml',meta:'Global · Hidden from Chat',code:'stages:\\n  prepare:\\n    type: command\\n  implement:\\n    type: base\\n    profile: execute\\n  verify:\\n    type: base\\n    profile: review\\n\\nflow: [prepare, implement, verify]'},
+  {name:'dynamic_handoff.yaml',meta:'Project · Shown in Chat',code:'stages:\\n  lead:\\n    type: handoff\\n    targets: [implementer, verifier]\\n  implementer:\\n    type: base\\n  verifier:\\n    type: base\\n    profile: review\\n\\nflow: [lead, implementer, verifier]'}
+];
+const promptMocks=[
+  {name:'common/review.md',meta:'Global prompt',code:'# Review\\nReview only the requested scope.\\nReturn exactly PASS or FAIL with concise evidence.'},
+  {name:'common/validator.md',meta:'Global prompt',code:'# Validator\\nValidate semantics in a fresh session.\\nDo not modify project files.'},
+  {name:'workflow/generate.md',meta:'Global prompt',code:'# Workflow Generator\\nGenerate the smallest valid Stage graph for the requested goal.'},
+  {name:'ralphy/execute.md',meta:'Project-style prompt',code:'# Execute\\nImplement the current bounded task.\\nPreserve unrelated behavior.'}
+];
+function renderAssetList(kind,data){
+  const list=document.getElementById(kind+'MockList');
+  list.innerHTML=data.map((x,i)=>`<button class="asset-item ${i===0?'active':''}" data-${kind}="${i}"><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.meta)}</small></button>`).join('');
+  list.querySelectorAll('.asset-item').forEach(b=>b.onclick=()=>selectAsset(kind,data,+b.dataset[kind]));
+  selectAsset(kind,data,0);
+}
+function selectAsset(kind,data,i){
+  document.querySelectorAll(`#${kind}MockList .asset-item`).forEach((b,n)=>b.classList.toggle('active',n===i));
+  document.getElementById(kind+'MockTitle').textContent=data[i].name;document.getElementById(kind+'MockMeta').textContent=data[i].meta;document.getElementById(kind+'MockCode').textContent=data[i].code.replaceAll('\\n','\n');
+}
+document.getElementById('generateMockWorkflow').onclick=()=>showToast('Mock: Generate with AI would open the existing generator flow');
+document.getElementById('newMockPrompt').onclick=()=>showToast('Mock: New Prompt');
+renderAssetList('workflow',workflowMocks);renderAssetList('prompt',promptMocks);
+
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
+
+renderChat('design');
+renderBoard('today');
+renderBatch('ui');
 </script>
 </body>
 </html>
