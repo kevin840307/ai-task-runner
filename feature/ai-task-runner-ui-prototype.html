@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Task Runner · UI Prototype</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f5f7fa;--panel:#fff;--panel-2:#fbfcfe;--line:#d8dee8;--text:#17202c;--muted:#687487;
+  --accent:#0f766e;--accent-dark:#115e59;--accent-soft:#e8f7f4;--fail:#b42318;--pass:#147a3f;
+  --run:#9a5b00;--warning-soft:#fff7df;--blue:#1d4ed8;--shadow-sm:0 1px 2px rgba(23,32,44,.04);
+  --shadow-md:0 6px 18px rgba(23,32,44,.06);--shadow-pop:0 18px 52px rgba(23,32,44,.16);
+  --r-sm:6px;--r-md:8px;--r-lg:11px;--r-xl:14px;--rail:252px;
+  --font:Inter,"Segoe UI",Arial,sans-serif;
+}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:rgba(100,116,139,.4) transparent}
+*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-thumb{background:rgba(100,116,139,.34);border:3px solid transparent;background-clip:content-box;border-radius:999px}
+html,body{height:100%;margin:0}body{font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden}
+button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{height:100vh;display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+.sidebar{min-height:0;padding:10px;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--line);
+  background:radial-gradient(circle at 0 0,rgba(15,118,110,.10),transparent 34%),linear-gradient(180deg,#fff,#f8fafc)}
+.brandrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(216,222,232,.72)}
+.brand{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:760}.brandmark{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-weight:950;box-shadow:0 10px 22px rgba(15,118,110,.22)}
+.iconbtn{width:34px;height:34px;border:1px solid var(--line);border-radius:999px;background:linear-gradient(180deg,#fff,var(--panel-2));color:var(--muted)}
+.nav{display:grid;gap:7px;margin-top:12px;padding-bottom:12px;border-bottom:1px solid rgba(216,222,232,.72)}
+.navbtn{width:100%;min-height:42px;padding:0 12px;display:flex;align-items:center;gap:9px;border:1px solid rgba(203,213,225,.72);border-radius:14px;background:rgba(255,255,255,.74);box-shadow:var(--shadow-sm);font-weight:800;font-size:13px;text-align:left;transition:.15s}
+.navbtn:hover,.navbtn.active{transform:translateY(-1px);border-color:rgba(15,118,110,.36);background:#fff;box-shadow:0 10px 24px rgba(15,23,42,.08);color:var(--accent-dark)}
+.navico{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:12px}.navbadge{margin-left:auto;padding:1px 6px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:8px;letter-spacing:.04em}
+.sectionlabel{margin:14px 8px 6px;display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.addsmall{width:24px;height:24px;border:0;background:transparent;color:var(--accent);font-weight:900;font-size:18px}
+.projects{min-height:0;overflow:auto;display:grid;gap:3px;align-content:start;padding:2px 0}.project{position:relative;display:grid;grid-template-columns:10px minmax(0,1fr);gap:8px;align-items:center;min-height:36px;padding:0 10px 0 15px;border:1px solid transparent;border-radius:8px;background:transparent}
+.project.active,.project:hover{background:rgba(255,255,255,.8);border-color:rgba(15,118,110,.14)}.project.active:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;background:var(--accent);border-radius:999px}
+.dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1}.dot.running{background:var(--accent);box-shadow:0 0 0 3px rgba(20,184,166,.13)}.dot.done{background:#16a34a}.project strong{display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.project small{display:block;margin-top:2px;color:var(--muted);font-size:9px}
+.sidefoot{margin-top:auto;padding:11px 8px 2px;color:var(--muted);font-size:10px;line-height:1.4}
+.workspace{position:relative;min-width:0;min-height:0;overflow:hidden}.view{position:absolute;inset:0;display:none;min-width:0;min-height:0}.view.active{display:grid}
+.page{grid-template-rows:68px minmax(0,1fr);background:var(--bg)}.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.title h1{margin:0;font-size:16px;line-height:1.2}.title p{margin:3px 0 0;color:var(--muted);font-size:11px}.actions{display:flex;align-items:center;gap:8px}
+.btn{min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);font-size:11px;font-weight:800}.btn:hover{border-color:var(--accent)}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn.primary:hover{background:var(--accent-dark)}.btn.danger{color:var(--fail)}.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);color:var(--muted);font-size:10px;font-weight:850}.pill.run{border-color:#f4c56a;background:var(--warning-soft);color:var(--run)}.pill.pass{border-color:#9fd2b0;background:#eef9f1;color:var(--pass)}.pill.fail{border-color:#f5a99e;background:#fee4df;color:var(--fail)}
+/* Chat */
+.chatbody{position:relative;min-height:0;display:grid;grid-template-rows:minmax(0,1fr);overflow:hidden}.messages{overflow:auto;padding:24px max(24px,calc((100% - 880px)/2)) 180px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:82%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow-sm);font-size:13px;line-height:1.55}.msg.user{align-self:flex-end;border-color:rgba(15,118,110,.26);background:#fbfffe}.msg.assistant{align-self:flex-start}.msgmeta{display:flex;align-items:center;gap:7px;margin-bottom:6px;color:var(--muted);font-size:10px;font-weight:800}.avatar{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:900}.composerwrap{position:absolute;left:0;right:0;bottom:0;padding:25px max(14px,calc((100% - 900px)/2)) 14px;background:linear-gradient(to bottom,rgba(245,247,250,0),var(--bg) 25px,var(--bg) 100%)}.composer{border:1px solid var(--line);border-radius:15px;background:var(--panel);box-shadow:0 12px 32px rgba(15,23,42,.10);overflow:hidden}.composer textarea{display:block;width:100%;height:76px;resize:none;border:0;outline:0;padding:14px;background:transparent;color:var(--text);font-size:13px}.composerfoot{display:flex;align-items:center;justify-content:space-between;padding:8px;border-top:1px solid #edf1f5}.chips{display:flex;gap:6px;align-items:center}.chip{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:10px;font-weight:800}
+/* Board */
+.boardpage{grid-template-rows:68px 54px minmax(0,1fr)}.boardtools{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--panel-2)}.search{width:min(330px,38vw);height:34px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)}.toggle{display:flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#fff}.toggle button{height:27px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:10px;font-weight:800}.toggle button.active{background:var(--accent-soft);color:var(--accent-dark)}
+.board{min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:12px;padding:14px 18px 20px}.col{min-width:245px;display:flex;flex-direction:column;min-height:0;border:1px solid #e4e9f0;border-radius:12px;background:#f8fafc}.colhead{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border-bottom:1px solid #e5eaf0}.colhead strong{font-size:12px}.count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:9px;font-weight:900}.coladd{margin-left:auto;border:0;background:transparent;color:var(--muted);font-size:18px}.dropzone{flex:1;min-height:140px;overflow:auto;padding:9px;display:flex;flex-direction:column;gap:8px}.dropzone.over{background:rgba(15,118,110,.06);outline:2px dashed rgba(15,118,110,.25);outline-offset:-5px;border-radius:10px}
+.taskcard{padding:10px;border:1px solid #dce3eb;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);cursor:grab;transition:.12s}.taskcard:hover{transform:translateY(-1px);border-color:rgba(15,118,110,.30);box-shadow:0 8px 18px rgba(15,23,42,.07)}.taskcard.dragging{opacity:.45}.cardtop{display:flex;align-items:flex-start;gap:8px}.handle{color:#a3adba;font-size:12px;letter-spacing:-2px;user-select:none}.tasktitle{flex:1;font-size:12px;font-weight:850;line-height:1.35}.runtime{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.03em}.runtime.running{background:#dff8ee;color:#047857}.runtime.stopped{background:#fee4df;color:#b42318}.runtime.done{background:#e9f8ed;color:#15803d}.runtime.recover{background:#fff7df;color:#9a5b00}.carddesc{margin:7px 0 9px;color:var(--muted);font-size:10px;line-height:1.45}.cardmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.tag{padding:2px 6px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:850}.cardfoot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:8px;border-top:1px solid #eef1f4;color:var(--muted);font-size:9px}.progress{display:flex;align-items:center;gap:6px}.bar{width:48px;height:4px;border-radius:999px;background:#e8edf2;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
+/* YAML */
+.yamlbody{min-height:0;display:grid;grid-template-columns:minmax(390px,44%) minmax(0,1fr);gap:0}.yamlleft{min-width:0;min-height:0;border-right:1px solid var(--line);background:var(--panel);display:grid;grid-template-rows:46px minmax(0,1fr)}.yamlright{min-width:0;min-height:0;overflow:auto;padding:16px 18px}.tabs{display:flex;align-items:end;gap:4px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}.tab{height:38px;padding:0 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:11px;font-weight:850}.tab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.yamlpane{min-height:0;overflow:auto;padding:12px}.yamlpane.hidden{display:none}.code{width:100%;height:100%;min-height:420px;resize:none;border:1px solid #dbe3ef;border-radius:10px;padding:13px;background:#f8fafc;color:#172033;font:11px/1.62 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre}.code:focus{border-color:#8abbb5;box-shadow:0 0 0 2px rgba(15,118,110,.08);background:#fff}.formlist{display:grid;gap:9px}.request{padding:11px;border:1px solid var(--line);border-radius:11px;background:#fbfdff}.reqhead{display:flex;align-items:center;gap:7px;margin-bottom:9px}.reqnum{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:950}.reqhead strong{font-size:11px}.reqhead button{margin-left:auto;border:0;background:transparent;color:var(--muted)}.field{display:grid;gap:4px;margin-top:7px}.field label{color:var(--muted);font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}.field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);padding:8px;font-size:10px}.field textarea{height:64px;resize:vertical}.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.addreq{width:100%;height:36px;border:1px dashed #bdc8d4;border-radius:9px;background:#fff;color:var(--accent);font-size:10px;font-weight:850}
+.batchintro{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.batchintro h2{margin:0 0 4px;font-size:14px}.batchintro p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}.callout{margin-bottom:12px;padding:10px 11px;border:1px solid rgba(15,118,110,.20);border-radius:10px;background:#f4fbf9;color:#496461;font-size:10px;line-height:1.45}.preview{display:grid;gap:8px}.previewitem{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}.previewitem:before{content:"";position:absolute;left:24px;top:100%;height:9px;border-left:1px dashed #b7c2cc}.previewitem:last-child:before{display:none}.step{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#eef2f6;color:#64748b;font-size:9px;font-weight:950}.previewitem.active .step{background:var(--accent);color:#fff}.previewitem.done .step{background:#e9f8ed;color:#15803d}.previewitem strong{display:block;font-size:11px}.previewitem small{display:block;margin-top:3px;color:var(--muted);font-size:9px}.orderchip{padding:3px 7px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900}.previewitem.active .orderchip{background:#dff8ee;color:#047857}
+/* Existing-page placeholders */
+.assetbody{min-height:0;display:grid;place-items:center;padding:30px}.assetcard{width:min(760px,90%);padding:28px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;box-shadow:var(--shadow-sm)}.assetcard h2{margin:0 0 8px;font-size:16px}.assetcard p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+/* Drawer */
+.overlay{position:fixed;inset:0;z-index:80;background:rgba(14,23,38,.28);backdrop-filter:blur(2px);display:none}.overlay.open{display:block}.drawer{position:absolute;top:0;right:0;width:min(520px,92vw);height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:#fff;border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(15,23,42,.16);transform:translateX(100%);transition:.18s}.overlay.open .drawer{transform:translateX(0)}.drawerhead{padding:15px 16px 12px;border-bottom:1px solid var(--line)}.drawerheadtop{display:flex;gap:10px;align-items:start}.drawerhead h2{flex:1;margin:0;font-size:15px;line-height:1.35}.close{width:30px;height:30px;border:0;background:transparent;color:var(--muted);font-size:22px}.drawerhead p{margin:5px 0 0;color:var(--muted);font-size:10px}.drawertabs{display:flex;gap:3px;padding:0 12px;border-bottom:1px solid var(--line);background:#fbfcfe}.drawertab{height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:850}.drawertab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.drawerbody{min-height:0;overflow:auto;padding:14px 16px}.section{margin-bottom:14px}.section h3{margin:0 0 8px;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;font-size:10px}.kv span{color:var(--muted)}.kv strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.runtimebox{padding:11px;border:1px solid rgba(15,118,110,.18);border-radius:11px;background:#f7fcfb}.runtop{display:flex;align-items:center;justify-content:space-between}.runtop strong{font-size:11px}.stagerow{display:flex;gap:8px;align-items:center;margin-top:9px}.stagebar{flex:1;height:6px;background:#e7edf1;border-radius:999px;overflow:hidden}.stagebar i{display:block;width:64%;height:100%;background:var(--accent);border-radius:999px}.timeline{display:grid;gap:0;margin-top:8px}.event{position:relative;padding:7px 0 7px 22px;font-size:10px}.event:before{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid #d9e0e7}.event:after{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;background:#cbd5e1;border:2px solid #fff}.event.done:after{background:#16a34a}.event.now:after{background:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.10)}.event small{display:block;color:var(--muted);margin-top:2px}.console{max-height:230px;overflow:auto;padding:11px;border:1px solid #d9e2ec;border-radius:10px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.drawerfoot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:#fbfcfe}
+/* toast */
+.toast{position:fixed;left:50%;bottom:18px;z-index:150;transform:translate(-50%,12px);opacity:0;pointer-events:none;padding:9px 12px;border-radius:999px;background:#17202c;color:#fff;font-size:10px;font-weight:800;box-shadow:var(--shadow-pop);transition:.18s}.toast.show{opacity:1;transform:translate(-50%,0)}
+.proto{position:fixed;left:12px;bottom:10px;z-index:20;padding:4px 7px;border:1px solid rgba(15,118,110,.18);border-radius:999px;background:rgba(255,255,255,.88);color:var(--accent-dark);font-size:8px;font-weight:900;backdrop-filter:blur(6px)}
+@media(max-width:900px){:root{--rail:205px}.board{grid-template-columns:repeat(4,260px)}.yamlbody{grid-template-columns:1fr}.yamlleft{border-right:0}.yamlright{display:none}}
+@media(max-width:620px){:root{--rail:155px}.brand span:last-child{display:none}.navbtn{padding:0 8px}.navbtn .navbadge{display:none}.messages{padding-left:12px;padding-right:12px}.header{padding:0 10px}.title p{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brandrow">
+      <div class="brand"><span class="brandmark">A</span><span>Agent Workflow</span></div>
+      <button class="iconbtn" id="themeBtn" title="外觀">◐</button>
+    </div>
+    <nav class="nav">
+      <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
+      <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navbadge" id="taskNavCount">6</span></button>
+      <button class="navbtn" data-view="yaml"><span class="navico">≡</span><span>YAML Tasks</span><span class="navbadge">BATCH</span></button>
+      <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
+      <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
+    </nav>
+    <div class="sectionlabel"><span>專曈</span><button class="addsmall" title="新增 / 開啟專曈">+</button></div>
+    <div class="projects">
+      <div class="project active"><span class="dot running"></span><div><strong>ai-task-runner</strong><small>Running · feature/ui</small></div></div>
+      <div class="project"><span class="dot done"></span><div><strong>game-client</strong><small>Completed</small></div></div>
+      <div class="project"><span class="dot"></span><div><strong>lab-tools</strong><small>Idle</small></div></div>
+    </div>
+    <div class="sidefoot">Project、Workflow、Runtime contract 仍沿用目前 Runner。這份頁面只示範 UI / UX。</div>
+  </aside>
+
+  <main class="workspace">
+    <!-- Chat -->
+    <section class="view page" id="view-chat">
+      <header class="header">
+        <div class="title"><h1>Chat</h1><p>C:\Users\kevin\ai-task-runner · 一般對評，不建立 Runner Task</p></div>
+        <div class="actions"><span class="pill">Project context</span><button class="btn">清除對話</button></div>
+      </header>
+      <div class="chatbody">
+        <div class="messages" id="chatMessages">
+          <div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>這裡是一般 Chat。你可以問程式、討論設計或請我閱讀目前專案內容；只有在你明確建立 Task 時，才會交給 Workflow Runner。</div>
+          <div class="msg user"><div class="msgmeta">You</div>幫我看目前 feature/ui 的 Task UI 有沒有更簡潔的做法。</div>
+          <div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>可以。建議把「討論」和「長時間執行」分開：Chat 專注互動，Tasks 專注可追蹤的工作，Workflow 則維持既有執行契約。</div>
+        </div>
+        <div class="composerwrap">
+          <div class="composer">
+            <textarea id="chatInput" placeholder="傳訊息給 AI…"></textarea>
+            <div class="composerfoot">
+              <div class="chips"><span class="chip">Project context</span><span class="chip">Default backend</span></div>
+              <button class="btn primary" id="chatSend">傳送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tasks -->
+    <section class="view page boardpage active" id="view-tasks">
+      <header class="header">
+        <div class="title"><h1>Tasks</h1><p>C:\Users\kevin\ai-task-runner · Board 管理狀態與 Runner runtime 分離</p></div>
+        <div class="actions"><span class="pill run">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
+      </header>
+      <div class="boardtools">
+        <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
+        <div class="actions"><span class="pill">拖曳卡片改 Board 狀態</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
+      </div>
+      <div class="board" id="board">
+        <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">2</span><button class="coladd">+</button></div><div class="dropzone">
+          <article class="taskcard" draggable="true" data-title="新增 YAML Task UI" data-runtime="idle"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">新增 YAML Task UI</div><span class="runtime">Idle</span></div><div class="carddesc">讓 YAML List 能用 Form / YAML 兩種方式編排與執行。</div><div class="cardmeta"><span class="tag">ralphy_ai_validate</span><span class="tag">UI</span></div><div class="cardfoot"><span>#T-104</span><span>今天</span></div></article>
+          <article class="taskcard" draggable="true" data-title="重整 README Workflow 說明" data-runtime="idle"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">重整 README Workflow 說明</div><span class="runtime">Idle</span></div><div class="carddesc">文件同步目前 Stage / PASS / FAIL contract。</div><div class="cardmeta"><span class="tag">docs</span></div><div class="cardfoot"><span>#T-105</span><span>昨天</span></div></article>
+        </div></section>
+        <section class="col" data-status="ongoing"><div class="colhead"><strong>Ongoing</strong><span class="count">2</span><button class="coladd">+</button></div><div class="dropzone">
+          <article class="taskcard" draggable="true" data-title="完成 feature/ui 新 Task 介面" data-runtime="running"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">完成 feature/ui 新 Task 介面</div><span class="runtime running">Running</span></div><div class="carddesc">Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。</div><div class="cardmeta"><span class="tag">feature/ui</span><span class="tag">review</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:64%"></i></span>3 / 5</span><span>12m</span></div></article>
+          <article class="taskcard" draggable="true" data-title="修正 Studio stage test" data-runtime="recover"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">修正 Studio stage test</div><span class="runtime recover">Recovering</span></div><div class="carddesc">API 暫時錯誤，StageExecutor 正在 same-session retry。</div><div class="cardmeta"><span class="tag">studio</span><span class="tag">API</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:42%"></i></span>2 / 5</span><span>4m</span></div></article>
+        </div></section>
+        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">1</span><button class="coladd">+</button></div><div class="dropzone">
+          <article class="taskcard" draggable="true" data-title="24H reliability review" data-runtime="stopped"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">24H reliability review</div><span class="runtime stopped">Stopped</span></div><div class="carddesc">User stop；可從 Task 詳細頁 Resume / Reset。</div><div class="cardmeta"><span class="tag">reliability</span><span class="tag">live</span></div><div class="cardfoot"><span>#T-099</span><span>1d</span></div></article>
+        </div></section>
+        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">1</span><button class="coladd">+</button></div><div class="dropzone">
+          <article class="taskcard" draggable="true" data-title="移除舊 Discussion 模式" data-runtime="done"><div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">移除舊 Discussion 模式</div><span class="runtime done">Completed</span></div><div class="carddesc">舊契約與 UI 已清理，測試通過。</div><div class="cardmeta"><span class="tag">cleanup</span></div><div class="cardfoot"><span class="progress"><span class="bar"><i style="width:100%"></i></span>5 / 5</span><span>2d</span></div></article>
+        </div></section>
+      </div>
+    </section>
+
+    <!-- YAML Tasks -->
+    <section class="view page" id="view-yaml">
+      <header class="header">
+        <div class="title"><h1>YAML Tasks</h1><p>同一個 YAML List / RunRequest contract 的 UI builder，不建立第二套 Runner</p></div>
+        <div class="actions"><button class="btn">Import YAML</button><button class="btn" id="validateYaml">Validate</button><button class="btn primary" id="runBatch">Run Batch</button></div>
+      </header>
+      <div class="yamlbody">
+        <section class="yamlleft">
+          <div class="tabs"><button class="tab active" data-yamltab="form">Form</button><button class="tab" data-yamltab="code">YAML</button></div>
+          <div class="yamlpane" id="yaml-form">
+            <div class="formlist" id="formList">
+              <div class="request">
+                <div class="reqhead"><span class="reqnum">1</span><strong>Fix task A</strong><button>⋮</button></div>
+                <div class="field"><label>Prompt</label><textarea>修正 feature/ui 的 Task board，保持目前視覺風格。</textarea></div>
+                <div class="row2"><div class="field"><label>Project root</label><input value="C:\Users\kevin\ai-task-runner"></div><div class="field"><label>Workflow</label><select><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option></select></div></div>
+              </div>
+              <div class="request">
+                <div class="reqhead"><span class="reqnum">2</span><strong>Review UI</strong><button>⋮</button></div>
+                <div class="field"><label>Prompt</label><textarea>Review UI/UX、測試與舊契約，必要時修正。</textarea></div>
+                <div class="row2"><div class="field"><label>Project root</label><input value="C:\Users\kevin\ai-task-runner"></div><div class="field"><label>Workflow</label><select><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option></select></div></div>
+              </div>
+              <button class="addreq" id="addRequest">+ Add RunRequest</button>
+            </div>
+          </div>
+          <div class="yamlpane hidden" id="yaml-code">
+<textarea class="code" id="yamlEditor">- prompt: Fix feature/ui Task board
+  project_root: C:\Users\kevin\ai-task-runner
+  workflow_file: ralphy_ai_validate.yaml
+  validator: ai
+  stage_retries: -1
+
+- prompt: Review UI/UX and tests
+  project_root: C:\Users\kevin\ai-task-runner
+  workflow_file: ralphy_ai_validate.yaml
+  validator: ai
+</textarea>
+          </div>
+        </section>
+        <section class="yamlright">
+          <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
+          <div class="callout"><strong>設計原則：</strong> Form 和 YAML 只是同一份 batch draft 的兩種視圖；執行前用既有 loader / validation 驗證，不在 UI 重新發明 workflow schema。</div>
+          <div class="preview" id="batchPreview">
+            <div class="previewitem"><span class="step">1</span><div><strong>Fix feature/ui Task board</strong><small>ai-task-runner · ralphy_ai_validate.yaml · validator: ai</small></div><span class="orderchip">Waiting</span></div>
+            <div class="previewitem"><span class="step">2</span><div><strong>Review UI/UX and tests</strong><small>ai-task-runner · ralphy_ai_validate.yaml · validator: ai</small></div><span class="orderchip">Waiting</span></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Existing sections -->
+    <section class="view page" id="view-workflows">
+      <header class="header"><div class="title"><h1>Workflows</h1><p>既有 Workflow Studio 保持原樣</p></div><div class="actions"><button class="btn">Import</button><button class="btn primary">Generate with AI</button></div></header>
+      <div class="assetbody"><div class="assetcard"><h2>這裡不重畫你現有的 Workflow Studio</h2><p>Prototype 只示範新增/調整的三個區域。正式實作仍保留目前 Workflows → Workflow Editor → Designer / YAML ownership。</p></div></div>
+    </section>
+    <section class="view page" id="view-prompts">
+      <header class="header"><div class="title"><h1>Prompts</h1><p>既有 Prompt workspace 保持原樣</p></div><div class="actions"><button class="btn primary">+ New Prompt</button></div></header>
+      <div class="assetbody"><div class="assetcard"><h2>Prompts 不需要因新 Task UI 改動</h2><p>Task / YAML Task 只引用現有 Prompt / Workflow assets，避免出現第二套資產管理。</p></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="overlay" id="taskOverlay">
+  <aside class="drawer">
+    <div class="drawerhead">
+      <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
+      <p>#T-103 · ai-task-runner · Board: <span id="drawerBoardStatus">Ongoing</span></p>
+    </div>
+    <div class="drawertabs"><button class="drawertab active">Overview</button><button class="drawertab">Runtime</button><button class="drawertab">Output</button><button class="drawertab">History</button></div>
+    <div class="drawerbody">
+      <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong>ralphy_ai_validate.yaml</strong><span>Backend</span><strong>Default backend</strong><span>Project</span><strong>C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
+      <section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong>Stage: review</strong><span class="runtime running">Running</span></div><div class="stagerow"><div class="stagebar"><i></i></div><small>3 / 5</small></div><div class="timeline"><div class="event done"><strong>planning</strong><small>PASS · 20:01</small></div><div class="event done"><strong>execute</strong><small>PASS · 20:07</small></div><div class="event now"><strong>review</strong><small>Running · same session</small></div><div class="event"><strong>final_validate</strong><small>Waiting</small></div></div></div></section>
+      <section class="section"><h3>Live output</h3><div class="console">[20:07:11] review: inspecting modified UI files
+[20:07:12] review: checking navigation ownership
+[20:07:15] review: validating Task board interactions
+[20:07:19] stage session active · bounded output shown here
+
+This remains the Runner-owned runtime projection.
+Board drag-and-drop does not synthesize runtime state.</div></section>
+    </div>
+    <div class="drawerfoot"><button class="btn danger" id="stopDemo">Stop</button><button class="btn">Open Workflow</button><button class="btn primary">Open Full Runtime</button></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="proto">STANDALONE UI PROTOTYPE · no repo changes</div>
+
+<script>
+const views=[...document.querySelectorAll('.view')];
+const nav=[...document.querySelectorAll('.navbtn[data-view]')];
+function showView(name){
+  views.forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
+  nav.forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+}
+nav.forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+
+const toast=document.getElementById('toast');
+let toastTimer;
+function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1800)}
+
+document.getElementById('themeBtn').addEventListener('click',()=>showToast('Prototype 目前鎖定現有 Teal light theme'));
+
+function openTask(card){
+  const title=card.dataset.title||'Task';
+  const status=card.closest('.col')?.dataset.status||'new';
+  const runtime=card.dataset.runtime||'idle';
+  document.getElementById('drawerTitle').textContent=title;
+  const statusName={new:'New',ongoing:'Ongoing',paused:'Paused',closed:'Closed'}[status]||status;
+  document.getElementById('drawerBoardStatus').textContent=statusName;
+  document.getElementById('drawerStatusValue').textContent=statusName;
+  const badge=document.getElementById('drawerRuntime');
+  const runtimeName={running:'Running',recover:'Recovering',stopped:'Stopped',done:'Completed',idle:'Idle'}[runtime]||runtime;
+  badge.textContent=runtimeName;
+  badge.className='pill '+(runtime==='done'?'pass':runtime==='stopped'?'fail':(runtime==='running'||runtime==='recover')?'run':'');
+  document.getElementById('taskOverlay').classList.add('open');
+}
+function bindCards(){document.querySelectorAll('.taskcard').forEach(card=>{card.onclick=(e)=>{if(!card.classList.contains('dragging'))openTask(card)}})}
+bindCards();
+document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
+document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
+
+let dragged=null;
+document.querySelectorAll('.taskcard').forEach(card=>{
+  card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});
+  card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over'));updateCounts()});
+});
+document.querySelectorAll('.dropzone').forEach(zone=>{
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('over');e.dataTransfer.dropEffect='move'});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('over');if(dragged){const old=dragged.closest('.col')?.dataset.status;zone.appendChild(dragged);const now=zone.closest('.col')?.dataset.status;showToast(`Board status: ${old} → ${now}（不改 Runner runtime）`);updateCounts()}});
+});
+function updateCounts(){
+  document.querySelectorAll('.col').forEach(c=>c.querySelector('.count').textContent=c.querySelectorAll('.taskcard:not([hidden])').length);
+  document.getElementById('taskNavCount').textContent=document.querySelectorAll('.taskcard').length;
+}
+document.getElementById('taskSearch').addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase();
+  document.querySelectorAll('.taskcard').forEach(c=>c.hidden=q&&!c.textContent.toLowerCase().includes(q));
+  updateCounts();
+});
+let runningOnly=false;
+document.getElementById('filterBtn').addEventListener('click',e=>{
+  runningOnly=!runningOnly;e.currentTarget.textContent=runningOnly?'顯示全部':'只看執行中';
+  document.querySelectorAll('.taskcard').forEach(c=>c.hidden=runningOnly&&!['running','recover'].includes(c.dataset.runtime));
+  updateCounts();
+});
+document.getElementById('newTask').addEventListener('click',()=>{
+  const zone=document.querySelector('.col[data-status="new"] .dropzone');
+  const id=106+document.querySelectorAll('.taskcard').length;
+  const card=document.createElement('article');
+  card.className='taskcard';card.draggable=true;card.dataset.title='New Task';card.dataset.runtime='idle';
+  card.innerHTML=`<div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">New Task</div><span class="runtime">Idle</span></div><div class="carddesc">從這裡建立長時間 Runner Task。</div><div class="cardmeta"><span class="tag">workflow</span></div><div class="cardfoot"><span>#T-${id}</span><span>now</span></div>`;
+  zone.prepend(card);showToast('已在 New 建立示意 Task');location.hash='task-created';location.hash='';
+  card.addEventListener('click',()=>openTask(card));card.addEventListener('dragstart',e=>{dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move'});card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null;updateCounts()});updateCounts();
+});
+document.getElementById('listMode').onclick=()=>showToast('Prototype 先示範你要求的 Azure-style Board；正式版可保留 List secondary view');
+
+document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('[data-yamltab]').forEach(x=>x.classList.toggle('active',x===t));
+  document.getElementById('yaml-form').classList.toggle('hidden',t.dataset.yamltab!=='form');
+  document.getElementById('yaml-code').classList.toggle('hidden',t.dataset.yamltab!=='code');
+}));
+document.getElementById('validateYaml').onclick=()=>showToast('YAML List valid · 2 child RunRequests');
+document.getElementById('runBatch').onclick=()=>{
+  const items=[...document.querySelectorAll('.previewitem')];
+  items.forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
+  if(items[0]){items[0].classList.add('active');items[0].querySelector('.orderchip').textContent='Running'}
+  showToast('Demo: Batch 開始執行第 1 個 child RunRequest');
+};
+document.getElementById('addRequest').onclick=()=>showToast('正式版：新增一個 child RunRequest，Form/YAML 同步');
+
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput');const text=input.value.trim();if(!text)return;
+  const box=document.getElementById('chatMessages');
+  const u=document.createElement('div');u.className='msg user';u.innerHTML='<div class="msgmeta">You</div>'+escapeHtml(text);box.appendChild(u);
+  const a=document.createElement('div');a.className='msg assistant';a.innerHTML='<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>這是一般 Chat 示意；這則訊息不會建立 Workflow Run。';box.appendChild(a);
+  input.value='';box.scrollTop=box.scrollHeight;
+};
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+document.getElementById('stopDemo').onclick=()=>showToast('Demo only：正式版仍呼叫既有 server-side action guard / Stop contract');
+</script>
+</body>
+</html>
