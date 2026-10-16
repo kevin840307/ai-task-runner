@@ -2075,6 +2075,145 @@ document.getElementById('drawerAddExisting').onclick=()=>{
   if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
 };
 
+// --- Task edit policy: New / Paused editable; Ongoing / Closed read-only ---
+let taskFormMode='create';
+let editingTaskId=null;
+function taskEditable(t){return !!t&&['new','paused'].includes(t.status)}
+function projectKeyForTask(t){return projectMeta[t.project]?t.project:(Object.keys(projectMeta).find(k=>projectMeta[k].path===t.project)||currentProjectKey||'ai-task-runner')}
+function taskRuntimeFingerprint(t){return JSON.stringify({project:t.project,workflow:t.workflow,goal:t.goal,promptSource:t.promptSource||{},workspacePolicy:t.workspacePolicy||'',workspaceKind:t.workspaceKind||'',branch:t.branch||'',executionRoot:t.executionRoot||''})}
+function setTaskFormCreateMode(){
+  taskFormMode='create';editingTaskId=null;
+  document.getElementById('taskFormTitle').textContent='New Task';
+  document.getElementById('taskFormHelp').textContent='先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。';
+  document.getElementById('createTaskConfirm').textContent='Create Task';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  document.getElementById('newTaskWorkflowField').hidden=false;
+  document.getElementById('newTaskWorkflowCaps').hidden=false;
+  document.querySelector('.workspace-selector-wrap').hidden=false;
+  document.getElementById('newTaskPromptSource').hidden=false;
+  document.getElementById('newTaskValidationSource').hidden=false;
+}
+function applyEditFormScope(t){
+  const multi=isSequenceTask(t);
+  const note=document.getElementById('editTaskScopeNote');
+  note.hidden=false;
+  if(multi){
+    note.innerHTML='<strong>Multi-step Task</strong>：這裡只編輯 Task title / owning project。每個 Step 的 Workflow、Prompt、Validator 請直接在 Execution plan 裡 Edit。';
+    document.getElementById('newTaskWorkflowField').hidden=true;
+    document.getElementById('newTaskWorkflowCaps').hidden=true;
+    document.querySelector('.workspace-selector-wrap').hidden=true;
+    document.getElementById('newTaskPromptSource').hidden=true;
+    document.getElementById('newTaskValidationSource').hidden=true;
+  }else{
+    note.innerHTML=t.status==='paused'?'<strong>Paused Task</strong>：可編輯。若變更 Project / Workflow / Prompt / Validator / Workspace，下一次會 fresh restart，不沿用舊 frozen run。':'<strong>New Task</strong>：尚未執行，可自由修改。';
+    document.getElementById('newTaskWorkflowField').hidden=false;
+    document.getElementById('newTaskWorkflowCaps').hidden=false;
+    document.querySelector('.workspace-selector-wrap').hidden=false;
+    document.getElementById('newTaskPromptSource').hidden=false;
+    document.getElementById('newTaskValidationSource').hidden=false;
+  }
+}
+function openEditTaskForm(t){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Ongoing Task 請先 Pause 再編輯':'Closed Task 為唯讀');return}
+  taskFormMode='edit';editingTaskId=t.id;
+  document.getElementById('taskFormTitle').textContent='Edit Task';
+  document.getElementById('taskFormHelp').textContent='使用與 New Task 相同的設定介面；Save 不會另外建立 Task。';
+  document.getElementById('createTaskConfirm').textContent='Save changes';
+  document.getElementById('newTaskTitle').value=t.title;
+  const key=projectKeyForTask(t);document.getElementById('newTaskProject').value=key;
+  if(!isSequenceTask(t)){
+    document.getElementById('newTaskWorkflow').value=t.workflow||'ralphy_ai_validate.yaml';
+    const p=t.promptSource||{};
+    newTaskDraft={goalMode:p.goalMode||'inline',prompt:p.prompt||t.goal||'',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'};
+    newTaskWorkspaceMode=t.workspacePolicy||((t.workspaceKind==='worktree')?'worktree':'auto');
+    renderNewTaskSources();renderNewTaskWorkspace();
+  }
+  applyEditFormScope(t);openModal('newTaskModal');
+}
+document.getElementById('editTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(t)openEditTaskForm(t)};
+
+const createTaskAction=document.getElementById('createTaskConfirm').onclick;
+document.getElementById('createTaskConfirm').onclick=()=>{
+  if(taskFormMode!=='edit')return createTaskAction();
+  const t=taskMap[editingTaskId];if(!t||!taskEditable(t))return;
+  const before=taskRuntimeFingerprint(t);
+  const title=document.getElementById('newTaskTitle').value.trim();if(!title){showToast('Task title 不可空白');return}
+  const project=document.getElementById('newTaskProject').value;
+  t.title=title;t.project=project;
+  if(!isSequenceTask(t)){
+    captureNewTaskSources();
+    const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+    let goal='';if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+    if(!goal){showToast('Task Prompt 不可空白');return}
+    if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+    const workspace=resolveTaskWorkspace(project,t.id,newTaskWorkspaceMode);if(!workspace.ok&&t.status==='new'){showToast(workspace.reason);return}
+    t.workflow=workflow;t.goal=goal;t.promptSource={...newTaskDraft};t.workspacePolicy=newTaskWorkspaceMode;
+    if(workspace.ok){t.workspaceKind=workspace.kind;t.branch=workspace.branch;t.executionRoot=workspace.root}
+    const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');t.tags=tags;
+  }
+  const runtimeChanged=before!==taskRuntimeFingerprint(t);
+  if(t.status==='paused'&&runtimeChanged){
+    t.configDirty=true;t.desc='Paused Task 已修改執行設定 · 下一次將 fresh restart 目前工作。';
+    pushTaskHistory(t,'Task edited while Paused · restart required');
+  }else{pushTaskHistory(t,'Task metadata updated')}
+  closeModal('newTaskModal');renderBoardFromMap();openTaskById(t.id);showToast(t.configDirty?'Saved · restart required':'Task updated');
+};
+
+// Any create entry resets the shared form back to create mode.
+document.getElementById('newTask').addEventListener('click',setTaskFormCreateMode,true);
+document.getElementById('chatToTask').addEventListener('click',setTaskFormCreateMode,true);
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',setTaskFormCreateMode,true));
+
+const editAwareOpenTaskById=openTaskById;
+openTaskById=function(id){
+  editAwareOpenTaskById(id);
+  const t=taskMap[id];if(!t)return;
+  const edit=document.getElementById('editTaskDemo'),editable=taskEditable(t);
+  edit.disabled=!editable;
+  edit.textContent=editable?'Edit Task':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  edit.title=editable?'Edit this Task':(t.status==='ongoing'?'Pause the Task before editing':'Closed Tasks are read-only');
+  const notice=document.getElementById('taskEditNotice');
+  if(t.configDirty){notice.hidden=false;notice.innerHTML='<strong>Configuration changed while Paused.</strong> Resume will fresh restart the current Task/Step using the new settings.'}
+  else{notice.hidden=true;notice.textContent=''}
+  const canEdit=editable;
+  document.getElementById('drawerAddStep').disabled=!canEdit;
+  document.getElementById('drawerAddExisting').disabled=!canEdit;
+  document.getElementById('stepsAdvanced').disabled=!canEdit;
+  if(t.status==='paused'&&t.configDirty&&document.getElementById('taskPrimaryDemo').textContent==='Resume')document.getElementById('taskPrimaryDemo').textContent='Restart';
+};
+
+// Board status, not runtime badge, owns editability for execution-plan controls.
+const finalPlanRender=renderBatchDraft;
+renderBatchDraft=function(){
+  finalPlanRender();
+  const t=taskMap[currentTaskId]||taskMap[batchParentTaskId];if(!t)return;
+  const editable=taskEditable(t);
+  if(!editable){document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=true)}
+  document.getElementById('drawerAddStep').disabled=!editable;
+  document.getElementById('drawerAddExisting').disabled=!editable;
+  document.getElementById('stepsAdvanced').disabled=!editable;
+};
+
+// Runtime-affecting edit on a Paused single Task becomes Restart, not fake Resume.
+const taskPrimaryBeforeEditPolicy=document.getElementById('taskPrimaryDemo').onclick;
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];
+  if(t&&t.status==='paused'&&t.configDirty&&!isSequenceTask(t)){
+    t.configDirty=false;t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.elapsed='0m';t.progress=[0,t.progress?.[1]||4];
+    t.desc='Restarted with edited configuration';pushTaskHistory(t,'Fresh restart with edited Task configuration');renderBoardFromMap();openTaskById(t.id);showToast('Fresh restart started');return;
+  }
+  taskPrimaryBeforeEditPolicy();
+};
+
+// YAML editing is also governed by Board status.
+const yamlOpenBeforeEditPolicy=openYamlPlanModal;
+openYamlPlanModal=function(){
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
+  yamlOpenBeforeEditPolicy();
+};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
