@@ -124,6 +124,8 @@ def _write_fixture_repo(root: Path) -> UIState:
 
 
 def _bridge_for(state: UIState):
+    state._browser_calls = []
+
     def bridge(method: str, url: str, body_json: str):
         try:
             body = json.loads(body_json or "{}")
@@ -139,6 +141,21 @@ def _bridge_for(state: UIState):
                             exclude_runtime_path=query.get("exclude_runtime", [""])[0]
                         )
                     }
+                elif path == "/api/chats":
+                    data = {"chats": state.chats.list(query.get("root", [""])[0])}
+                elif path == "/api/chats/messages":
+                    data = state.chat_messages.list(query.get("chat_id", [""])[0])
+                elif path == "/api/workspaces":
+                    data = state.workspaces_payload(query.get("chat_id", [""])[0])
+                elif path == "/api/tasks":
+                    data = state.tasks_payload(
+                        query.get("chat_id", [""])[0],
+                        root=query.get("root", [""])[0],
+                        limit=int(query.get("limit", ["100"])[0]),
+                        attention_only=query.get("attention", ["0"])[0] == "1",
+                    )
+                elif path == "/api/task":
+                    data = state.task_detail(query.get("task_id", [""])[0])
                 elif path == "/api/project/messages":
                     data = {"messages": []}
                 elif path == "/api/project/runs":
@@ -176,7 +193,51 @@ def _bridge_for(state: UIState):
                 else:
                     raise ValueError(f"Unhandled browser E2E GET {path}")
             else:
-                if path == "/api/studio/prompt/create":
+                state._browser_calls.append({"method": method, "path": path, "body": body})
+                if path == "/api/chats/create":
+                    data = state.chats.create(body.get("root", ""), body.get("title", ""))
+                elif path == "/api/chats/turn":
+                    chat_id = body.get("chat_id", "")
+                    state.chat_messages.append(chat_id, body.get("message", ""))
+                    state.chat_messages.append_assistant(chat_id, "Fixture assistant response")
+                    data = state.chat_messages.list(chat_id)
+                elif path == "/api/tasks/create":
+                    chat_id = body.get("chat_id", "")
+                    chat = next(item for item in state.chats.list() if item["chat_id"] == chat_id)
+                    task_type = body.get("task_type", "single")
+                    items = body.get("items", []) if task_type == "sequential" else []
+                    instruction = body.get("instruction", "") or (
+                        f"Task List · {len(items)} items" if items else "Browser Task"
+                    )
+                    task = state.tasks.create(
+                        chat_id=chat_id,
+                        root_path=chat["root_path"],
+                        instruction=instruction,
+                        title=body.get("title", ""),
+                        task_type=task_type,
+                        workflow=body.get("workflow", ""),
+                    )
+                    task = state.tasks.update(
+                        task["task_id"],
+                        items=items,
+                        backend=body.get("backend", ""),
+                        model=body.get("model", ""),
+                        validator=body.get("validator", ""),
+                        ai_validator_prompt_file=body.get("ai_validator_prompt_file", ""),
+                        readonly_safety=body.get("readonly_safety", "restore"),
+                        last_status="completed",
+                    )
+                    data = state.task_detail(task["task_id"])
+                elif path == "/api/tasks/action":
+                    data = state.task_action(
+                        body.get("task_id", ""),
+                        body.get("action", ""),
+                        instruction=body.get("instruction", ""),
+                        workflow=body.get("workflow", ""),
+                    )
+                elif path == "/api/tasks/delete":
+                    data = state.delete_task(body.get("task_id", ""))
+                elif path == "/api/studio/prompt/create":
                     data = state.studio_prompt_create(
                         body.get("name", ""),
                         body.get("destination", "global"),
