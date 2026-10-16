@@ -906,7 +906,9 @@ def test_original_workspace_integrates_future_chat_tasks_without_second_shell() 
         root = Path(td)
         state = _write_fixture_repo(root)
 
-        # Seed a historical Task on another Chat to prove Project-wide History.
+        # Keep the active Chat distinct from historical Task ownership so
+        # Project-wide History is a real cross-Chat assertion.
+        state.chats.create(str(root), "Primary Chat")
         older_chat = state.chats.create(str(root), "Older Chat")
         older = state.tasks.create(
             chat_id=older_chat["chat_id"],
