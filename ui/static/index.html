@@ -358,6 +358,49 @@
   </main>
 
 
+  <div id="taskListBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card integrated-task-list-card" role="dialog" aria-modal="true" aria-labelledby="taskListTitle">
+      <div class="modal-head">
+        <div><h2 id="taskListTitle">Task List</h2><p>依序執行多個任務。預設沿用目前 Workflow；進階欄位可用 YAML。</p></div>
+        <button id="taskListClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <div class="integrated-task-list-toolbar">
+          <span id="taskListWorkflowHint" class="modal-hint"></span>
+          <button id="taskListAdd" type="button">+ Add item</button>
+        </div>
+        <div id="integratedTaskListItems" class="integrated-task-list-items"></div>
+        <details id="integratedTaskListAdvanced" class="integrated-task-list-advanced">
+          <summary>Advanced YAML</summary>
+          <textarea id="integratedTaskListYaml" class="designer-textarea integrated-task-list-yaml" spellcheck="false"></textarea>
+          <div class="integrated-task-list-yaml-actions">
+            <button id="taskListYamlRefresh" type="button">Refresh from Visual</button>
+            <button id="taskListYamlApply" type="button">Validate & Apply</button>
+          </div>
+          <div id="integratedTaskListYamlStatus" class="modal-hint"></div>
+        </details>
+      </div>
+      <div class="modal-actions">
+        <button id="taskListCancel" class="modal-secondary" type="button">Cancel</button>
+        <button id="taskListRun" class="primary modal-primary" type="button">Run List</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="taskHistoryBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card integrated-task-history-card" role="dialog" aria-modal="true" aria-labelledby="taskHistoryTitle">
+      <div class="modal-head">
+        <div><h2 id="taskHistoryTitle">Task History</h2><p>同一個 Project 裡的 durable Tasks。點選即可查看，不切換到另一套頁面。</p></div>
+        <button id="taskHistoryClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
+      </div>
+      <div class="integrated-task-history-body">
+        <div id="integratedTaskHistoryList" class="integrated-task-history-list"></div>
+        <div id="integratedTaskHistoryDetail" class="integrated-task-history-detail"><div class="designer-empty-state">Select a Task</div></div>
+      </div>
+      <div class="modal-actions"><button id="taskHistoryDone" class="primary" type="button">Done</button></div>
+    </div>
+  </div>
+
   <div id="validationDetailsBackdrop" class="modal-backdrop validation-details-backdrop" hidden>
     <div class="modal-card validation-details-card" role="dialog" aria-modal="true" aria-labelledby="validationDetailsTitle">
       <div class="modal-head validation-details-head">
