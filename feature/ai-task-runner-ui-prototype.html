@@ -281,6 +281,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <section class="yamlright">
           <div class="batchintro"><div><h2>Execution preview</h2><p>每一項仍是 child RunRequest，依序走正式 WorkflowRunner → FlowEngine → StageExecutor。</p></div><span class="pill">Sequential</span></div>
           <div class="yaml-contract-note"><strong>同一份 RunRequest draft</strong><span>Workflow 會決定需要哪些驗證欄位；Form / YAML 隨時可切換。</span></div>
+          <div class="yaml-parent-hint"><span>▦</span><div><strong>Tasks 只顯示 1 張 YAML Batch 父 Task</strong><br>子 RunRequest 的進度、停止、恢復都彙總到這張 Task，不把每個 item 變成 Board 卡片。</div></div>
           <div class="preview" id="batchPreview"></div>
           <div class="batch-log" id="batchLog">Mock batch is idle. Choose a preset/outcome and press Run Batch.</div>
         </section>
@@ -1229,7 +1230,7 @@ function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
 }
 function renderNewTaskWorkspace(){
   const host=document.getElementById('newTaskWorkspace');if(!host)return;
-  const project=document.getElementById('newTaskProject')?.value||currentProjectKey||'ai-task-runner';
+  const project=document.getElementById('newTaskProject')?.value||'ai-task-runner';
   const busy=mainBusyTask(project),previewId='T-'+(taskSequence+1);
   const resolved=resolveTaskWorkspace(project,previewId,newTaskWorkspaceMode);
   const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
