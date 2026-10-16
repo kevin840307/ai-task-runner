@@ -466,7 +466,7 @@ async function openTaskHistory() {
   $("integratedTaskHistoryDetail").innerHTML = '<div class="designer-empty-state">Select a Task</div>';
   $("taskHistoryBackdrop").hidden = false;
   try {
-    const data = await api("/api/tasks?chat_id=" + encodeURIComponent(state.currentChat.chat_id) + "&limit=100", { timeoutMs: 15000 });
+    const data = await api("/api/tasks?root=" + encodeURIComponent(state.project.path) + "&limit=100", { timeoutMs: 15000 });
     root.replaceChildren();
     for (const task of data.tasks || []) {
       const button = document.createElement("button"); button.type = "button"; button.dataset.taskId = task.task_id;
