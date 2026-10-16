@@ -233,6 +233,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #editTaskDemo:disabled{opacity:.5;cursor:not-allowed}
 
 .task-edit-notice{margin:-4px 0 12px;padding:9px 10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed;color:#8a5500;font-size:9px;line-height:1.45}.task-edit-notice strong{color:#7a4800}
+
+/* Full plan surface: same Task, deeper editing only when needed */
+.drawer-plan-summary{display:grid;gap:6px}.drawer-plan-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;border:1px solid #e1e7ee;border-radius:9px;background:#fbfcfd}.drawer-plan-row .n{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#eef3f5;color:#64748b;font-size:8px;font-weight:900}.drawer-plan-row strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}.drawer-plan-row small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.drawer-plan-row .state{font-size:8px;font-weight:900;color:#64748b}.drawer-plan-row.current{border-color:rgba(15,118,110,.28);background:#f7fcfb}.drawer-plan-row.done{opacity:.66}
+.plan-header .title{display:flex;align-items:center;gap:12px}.plan-back{width:auto;padding:0 9px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);font-size:9px;font-weight:850}.plan-page-body{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;padding:14px;background:var(--bg);overflow:auto}.plan-main{min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff}.plan-intro{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.plan-intro strong{display:block;font-size:11px}.plan-intro span:not(.pill){display:block;margin-top:3px;color:var(--muted);font-size:8px}.plan-list{display:grid;gap:7px}.plan-row{border:1px solid #e1e7ee;border-radius:10px;background:#fff;overflow:hidden}.plan-row-head{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;min-height:50px;padding:6px 8px}.plan-row-num{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}.plan-row.done .plan-row-num{background:#eaf8ee;color:#15803d}.plan-row.current{border-color:rgba(15,118,110,.32)}.plan-row.current .plan-row-num{background:var(--accent);color:#fff}.plan-row-copy strong{display:block;font-size:10px}.plan-row-copy small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.plan-row-actions{display:flex;align-items:center;gap:4px}.plan-row-state{padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}.plan-row-state.pass{background:#eaf8ee;color:#15803d}.plan-row-state.running{background:#e9f6f4;color:#0f766e}.plan-row-state.stopped{background:#fff3e5;color:#9a5b00}.plan-row-body{display:none;padding:12px 13px 14px;border-top:1px solid #edf1f4;background:#fbfcfe}.plan-row.expanded .plan-row-body{display:block}.plan-row-controls{display:flex;gap:4px}.plan-row-controls button{height:27px;min-width:27px;padding:0 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#64748b;font-size:8px}.plan-row-controls button:hover:not(:disabled){border-color:#aebbc7;color:var(--text)}.plan-row-controls button:disabled{opacity:.4}.plan-side{display:grid;align-content:start;gap:10px}.plan-side-card{padding:11px;border:1px solid var(--line);border-radius:11px;background:#fff}.plan-side-card h3{margin:0 0 8px;color:#475569;font-size:9px;text-transform:uppercase;letter-spacing:.05em}.plan-side-card p{margin:0 0 7px;color:var(--muted);font-size:8px;line-height:1.5}.plan-side-kv{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 8px;font-size:8px}.plan-side-kv span{color:var(--muted)}.plan-side-kv strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:960px){.plan-page-body{grid-template-columns:1fr}.plan-side{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -313,6 +318,24 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="listview" id="taskListView"></div>
     </section>
 
+    <!-- Full Task Plan: same Task object, no sidebar navigation item -->
+    <section class="view page" id="view-plan">
+      <header class="header plan-header">
+        <div class="title"><button class="plan-back" id="planBackToTask" type="button">← Task</button><div><h1 id="planPageTitle">Execution plan</h1><p id="planPageMeta">T-000 · New · 1 task</p></div></div>
+        <div class="actions"><button class="btn" id="planAddTask" type="button">+ Add task</button><button class="btn" id="planAddExisting" type="button">Add existing</button><button class="btn" id="planEditYaml" type="button">Edit YAML</button></div>
+      </header>
+      <div class="plan-page-body">
+        <main class="plan-main">
+          <div class="plan-intro"><div><strong>Execution order</strong><span>同一張 Board Task，由上到下依序執行。</span></div><span class="pill" id="planStatePill">Editable</span></div>
+          <div class="plan-list" id="planFormList"></div>
+        </main>
+        <aside class="plan-side">
+          <section class="plan-side-card"><h3>Task</h3><div class="plan-side-kv" id="planTaskSummary"></div></section>
+          <section class="plan-side-card"><h3>Rules</h3><p>New / Paused 可編輯。Ongoing / Closed 唯讀。</p><p>Paused 修改目前工作後，Resume 會 fresh restart 受影響的 task。</p></section>
+        </aside>
+      </div>
+    </section>
+
     <!-- Existing Workflows / Prompts: intentionally unchanged -->
     <!-- Existing Workflows / Prompts: intentionally unchanged -->
     <section class="view page" id="view-workflows">
@@ -366,10 +389,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <section class="section execution-plan-section">
           <div class="execution-plan-head">
             <div><h3>Execution plan</h3><p id="taskListEditHint">1 task · runs as one Task</p></div>
-            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button">Add existing</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
+            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button">Add existing</button><button class="btn ghost" id="openFullPlan" type="button" hidden>Open full plan ↗</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
           </div>
           <div class="steps-summary" id="taskListParentHint">1 task · same Board item</div>
-          <div id="yaml-form"><div class="formlist" id="formList"></div></div>
+          <div id="yaml-form"><div class="formlist drawer-plan-summary" id="formList"></div></div>
           <div id="drawerListItems" hidden></div>
           <div id="batchPreview" hidden></div>
           <div id="batchLog" hidden>Task is idle.</div>
