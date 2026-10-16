@@ -1110,7 +1110,66 @@ document.getElementById('resetBatch').onclick=()=>{
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
 
-renderChat('design');
+let currentProjectKey='ai-task-runner';
+const projectSelect=document.getElementById('projectSelect');
+projectSelect.addEventListener('change',()=>{
+  currentProjectKey=projectSelect.value;
+  const meta=projectMeta[currentProjectKey];
+  document.getElementById('projectSwitcherPath').textContent=meta.path;
+  document.getElementById('chatProjectLine').textContent=`${meta.path} · 一般對話，不建立 Runner Task`;
+  if(document.getElementById('newTaskProject'))document.getElementById('newTaskProject').value=currentProjectKey;
+  showToast(`切換 mock project：${currentProjectKey}`);
+});
+
+const chatSessions=[
+  {id:'design',name:'UI 設計討論',messages:chatPresets.design.slice()},
+  {id:'debug',name:'Bug investigation',messages:chatPresets.debug.slice()},
+  {id:'review',name:'Code review',messages:chatPresets.review.slice()},
+  {id:'long',name:'Long conversation',messages:chatPresets.long.slice()}
+];
+let activeChatId='design',chatSequence=4;
+function activeChat(){return chatSessions.find(x=>x.id===activeChatId)||chatSessions[0]}
+function syncChatSessionSelect(){
+  const select=document.getElementById('chatPreset');
+  select.innerHTML=chatSessions.map(x=>`<option value="${x.id}" ${x.id===activeChatId?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
+}
+function renderChatSession(){
+  syncChatSessionSelect();
+  const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
+  (session?.messages||[]).forEach(([who,body])=>{
+    const el=document.createElement('div');el.className='msg '+who;
+    el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);
+    box.appendChild(el);
+  });
+  if(!(session?.messages||[]).length){
+    box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這是一個新的獨立 mock session。輸入訊息後只會寫進這個 Chat。</div></div>';
+  }
+  box.scrollTop=box.scrollHeight;
+}
+function renderChat(key){if(chatSessions.some(x=>x.id===key))activeChatId=key;renderChatSession()}
+document.getElementById('chatPreset').onchange=e=>{activeChatId=e.target.value;renderChatSession()};
+document.getElementById('newChat').onclick=()=>{
+  const id='chat-'+(++chatSequence);
+  chatSessions.unshift({id,name:`New Chat ${chatSequence}`,messages:[]});
+  activeChatId=id;renderChatSession();document.getElementById('chatInput').focus();showToast('已建立新的 mock Chat session');
+};
+document.getElementById('renameChat').onclick=()=>{
+  document.getElementById('renameChatInput').value=activeChat()?.name||'';
+  openModal('renameChatModal');setTimeout(()=>document.getElementById('renameChatInput').select(),0);
+};
+document.getElementById('renameChatConfirm').onclick=()=>{
+  const value=document.getElementById('renameChatInput').value.trim();
+  if(!value){showToast('Chat name 不可空白');return}
+  activeChat().name=value;closeModal('renameChatModal');renderChatSession();showToast('Chat renamed');
+};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput'),text=input.value.trim();if(!text)return;
+  const session=activeChat();session.messages.push(['user',text]);
+  const reply=/task|執行|run/i.test(text)?'這是一般 Chat。若要長時間執行，可用「建立 Task」帶到 Task 表單。':'收到。這則回覆只屬於目前 Chat session；切換其他 Chat 後會保留各自歷史。';
+  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+};
+
+renderChatSession();
 renderBoard('today');
 renderBatch('ui');
 </script>
