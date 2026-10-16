@@ -35,6 +35,7 @@ const state = {
   lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", runtimeRefreshToken: 0, projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
   studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", studioCatalogLoading: false, projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
   runLaunching: false, fullDesignerAvailable: null,
+  composerMode: "task", chats: [], currentChat: null, workspaceOptions: [],
 };
 const runActionGate = createLatestActionGate();
 
@@ -199,6 +200,117 @@ function followHistoryToBottom(force = false) {
     root.scrollTop = root.scrollHeight;
     state.historyPinnedToBottom = true;
   });
+}
+
+// ------------------------------ Integrated Project Chat / Tasks ------------------------------
+function isChatMode() { return state.composerMode === "chat"; }
+function renderComposerMode() {
+  document.body.dataset.composerMode = state.composerMode;
+  const chat = isChatMode();
+  $("taskModeButton")?.classList.toggle("active", !chat);
+  $("chatModeButton")?.classList.toggle("active", chat);
+  $("taskModeButton")?.setAttribute("aria-pressed", String(!chat));
+  $("chatModeButton")?.setAttribute("aria-pressed", String(chat));
+  if ($("sendButton")) {
+    $("sendButton").textContent = chat ? "Send" : t("actions.run", "Run");
+    $("sendButton").title = chat ? "Send message" : "Run task";
+  }
+  if ($("messageInput")) $("messageInput").placeholder = chat
+    ? "Ask about this project…"
+    : "描述要完成的功能或修復內容...";
+  if ($("taskHistoryButton")) $("taskHistoryButton").hidden = chat || !state.project;
+  if ($("clearHistoryButton")) $("clearHistoryButton").hidden = chat;
+  requestAnimationFrame(syncComposerReserve);
+}
+async function setComposerMode(mode, { persist = true, refresh = true } = {}) {
+  state.composerMode = mode === "chat" ? "chat" : "task";
+  if (persist && state.project) rememberProjectPreference("composerMode", state.composerMode);
+  closeOptionsPanel();
+  removeLiveCard();
+  removeRuntimeInputCard();
+  renderComposerMode();
+  if (state.runtime) renderRuntime(state.runtime);
+  if (refresh && state.project) await refreshMessages({ forceFollow: true });
+}
+function renderConversationTools() {
+  const tools = $("conversationTools"), select = $("conversationSelect");
+  if (!tools || !select) return;
+  tools.hidden = !state.project;
+  select.innerHTML = "";
+  for (const chat of state.chats.filter((item) => !item.archived)) {
+    const option = document.createElement("option");
+    option.value = chat.chat_id;
+    option.textContent = chat.title || "Chat";
+    select.appendChild(option);
+  }
+  if (state.currentChat?.chat_id) select.value = state.currentChat.chat_id;
+  select.disabled = !state.project || !select.options.length;
+}
+async function ensureProjectChat({ createNew = false } = {}) {
+  if (!state.project) return null;
+  const root = state.project.path;
+  const data = await api("/api/chats?root=" + encodeURIComponent(root), { timeoutMs: 15000 });
+  state.chats = Array.isArray(data.chats) ? data.chats : [];
+  const prefs = currentProjectPreferences();
+  let chat = !createNew
+    ? state.chats.find((item) => item.chat_id === prefs.chatId && !item.archived)
+      || state.chats.find((item) => !item.archived)
+    : null;
+  if (!chat) {
+    chat = await api("/api/chats/create", {
+      method: "POST",
+      body: JSON.stringify({ root, title: createNew ? "New Chat" : (state.project.name || "Project Chat") }),
+    });
+    state.chats.push(chat);
+  }
+  state.currentChat = chat;
+  rememberProjectPreference("chatId", chat.chat_id);
+  renderConversationTools();
+  return chat;
+}
+async function loadIntegratedWorkspaces() {
+  const field = $("workspaceOptionField"), select = $("taskWorkspaceSelect"), hint = $("taskWorkspaceHint");
+  if (!field || !select || !state.currentChat) return;
+  select.innerHTML = '<option value="main">Main</option>';
+  field.hidden = true;
+  try {
+    const data = await api("/api/workspaces?chat_id=" + encodeURIComponent(state.currentChat.chat_id), { timeoutMs: 15000 });
+    state.workspaceOptions = data.workspaces || [];
+    const main = (data.workspaces || []).find((item) => item.is_main);
+    const mainOption = select.options[0];
+    if (main) {
+      mainOption.disabled = Boolean(main.busy);
+      mainOption.dataset.busy = String(Boolean(main.busy));
+      mainOption.textContent = main.busy ? "Main · Busy" : "Main";
+    }
+    if (data.git_available) {
+      field.hidden = false;
+      const fresh = document.createElement("option");
+      fresh.value = "new";
+      fresh.textContent = "New Worktree";
+      select.appendChild(fresh);
+      for (const workspace of data.workspaces || []) {
+        if (workspace.is_main) continue;
+        const option = document.createElement("option");
+        option.value = "existing:" + workspace.path;
+        option.disabled = Boolean(workspace.busy);
+        option.textContent = (workspace.branch || workspace.path) + (workspace.busy ? " · Busy" : "");
+        select.appendChild(option);
+      }
+      hint.textContent = "Main by default. Worktree is optional isolation; Task never merges branches.";
+    } else {
+      hint.textContent = main?.busy ? "Main is busy with another Task." : "Main";
+    }
+  } catch (error) {
+    field.hidden = true;
+    hint.textContent = "Workspace discovery unavailable; backend guard still applies.";
+  }
+}
+function selectedWorkspacePayload() {
+  const value = $("taskWorkspaceSelect")?.value || "main";
+  if (value === "new") return { workspace_mode: "new", workspace_path: "" };
+  if (value.startsWith("existing:")) return { workspace_mode: "existing", workspace_path: value.slice("existing:".length) };
+  return { workspace_mode: "main", workspace_path: "" };
 }
 
 // ------------------------------ Projects / Chat ------------------------------
@@ -424,6 +536,7 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
+  state.chats = []; state.currentChat = null; renderConversationTools();
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
@@ -453,10 +566,13 @@ async function selectProject(project) {
   }
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
-  if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
+  const projectPrefs = currentProjectPreferences();
+  state.composerMode = projectPrefs.composerMode === "chat" ? "chat" : "task";
+  if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker(); renderComposerMode();
   $("projectName").textContent = project.name; $("projectPath").textContent = project.path; $("emptyState").hidden = true;
   $("summary").hidden = false; $("messages").hidden = false; $("composePanel").hidden = false; $("errorText").textContent = ""; requestAnimationFrame(syncComposerReserve);
   try {
+    await ensureProjectChat();
     await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path })]);
     refreshStudioFiles({ force: true, projectPath: project.path });
   } catch (error) { showActionError(error.message, "Project loading failed"); }
@@ -467,16 +583,32 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
   if (!projectPath) return;
   const root = $("messages");
   const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
-  const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
-  if (!sameProjectPath(state.project?.path, projectPath)) return;
-  const input = root.querySelector(".runtime-input-card");
-  const live = root.querySelector(".live-activity"); root.innerHTML = "";
-  for (const message of data.messages || []) {
-    const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant"; if (message.run_id) item.dataset.runId = String(message.run_id);
-    const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.content || ""; item.appendChild(body); root.appendChild(item);
+  if (isChatMode()) {
+    const chat = state.currentChat || await ensureProjectChat();
+    const data = await api("/api/chats/messages?chat_id=" + encodeURIComponent(chat.chat_id), { timeoutMs: 15000 });
+    if (!sameProjectPath(state.project?.path, projectPath) || chat.chat_id !== state.currentChat?.chat_id) return;
+    root.innerHTML = "";
+    for (const message of data.messages || []) {
+      const item = document.createElement("article");
+      item.className = `message ${message.role} ${message.role === "user" ? "chat-user" : "chat-assistant"}`;
+      item.dataset.role = message.role || "assistant";
+      const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.text || ""; item.appendChild(body); root.appendChild(item);
+    }
+    if (!data.messages?.length) {
+      const empty = document.createElement("div"); empty.className = "empty-state-inline"; empty.textContent = "Ask about this project. Chat is read-only; switch to Task when you want changes."; root.appendChild(empty);
+    }
+  } else {
+    const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
+    if (!sameProjectPath(state.project?.path, projectPath)) return;
+    const input = root.querySelector(".runtime-input-card");
+    const live = root.querySelector(".live-activity"); root.innerHTML = "";
+    for (const message of data.messages || []) {
+      const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant"; if (message.run_id) item.dataset.runId = String(message.run_id);
+      const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.content || ""; item.appendChild(body); root.appendChild(item);
+    }
+    if (input) root.appendChild(input);
+    if (live) root.appendChild(live);
   }
-  if (input) root.appendChild(input);
-  if (live) root.appendChild(live);
   if (shouldFollow) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
 }
 function ensureLiveCard({ forceVisibleOnCreate = false } = {}) {
@@ -727,24 +859,26 @@ function renderRuntime(runtime) {
 
   $("clearHistoryButton").disabled = isRunning;
   $("clearHistoryButton").title = isRunning ? "Stop the active task before clearing this chat history" : "Clear chat history";
-  $("sendButton").hidden = actions.run === false;
+  $("sendButton").hidden = isChatMode() ? false : actions.run === false;
   $("stopButton").hidden = !actions.stop;
   $("resumeButton").hidden = !actions.resume;
   $("resetButton").hidden = !actions.reset;
   $("rerunButton").hidden = !actions.rerun;
 
-  const blockNew = actions.run === false || state.runLaunching || state.studioCatalogLoading;
-  const blockTyping = actions.run === false || state.runLaunching;
+  const chatMode = isChatMode();
+  const blockNew = chatMode ? state.runLaunching : (actions.run === false || state.runLaunching || state.studioCatalogLoading);
+  const blockTyping = chatMode ? state.runLaunching : (actions.run === false || state.runLaunching);
   $("sendButton").disabled = blockNew;
-  $("sendButton").title = actions.run === false
-    ? (isRunning ? "A task is already running." : "Continue or Reset the stopped task before starting another.")
-    : state.runLaunching ? "Task launch is already in progress."
-      : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
+  $("sendButton").title = chatMode ? "Send message"
+    : actions.run === false
+      ? (isRunning ? "A task is already running." : "Continue or Reset the stopped task before starting another.")
+      : state.runLaunching ? "Task launch is already in progress."
+        : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
   $("messageInput").disabled = blockTyping;
   renderRunConfigurationLock();
-  $("messageInput").placeholder = "描述要完成的功能或修復內容...";
+  renderComposerMode();
 
-  if (isRunning || isResumable) {
+  if (!chatMode && (isRunning || isResumable)) {
     const card = ensureLiveCard({ forceVisibleOnCreate: true });
     card.classList.toggle("running", isRunning);
     renderLiveRuntimeHeader(runtime);
@@ -779,22 +913,56 @@ function renderRuntime(runtime) {
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
 function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; autosizeTextarea(ta, { minHeight: 46, maxHeight: 210 }); syncComposerReserve(); }
 async function sendMessage() {
-  const text = $("messageInput").value.trim(); if (!text || !state.project || runConfigurationLocked()) return; $("errorText").textContent = "";
+  const text = $("messageInput").value.trim();
+  if (!text || !state.project || (!isChatMode() && runConfigurationLocked()) || state.runLaunching) return;
+  $("errorText").textContent = "";
   const actionToken = runActionGate.begin();
   state.runLaunching = true; state.historyPinnedToBottom = true;
   $("sendButton")?.setAttribute("aria-busy", "true");
-  renderRunConfigurationLock(); renderRuntime(state.runtime || {});
+  renderRunConfigurationLock(); if (state.runtime) renderRuntime(state.runtime); else renderComposerMode();
   try {
-    await api("/api/project/message", { method: "POST", body: JSON.stringify(payload({ message: text })) });
-    if (!runActionGate.isCurrent(actionToken)) return;
-    $("messageInput").value = ""; resizeComposerInput(); await refreshMessages({ forceFollow: true });
-    if (state.runtimeRefreshPromise) { try { await state.runtimeRefreshPromise; } catch (_) {} }
-    await refreshRuntime(); showToast("Task started");
+    const chat = state.currentChat || await ensureProjectChat();
+    if (isChatMode()) {
+      await api("/api/chats/turn", {
+        method: "POST",
+        body: JSON.stringify({ chat_id: chat.chat_id, message: text }),
+      });
+      if (!runActionGate.isCurrent(actionToken)) return;
+      $("messageInput").value = ""; resizeComposerInput();
+      await refreshMessages({ forceFollow: true });
+    } else {
+      const run = payload();
+      const task = await api("/api/tasks/create", {
+        method: "POST",
+        body: JSON.stringify({
+          chat_id: chat.chat_id,
+          task_type: "single",
+          instruction: text,
+          workflow: run.workflow,
+          backend: run.backend,
+          validator: run.validator,
+          ai_validator_prompt_file: run.ai_validator_prompt_file,
+          readonly_safety: "restore",
+          ...selectedWorkspacePayload(),
+        }),
+      });
+      if (!runActionGate.isCurrent(actionToken)) return;
+      if (task.last_error) throw new Error(task.last_error);
+      $("messageInput").value = ""; resizeComposerInput();
+      await refreshMessages({ forceFollow: true });
+      if (state.runtimeRefreshPromise) { try { await state.runtimeRefreshPromise; } catch (_) {} }
+      await refreshRuntime({ force: true });
+      showToast("Task started");
+    }
   } catch (error) {
     if (!runActionGate.isCurrent(actionToken)) return;
-    $("errorText").textContent = error.message; showActionError(error.message, "Task start failed");
+    $("errorText").textContent = error.message;
+    showActionError(error.message, isChatMode() ? "Chat failed" : "Task start failed");
   } finally {
-    if (runActionGate.isCurrent(actionToken)) { state.runLaunching = false; $("sendButton")?.removeAttribute("aria-busy"); renderRunConfigurationLock(); if (state.runtime) renderRuntime(state.runtime); }
+    if (runActionGate.isCurrent(actionToken)) {
+      state.runLaunching = false; $("sendButton")?.removeAttribute("aria-busy");
+      renderRunConfigurationLock(); if (state.runtime) renderRuntime(state.runtime); else renderComposerMode();
+    }
   }
 }
 
@@ -1995,7 +2163,7 @@ document.addEventListener("click", (event) => {
   if (!$("themePanel").hidden && !$("themePanel").contains(event.target) && !$("themeButton").contains(event.target)) closeThemePanel();
 });
 function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }
-function toggleOptionsPanel() { const panel = $("optionsPanel"); const open = panel.hidden; if (!open) return closeOptionsPanel(); panel.hidden = false; panel.scrollLeft = 0; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
+function toggleOptionsPanel() { const panel = $("optionsPanel"); const open = panel.hidden; if (!open) return closeOptionsPanel(); panel.hidden = false; panel.scrollLeft = 0; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); loadIntegratedWorkspaces(); }
 $("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptionsPanel(); };
 $("optionsCloseButton").onclick = closeOptionsPanel;
 $("environmentCheckButton").onclick = checkEnvironment;
@@ -2009,6 +2177,19 @@ window.addEventListener("app-language-changed", () => { renderThemeControls(); i
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
+$("taskModeButton").onclick = () => setComposerMode("task");
+$("chatModeButton").onclick = () => setComposerMode("chat");
+$("conversationSelect").onchange = async () => {
+  const chat = state.chats.find((item) => item.chat_id === $("conversationSelect").value);
+  if (!chat) return;
+  state.currentChat = chat; rememberProjectPreference("chatId", chat.chat_id);
+  if (isChatMode()) await refreshMessages({ forceFollow: true });
+};
+$("newConversationButton").onclick = async () => {
+  if (!state.project) return;
+  try { await ensureProjectChat({ createNew: true }); if (isChatMode()) await refreshMessages({ forceFollow: true }); showToast("New Chat created"); }
+  catch (error) { showActionError(error.message, "New Chat failed"); }
+};
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.actions?.stop) return;
@@ -2052,7 +2233,7 @@ $("resetButton").onclick = async () => {
 $("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("workflowContextMenu").hidden) return closeWorkflowContextMenu(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
-state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {
+state.preferences = loadUiPreferences(); document.body.dataset.composerMode = "task"; showEmpty(); renderComposerMode(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {
   const composerObserver = new ResizeObserver(syncComposerReserve);
   composerObserver.observe($("composePanel"));
   composerObserver.observe(document.querySelector(".workspace"));
