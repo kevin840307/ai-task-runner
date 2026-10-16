@@ -1,0 +1,24 @@
+/* Future capabilities integrated into the original workspace.
+   Keep this file intentionally small: original layout/styles remain authoritative. */
+
+.conversation-tools{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.conversation-select{max-width:220px;height:30px;padding:0 28px 0 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
+.conversation-new{width:30px;height:30px;padding:0;border-radius:8px}
+.composer-mode-toggle{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border);border-radius:9px;background:var(--surface-muted)}
+.composer-mode-button{min-width:46px;height:28px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;font-weight:700}
+.composer-mode-button.active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+body[data-composer-mode="chat"] #workflowPicker,
+body[data-composer-mode="chat"] #optionsButton,
+body[data-composer-mode="chat"] #taskListButton{display:none}
+body[data-composer-mode="chat"] #summary,
+body[data-composer-mode="chat"] #runtimeGuidance{display:none!important}
+body[data-composer-mode="chat"] #clearHistoryButton{display:none}
+body[data-composer-mode="task"] #taskHistoryButton{display:inline-flex}
+#workspaceOptionField select{width:100%;min-width:180px}
+#taskWorkspaceHint{display:block;margin-top:5px;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.message.chat-assistant{background:var(--surface);border-color:var(--border)}
+.message.chat-user{margin-left:auto;max-width:min(78%,760px)}
+@media(max-width:760px){
+  .conversation-select{max-width:145px}
+  .composer-mode-button{min-width:40px;padding:0 7px}
+}
