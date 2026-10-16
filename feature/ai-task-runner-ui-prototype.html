@@ -1216,6 +1216,31 @@ function captureNewTaskSources(){
   if(document.getElementById('taskAiFile'))newTaskDraft.aiFile=document.getElementById('taskAiFile').value;
   if(document.getElementById('taskAiAsset'))newTaskDraft.aiAsset=document.getElementById('taskAiAsset').value;
 }
+let newTaskWorkspaceMode='auto';
+function mainBusyTask(project){
+  return Object.values(taskMap||{}).find(t=>t.project===project&&t.workspaceKind==='main'&&['running','recover'].includes(t.runtime));
+}
+function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
+  const busy=mainBusyTask(project);
+  const chosen=mode==='auto'?(busy?'worktree':'main'):mode;
+  if(chosen==='main'&&busy)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用`,busy};
+  if(chosen==='worktree')return {ok:true,kind:'worktree',branch:`task/${id}`,root:worktreeRootFor(project,id),busy};
+  return {ok:true,kind:'main',branch:projectMeta[project]?.branch||'main',root:projectMeta[project]?.path||project,busy};
+}
+function renderNewTaskWorkspace(){
+  const host=document.getElementById('newTaskWorkspace');if(!host)return;
+  const project=document.getElementById('newTaskProject')?.value||currentProjectKey||'ai-task-runner';
+  const busy=mainBusyTask(project),previewId='T-'+(taskSequence+1);
+  const resolved=resolveTaskWorkspace(project,previewId,newTaskWorkspaceMode);
+  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  host.innerHTML=`<div class="workspace-options">
+    ${option('auto','Auto','Main 有空就直接使用；忙碌時自動建立 isolated worktree。',busy?`Main busy → ${previewId} 將使用 Worktree`:'Main available → 使用 Main')}
+    ${option('main','Main workspace','直接使用專案目前 working tree；同一路徑只能一個 Running Task。',busy?`Busy · ${busy.id} 正在執行`:'Available',!!busy)}
+    ${option('worktree','Isolated worktree','為這個 Task 建立獨立 branch/path，可與同專案其他 Task 同時執行。',`task/${previewId}`)}
+  </div><div class="workspace-preview"><strong>Execution preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
+  host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
+}
+document.getElementById('newTaskProject').addEventListener('change',renderNewTaskWorkspace);
 function renderNewTaskSources(){
   const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
   document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
@@ -1230,11 +1255,13 @@ function renderNewTaskSources(){
   document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
   document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
   document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt Asset 仍由原本 Prompts workspace 管理')});
+  renderNewTaskWorkspace();
 }
 document.getElementById('newTaskWorkflow').addEventListener('change',()=>{captureNewTaskSources();renderNewTaskSources()});
 document.getElementById('newTask').addEventListener('click',()=>{
   newTaskDraft={goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
-  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();
+  newTaskWorkspaceMode='auto';
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderNewTaskWorkspace();
 });
 document.getElementById('chatToTask').onclick=()=>{
   const input=document.getElementById('chatInput').value.trim();
@@ -1252,9 +1279,11 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   if(!title||!goal){showToast('Task title / Prompt 不可空白');return}
   if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
   const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
+  const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
+  if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
   const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
-  const t={id,status:'new',title,runtime:'idle',desc:'尚未開始；Workflow capability 已決定需要哪些驗證輸入。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft}};
-  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast('已建立 mock Task · 尚未執行');openTaskById(id);
+  const t={id,status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
+  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
 };
 
 function openPathPicker(index,field,kind,context='batch'){
@@ -1346,15 +1375,18 @@ function previewSummary(x,i){
 
 renderNewTaskSources();
 let currentProjectKey='ai-task-runner';
-const projectSelect=document.getElementById('projectSelect');
-projectSelect.addEventListener('change',()=>{
-  currentProjectKey=projectSelect.value;
-  const meta=projectMeta[currentProjectKey];
+function selectProject(key){
+  if(!projectMeta[key])return;
+  currentProjectKey=key;
+  const meta=projectMeta[key];
+  document.querySelectorAll('.project[data-project]').forEach(x=>x.classList.toggle('active',x.dataset.project===key));
   document.getElementById('projectSwitcherPath').textContent=meta.path;
   document.getElementById('chatProjectLine').textContent=`${meta.path} · 一般對話，不建立 Runner Task`;
-  if(document.getElementById('newTaskProject'))document.getElementById('newTaskProject').value=currentProjectKey;
-  showToast(`切換 mock project：${currentProjectKey}`);
-});
+  if(document.getElementById('newTaskProject'))document.getElementById('newTaskProject').value=key;
+  if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
+}
+document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{selectProject(p.dataset.project);showToast(`切換 mock project：${p.dataset.project}`)}));
+document.getElementById('newProjectDemo').onclick=()=>showToast('Mock: New Project 固定在 sidebar 上方；正式版沿用既有 Open/Add Project 流程');
 
 const chatSessions=[
   {id:'design',name:'UI 設計討論',messages:chatPresets.design.slice()},
