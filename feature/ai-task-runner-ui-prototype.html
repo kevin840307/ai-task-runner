@@ -161,6 +161,28 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 .yaml-contract-note{display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;padding:9px 10px;border:1px solid rgba(15,118,110,.18);border-radius:9px;background:#f7fcfb;font-size:9px;line-height:1.45}.yaml-contract-note span{color:var(--muted)}
 .task-create-modal{width:min(760px,94vw)}.task-basics{margin-bottom:4px}#newTaskPromptSource,#newTaskValidationSource{margin-top:8px}.task-source-card{margin-top:8px}
 @media(max-width:1050px){.yamlbody{grid-template-columns:minmax(430px,55%) minmax(330px,45%)}}@media(max-width:850px){.yamlbody{grid-template-columns:1fr}.yamlright{display:none}.session-select{min-width:150px}.chat-session-actions{gap:5px}}
+
+/* Round: worktree-aware Tasks + GPT-like project rail + textarea polish */
+.project-area{display:flex;flex:1 1 auto;min-height:0;flex-direction:column;margin-top:10px;overflow:hidden}
+.new-project-fixed{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:0 10px;border:1px solid rgba(15,118,110,.24);border-radius:9px;background:#fff;color:var(--accent-dark);text-align:left;font-size:11px}.new-project-fixed span{font-size:16px}.new-project-fixed:hover{background:var(--accent-soft);border-color:rgba(15,118,110,.42)}
+.project-list-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:13px 8px 5px;color:var(--muted);font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}.project-list-head small{font-size:8px;font-weight:700;text-transform:none;letter-spacing:0}
+.project-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:1px 2px 8px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+.project-scroll::-webkit-scrollbar{width:6px}.project-scroll::-webkit-scrollbar-track{background:transparent}.project-scroll::-webkit-scrollbar-thumb{border-radius:999px;background:#cbd5e1}.project-scroll::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+.project-list-item{position:relative;display:grid;grid-template-columns:9px minmax(0,1fr);gap:8px;align-items:center;width:100%;min-height:42px;margin:1px 0;padding:5px 8px;border:1px solid transparent;border-radius:8px;background:transparent;text-align:left;color:var(--text)}
+.project-list-item:hover{background:#f3f6f8}.project-list-item.active{background:#eef7f5;border-color:rgba(15,118,110,.16)}.project-list-item.active:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:999px;background:var(--accent)}
+.project-list-item .project-copy strong{font-size:11px}.project-list-item .project-copy small{font-size:8px}
+.project-current-path{flex:0 0 auto;margin-top:5px;padding:7px 8px;border-top:1px solid rgba(216,222,232,.72);color:#8a95a5;font:8px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-selector-wrap{margin-top:10px;padding:10px;border:1px solid #e1e7ee;border-radius:11px;background:#f9fbfc}.workspace-selector-title{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:8px}.workspace-selector-title strong{display:block;font-size:10px}.workspace-selector-title small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.workspace-recommended{padding:3px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dark);font-size:8px;font-weight:900}
+.workspace-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.workspace-option{position:relative;display:block;min-height:72px;padding:9px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer}.workspace-option:hover{border-color:rgba(15,118,110,.36)}.workspace-option.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(15,118,110,.08)}.workspace-option.disabled{opacity:.5;cursor:not-allowed;background:#f8fafc}
+.workspace-option input{position:absolute;opacity:0;pointer-events:none}.workspace-option strong{display:block;font-size:10px}.workspace-option small{display:block;margin-top:4px;color:var(--muted);font-size:8px;line-height:1.4}.workspace-option .workspace-status{display:block;margin-top:6px;color:var(--accent-dark);font-size:8px;font-weight:850}.workspace-option.disabled .workspace-status{color:var(--fail)}
+.workspace-preview{margin-top:8px;padding:8px 9px;border-radius:8px;background:#eef6f5;color:#47645f;font-size:8px;line-height:1.5}.workspace-preview strong{color:var(--accent-dark)}
+.workspace-tag{background:#eaf5f3!important;color:#0f766e!important}.batch-tag{background:#eef2ff!important;color:#4f46e5!important}
+textarea,.code,.composer textarea,.field textarea,.source-body textarea{border:1px solid #d9e1e9!important;border-radius:10px!important;background:linear-gradient(180deg,#fff,#fbfcfe)!important;color:var(--text)!important;line-height:1.55!important;transition:border-color .15s,box-shadow .15s,background .15s!important;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+textarea:hover,.code:hover,.composer textarea:hover,.field textarea:hover,.source-body textarea:hover{border-color:#bdc9d5!important}
+textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.source-body textarea:focus{outline:0!important;border-color:#6fa9a3!important;background:#fff!important;box-shadow:0 0 0 3px rgba(15,118,110,.09)!important}
+.source-body textarea,.field textarea{min-height:86px;padding:10px 11px!important;resize:vertical!important}.composer textarea{min-height:82px;height:82px;padding:14px 15px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;resize:none!important}.code{padding:14px 15px!important;tab-size:2}
+.yaml-parent-hint{display:flex;align-items:center;gap:8px;margin-top:10px;padding:9px 10px;border:1px solid #dfe5fb;border-radius:9px;background:#f6f7ff;color:#535a7a;font-size:9px}.yaml-parent-hint strong{color:#4338ca}
+@media(max-width:900px){.workspace-options{grid-template-columns:1fr}.workspace-option{min-height:58px}}
 </style>
 </head>
 <body>
@@ -181,14 +203,18 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
       <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
       <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
     </nav>
-    <div class="project-switcher">
-      <div class="project-switcher-head"><span>Current project</span><button class="addsmall" title="新增 / 開啟專案">+</button></div>
-      <select id="projectSelect" class="project-select">
-        <option value="ai-task-runner">ai-task-runner · feature/ui</option>
-        <option value="game-client">game-client · main</option>
-        <option value="lab-tools">lab-tools · dev</option>
-      </select>
-      <small id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</small>
+    <div class="project-area">
+      <button class="new-project-fixed" id="newProjectDemo" type="button"><span>＋</span><strong>New Project</strong></button>
+      <div class="project-list-head"><span>Projects</span><small>scroll</small></div>
+      <div class="project-scroll" id="projectScroll">
+        <button class="project project-list-item active" type="button" data-project="ai-task-runner"><span class="dot running"></span><span class="project-copy"><strong>ai-task-runner</strong><small>feature/ui · 2 active workspaces</small></span></button>
+        <button class="project project-list-item" type="button" data-project="game-client"><span class="dot done"></span><span class="project-copy"><strong>game-client</strong><small>main · Completed</small></span></button>
+        <button class="project project-list-item" type="button" data-project="lab-tools"><span class="dot"></span><span class="project-copy"><strong>lab-tools</strong><small>dev · Idle</small></span></button>
+        <button class="project project-list-item" type="button" data-project="demo-api"><span class="dot"></span><span class="project-copy"><strong>demo-api</strong><small>main · Idle</small></span></button>
+        <button class="project project-list-item" type="button" data-project="web-console"><span class="dot done"></span><span class="project-copy"><strong>web-console</strong><small>feature/dashboard · Completed</small></span></button>
+        <button class="project project-list-item" type="button" data-project="sandbox-lab"><span class="dot"></span><span class="project-copy"><strong>sandbox-lab</strong><small>main · Idle</small></span></button>
+      </div>
+      <div class="project-current-path" id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</div>
     </div>
   </aside>
 
@@ -307,7 +333,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
     <div class="drawerbody">
       <div class="drawer-pane active" id="drawer-overview">
         <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
-        <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
+        <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
       </div>
       <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
@@ -336,6 +362,10 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
         <div class="field"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
+      <div class="workspace-selector-wrap">
+        <div class="workspace-selector-title"><div><strong>Workspace isolation</strong><small>同一個實際路徑最多一個 Running Task</small></div><span class="workspace-recommended">Auto recommended</span></div>
+        <div id="newTaskWorkspace"></div>
+      </div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
