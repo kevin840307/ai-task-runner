@@ -1778,6 +1778,109 @@ document.getElementById('deleteTaskDemo').onclick=()=>{
   delete taskMap[id];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast(t.kind==='list'?'Task List deleted':'Mock Task deleted');
 };
 
+// --- Sequence Composer: Task List is composed from the same Task configuration ---
+let sequenceExpandedIndex=0;
+let existingPickerContext=null;
+function taskFormToListItem(){
+  captureNewTaskSources();
+  const projectKey=document.getElementById('newTaskProject').value;
+  const project=projectMeta[projectKey]?.path||projectKey;
+  return {
+    prompt:newTaskDraft.prompt||document.getElementById('newTaskTitle').value.trim()||'Task',
+    goalMode:newTaskDraft.goalMode,goalFile:newTaskDraft.goalFile,goalAsset:newTaskDraft.goalAsset,
+    project,workflow:document.getElementById('newTaskWorkflow').value,
+    validatorMode:newTaskDraft.validator?'file':'none',validator:newTaskDraft.validator,
+    aiMode:newTaskDraft.aiMode,aiPrompt:newTaskDraft.aiPrompt,aiFile:newTaskDraft.aiFile,aiAsset:newTaskDraft.aiAsset
+  };
+}
+function taskToListItem(t){
+  const p=t.promptSource||{};
+  return {
+    prompt:p.prompt||t.goal||t.title,
+    goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
+    project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
+    validatorMode:p.validator?'file':'none',validator:p.validator||'',
+    aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'
+  };
+}
+function createTaskListFromItems(items){
+  const title=document.getElementById('newTaskTitle').value.trim()||'New Task List';
+  const project=document.getElementById('newTaskProject').value;
+  const id='T-'+(++taskSequence);
+  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} tasks · ready to edit`,tags:[`${items.length} tasks`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered sequence of Tasks using the existing RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child task workspaces',listItems:cloneBatch(items)};
+  taskMap[id]=t;renderBoardFromMap();return t;
+}
+function defaultNextItem(projectKey){
+  const root=projectMeta[projectKey]?.path||projectKey||'C:\\project';
+  return {prompt:'Next task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+}
+function openExistingTaskPicker(context){
+  existingPickerContext=context;
+  const host=document.getElementById('existingTaskPicker');
+  const candidates=Object.values(taskMap).filter(t=>t.kind!=='list'&&t.workspaceKind!=='batch');
+  host.innerHTML=candidates.length?candidates.map(t=>`<button type="button" class="existing-task-option" data-existing-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>${escapeHtml(runtimeLabel(t.runtime))}</span></button>`).join(''):'<div class="empty-panel">No standalone Tasks in this mock board.</div>';
+  host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
+    const source=taskMap[b.dataset.existingId],item=taskToListItem(source);if(!source)return;
+    if(existingPickerContext==='new'){
+      const first=taskFormToListItem(),t=createTaskListFromItems([first,item]);closeModal('newTaskModal');closeModal('existingTaskModal');sequenceExpandedIndex=1;openTaskListEditor(t.id);showToast('Task upgraded to Task List · existing Task copied as item 2');
+    }else{
+      batchDraft.push(item);sequenceExpandedIndex=batchDraft.length-1;closeModal('existingTaskModal');renderBatchDraft();showToast('Existing Task copied into sequence');
+    }
+  });
+  openModal('existingTaskModal');
+}
+document.getElementById('addNextTaskFromNew').onclick=()=>{
+  const first=taskFormToListItem(),next=defaultNextItem(document.getElementById('newTaskProject').value);
+  const t=createTaskListFromItems([first,next]);closeModal('newTaskModal');sequenceExpandedIndex=1;openTaskListEditor(t.id);showToast('Task upgraded to Task List · Item 1 preserved');
+};
+document.getElementById('addExistingTaskFromNew').onclick=()=>openExistingTaskPicker('new');
+
+function sequenceState(i){
+  if(i<batchState.index)return ['PASS','pass'];
+  if(i===batchState.index&&batchState.status==='running')return [batchState.recovered?'Recovering':'Running','running'];
+  if(i===batchState.index&&batchState.status==='stopped')return [batchState.currentDirty?'Restart on resume':'Stopped','stopped'];
+  if(i===batchState.index&&batchState.status==='failed')return ['Failed','stopped'];
+  return ['Waiting',''];
+}
+renderBatchDraft=function(){
+  const form=document.getElementById('formList');
+  if(!batchDraft.length){
+    form.innerHTML='<div class="empty-panel"><div><strong>No tasks in this sequence</strong><br><br>Add a new Task or copy an existing one.</div></div><div class="sequence-add-row"><button class="btn" id="addRequest">+ Add task</button><button class="btn ghost" id="addExistingSequence">Add existing</button></div>';
+  }else{
+    const rows=batchDraft.map((x,i)=>{
+      const caps=workflowCaps(x.workflow),validation=[],state=sequenceState(i),expanded=i===sequenceExpandedIndex;
+      if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div></div></div>`);
+      if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${aiSourceBody(x,i)}</div></div>`);
+      return `<div class="request sequence-item ${expanded?'expanded':''} ${i<batchState.index?'completed-lock':''} ${i===batchState.index&&batchState.status==='running'?'active-item':''}" data-req="${i}">
+        <div class="reqhead"><span class="reqnum">${i+1}</span><div class="sequence-item-title"><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="req-actions"><span class="sequence-state ${state[1]}">${state[0]}</span><button class="sequence-expand" type="button" data-expand="${i}">${expanded?'Collapse':'Edit'}</button><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div>
+        <div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${goalSourceBody(x,i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">This Workflow needs no extra validator input.</div>'}</div>
+      </div>`;
+    }).join('');
+    form.innerHTML=`<div class="sequence-composer">${rows}<div class="sequence-add-row"><button class="btn" id="addRequest">+ Add task</button><button class="btn ghost" id="addExistingSequence">Add existing</button></div></div>`;
+  }
+  bindBatchForm();
+  document.querySelectorAll('[data-expand]').forEach(b=>b.onclick=()=>{sequenceExpandedIndex=sequenceExpandedIndex===+b.dataset.expand?-1:+b.dataset.expand;renderBatchDraft()});
+  document.getElementById('addExistingSequence')?.addEventListener('click',()=>openExistingTaskPicker('sequence'));
+  syncBatchViews();setBatchControls();syncTaskListDraftToParent();
+};
+
+// Keep Add task compact and expand only the new item.
+const sequenceBaseBindBatchForm=bindBatchForm;
+bindBatchForm=function(){
+  sequenceBaseBindBatchForm();
+  const add=document.getElementById('addRequest');
+  if(add)add.onclick=()=>{
+    const root=batchDraft[0]?.project||projectMeta[currentProjectKey]?.path||'C:\\project';
+    batchDraft.push({prompt:'New task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+    sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft();showToast('Task added to sequence');
+  };
+  document.querySelectorAll('[data-remove]').forEach(b=>{const old=b.onclick;b.onclick=()=>{const i=+b.dataset.remove;if(i<batchState.index)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()}});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()});
+  document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()});
+  setBatchControls();
+};
+
+// Re-render using the sequence composer after binding override.
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
