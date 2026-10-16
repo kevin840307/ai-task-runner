@@ -2237,10 +2237,158 @@ openYamlPlanModal=function(){
 };
 document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
 
+// --- Canonical prototype execution-plan renderer ---
+function planItemDefaults(x={},t=null,i=0){
+  const fallbackProject=projectMeta[t?.project]?.path||t?.project||projectMeta[currentProjectKey]?.path||'C:\\project';
+  return {
+    prompt:String(x.prompt||x.goal||`Task ${i+1}`),
+    goalMode:x.goalMode||'inline',goalFile:x.goalFile||'',goalAsset:x.goalAsset||'common/review.md',
+    project:x.project||fallbackProject,workflow:x.workflow||'ralphy_ai_validate.yaml',
+    validatorMode:x.validatorMode||((x.validator&&x.validator!=='ai')?'file':x.validator==='ai'?'ai':'none'),validator:x.validator&&x.validator!=='ai'?x.validator:'',
+    aiMode:x.aiMode||'default',aiPrompt:x.aiPrompt||'',aiFile:x.aiFile||'',aiAsset:x.aiAsset||'common/ai_validator.md'
+  };
+}
+function planItemsForTask(t){
+  const raw=isSequenceTask(t)&&Array.isArray(t.listItems)&&t.listItems.length?t.listItems:[singleTaskItem(t)];
+  return raw.map((x,i)=>planItemDefaults(x,t,i));
+}
+function planStateFor(t,i,count){
+  const done=Math.min(t.progress?.[0]||0,count);
+  if(t.runtime==='done'||i<done)return {label:'PASS',cls:'pass',done:true,current:false};
+  const current=i===Math.min(done,count-1);
+  if(current&&t.runtime==='recover')return {label:'Recovering',cls:'running',done:false,current:true};
+  if(current&&t.runtime==='running')return {label:'Running',cls:'running',done:false,current:true};
+  if(current&&['stopped','attention'].includes(t.runtime))return {label:t.configDirty?'Restart':'Stopped',cls:'stopped',done:false,current:true};
+  if(current&&t.runtime==='failed')return {label:'Failed',cls:'stopped',done:false,current:true};
+  return {label:'Waiting',cls:'',done:false,current:false};
+}
+function planTitle(x,i){
+  const title=itemTitle(x,i);return title&&String(title).trim()?title:`Task ${i+1}`;
+}
+function setPlanDraftForTask(t){
+  batchParentTaskId=t.id;
+  batchDraft=cloneBatch(planItemsForTask(t));
+  batchState=deriveStepState(t);
+  if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
+}
+function commitPlanDraft(t,{markDirty=true}={}){
+  batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  if(batchDraft.length<=1){
+    const x=batchDraft[0]||planItemDefaults({},t,0);
+    t.kind='task';t.listItems=null;
+    if(t.workspaceKind==='batch')t.workspaceKind='main';
+    t.workflow=x.workflow;t.goal=x.prompt;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    t.tags=['workflow'];t.progress=[Math.min(t.progress?.[0]||0,1),1];
+    t.desc=t.status==='paused'&&markDirty?'Paused Task · execution plan changed · restart required.':'Single task';
+  }else{
+    t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);
+    t.tags=[`${batchDraft.length} tasks`];t.progress=[Math.min(t.progress?.[0]||0,batchDraft.length),batchDraft.length];
+    t.executionRoot=`${batchDraft.length} child workspaces`;t.desc=`${batchDraft.length} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  }
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;}
+}
+function planRowBody(x,i,editable){
+  const caps=workflowCaps(x.workflow),validation=[];
+  if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose</button></div></div></div>`);
+  if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="aiMode"`)}</div><div class="source-body">${aiSourceBody(x,i)}</div></div>`);
+  return `<div class="workflow-row"><div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="goalMode"`)}</div><div class="source-body">${goalSourceBody(x,i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">This Workflow needs no extra validator input.</div>'}`;
+}
+function renderDrawerPlan(t){
+  const host=document.getElementById('formList'),items=batchDraft.length?batchDraft:planItemsForTask(t),editable=taskEditable(t);
+  document.getElementById('taskListEditHint').textContent=items.length===1?'Single task · add another only when needed':`${items.length} tasks · top-to-bottom sequence`;
+  document.getElementById('taskListParentHint').textContent=items.length===1?'Runs once · same Board Task':`${items.length} tasks · one Board Task`;
+  document.getElementById('openFullPlan').hidden=items.length<2;
+  if(items.length===1){
+    const x=items[0],s=planStateFor(t,0,1);
+    host.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${s.cls}">${escapeHtml(s.label)}</span></div>`;
+  }else{
+    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open full plan to edit</div>`:'');
+  }
+  ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
+}
+function renderFullPlan(t){
+  const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:planItemsForTask(t),editable=taskEditable(t);
+  document.getElementById('planPageTitle').textContent=t.title;
+  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
+  host.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length),expanded=i===sequenceExpandedIndex,completed=s.done;
+    const canMutate=editable&&!completed;
+    return `<article class="plan-row ${expanded?'expanded':''} ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-plan-expand="${i}">${expanded?'Close':'Edit'}</button><button type="button" data-plan-up="${i}" ${!canMutate||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canMutate||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canMutate||items.length<=1?'disabled':''}>×</button></div></div></div><div class="plan-row-body">${planRowBody(x,i,editable)}</div></article>`;
+  }).join('');
+  ['planAddTask','planAddExisting','planEditYaml'].forEach(id=>document.getElementById(id).disabled=!editable);
+  bindFullPlan(t);
+}
+function bindFullPlan(t){
+  document.querySelectorAll('[data-plan-expand]').forEach(b=>b.onclick=()=>{sequenceExpandedIndex=sequenceExpandedIndex===+b.dataset.planExpand?-1:+b.dataset.planExpand;renderFullPlan(t)});
+  document.querySelectorAll('[data-plan-item][data-plan-field]').forEach(el=>{
+    el.disabled=!taskEditable(t)||(+el.dataset.planItem)<batchState.index;
+    const ev=el.tagName==='SELECT'?'change':'input';el.addEventListener(ev,()=>{
+      const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;batchDraft[i][field]=el.value;
+      commitPlanDraft(t);if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
+    });
+  });
+  document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'batch'));
+  document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+}
+function renderExecutionPlan(t){if(!t)return;renderDrawerPlan(t);if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(t)}
+
+// Final renderer replaces all previous batch/sequence visual wrappers.
+prepareStepsForTask=function(t){if(!t)return;setPlanDraftForTask(t);renderExecutionPlan(t)};
+renderBatchDraft=function(){const t=taskMap[currentTaskId]||taskMap[batchParentTaskId];if(t)renderExecutionPlan(t)};
+syncTaskListDraftToParent=function(){const t=taskMap[batchParentTaskId]||taskMap[currentTaskId];if(t)commitPlanDraft(t,{markDirty:false})};
+
+function addPlanTask(t,{openPlan=true}={}){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
+  if(batchParentTaskId!==t.id)setPlanDraftForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push(planItemDefaults({prompt:'Next task',project:root},t,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(t);renderBoardFromMap();renderExecutionPlan(t);
+  if(openPlan)openFullPlanPage(t.id);
+}
+function openFullPlanPage(id=currentTaskId){
+  const t=taskMap[id];if(!t)return;currentTaskId=id;setPlanDraftForTask(t);showView('plan');renderFullPlan(t);
+}
+document.getElementById('openFullPlan').onclick=()=>openFullPlanPage(currentTaskId);
+document.getElementById('planBackToTask').onclick=()=>{const id=currentTaskId;showView('tasks');openTaskById(id)};
+document.getElementById('drawerAddStep').onclick=()=>{const t=taskMap[currentTaskId];if(t)addPlanTask(t,{openPlan:true})};
+document.getElementById('planAddTask').onclick=()=>{const t=taskMap[currentTaskId];if(t)addPlanTask(t,{openPlan:false});renderFullPlan(t)};
+
+openExistingTaskPicker=function(context){
+  existingPickerContext=context;const host=document.getElementById('existingTaskPicker');
+  const candidates=Object.values(taskMap).filter(t=>t.id!==currentTaskId&&t.kind!=='list'&&t.workspaceKind!=='batch');
+  host.innerHTML=candidates.length?candidates.map(t=>`<button type="button" class="existing-task-option" data-existing-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>${escapeHtml(runtimeLabel(t.runtime))}</span></button>`).join(''):'<div class="empty-panel">No standalone Tasks available.</div>';
+  host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
+    const owner=taskMap[currentTaskId],source=taskMap[b.dataset.existingId];if(!owner||!source||!taskEditable(owner))return;
+    if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);batchDraft.push(planItemDefaults(taskToListItem(source),owner,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner);closeModal('existingTaskModal');renderBoardFromMap();renderExecutionPlan(owner);
+    if(context==='drawer')openFullPlanPage(owner.id);else if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(owner);showToast('Existing Task copied into execution plan');
+  });openModal('existingTaskModal');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;openExistingTaskPicker('drawer')};
+document.getElementById('planAddExisting').onclick=()=>{const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;openExistingTaskPicker('plan')};
+
+function openPlanYamlForTask(t){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
+  if(batchParentTaskId!==t.id)setPlanDraftForTask(t);pendingYamlPlan=null;document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Editing the same execution plan. Validate before Apply.';document.getElementById('applyYamlPlan').disabled=true;openModal('yamlPlanModal');
+}
+openYamlPlanModal=function(){const t=taskMap[currentTaskId];if(t)openPlanYamlForTask(t)};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;document.getElementById('planEditYaml').onclick=openYamlPlanModal;
+document.getElementById('applyYamlPlan').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t);pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Execution plan YAML applied');
+};
+
+// Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
+const canonicalPlanOpenTask=openTaskById;
+openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t);document.getElementById('drawerItemsTab').hidden=true}};
+
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
-renderBatch('ui');
 </script>
 </body>
 </html>
