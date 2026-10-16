@@ -225,6 +225,9 @@ class Handler(SimpleHTTPRequestHandler):
                     workspace_path=str(body.get("workspace_path", "")),
                     backend=str(body.get("backend", "")),
                     model=str(body.get("model", "")),
+                    validator=str(body.get("validator", "")),
+                    ai_validator_prompt_file=str(body.get("ai_validator_prompt_file", "")),
+                    readonly_safety=str(body.get("readonly_safety", "restore")),
                 ))
             if parsed.path == "/api/tasks/action":
                 return self._json(self.state.task_action(
