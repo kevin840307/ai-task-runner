@@ -385,6 +385,7 @@ class TaskWorkspaceMixin:
         self,
         chat_id: str = "",
         *,
+        root: str = "",
         limit: int = 100,
         attention_only: bool = False,
     ) -> dict:
@@ -392,7 +393,7 @@ class TaskWorkspaceMixin:
             self._chat_for_task(chat_id)
         if int(limit) < 1:
             raise ValueError("Task list limit must be positive")
-        rows = list(self.tasks.list(chat_id=chat_id))
+        rows = list(self.tasks.list(chat_id=chat_id, root=root))
         rows.sort(
             key=lambda item: float(item.get("updated_at") or item.get("created_at") or 0),
             reverse=True,
