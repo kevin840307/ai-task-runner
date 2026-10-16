@@ -894,3 +894,130 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             assert not page.locator("#validationPickers").is_visible()
             assert not errors
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_original_workspace_integrates_future_chat_tasks_without_second_shell() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+
+        # Seed a historical Task on another Chat to prove Project-wide History.
+        older_chat = state.chats.create(str(root), "Older Chat")
+        older = state.tasks.create(
+            chat_id=older_chat["chat_id"],
+            root_path=str(root),
+            instruction="Historical project task",
+            title="Older project task",
+            task_type="single",
+            workflow="",
+        )
+        state.tasks.update(older["task_id"], last_status="completed")
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            # Original product shell remains the only primary surface.
+            assert urlparse(page.url).path == "/"
+            assert page.locator("#chatNav").count() == 1
+            assert page.locator("#workflowNav").count() == 1
+            assert page.locator("#promptNav").count() == 1
+            assert page.locator('a[href="/chats.html"]').count() == 0
+            assert page.locator("#taskModeButton").get_attribute("aria-pressed") == "true"
+            assert page.locator("#workflowPicker").is_visible()
+            assert page.locator("#optionsButton").is_visible()
+            page.locator("#conversationTools").wait_for(state="visible")
+
+            # Chat mode reuses the same composer/history and hides Task-only controls.
+            page.locator("#chatModeButton").click()
+            assert page.locator("#chatModeButton").get_attribute("aria-pressed") == "true"
+            assert not page.locator("#workflowPicker").is_visible()
+            assert not page.locator("#optionsButton").is_visible()
+            page.locator("#messageInput").fill("Explain the auth flow")
+            page.locator("#sendButton").click()
+            page.get_by_text("Fixture assistant response", exact=True).wait_for()
+            assert page.locator("#messages .message").count() == 2
+            assert urlparse(page.url).path == "/"
+
+            # One user message becomes a Task without opening another page.
+            user_message = page.locator("#messages .message.chat-user").first
+            user_message.get_by_role("button", name="Run as Task", exact=True).click()
+            assert page.locator("#taskModeButton").get_attribute("aria-pressed") == "true"
+            assert page.locator("#workflowPicker").is_visible()
+            assert page.locator("#messageInput").input_value() == "Explain the auth flow"
+            page.locator("#sendButton").click()
+            page.wait_for_function("document.querySelector('#messageInput').value === ''")
+            task_calls = [
+                call for call in state._browser_calls
+                if call["path"] == "/api/tasks/create"
+            ]
+            assert task_calls
+            assert task_calls[-1]["body"]["task_type"] == "single"
+            assert task_calls[-1]["body"]["instruction"] == "Explain the auth flow"
+
+            # Task List is an original-style modal and keeps the current page.
+            page.locator("#taskListButton").click()
+            page.locator("#taskListBackdrop").wait_for(state="visible")
+            rows = page.locator("#integratedTaskListItems .integrated-task-list-item textarea")
+            rows.first.fill("First ordered change")
+            page.locator("#taskListAdd").click()
+            rows = page.locator("#integratedTaskListItems .integrated-task-list-item textarea")
+            rows.nth(1).fill("Second ordered change")
+            page.locator("#taskListRun").click()
+            page.locator("#taskListBackdrop").wait_for(state="hidden")
+            task_calls = [
+                call for call in state._browser_calls
+                if call["path"] == "/api/tasks/create"
+            ]
+            assert task_calls[-1]["body"]["task_type"] == "sequential"
+            assert [item["instruction"] for item in task_calls[-1]["body"]["items"]] == [
+                "First ordered change",
+                "Second ordered change",
+            ]
+            assert urlparse(page.url).path == "/"
+
+            # Project-wide Task History includes Tasks from other compact Chats.
+            page.locator("#taskHistoryButton").click()
+            page.locator("#taskHistoryBackdrop").wait_for(state="visible")
+            page.get_by_text("Older project task", exact=True).wait_for()
+            assert page.locator("#integratedTaskHistoryList button").count() >= 3
+
+            # Low-resolution original workspace remains bounded.
+            page.set_viewport_size({"width": 720, "height": 720})
+            page.locator("#taskHistoryDone").click()
+            width = page.evaluate(
+                "() => ({client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})"
+            )
+            assert width["scroll"] <= width["client"] + 1
+            assert not errors
+            browser.close()
