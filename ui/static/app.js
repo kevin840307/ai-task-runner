@@ -221,6 +221,7 @@ function renderComposerMode() {
     : "描述要完成的功能或修復內容...";
   if ($("taskHistoryButton")) $("taskHistoryButton").hidden = chat || !state.project;
   if ($("clearHistoryButton")) $("clearHistoryButton").hidden = chat;
+  renderConversationTools();
   requestAnimationFrame(syncComposerReserve);
 }
 async function setComposerMode(mode, { persist = true, refresh = true } = {}) {
@@ -236,7 +237,7 @@ async function setComposerMode(mode, { persist = true, refresh = true } = {}) {
 function renderConversationTools() {
   const tools = $("conversationTools"), select = $("conversationSelect");
   if (!tools || !select) return;
-  tools.hidden = !state.project;
+  tools.hidden = !state.project || !isChatMode();
   select.innerHTML = "";
   for (const chat of state.chats.filter((item) => !item.archived)) {
     const option = document.createElement("option");
