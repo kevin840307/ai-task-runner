@@ -889,6 +889,7 @@ const batchPresets={
 let batchDraft=[];
 let batchRunTimer=null;
 let batchState={status:'idle',index:0,recovered:false};
+let batchParentTaskId=null;
 let pickerTarget=null;
 
 function cloneBatch(items){return JSON.parse(JSON.stringify(items||[]))}
@@ -1113,8 +1114,30 @@ document.getElementById('validateYaml').onclick=()=>{
   showToast(`YAML List valid · ${items.length} child RunRequests`);
   document.getElementById('batchLog').textContent=`[validate] PASS · ${items.length} child RunRequests\n[validate] goal_file / validator / ai_validator_prompt_file mapped to current RunRequest contract\n[validate] Formal implementation calls the existing backend loader/schema path.`;
 };
+function ensureBatchParentTask(){
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){
+    const id='YAML-'+(++taskSequence),preset=document.getElementById('batchPreset');
+    batchParentTaskId=id;
+    t={id,status:'ongoing',title:`YAML Batch · ${preset.options[preset.selectedIndex]?.text||'Batch'}`,runtime:'running',desc:`Sequential YAML List · ${batchDraft.length} child RunRequests`,tags:['YAML Batch',`${batchDraft.length} items`],workflow:'YAML List',project:currentProjectKey||'ai-task-runner',progress:[0,batchDraft.length],elapsed:'0m',stage:`Item 1 / ${batchDraft.length}`,session:'batch',goal:'Execute the current YAML Tasks batch through the existing YAML List / RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${batchDraft.length} child RunRequest workspaces`};
+    taskMap[id]=t;
+  }
+  return t;
+}
+function updateBatchParentTask(runtime,status,index=batchState.index){
+  const t=ensureBatchParentTask();
+  t.runtime=runtime;t.status=status;t.progress=[Math.min(index,batchDraft.length),batchDraft.length];
+  t.stage=batchDraft.length?`YAML item ${Math.min(index+1,batchDraft.length)} / ${batchDraft.length}`:'Batch';
+  t.desc=`Sequential YAML List · ${batchDraft.length} child RunRequests · ${runtimeLabel(runtime)}`;
+  t.tags=['YAML Batch',`${batchDraft.length} items`];
+  t.executionRoot=`${batchDraft.length} child RunRequest workspaces`;
+  renderBoardFromMap();
+  return t;
+}
 function finishBatch(status,message){
   clearInterval(batchRunTimer);batchRunTimer=null;batchState.status=status;setBatchControls();
+  if(status==='completed')updateBatchParentTask('done','closed',batchDraft.length);
+  else if(status==='failed')updateBatchParentTask('failed','paused',batchState.index);
   if(message)document.getElementById('batchLog').textContent+=`\n${message}`;
 }
 function batchTick(){
@@ -1126,6 +1149,7 @@ function batchTick(){
   item.classList.add('active');item.querySelector('.orderchip').textContent='Running';
   if(outcome==='recover'&&batchState.index===0&&!batchState.recovered){
     batchState.recovered=true;item.querySelector('.orderchip').textContent='Recovering';
+    updateBatchParentTask('recover','ongoing',batchState.index);
     log.textContent+='\n[00:05] item 1 · HTTP 503\n[00:10] StageExecutor same-session retry';return;
   }
   if(outcome==='fail'&&batchState.index===1){
@@ -1136,6 +1160,7 @@ function batchTick(){
   item.classList.remove('active');item.classList.add('done');item.querySelector('.orderchip').textContent='PASS';
   log.textContent+=`\n[00:${String((batchState.index+1)*6).padStart(2,'0')}] item ${batchState.index+1} PASS`;
   batchState.index++;
+  updateBatchParentTask('running','ongoing',batchState.index);
 }
 document.getElementById('runBatch').onclick=()=>{
   const errors=batchValidationErrors(batchDraft);
@@ -1144,7 +1169,9 @@ document.getElementById('runBatch').onclick=()=>{
   clearInterval(batchRunTimer);
   document.querySelectorAll('.previewitem').forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
   batchState={status:'running',index:0,recovered:false};setBatchControls();
-  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
+  batchParentTaskId=null;
+  updateBatchParentTask('running','ongoing',0);
+  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] one YAML Batch parent Task created in Tasks\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
   batchTick();batchRunTimer=setInterval(batchTick,900);
 };
 document.getElementById('stopBatch').onclick=()=>{
@@ -1152,24 +1179,29 @@ document.getElementById('stopBatch').onclick=()=>{
   clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
   const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
   if(item)item.querySelector('.orderchip').textContent='Stopped';
+  updateBatchParentTask('stopped','paused',batchState.index);
   document.getElementById('batchLog').textContent+='\n[user] batch stop requested · current child durable state preserved';
-  showToast('Mock Batch stopped');
+  showToast('Mock Batch stopped · Tasks parent moved to Paused');
 };
 document.getElementById('resumeBatch').onclick=()=>{
   if(batchState.status!=='stopped')return;
   batchState.status='running';setBatchControls();
   const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
   if(item)item.querySelector('.orderchip').textContent='Running';
+  updateBatchParentTask('running','ongoing',batchState.index);
   document.getElementById('batchLog').textContent+='\n[user] resume · continue current child RunRequest';
-  batchRunTimer=setInterval(batchTick,900);showToast('Mock Batch resumed');
+  batchRunTimer=setInterval(batchTick,900);showToast('Mock Batch resumed · Tasks parent Ongoing');
 };
 
 document.getElementById('resetBatch').onclick=()=>{
   if(batchState.status!=='stopped')return;
   resetBatchRuntime();
   syncBatchViews();
+  if(batchParentTaskId&&taskMap[batchParentTaskId]){
+    const t=taskMap[batchParentTaskId];t.runtime='idle';t.status='new';t.progress=[0,batchDraft.length];t.stage='Batch draft';t.desc='YAML Batch reset；draft unlocked for editing.';renderBoardFromMap();
+  }
   document.getElementById('batchLog').textContent='[reset] stopped batch abandoned · draft unlocked for editing';
-  showToast('Mock Batch reset');
+  showToast('Mock Batch reset · parent Task moved to New');
 };
 
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
