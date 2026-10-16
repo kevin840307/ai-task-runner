@@ -511,6 +511,9 @@ class TaskWorkspaceMixin:
         workspace_path: str = "",
         backend: str = "",
         model: str = "",
+        validator: str = "",
+        ai_validator_prompt_file: str = "",
+        readonly_safety: str = "restore",
     ) -> dict:
         chat = self._chat_for_task(chat_id)
         if not chat.get("path_available"):
@@ -551,6 +554,9 @@ class TaskWorkspaceMixin:
             source_goal_file=source_goal_file,
             backend=str(backend or ""),
             model=str(model or ""),
+            validator=str(validator or ""),
+            ai_validator_prompt_file=str(ai_validator_prompt_file or ""),
+            readonly_safety=str(readonly_safety or "restore"),
         )
         try:
             task, project = self._prepare_task_workspace(
@@ -566,6 +572,9 @@ class TaskWorkspaceMixin:
                 workflow=resolved_workflow,
                 backend=str(backend or ""),
                 model=str(model or ""),
+                validator=str(validator or ""),
+                ai_validator_prompt_file=str(ai_validator_prompt_file or ""),
+                readonly_safety=str(readonly_safety or "restore"),
                 goal_file=source_goal_file,
             )
         except Exception as exc:
@@ -589,6 +598,9 @@ class TaskWorkspaceMixin:
             "source_goal_file": source_goal_file,
             "backend": str(request.get("backend") or backend or ""),
             "model": str(request.get("model") or model or ""),
+            "validator": str(validator or ""),
+            "ai_validator_prompt_file": str(ai_validator_prompt_file or ""),
+            "readonly_safety": str(readonly_safety or "restore"),
             "workflow": str(request.get("workflow") or resolved_workflow),
             "run_id": "",
         })
@@ -871,6 +883,9 @@ class TaskWorkspaceMixin:
                     workflow=parent_workflow,
                     backend=str(task.get("backend") or ""),
                     model=str(task.get("model") or ""),
+                    validator=str(task.get("validator") or ""),
+                    ai_validator_prompt_file=str(task.get("ai_validator_prompt_file") or ""),
+                    readonly_safety=str(task.get("readonly_safety") or "restore"),
                 )
                 task = self.tasks.append_execution(task_id, {
                     "request_id": "",
@@ -896,6 +911,9 @@ class TaskWorkspaceMixin:
                     workflow=resolved_workflow,
                     backend=str(task.get("backend") or ""),
                     model=str(task.get("model") or ""),
+                    validator=str(task.get("validator") or ""),
+                    ai_validator_prompt_file=str(task.get("ai_validator_prompt_file") or ""),
+                    readonly_safety=str(task.get("readonly_safety") or "restore"),
                 )
                 request_id = str(request.get("request_id") or "")
                 task = self.tasks.append_execution(task_id, {
