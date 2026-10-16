@@ -411,7 +411,10 @@ document.getElementById('themeBtn').addEventListener('click',()=>showToast('Mock
 const projectMeta={
   'ai-task-runner':{path:'C:\\Users\\kevin\\ai-task-runner',branch:'feature/ui'},
   'game-client':{path:'D:\\dev\\game-client',branch:'main'},
-  'lab-tools':{path:'D:\\lab\\tools',branch:'dev'}
+  'lab-tools':{path:'D:\\lab\\tools',branch:'dev'},
+  'demo-api':{path:'D:\\dev\\demo-api',branch:'main'},
+  'web-console':{path:'D:\\dev\\web-console',branch:'feature/dashboard'},
+  'sandbox-lab':{path:'D:\\lab\\sandbox-lab',branch:'main'}
 };
 document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
   document.querySelectorAll('.project').forEach(x=>x.classList.remove('active'));p.classList.add('active');
@@ -506,17 +509,45 @@ function runtimeLabel(rt){return {running:'Running',recover:'Recovering',stopped
 function statusLabel(st){return {new:'New',ongoing:'Ongoing',paused:'Paused',closed:'Closed'}[st]||st}
 function runtimeClass(rt){return ['running','recover','stopped','done','failed','attention'].includes(rt)?rt:''}
 function progressPct(t){return t.progress[1]?Math.round(t.progress[0]/t.progress[1]*100):0}
+function workspaceName(t){
+  if(t.workspaceKind==='worktree')return `Worktree · ${t.branch||('task/'+t.id)}`;
+  if(t.workspaceKind==='batch')return 'YAML Batch';
+  return 'Main workspace';
+}
+function worktreeRootFor(project,id){
+  const root=projectMeta[project]?.path||project||'C:\\project';
+  const parts=root.split('\\'),name=parts.pop()||'project';
+  return [...parts,name+'-worktrees',id].join('\\');
+}
+function hydrateTaskWorkspace(t,mainOwners){
+  if(t.workspaceKind)return t;
+  const active=['running','recover'].includes(t.runtime);
+  if(active&&mainOwners.has(t.project)){
+    t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id);
+  }else{
+    t.workspaceKind='main';t.branch=projectMeta[t.project]?.branch||'main';t.executionRoot=projectMeta[t.project]?.path||t.project;
+    if(active)mainOwners.add(t.project);
+  }
+  return t;
+}
 function taskCardHtml(t){
   const progress=t.progress[1]?`<span class="progress"><span class="bar"><i style="width:${progressPct(t)}%"></i></span>${t.progress[0]} / ${t.progress[1]}</span>`:`<span>#${t.id}</span>`;
+  const workspaceClass=t.workspaceKind==='batch'?'batch-tag':'workspace-tag';
   return `<article class="taskcard ${t.runtime==='attention'?'attention':''} ${t.runtime==='failed'?'failed':''}" draggable="true" data-id="${t.id}" data-title="${escapeHtml(t.title)}" data-runtime="${t.runtime}">
     <div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">${escapeHtml(t.title)}</div><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span></div>
-    <div class="carddesc">${escapeHtml(t.desc)}</div><div class="cardmeta">${t.tags.map(x=>`<span class="tag">${escapeHtml(x)}</span>`).join('')}</div>
+    <div class="carddesc">${escapeHtml(t.desc)}</div><div class="cardmeta"><span class="tag ${workspaceClass}">${escapeHtml(workspaceName(t))}</span>${t.tags.map(x=>`<span class="tag">${escapeHtml(x)}</span>`).join('')}</div>
     <div class="cardfoot">${progress}<span>${escapeHtml(t.elapsed)}</span></div></article>`;
 }
 function renderBoard(preset=currentPreset){
   currentPreset=preset;taskMap={};
   document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
-  (taskPresets[preset]||[]).forEach(t=>{taskMap[t.id]={...t};const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t))});
+  const mainOwners=new Set();
+  (taskPresets[preset]||[]).forEach(source=>{
+    const t=hydrateTaskWorkspace({...source,tags:[...(source.tags||[])]},mainOwners);
+    taskMap[t.id]=t;
+    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+    if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
+  });
   bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
 }
 const BOARD_TRANSITIONS={
@@ -725,6 +756,9 @@ function openTaskById(id){
   document.getElementById('drawerStatusValue').textContent=statusLabel(t.status);
   document.getElementById('drawerWorkflow').textContent=t.workflow;
   document.getElementById('drawerProject').textContent=projectMeta[t.project]?.path||t.project;
+  document.getElementById('drawerWorkspace').textContent=workspaceName(t);
+  document.getElementById('drawerBranch').textContent=t.branch||'—';
+  document.getElementById('drawerExecutionRoot').textContent=t.executionRoot||projectMeta[t.project]?.path||t.project;
   document.getElementById('drawerBackend').textContent=t.runtime==='recover'?'Qwen · qwen3-coder-plus':'Default backend';
   document.getElementById('drawerGoal').textContent=t.goal;
   document.getElementById('metricProgress').textContent=`${t.progress[0]} / ${t.progress[1]}`;
