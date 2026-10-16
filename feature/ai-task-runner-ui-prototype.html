@@ -547,8 +547,7 @@ document.getElementById('listMode').onclick=e=>{
 
 function renderBoardFromMap(){
   document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
-  Object.values(taskMap).forEach(t=>{
-    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+  Object.values(taskMap).forEach(t=>{    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
     if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
   });
   bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
@@ -998,3 +997,35 @@ document.getElementById('runBatch').onclick=()=>{
 };
 document.getElementById('stopBatch').onclick=()=>{
   if(batchState.status!=='running')return;
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
+  if(item)item.querySelector('.orderchip').textContent='Stopped';
+  document.getElementById('batchLog').textContent+='\n[user] batch stop requested · current child durable state preserved';
+  showToast('Mock Batch stopped');
+};
+document.getElementById('resumeBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  batchState.status='running';setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
+  if(item)item.querySelector('.orderchip').textContent='Running';
+  document.getElementById('batchLog').textContent+='\n[user] resume · continue current child RunRequest';
+  batchRunTimer=setInterval(batchTick,900);showToast('Mock Batch resumed');
+};
+
+document.getElementById('resetBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  resetBatchRuntime();
+  syncBatchViews();
+  document.getElementById('batchLog').textContent='[reset] stopped batch abandoned · draft unlocked for editing';
+  showToast('Mock Batch reset');
+};
+
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
+
+renderChat('design');
+renderBoard('today');
+renderBatch('ui');
+</script>
+</body>
+</html>
