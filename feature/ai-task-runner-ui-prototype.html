@@ -1476,8 +1476,8 @@ function renderBatchDraft(){
     form.innerHTML=batchDraft.map((x,i)=>{
       const caps=workflowCaps(x.workflow),validation=[];
       if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div></div></div>`);
-      if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${aiSourceBody(x,i)}</div></div>`);
-      return `<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${goalSourceBody(x,i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>'}</div></div>`;
+      if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(aiSourceBody(x,i),i)}</div></div>`);
+      return `<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(goalSourceBody(x,i),i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>'}</div></div>`;
     }).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
   }
   bindBatchForm();syncBatchViews();
@@ -2288,6 +2288,15 @@ function commitPlanDraft(t,{markDirty=true}={}){
   }
   if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;}
 }
+function planizeSourceHtml(html,i){
+  return String(html||'')
+    .replaceAll(`data-item="${i}"`,`data-plan-item="${i}"`)
+    .replaceAll('data-field=','data-plan-field=')
+    .replaceAll(`data-pick-index="${i}"`,`data-plan-pick="${i}"`)
+    .replaceAll('data-pick-field=','data-plan-pick-field=')
+    .replaceAll('data-pick-kind=','data-plan-pick-kind=')
+    .replaceAll('data-view-prompts="1"','data-plan-view-prompts="1"');
+}
 function planRowBody(x,i,editable){
   const caps=workflowCaps(x.workflow),validation=[];
   if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose</button></div></div></div>`);
@@ -2332,11 +2341,21 @@ function bindFullPlan(t){
   });
   document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'batch'));
+  document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
   document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t);renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 }
-function renderExecutionPlan(t){if(!t)return;renderDrawerPlan(t);if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(t)}
+function renderExecutionPlan(t){
+  if(!t)return;
+  renderDrawerPlan(t);
+  const preview=document.getElementById('batchPreview'),items=batchDraft.length?batchDraft:planItemsForTask(t);
+  preview.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length);
+    return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`;
+  }).join('');
+  if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(t);
+}
 
 // Final renderer replaces all previous batch/sequence visual wrappers.
 prepareStepsForTask=function(t){if(!t)return;setPlanDraftForTask(t);renderExecutionPlan(t)};
