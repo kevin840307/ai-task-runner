@@ -372,7 +372,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         </section>
       </div>
       <div class="drawer-pane" id="drawer-items"></div>
-      <div class="drawer-pane" id="drawer-runtime">      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
+      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
     <article class="task-live-activity">
       <div class="task-live-head"><span class="task-live-dot" id="drawerLiveDot" aria-hidden="true"></span><strong>CLI Runtime</strong><small id="drawerLiveProgress">same runtime state</small><small id="drawerLiveUpdated">Last update now</small></div>
@@ -1172,11 +1172,7 @@ function setBatchControls(){
 function resetBatchRuntime(){
   clearInterval(batchRunTimer);batchRunTimer=null;batchState={status:'idle',index:0,recovered:false};setBatchControls();
 }
-document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click',()=>{
-  document.querySelectorAll('[data-yamltab]').forEach(x=>x.classList.toggle('active',x===t));
-  document.getElementById('yaml-form').classList.toggle('hidden',t.dataset.yamltab!=='form');
-  document.getElementById('yaml-code').classList.toggle('hidden',t.dataset.yamltab!=='code');
-}));
+// YAML is edited only through yamlPlanModal; no Visual/YAML mode switch remains.
 document.getElementById('batchPreset').onchange=e=>{renderBatch(e.target.value);showToast(`載入 ${e.target.options[e.target.selectedIndex].text}`)};
 document.getElementById('yamlEditor').addEventListener('input',()=>{
   if(batchState.status==='running')return;
@@ -1667,14 +1663,13 @@ function openTaskListEditor(id){
   renderBatchDraft();showView('yaml');
 }
 document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
-document.getElementById('editTaskListDemo').onclick=()=>openTaskListEditor(currentTaskId);
+// Legacy Edit List button removed; execution plan is edited in Overview.
 
 const baseOpenTaskById=openTaskById;
 openTaskById=function(id){
   baseOpenTaskById(id);
   const t=taskMap[id],isList=!!t&&(t.kind==='list'||t.workspaceKind==='batch');
   const tab=document.getElementById('drawerItemsTab');tab.hidden=!isList;
-  document.getElementById('editTaskListDemo').hidden=!isList;
   const host=document.getElementById('drawerListItems');
   if(!isList){host.innerHTML='';return}
   const items=t.listItems||[];host.className='drawer-list-items';
@@ -1682,7 +1677,6 @@ openTaskById=function(id){
     const state=i<(t.progress?.[0]||0)?'PASS':(i===(t.progress?.[0]||0)&&['running','recover','stopped','failed'].includes(t.runtime)?runtimeLabel(t.runtime):'Waiting');
     return `<div class="drawer-list-item ${state==='PASS'?'done':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(state)}</span></div>`;
   }).join('')||'<div class="empty-panel">No items</div>';
-  document.getElementById('editTaskListDemo').textContent=['running','recover'].includes(t.runtime)?'View List':'Edit List';
 };
 
 const baseRenderDrawerActions=renderDrawerActions;
@@ -1952,15 +1946,12 @@ openTaskById=function(id){
   finalBaseOpenTaskById(id);
   const t=taskMap[id];if(!t)return;
   document.getElementById('drawerItemsTab').hidden=false;
-  document.getElementById('editTaskListDemo').hidden=true;
   prepareStepsForTask(t);
   document.querySelector('#taskOverlay .drawer').classList.remove('steps-mode');
 };
 
 document.querySelectorAll('[data-drawertab]').forEach(b=>b.addEventListener('click',()=>{
-  const drawer=document.querySelector('#taskOverlay .drawer');
-  if(b.dataset.drawertab==='items'){prepareStepsForTask(taskMap[currentTaskId]);drawer.classList.add('steps-mode')}
-  else drawer.classList.remove('steps-mode');
+  document.querySelector('#taskOverlay .drawer').classList.remove('steps-mode');
 }));
 
 document.getElementById('drawerAddStep').onclick=()=>{
@@ -1976,10 +1967,7 @@ document.getElementById('drawerAddExisting').onclick=()=>{
   if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
   if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
 };
-document.getElementById('stepsAdvanced').onclick=()=>{
-  const row=document.getElementById('stepsModeRow'),show=row.hidden;row.hidden=!show;
-  document.getElementById('stepsAdvanced').textContent=show?'Hide advanced':'⋯ Advanced';
-};
+// YAML advanced editor is opened by the final yamlPlanModal handler.
 
 // Task footer remains the single Run / Stop / Resume control for both 1-step and multi-step Tasks.
 document.getElementById('taskPrimaryDemo').onclick=()=>{
