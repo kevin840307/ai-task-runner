@@ -448,6 +448,42 @@ async function renderTaskHistoryDetail(taskId) {
   if (allowed.stop) addAction("Stop", "stop");
   if (allowed.resume) addAction("Resume", "resume");
   if (allowed.rerun) addAction("Rerun", "rerun");
+  if (allowed.continue) {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = "Continue";
+    button.onclick = async () => {
+      const instruction = await inputDialog({ title: "Continue Task", message: "Add a new instruction to this Task.", label: "Instruction", value: "", confirmLabel: "Continue" });
+      if (!instruction) return;
+      try {
+        await api("/api/tasks/action", { method: "POST", body: JSON.stringify({ task_id: taskId, action: "continue", instruction }) });
+        await renderTaskHistoryDetail(taskId); await refreshRuntime({ force: true });
+      } catch (error) { showActionError(error.message, "Continue failed"); }
+    };
+    actions.append(button);
+  }
+  if (allowed.cleanup_workspace) {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = "Clean Worktree";
+    button.onclick = async () => {
+      const ok = await confirmDialog({ title: "Clean managed Worktree?", message: "Runtime evidence is archived first. Source branches are never merged or deleted automatically.", confirmLabel: "Clean Worktree" });
+      if (!ok) return;
+      try {
+        await api("/api/tasks/workspace/cleanup", { method: "POST", body: JSON.stringify({ task_id: taskId }) });
+        await renderTaskHistoryDetail(taskId);
+      } catch (error) { showActionError(error.message, "Worktree cleanup failed"); }
+    };
+    actions.append(button);
+  }
+  if (allowed.delete) {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = "Delete"; button.className = "danger-text";
+    button.onclick = async () => {
+      const ok = await confirmDialog({ title: "Delete Task history?", message: "Delete this UI Task record? Project source files and Git branches are not deleted.", confirmLabel: "Delete", danger: true });
+      if (!ok) return;
+      try {
+        await api("/api/tasks/delete", { method: "POST", body: JSON.stringify({ task_id: taskId }) });
+        state.selectedHistoryTaskId = ""; await openTaskHistory();
+      } catch (error) { showActionError(error.message, "Delete Task failed"); }
+    };
+    actions.append(button);
+  }
   if (actions.children.length) root.append(actions);
   const history = document.createElement("div"); history.className = "integrated-task-history-evidence";
   for (const execution of task.executions || []) {
@@ -962,10 +998,17 @@ function updateRuntimeFreshness() {
   last?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
-function runConfigurationLocked() {
+function selectedIsolatedWorkspaceAvailable() {
+  const select = $("taskWorkspaceSelect");
+  const option = select?.selectedOptions?.[0];
+  return Boolean(option && option.value !== "main" && !option.disabled);
+}
+function runtimeBlocksNewTask() {
   const actions = state.runtime?.actions;
-  const runtimeBlocksNew = Boolean(actions && actions.run === false);
-  return Boolean(state.runLaunching || runtimeBlocksNew || state.studioCatalogLoading);
+  return Boolean(actions && actions.run === false && !selectedIsolatedWorkspaceAvailable());
+}
+function runConfigurationLocked() {
+  return Boolean(state.runLaunching || runtimeBlocksNewTask() || state.studioCatalogLoading);
 }
 function renderRunConfigurationLock() {
   const locked = runConfigurationLocked();
@@ -1040,12 +1083,13 @@ function renderRuntime(runtime) {
   $("rerunButton").hidden = !actions.rerun;
 
   const chatMode = isChatMode();
-  const blockNew = chatMode ? state.runLaunching : (actions.run === false || state.runLaunching || state.studioCatalogLoading);
-  const blockTyping = chatMode ? state.runLaunching : (actions.run === false || state.runLaunching);
+  const taskBlocked = runtimeBlocksNewTask();
+  const blockNew = chatMode ? state.runLaunching : (taskBlocked || state.runLaunching || state.studioCatalogLoading);
+  const blockTyping = chatMode ? state.runLaunching : (taskBlocked || state.runLaunching);
   $("sendButton").disabled = blockNew;
   $("sendButton").title = chatMode ? "Send message"
-    : actions.run === false
-      ? (isRunning ? "A task is already running." : "Continue or Reset the stopped task before starting another.")
+    : taskBlocked
+      ? (isRunning ? "Main is busy. Choose a free Worktree in Options or stop the active Task." : "Continue or Reset the stopped task before starting another.")
       : state.runLaunching ? "Task launch is already in progress."
         : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
   $("messageInput").disabled = blockTyping;
@@ -2363,6 +2407,7 @@ $("taskHistoryClose").onclick = closeTaskHistory; $("taskHistoryDone").onclick =
 $("taskHistoryBackdrop").onclick = (event) => { if (event.target === $("taskHistoryBackdrop")) closeTaskHistory(); };
 $("taskModeButton").onclick = () => setComposerMode("task");
 $("chatModeButton").onclick = () => setComposerMode("chat");
+$("taskWorkspaceSelect").onchange = () => { if (state.runtime) renderRuntime(state.runtime); else { renderRunConfigurationLock(); renderComposerMode(); } };
 $("conversationSelect").onchange = async () => {
   const chat = state.chats.find((item) => item.chat_id === $("conversationSelect").value);
   if (!chat) return;
