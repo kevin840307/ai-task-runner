@@ -524,7 +524,7 @@ function runtimeClass(rt){return ['running','recover','stopped','done','failed',
 function progressPct(t){return t.progress[1]?Math.round(t.progress[0]/t.progress[1]*100):0}
 function workspaceName(t){
   if(t.workspaceKind==='worktree')return `Worktree · ${t.branch||('task/'+t.id)}`;
-  if(t.workspaceKind==='batch')return 'YAML Batch';
+  if(t.workspaceKind==='batch')return 'Task List';
   return 'Main workspace';
 }
 function worktreeRootFor(project,id){
@@ -811,8 +811,18 @@ document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
 document.getElementById('taskPrimaryDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
+  if(t.kind==='list'||t.workspaceKind==='batch'){
+    if(t.runtime==='idle'){openTaskListEditor(t.id);showToast('Open Task List Editor');return}
+    if(['running','recover'].includes(t.runtime)){
+      if(t.id!==batchParentTaskId)openTaskListEditor(t.id);
+      document.getElementById('stopBatch').click();openTaskById(t.id);return;
+    }
+    if(['stopped','attention','failed'].includes(t.runtime)){
+      if(t.id!==batchParentTaskId)openTaskListEditor(t.id);
+      document.getElementById('resumeBatch').click();openTaskById(t.id);return;
+    }
+  }
   if(t.runtime==='idle'){
-    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){showView('yaml');showToast('YAML Batch 請由 YAML Tasks 的 Run Batch 啟動');return}
     if(t.workspaceKind==='main'){
       const busy=mainBusyTask(t.project);
       if(busy&&busy.id!==t.id){
@@ -827,12 +837,10 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
     pushTaskHistory(t,'Run started · server-side action guard accepted');
     showToast('Mock Run started');
   }else if(['running','recover'].includes(t.runtime)){
-    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){document.getElementById('stopBatch').click();openTaskById(t.id);return}
     t.runtime='stopped';t.desc='User stop；durable state 保留，可 Resume / Reset。';
     pushTaskHistory(t,'Stopped by user · resumable');
     showToast('Mock Stop · 現在可拖到 Paused / Closed');
   }else if(['stopped','attention'].includes(t.runtime)){
-    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){document.getElementById('resumeBatch').click();openTaskById(t.id);return}
     t.runtime='running';t.desc='Resume from durable state；沿用既有 Workflow snapshot。';
     if(t.status==='paused')t.status='ongoing';
     pushTaskHistory(t,'Resume accepted · continuing saved state');
@@ -1130,8 +1138,11 @@ document.querySelectorAll('[data-yamltab]').forEach(t=>t.addEventListener('click
 }));
 document.getElementById('batchPreset').onchange=e=>{renderBatch(e.target.value);showToast(`載入 ${e.target.options[e.target.selectedIndex].text}`)};
 document.getElementById('yamlEditor').addEventListener('input',()=>{
-  resetBatchRuntime();
-  document.getElementById('batchLog').textContent='YAML edited manually. Press Validate to parse known RunRequest fields back into Form.';
+  if(batchState.status==='running')return;
+  if(batchState.status==='stopped')batchState.currentDirty=true;
+  document.getElementById('batchLog').textContent=batchState.status==='stopped'
+    ?'YAML edited while Paused. Validate before Resume; current item will fresh restart.'
+    :'YAML edited manually. Press Validate to parse known RunRequest fields back into Form.';
 });
 document.getElementById('validateYaml').onclick=()=>{
   const current=document.getElementById('yamlEditor').value.trim(),generated=batchToYaml(batchDraft).trim();
