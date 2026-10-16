@@ -1110,6 +1110,110 @@ document.getElementById('resetBatch').onclick=()=>{
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
 
+const WORKFLOW_CAPABILITIES={
+  'ralphy_ai_validate.yaml':{file:false,ai:true,label:'AI validation'},
+  'mixed.yaml':{file:true,ai:true,label:'File + AI validation'},
+  'file.yaml':{file:true,ai:false,label:'File validation'},
+  'dynamic_handoff.yaml':{file:false,ai:false,label:'No extra validator input'}
+};
+function workflowCaps(name){return WORKFLOW_CAPABILITIES[basename(name)]||{file:false,ai:false,label:'Workflow-owned validation'}}
+function workflowCapsHtml(name){
+  const caps=workflowCaps(name),chips=[];
+  if(caps.file)chips.push('<span class="cap-chip">File Validator</span>');
+  if(caps.ai)chips.push('<span class="cap-chip">AI Validator</span>');
+  if(!chips.length)chips.push('<span class="cap-chip neutral">No extra validation input</span>');
+  return chips.join('');
+}
+function sourceTabs(value,modes,attrs=''){
+  return '<div class="source-tabs">'+modes.map(([key,label])=>`<button type="button" class="${value===key?'active':''}" data-source-value="${key}" ${attrs}>${label}</button>`).join('')+'</div>';
+}
+
+let newTaskDraft={
+  goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',
+  validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+};
+function taskGoalBody(){
+  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose</button></div><div class="source-note">執行時使用既有 <strong>goal_file</strong>。</div>`;
+  if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div><div class="source-note">Prompt Asset 解析成檔案路徑後交給 Runner。</div>`;
+  return `<textarea id="taskPromptInline" placeholder="輸入 Task Prompt">${escapeHtml(newTaskDraft.prompt)}</textarea><div class="source-note">Write 模式會存成受管 draft，再以 <strong>goal_file</strong> 執行。</div>`;
+}
+function taskAiBody(){
+  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" id="taskPickAi">Choose</button></div>`;
+  if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
+  if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="AI Validator instructions">${escapeHtml(newTaskDraft.aiPrompt)}</textarea><div class="source-note">Write 模式同樣會先存受管 draft，再交給既有 <strong>ai_validator_prompt_file</strong>。</div>`;
+  return '<div class="source-note">Default：沿用 Workflow / Runner 的 AI Validator Prompt。</div>';
+}
+function captureNewTaskSources(){
+  if(document.getElementById('taskPromptInline'))newTaskDraft.prompt=document.getElementById('taskPromptInline').value;
+  if(document.getElementById('taskGoalFile'))newTaskDraft.goalFile=document.getElementById('taskGoalFile').value;
+  if(document.getElementById('taskGoalAsset'))newTaskDraft.goalAsset=document.getElementById('taskGoalAsset').value;
+  if(document.getElementById('taskValidatorFile'))newTaskDraft.validator=document.getElementById('taskValidatorFile').value;
+  if(document.getElementById('taskAiInline'))newTaskDraft.aiPrompt=document.getElementById('taskAiInline').value;
+  if(document.getElementById('taskAiFile'))newTaskDraft.aiFile=document.getElementById('taskAiFile').value;
+  if(document.getElementById('taskAiAsset'))newTaskDraft.aiAsset=document.getElementById('taskAiAsset').value;
+}
+function renderNewTaskSources(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`<div class="source-card task-source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode')}</div><div class="source-body">${taskGoalBody()}</div></div>`;
+  const fields=[];
+  if(caps.file)fields.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose</button></div></div></div>`);
+  if(caps.ai)fields.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode')}</div><div class="source-body">${taskAiBody()}</div></div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=fields.length?`<div class="validation-grid ${fields.length===1?'one':''}">${fields.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>';
+  document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources()});
+  document.querySelectorAll('[data-task-ai-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.aiMode=b.dataset.sourceValue;renderNewTaskSources()});
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt Asset 仍由原本 Prompts workspace 管理')});
+}
+document.getElementById('newTaskWorkflow').addEventListener('change',()=>{captureNewTaskSources();renderNewTaskSources()});
+document.getElementById('newTask').addEventListener('click',()=>{
+  newTaskDraft={goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();
+});
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();
+  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();openModal('newTaskModal');
+};
+document.getElementById('createTaskConfirm').onclick=()=>{
+  captureNewTaskSources();
+  const title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let goal='';
+  if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
+  else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+  if(!title||!goal){showToast('Task title / Prompt 不可空白');return}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
+  const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
+  const t={id,status:'new',title,runtime:'idle',desc:'尚未開始；Workflow capability 已決定需要哪些驗證輸入。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft}};
+  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast('已建立 mock Task · 尚未執行');openTaskById(id);
+};
+
+function openPathPicker(index,field,kind,context='batch'){
+  pickerTarget=context==='task'?{context:'task',field}:{context:'batch',index,field};
+  const item=context==='task'?{project:projectMeta[document.getElementById('newTaskProject').value]?.path||'C:\\project'}:(batchDraft[index]||{});
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const options=kind==='validator'
+    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    :kind==='ai'
+      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai_validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
+      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
+  document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
+  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以直接貼絕對或相對路徑。';
+  document.getElementById('pathPickerOptions').innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
+  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
+    if(pickerTarget?.context==='task'){newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources()}
+    else if(pickerTarget&&batchDraft[pickerTarget.index]){batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;renderBatchDraft()}
+    closeModal('pathPickerModal');showToast('已選擇 mock 路徑');
+  });
+  openModal('pathPickerModal');
+}
+
+renderNewTaskSources();
 let currentProjectKey='ai-task-runner';
 const projectSelect=document.getElementById('projectSelect');
 projectSelect.addEventListener('change',()=>{
