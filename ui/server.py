@@ -101,6 +101,7 @@ class Handler(SimpleHTTPRequestHandler):
                 attention_only = query.get("attention", ["0"])[0] == "1"
                 return self._json(self.state.tasks_payload(
                     query.get("chat_id", [""])[0],
+                    root=query.get("root", [""])[0],
                     limit=limit,
                     attention_only=attention_only,
                 ))
