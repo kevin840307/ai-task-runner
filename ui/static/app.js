@@ -36,6 +36,7 @@ const state = {
   studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", studioCatalogLoading: false, projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
   runLaunching: false, fullDesignerAvailable: null,
   composerMode: "task", chats: [], currentChat: null, workspaceOptions: [],
+  taskListRawByRow: new WeakMap(), selectedHistoryTaskId: "",
 };
 const runActionGate = createLatestActionGate();
 
@@ -311,6 +312,170 @@ function selectedWorkspacePayload() {
   if (value === "new") return { workspace_mode: "new", workspace_path: "" };
   if (value.startsWith("existing:")) return { workspace_mode: "existing", workspace_path: value.slice("existing:".length) };
   return { workspace_mode: "main", workspace_path: "" };
+}
+
+function cloneTaskListRaw(value) {
+  try { return JSON.parse(JSON.stringify(value && typeof value === "object" ? value : {})); }
+  catch (_) { return {}; }
+}
+function taskListRawInstruction(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  if (raw.goal_file) return "Use file: " + raw.goal_file;
+  return String(raw.prompt || raw.goal || "");
+}
+function renumberIntegratedTaskList() {
+  [...$("integratedTaskListItems").children].forEach((row, index) => {
+    const badge = row.querySelector(".integrated-task-list-index");
+    if (badge) badge.textContent = String(index + 1);
+  });
+}
+function addIntegratedTaskListItem(value = "", raw = null, index = null) {
+  const root = $("integratedTaskListItems");
+  const row = document.createElement("div"); row.className = "integrated-task-list-item";
+  const badge = document.createElement("span"); badge.className = "integrated-task-list-index";
+  const text = document.createElement("textarea"); text.placeholder = "Instruction / Prompt"; text.maxLength = 20000;
+  const rawValue = cloneTaskListRaw(raw); const shown = value || taskListRawInstruction(rawValue);
+  text.value = shown; row.dataset.originalInstruction = shown; state.taskListRawByRow.set(row, rawValue);
+  const controls = document.createElement("div"); controls.className = "integrated-task-list-controls";
+  const up = document.createElement("button"); up.type = "button"; up.textContent = "↑"; up.title = "Move up";
+  const down = document.createElement("button"); down.type = "button"; down.textContent = "↓"; down.title = "Move down";
+  const dup = document.createElement("button"); dup.type = "button"; dup.textContent = "⧉"; dup.title = "Duplicate";
+  const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = "Remove";
+  up.onclick = () => { row.previousElementSibling?.before(row); renumberIntegratedTaskList(); };
+  down.onclick = () => { row.nextElementSibling?.after(row); renumberIntegratedTaskList(); };
+  dup.onclick = () => { addIntegratedTaskListItem(text.value, cloneTaskListRaw(state.taskListRawByRow.get(row)), [...root.children].indexOf(row) + 1); };
+  remove.onclick = () => { if (root.children.length > 1) { row.remove(); renumberIntegratedTaskList(); } };
+  controls.append(up, down, dup, remove); row.append(badge, text, controls);
+  if (index === null || index >= root.children.length) root.append(row); else root.insertBefore(row, root.children[index]);
+  renumberIntegratedTaskList(); return row;
+}
+function integratedTaskListPayload() {
+  return [...$("integratedTaskListItems").children].map((row) => {
+    const instruction = row.querySelector("textarea").value.trim();
+    const raw = cloneTaskListRaw(state.taskListRawByRow.get(row));
+    if (Object.keys(raw).length && instruction !== row.dataset.originalInstruction) {
+      delete raw.goal; delete raw.goal_file; raw.prompt = instruction;
+    }
+    return { instruction, workflow: "", raw };
+  });
+}
+function renderIntegratedTaskListRaw(rawItems) {
+  $("integratedTaskListItems").replaceChildren();
+  for (const raw of rawItems || []) addIntegratedTaskListItem(taskListRawInstruction(raw), raw);
+  if (!$("integratedTaskListItems").children.length) addIntegratedTaskListItem();
+}
+async function refreshIntegratedTaskListYaml() {
+  const chat = state.currentChat || await ensureProjectChat();
+  const workflow = selectedWorkflowItem()?.path || "";
+  $("integratedTaskListYamlStatus").textContent = "Validating…";
+  const data = await api("/api/tasks/list/export", {
+    method: "POST",
+    body: JSON.stringify({ chat_id: chat.chat_id, items: integratedTaskListPayload(), workflow }),
+  });
+  $("integratedTaskListYaml").value = data.canonical || "";
+  $("integratedTaskListYamlStatus").textContent = "Valid YAML · advanced fields preserved";
+}
+async function applyIntegratedTaskListYaml() {
+  const chat = state.currentChat || await ensureProjectChat();
+  const workflow = selectedWorkflowItem()?.path || "";
+  $("integratedTaskListYamlStatus").textContent = "Validating…";
+  const data = await api("/api/tasks/list/parse", {
+    method: "POST",
+    body: JSON.stringify({ chat_id: chat.chat_id, content: $("integratedTaskListYaml").value, workflow }),
+  });
+  renderIntegratedTaskListRaw(data.raw || []);
+  $("integratedTaskListYaml").value = data.canonical || $("integratedTaskListYaml").value;
+  $("integratedTaskListYamlStatus").textContent = "Applied · untouched YAML fields are preserved";
+}
+function closeIntegratedTaskList() { $("taskListBackdrop").hidden = true; }
+async function openIntegratedTaskList(seed = "") {
+  if (!state.project || runConfigurationLocked()) return;
+  await ensureProjectChat();
+  $("integratedTaskListItems").replaceChildren();
+  addIntegratedTaskListItem(seed || $("messageInput").value.trim());
+  $("integratedTaskListYaml").value = "";
+  $("integratedTaskListYamlStatus").textContent = "";
+  $("integratedTaskListAdvanced").open = false;
+  const workflow = selectedWorkflowItem();
+  $("taskListWorkflowHint").textContent = workflow ? "Workflow · " + workflow.name : "Workflow · product default";
+  $("taskListBackdrop").hidden = false;
+  $("integratedTaskListItems").querySelector("textarea")?.focus();
+}
+async function runIntegratedTaskList() {
+  const items = integratedTaskListPayload();
+  if (!items.length || items.some((item) => !item.instruction && !item.raw?.goal_file)) {
+    showActionError("Every Task List item needs an instruction or goal file.", "Task List invalid"); return;
+  }
+  const chat = state.currentChat || await ensureProjectChat();
+  const run = payload();
+  const button = $("taskListRun"); button.disabled = true; button.textContent = "Starting…";
+  try {
+    const task = await api("/api/tasks/create", {
+      method: "POST",
+      body: JSON.stringify({
+        chat_id: chat.chat_id, task_type: "sequential", items,
+        workflow: run.workflow, backend: run.backend, ...selectedWorkspacePayload(),
+      }),
+    });
+    if (task.last_error) throw new Error(task.last_error);
+    closeIntegratedTaskList();
+    await setComposerMode("task", { refresh: false });
+    $("messageInput").value = ""; resizeComposerInput();
+    await refreshMessages({ forceFollow: true }); await refreshRuntime({ force: true });
+    showToast("Task List started");
+  } catch (error) { showActionError(error.message, "Task List start failed"); }
+  finally { button.disabled = false; button.textContent = "Run List"; }
+}
+function closeTaskHistory() { $("taskHistoryBackdrop").hidden = true; state.selectedHistoryTaskId = ""; }
+function historyStatusText(task) { return String(task.runtime?.status || task.last_status || "pending").replaceAll("_", " "); }
+async function renderTaskHistoryDetail(taskId) {
+  const root = $("integratedTaskHistoryDetail"); root.innerHTML = '<div class="designer-empty-state">Loading…</div>';
+  const task = await api("/api/task?task_id=" + encodeURIComponent(taskId), { timeoutMs: 15000 });
+  state.selectedHistoryTaskId = taskId;
+  for (const button of $("integratedTaskHistoryList").querySelectorAll("button[data-task-id]")) button.classList.toggle("active", button.dataset.taskId === taskId);
+  root.replaceChildren();
+  const title = document.createElement("h3"); title.textContent = task.title || "Task";
+  const meta = document.createElement("p"); meta.className = "modal-hint"; meta.textContent = historyStatusText(task) + (task.task_type === "sequential" ? " · Task List" : "");
+  const instruction = document.createElement("pre"); instruction.textContent = task.instruction || "";
+  root.append(title, meta, instruction);
+  const actions = document.createElement("div"); actions.className = "integrated-task-history-actions";
+  const allowed = task.available_actions || {};
+  const addAction = (label, action) => {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = label;
+    button.onclick = async () => { try { await api("/api/tasks/action", { method: "POST", body: JSON.stringify({ task_id: taskId, action }) }); await renderTaskHistoryDetail(taskId); await refreshRuntime({ force: true }); } catch (error) { showActionError(error.message, label + " failed"); } };
+    actions.append(button);
+  };
+  if (allowed.stop) addAction("Stop", "stop");
+  if (allowed.resume) addAction("Resume", "resume");
+  if (allowed.rerun) addAction("Rerun", "rerun");
+  if (actions.children.length) root.append(actions);
+  const history = document.createElement("div"); history.className = "integrated-task-history-evidence";
+  for (const execution of task.executions || []) {
+    const block = document.createElement("details"); const summary = document.createElement("summary");
+    summary.textContent = (execution.instruction || task.instruction || "Execution").split("\n")[0].slice(0, 100);
+    const pre = document.createElement("pre");
+    const evidence = execution.evidence || {};
+    pre.textContent = [evidence.result, evidence.stream_tail, execution.run_id ? "Run: " + execution.run_id : ""].filter(Boolean).join("\n\n");
+    block.append(summary, pre); history.append(block);
+  }
+  root.append(history);
+}
+async function openTaskHistory() {
+  if (!state.currentChat) await ensureProjectChat();
+  const root = $("integratedTaskHistoryList"); root.innerHTML = '<div class="designer-empty-state">Loading…</div>';
+  $("integratedTaskHistoryDetail").innerHTML = '<div class="designer-empty-state">Select a Task</div>';
+  $("taskHistoryBackdrop").hidden = false;
+  try {
+    const data = await api("/api/tasks?chat_id=" + encodeURIComponent(state.currentChat.chat_id) + "&limit=100", { timeoutMs: 15000 });
+    root.replaceChildren();
+    for (const task of data.tasks || []) {
+      const button = document.createElement("button"); button.type = "button"; button.dataset.taskId = task.task_id;
+      const name = document.createElement("strong"); name.textContent = task.title || "Task";
+      const meta = document.createElement("small"); meta.textContent = historyStatusText(task);
+      button.append(name, meta); button.onclick = () => renderTaskHistoryDetail(task.task_id).catch((error) => showActionError(error.message, "Task history failed")); root.append(button);
+    }
+    if (!root.children.length) root.innerHTML = '<div class="designer-empty-state">No Tasks yet.</div>';
+  } catch (error) { root.innerHTML = ""; showActionError(error.message, "Task history failed"); }
 }
 
 // ------------------------------ Projects / Chat ------------------------------
@@ -592,7 +757,16 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
       const item = document.createElement("article");
       item.className = `message ${message.role} ${message.role === "user" ? "chat-user" : "chat-assistant"}`;
       item.dataset.role = message.role || "assistant";
-      const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.text || ""; item.appendChild(body); root.appendChild(item);
+      const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.text || ""; item.appendChild(body);
+      if (message.role === "user") {
+        const actions = document.createElement("div"); actions.className = "chat-message-actions";
+        const run = document.createElement("button"); run.type = "button"; run.textContent = "Run as Task";
+        run.onclick = async () => { await setComposerMode("task"); $("messageInput").value = message.text || ""; resizeComposerInput(); $("messageInput").focus(); };
+        const list = document.createElement("button"); list.type = "button"; list.textContent = "Task List";
+        list.onclick = () => openIntegratedTaskList(message.text || "");
+        actions.append(run, list); item.appendChild(actions);
+      }
+      root.appendChild(item);
     }
     if (!data.messages?.length) {
       const empty = document.createElement("div"); empty.className = "empty-state-inline"; empty.textContent = "Ask about this project. Chat is read-only; switch to Task when you want changes."; root.appendChild(empty);
@@ -2177,6 +2351,16 @@ window.addEventListener("app-language-changed", () => { renderThemeControls(); i
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
+$("taskListButton").onclick = () => openIntegratedTaskList();
+$("taskListClose").onclick = closeIntegratedTaskList; $("taskListCancel").onclick = closeIntegratedTaskList;
+$("taskListBackdrop").onclick = (event) => { if (event.target === $("taskListBackdrop")) closeIntegratedTaskList(); };
+$("taskListAdd").onclick = () => addIntegratedTaskListItem();
+$("taskListYamlRefresh").onclick = () => refreshIntegratedTaskListYaml().catch((error) => showActionError(error.message, "YAML refresh failed"));
+$("taskListYamlApply").onclick = () => applyIntegratedTaskListYaml().catch((error) => showActionError(error.message, "YAML apply failed"));
+$("taskListRun").onclick = runIntegratedTaskList;
+$("taskHistoryButton").onclick = openTaskHistory;
+$("taskHistoryClose").onclick = closeTaskHistory; $("taskHistoryDone").onclick = closeTaskHistory;
+$("taskHistoryBackdrop").onclick = (event) => { if (event.target === $("taskHistoryBackdrop")) closeTaskHistory(); };
 $("taskModeButton").onclick = () => setComposerMode("task");
 $("chatModeButton").onclick = () => setComposerMode("chat");
 $("conversationSelect").onchange = async () => {
@@ -2231,7 +2415,7 @@ $("resetButton").onclick = async () => {
   try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime({ force: true }); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
 $("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
-window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("workflowContextMenu").hidden) return closeWorkflowContextMenu(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
+window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("taskListBackdrop").hidden) return closeIntegratedTaskList(); if (!$("taskHistoryBackdrop").hidden) return closeTaskHistory(); if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("workflowContextMenu").hidden) return closeWorkflowContextMenu(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
 state.preferences = loadUiPreferences(); document.body.dataset.composerMode = "task"; showEmpty(); renderComposerMode(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {
   const composerObserver = new ResizeObserver(syncComposerReserve);
