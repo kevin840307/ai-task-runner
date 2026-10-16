@@ -3,15 +3,15 @@ AI Task Runner - Future Product / UI Direction
 
 Purpose
 -------
-This file records future product/UI direction only.
-It must not replace current release gates in todo.txt or architecture contracts in UI.txt / DevFollow.txt.
+This file records the completed future product/UI roadmap and the design intent behind it.
+It does not replace current release gates in todo.txt or architecture contracts in UI.txt / DevFollow.txt.
 
-Document precedence while this roadmap is not yet implemented:
-- todo.txt + UI.txt + DevFollow.txt describe the current product/runtime contract.
-- future.txt describes the intended future direction.
-- If a future phase intentionally changes current UI ownership/behavior, update the affected current
+Document precedence after roadmap implementation:
+- todo.txt + UI.txt + DevFollow.txt describe the current product/runtime contract and remain authoritative.
+- future.txt records the implemented product direction, acceptance criteria, and completion evidence.
+- Any later change that intentionally alters UI ownership/behavior must update the affected current
   contract/docs in the SAME implementation change after regression coverage exists.
-- Do not pre-emptively rewrite current contracts merely to make them match this roadmap.
+- Do not rewrite current contracts merely to match historical roadmap wording.
 
 Core principles
 ---------------
