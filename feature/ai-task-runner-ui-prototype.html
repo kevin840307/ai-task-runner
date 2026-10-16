@@ -417,10 +417,7 @@ const projectMeta={
   'web-console':{path:'D:\\dev\\web-console',branch:'feature/dashboard'},
   'sandbox-lab':{path:'D:\\lab\\sandbox-lab',branch:'main'}
 };
-document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
-  document.querySelectorAll('.project').forEach(x=>x.classList.remove('active'));p.classList.add('active');
-  showToast(`切換 mock project：${p.dataset.project}`);
-}));
+// Project list behavior is bound after currentProjectKey is initialized.
 
 const chatPresets={
   design:[
@@ -521,6 +518,7 @@ function worktreeRootFor(project,id){
   return [...parts,name+'-worktrees',id].join('\\');
 }
 function hydrateTaskWorkspace(t,mainOwners){
+  if(!t.workspacePolicy)t.workspacePolicy='auto';
   if(t.workspaceKind)return t;
   const active=['running','recover'].includes(t.runtime);
   if(active&&mainOwners.has(t.project)){
@@ -569,6 +567,17 @@ function boardMoveAllowed(t,target){
   return {ok:true,reason:''};
 }
 function syncRuntimeForBoardMove(t,oldStatus,newStatus){
+  if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){
+    if(newStatus==='paused'&&batchState.status==='running'){
+      clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
+      const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);if(item)item.querySelector('.orderchip').textContent='Stopped';
+      t.runtime='stopped';pushTaskHistory(t,'Board pause · YAML Batch stopped · child state preserved');return;
+    }
+    if(oldStatus==='paused'&&newStatus==='ongoing'&&batchState.status==='stopped'){
+      batchState.status='running';setBatchControls();batchRunTimer=setInterval(batchTick,900);
+      t.runtime='running';pushTaskHistory(t,'Board resume · YAML Batch continued');return;
+    }
+  }
   if(newStatus==='paused'&&['running','recover'].includes(t.runtime)){
     t.runtime='stopped';
     t.desc='由 Board 移到 Paused；mock Stop 已送出，durable state 保留。';
@@ -788,15 +797,27 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementB
 document.getElementById('taskPrimaryDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
   if(t.runtime==='idle'){
+    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){showView('yaml');showToast('YAML Batch 請由 YAML Tasks 的 Run Batch 啟動');return}
+    if(t.workspaceKind==='main'){
+      const busy=mainBusyTask(t.project);
+      if(busy&&busy.id!==t.id){
+        if(t.workspacePolicy==='auto'){
+          t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id);
+          pushTaskHistory(t,`Main busy by ${busy.id} · Auto switched to isolated worktree`);
+        }else{showToast(`Main workspace 正被 ${busy.id} 使用；請改用 Worktree`);return}
+      }
+    }
     t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';t.desc='Runner 已啟動；Board 與 runtime 仍由不同狀態來源顯示。';
     if(t.status==='new')t.status='ongoing';
     pushTaskHistory(t,'Run started · server-side action guard accepted');
     showToast('Mock Run started');
   }else if(['running','recover'].includes(t.runtime)){
+    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){document.getElementById('stopBatch').click();openTaskById(t.id);return}
     t.runtime='stopped';t.desc='User stop；durable state 保留，可 Resume / Reset。';
     pushTaskHistory(t,'Stopped by user · resumable');
     showToast('Mock Stop · 現在可拖到 Paused / Closed');
   }else if(['stopped','attention'].includes(t.runtime)){
+    if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){document.getElementById('resumeBatch').click();openTaskById(t.id);return}
     t.runtime='running';t.desc='Resume from durable state；沿用既有 Workflow snapshot。';
     if(t.status==='paused')t.status='ongoing';
     pushTaskHistory(t,'Resume accepted · continuing saved state');
@@ -806,6 +827,7 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
 };
 document.getElementById('taskResetDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
+  if(t.workspaceKind==='batch'&&t.id===batchParentTaskId&&batchState.status==='stopped'){document.getElementById('resetBatch').click();openTaskById(t.id);return}
   t.runtime='idle';t.stage='Idle';t.session='—';t.progress=[0,t.progress[1]||4];t.elapsed='—';t.desc='Runtime 已 Reset；Board 狀態不自動改寫。';
   pushTaskHistory(t,'Runtime reset · board status preserved');
   renderBoardFromMap();openTaskById(t.id);showToast('Mock Reset');
@@ -1315,7 +1337,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
   if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
   const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
-  const t={id,status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
+  const t={id,status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspacePolicy:newTaskWorkspaceMode,workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
   taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
 };
 
