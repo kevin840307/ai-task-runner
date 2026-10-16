@@ -498,13 +498,26 @@ const BOARD_TRANSITIONS={
 function boardMoveAllowed(t,target){
   if(!t||!target)return {ok:false,reason:'Unknown target'};
   if(t.status===target)return {ok:true,reason:'Same status'};
-  if(['running','recover'].includes(t.runtime)&&['paused','closed'].includes(target)){
-    return {ok:false,reason:`${runtimeLabel(t.runtime)} 中，請先 Stop 再移到 ${statusLabel(target)}`};
-  }
   if(!BOARD_TRANSITIONS[t.status]?.has(target)){
     return {ok:false,reason:`${statusLabel(t.status)} 不允許直接移到 ${statusLabel(target)}`};
   }
+  if(target==='closed'&&['running','recover'].includes(t.runtime)){
+    return {ok:false,reason:'執行中的 Task 不直接 Closed；先移到 Paused（會 Stop）或從詳細頁 Stop'};
+  }
   return {ok:true,reason:''};
+}
+function syncRuntimeForBoardMove(t,oldStatus,newStatus){
+  if(newStatus==='paused'&&['running','recover'].includes(t.runtime)){
+    t.runtime='stopped';
+    t.desc='由 Board 移到 Paused；mock Stop 已送出，durable state 保留。';
+    pushTaskHistory(t,'Board Ongoing → Paused · Stop accepted · resumable');
+  }else if(oldStatus==='paused'&&newStatus==='ongoing'&&['stopped','attention'].includes(t.runtime)){
+    t.runtime='running';
+    t.desc='由 Board Paused → Ongoing；mock Resume 從 durable state 繼續。';
+    pushTaskHistory(t,'Board Paused → Ongoing · Resume accepted');
+  }else{
+    pushTaskHistory(t,`Board ${statusLabel(oldStatus)} → ${statusLabel(newStatus)}`);
+  }
 }
 function clearDropHints(){
   document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over','allowed','blocked'));
@@ -544,9 +557,9 @@ document.querySelectorAll('.dropzone').forEach(zone=>{
     const rule=boardMoveAllowed(t,now);
     if(!rule.ok){showToast(`不可移動：${rule.reason}`);return}
     if(old===now){showToast(`Task 已在 ${statusLabel(now)}`);return}
-    zone.appendChild(dragged);t.status=now;
-    showToast(`Board status: ${statusLabel(old)} → ${statusLabel(now)}（Runtime 仍是 ${runtimeLabel(t.runtime)}）`);
-    updateCounts();renderTaskList();
+    syncRuntimeForBoardMove(t,old,now);t.status=now;
+    renderBoardFromMap();
+    showToast(`Task: ${statusLabel(old)} → ${statusLabel(now)} · Runtime ${runtimeLabel(t.runtime)}`);
   });
 });
 function updateCounts(){
@@ -648,6 +661,28 @@ function taskDetails(t){
     :'[20:07:11] stage: inspecting modified files\n[20:07:12] checking runtime ownership\n[20:07:15] validating UI interactions\n[20:07:19] bounded live output continues...';
   return {timeline,output,history:generic};
 }
+function renderTaskLiveOutput(t){
+  const dot=document.getElementById('drawerLiveDot'),indicator=document.getElementById('drawerLiveIndicator');
+  const cls=t.runtime==='running'?'running':t.runtime==='recover'?'recover':t.runtime==='done'?'done':t.runtime==='failed'?'failed':'';
+  dot.className='task-live-dot '+cls;
+  indicator.textContent=runtimeLabel(t.runtime);
+  indicator.className='task-live-indicator '+(t.runtime==='stopped'?'stopped':t.runtime==='done'?'done':t.runtime==='recover'?'recover':'');
+  document.getElementById('drawerLiveProgress').textContent=`${t.progress[0]} / ${t.progress[1]} TODO · ${t.stage}`;
+  document.getElementById('drawerLiveUpdated').textContent='Last update now';
+  document.getElementById('drawerLiveElapsed').textContent=t.elapsed==='—'?'00:00:00':t.elapsed;
+  const activity=t.runtime==='recover'
+    ?['HTTP 503 service unavailable','StageExecutor same-session retry','Next failure rotates only this Stage session']
+    :t.runtime==='running'
+    ?['Inspecting modified files',`Stage ${t.stage} is active`,'Waiting for structured StageResult']
+    :t.runtime==='stopped'
+    ?['Stopped by user','Durable state preserved','Resume continues saved Workflow snapshot']
+    :t.runtime==='done'
+    ?['Final AI validation passed','Workflow completed','State committed']
+    :t.runtime==='failed'
+    ?['Deterministic error','Fail closed','Technical retry not entered']
+    :['Runtime is not active'];
+  document.getElementById('drawerLiveActivityList').innerHTML=activity.map(x=>`<div>${escapeHtml(x)}</div>`).join('');
+}
 function openTask(card){openTaskById(card.dataset.id)}
 function openTaskById(id){
   const t=taskMap[id];if(!t)return;
@@ -672,6 +707,7 @@ function openTaskById(id){
   [badge,inline].forEach(x=>{x.textContent=runtimeLabel(t.runtime);x.className=(x===badge?'pill ':'runtime ')+(t.runtime==='done'?'pass':t.runtime==='stopped'||t.runtime==='failed'?'fail':t.runtime==='idle'?'':t.runtime==='attention'||t.runtime==='recover'||t.runtime==='running'?'run':'')});
   document.getElementById('drawerTimeline').innerHTML=d.timeline.map(([n,m,c])=>`<div class="event ${c}"><strong>${escapeHtml(n)}</strong><small>${escapeHtml(m)}</small></div>`).join('');
   document.getElementById('drawerConsole').textContent=d.output;
+  renderTaskLiveOutput(t);
   document.getElementById('drawerHistory').innerHTML=d.history.map(([time,msg])=>`<div class="history-row"><time>${time}</time><span>${escapeHtml(msg)}</span></div>`).join('');
   renderDrawerActions(t);
   document.querySelectorAll('.drawertab').forEach((b,i)=>b.classList.toggle('active',i===0));document.querySelectorAll('.drawer-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
