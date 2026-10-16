@@ -195,6 +195,21 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-list-pane-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.task-list-pane-head h3{margin:0}.drawer-list-items{display:grid;gap:6px}.drawer-list-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:#fbfdff}.drawer-list-item.done{opacity:.68}.drawer-list-item .n{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900}.drawer-list-item strong{display:block;font-size:9px}.drawer-list-item small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.drawer-list-item .state{font-size:8px;font-weight:900;color:var(--accent-dark)}
 
 .request.completed-lock{opacity:.62;background:#f7f9fb}.request.completed-lock .reqhead:after{content:"PASS · locked";margin-left:auto;padding:3px 6px;border-radius:999px;background:#e9f8ed;color:#15803d;font-size:7px;font-weight:900}
+
+.sequence-starter{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;padding:10px 11px;border:1px dashed #cbd5df;border-radius:11px;background:#fbfcfd}
+.sequence-starter-copy{display:flex;align-items:center;gap:9px;min-width:0}.sequence-index{display:grid;place-items:center;flex:0 0 auto;width:25px;height:25px;border-radius:8px;background:#eef3f5;color:#64748b;font-size:9px;font-weight:900}.sequence-starter-copy strong{display:block;font-size:10px}.sequence-starter-copy small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.sequence-starter-actions{display:flex;gap:6px;flex:0 0 auto}
+.sequence-composer{position:relative;display:grid;gap:0;padding:2px 0 12px 0}.sequence-composer:before{content:"";position:absolute;left:23px;top:28px;bottom:32px;width:1px;background:#d9e1e9}
+.sequence-item{position:relative;margin:0 0 7px;padding:0 0 0 0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}
+.sequence-item .reqhead{position:relative;display:grid;grid-template-columns:46px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:48px;margin:0;padding:4px 6px 4px 0;border:0;background:transparent}
+.sequence-item .reqnum{position:relative;z-index:1;display:grid;place-items:center;width:30px;height:30px;margin-left:8px;border:3px solid #f7f9fb;border-radius:50%;background:#fff;color:#64748b;font-size:9px;font-weight:900;box-shadow:0 0 0 1px #d9e1e9}
+.sequence-item.active-item .reqnum{color:#fff;background:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.sequence-item.completed-lock .reqnum{color:#15803d;background:#eaf8ee;box-shadow:0 0 0 1px #b8e2c1}
+.sequence-item-title{min-width:0}.sequence-item-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}.sequence-item-title small{display:block;margin-top:2px;color:var(--muted);font-size:8px}
+.sequence-state{padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}.sequence-state.running{background:#e9f6f4;color:#0f766e}.sequence-state.pass{background:#eaf8ee;color:#15803d}.sequence-state.stopped{background:#fff3e5;color:#9a5b00}
+.sequence-item .req-actions{display:flex;align-items:center;gap:3px;margin:0}.sequence-item .req-actions button{width:26px;height:26px}.sequence-expand{width:auto!important;padding:0 8px!important;font-size:8px!important}
+.sequence-item .request-body{display:none;margin-left:47px;padding:10px 11px 12px;border:1px solid #e1e7ee;border-radius:10px;background:#fff}.sequence-item.expanded .request-body{display:block}
+.sequence-add-row{position:relative;z-index:1;display:flex;align-items:center;gap:7px;margin:2px 0 0 47px}.sequence-add-row .btn{height:31px;font-size:9px}
+.existing-task-picker{display:grid;gap:6px}.existing-task-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:left;color:var(--text)}.existing-task-option:hover{border-color:#aebbc7;background:#fbfcfd}.existing-task-option strong{display:block;font-size:10px}.existing-task-option small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.existing-task-option span{font-size:8px;font-weight:900;color:var(--accent-dark)}
 </style>
 </head>
 <body>
@@ -278,17 +293,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <!-- Task List Editor: opened from Tasks, no standalone sidebar entry -->
     <section class="view page" id="view-yaml">
       <header class="header">
-        <div class="title"><h1 id="taskListEditorTitle">Task List Editor</h1><p>Task 的批次型態 · Form / YAML 都編輯同一份 ordered child RunRequests</p></div>
+        <div class="title"><h1 id="taskListEditorTitle">Task Sequence</h1><p>一張 Task 裡的 ordered tasks · 展開 item 才顯示完整設定，YAML 是 Advanced mode</p></div>
         <div class="actions"><button class="btn" id="backToTasks">← Tasks</button><select class="mockselect" id="batchPreset"><option value="ui">Mock: UI list</option><option value="reliability">Mock: Reliability list</option><option value="multi">Mock: Multi-project list</option><option value="empty">Mock: Empty list</option></select><select class="mockselect" id="batchOutcome"><option value="success">Mock: Success</option><option value="recover">Mock: Recover once</option><option value="fail">Mock: Fail item 2</option></select><button class="btn" id="validateYaml">Validate</button><button class="btn danger" id="stopBatch" hidden>Pause</button><button class="btn" id="resumeBatch" hidden>Resume</button><button class="btn" id="resetBatch" hidden>Reset current</button><button class="btn primary" id="runBatch">Run List</button></div>
       </header>
       <div class="yamlbody">
         <section class="yamlleft">
-          <div class="tabs"><button class="tab active" data-yamltab="form">Form</button><button class="tab" data-yamltab="code">YAML</button></div>
+          <div class="tabs"><button class="tab active" data-yamltab="form">Sequence</button><button class="tab" data-yamltab="code">YAML</button></div>
           <div class="yamlpane" id="yaml-form"><div class="formlist" id="formList"></div></div>
           <div class="yamlpane hidden" id="yaml-code"><textarea class="code" id="yamlEditor"></textarea></div>
         </section>
         <section class="yamlright">
-          <div class="batchintro"><div><h2>List execution</h2><p>Board 上只有父 Task；children 依序走既有 YAML List / RunRequest runtime。</p></div><span class="pill">Sequential</span></div>
+          <div class="batchintro"><div><h2>Execution order</h2><p>Board 仍只有這一張 Task；下面只是它的執行步驟，不是第二個 Board。</p></div><span class="pill">Sequential</span></div>
           <div class="yaml-contract-note"><strong>Task List = Task kind</strong><span>不是另一套 Runner。Paused 時可編輯未完成 items；完成項目保留。</span></div>
           <div class="yaml-parent-hint"><span>▦</span><div><strong id="taskListParentHint">Parent Task</strong><br><span id="taskListEditHint">Running 時鎖定；Paused / New 可修改剩餘清單。</span></div></div>
           <div class="preview" id="batchPreview"></div>
@@ -367,23 +382,24 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="modal-card task-create-modal">
     <div class="modal-head"><div><h2>New Task</h2><p>Task 建立與 Task Lists 使用相同 Prompt / Validator source picker。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
-      <div class="task-kind-switch"><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
+      <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
         <div class="field full"><label>Task title</label><input id="newTaskTitle" value="Implement mock interaction"></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
         <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
-      <div id="newTaskListSetup" class="task-list-setup" hidden>
-        <div class="task-list-setup-copy"><strong>Task List</strong><span>建立後仍是一張 Board Task；items 只在 Task 內展開。</span></div>
-        <div class="task-list-mini-preview"><span>2 starter items</span><span>Form / YAML</span><span>Sequential</span><span>Pause to edit</span></div>
-      </div>
+      <div id="newTaskListSetup" class="task-list-setup" hidden></div>
       <div class="workspace-selector-wrap">
         <div class="workspace-selector-title"><div><strong>Workspace isolation</strong><small>同一個實際路徑最多一個 Running Task</small></div><span class="workspace-recommended">Auto recommended</span></div>
         <div id="newTaskWorkspace"></div>
       </div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
+      <div class="sequence-starter">
+        <div class="sequence-starter-copy"><span class="sequence-index">1</span><div><strong>Single task</strong><small>Add another task only when this work needs an ordered sequence.</small></div></div>
+        <div class="sequence-starter-actions"><button class="btn" type="button" id="addNextTaskFromNew">+ Add next task</button><button class="btn ghost" type="button" id="addExistingTaskFromNew">Add existing</button></div>
+      </div>
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
       <div class="state-hint">建立後先放在 <strong>New</strong>。Workflow 需要的驗證欄位才會出現；不需要的設定不佔畫面。</div>
     </div>
@@ -407,8 +423,15 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   </div>
 </div>
 
+<div class="modal-overlay" id="existingTaskModal">
+  <div class="modal-card" style="width:min(620px,94vw)">
+    <div class="modal-head"><div><h2>Add existing task</h2><p>把既有 Task 的設定複製成下一個 sequence item；原 Task 本身不會被搬走。</p></div><button class="close" data-close-modal="existingTaskModal">×</button></div>
+    <div class="modal-body"><div class="existing-task-picker" id="existingTaskPicker"></div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="existingTaskModal">Cancel</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
-<div class="proto">INTERACTIVE MOCK PROTOTYPE · local-only interactions</div>
 
 <script>
 const views=[...document.querySelectorAll('.view')];
