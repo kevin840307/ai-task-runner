@@ -219,6 +219,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #drawer-items .formlist{gap:2px}#drawer-items .sequence-composer{padding-bottom:0}#drawer-items .sequence-add-row{margin-left:47px;padding-top:4px}
 #drawer-items .request-body{background:#fbfcfe}#drawer-items .source-card{background:#fff}
 #drawer-items .code{min-height:420px;max-height:60vh}
+
+/* Simplified execution plan: always visible in Task Overview, YAML is a modal. */
+.execution-plan-section{margin-top:2px}.execution-plan-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.execution-plan-head h3{margin:0!important}.execution-plan-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.execution-plan-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.execution-plan-section .steps-summary{margin-bottom:7px}.execution-plan-section .sequence-composer{padding:0}.execution-plan-section .sequence-item .reqhead{min-height:43px}.execution-plan-section .sequence-item .request-body{margin-left:42px}.execution-plan-section .sequence-add-row{display:none}
+.yaml-plan-modal{width:min(760px,94vw)}.yaml-plan-editor{width:100%;min-height:430px;max-height:62vh;resize:vertical}.yaml-plan-status{margin-top:8px;padding:8px 10px;border-radius:8px;background:#f7f9fb;color:var(--muted);font-size:9px}.yaml-plan-status.ok{background:#f0faf4;color:#15803d}.yaml-plan-status.bad{background:#fff4f2;color:#b42318}
 </style>
 </head>
 <body>
@@ -342,31 +347,19 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
       <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
-    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items">Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
       <div class="drawer-pane active" id="drawer-overview">
         <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
         <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
         <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
-      </div>
-      <div class="drawer-pane" id="drawer-items">
-        <section class="section steps-section">
-          <div class="steps-toolbar">
-            <div><h3>Steps</h3><p id="taskListEditHint">Single Task · add another step only when needed</p></div>
-            <div class="steps-actions">
-              <button class="btn" id="drawerAddStep" type="button">+ Add step</button>
-              <button class="btn ghost" id="drawerAddExisting" type="button">Add existing</button>
-              <button class="btn ghost" id="stepsAdvanced" type="button">⋯ Advanced</button>
-              <button class="btn" id="editTaskListDemo" type="button" hidden>Edit</button>
-            </div>
+        <section class="section execution-plan-section">
+          <div class="execution-plan-head">
+            <div><h3>Execution plan</h3><p id="taskListEditHint">1 task · runs as one Task</p></div>
+            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button">Add existing</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
           </div>
-          <div class="steps-summary" id="taskListParentHint">1 step · same Task</div>
-          <div class="steps-mode-row" id="stepsModeRow" hidden>
-            <div class="tabs compact"><button class="tab active" data-yamltab="form">Visual</button><button class="tab" data-yamltab="code">YAML</button></div>
-            <button class="btn" id="validateYaml" type="button">Validate YAML</button>
-          </div>
+          <div class="steps-summary" id="taskListParentHint">1 task · same Board item</div>
           <div id="yaml-form"><div class="formlist" id="formList"></div></div>
-          <div class="hidden" id="yaml-code"><textarea class="code" id="yamlEditor"></textarea></div>
           <div id="drawerListItems" hidden></div>
           <div id="batchPreview" hidden></div>
           <div id="batchLog" hidden>Task is idle.</div>
@@ -375,7 +368,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
           <button id="runBatch" hidden type="button"></button><button id="stopBatch" hidden type="button"></button><button id="resumeBatch" hidden type="button"></button><button id="resetBatch" hidden type="button"></button><button id="backToTasks" hidden type="button"></button><span id="taskListEditorTitle" hidden></span>
         </section>
       </div>
-      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
+      <div class="drawer-pane" id="drawer-items"></div>
+      <div class="drawer-pane" id="drawer-runtime">      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
     <article class="task-live-activity">
       <div class="task-live-head"><span class="task-live-dot" id="drawerLiveDot" aria-hidden="true"></span><strong>CLI Runtime</strong><small id="drawerLiveProgress">same runtime state</small><small id="drawerLiveUpdated">Last update now</small></div>
@@ -430,6 +424,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-head"><div><h2 id="pathPickerTitle">Choose file</h2><p id="pathPickerHelp">Mock file picker</p></div><button class="close" data-close-modal="pathPickerModal">×</button></div>
     <div class="modal-body"><div class="picker-options" id="pathPickerOptions"></div></div>
     <div class="modal-foot"><button class="btn" data-close-modal="pathPickerModal">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="yamlPlanModal">
+  <div class="modal-card yaml-plan-modal">
+    <div class="modal-head"><div><h2>Edit execution plan YAML</h2><p>Advanced view of the same execution plan. Apply returns to Task Overview.</p></div><button class="close" data-close-modal="yamlPlanModal">×</button></div>
+    <div class="modal-body">
+      <textarea class="code yaml-plan-editor" id="yamlEditor"></textarea>
+      <div class="yaml-plan-status" id="yamlPlanStatus">No changes.</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="yamlPlanModal">Cancel</button><button class="btn" id="validateYaml" type="button">Validate</button><button class="btn primary" id="applyYamlPlan" type="button">Apply</button></div>
   </div>
 </div>
 
