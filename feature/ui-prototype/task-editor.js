@@ -546,8 +546,63 @@ function syncChatAgentControl(){
   model.value=session.model;mode.value=session.mode;
   if(modeControl){modeControl.dataset.mode=session.mode;modeControl.title=profile.modes.find(x=>x.id===session.mode)?.description||''}
   if(ask){ask.disabled=!profile.sideQuestion;ask.title=profile.sideQuestion?'Ask a side question without changing main Chat history':'Selected Agent does not expose side questions'}
+  syncComposerPickerLabels();
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
+let composerPickerKind='',composerPickerAnchor=null;
+function composerPickerEntries(kind){
+  const profile=chatAgentProfile();
+  if(kind==='agent')return Object.entries(mockAgentProfiles).map(([id,p])=>({id,label:p.label,description:`${p.models.length} models · ${p.modes.length} modes · side question ${p.sideQuestion?'on':'off'}`,meta:id==='qwen'?'Qwen CLI':'OpenCode CLI',icon:id==='qwen'?'Q':'O'}));
+  if(kind==='model')return profile.models.map(x=>({id:x.id,label:x.label,description:x.id,meta:'Model',icon:'M'}));
+  return profile.modes.map(x=>({id:x.id,label:x.label,description:x.description,meta:x.native,icon:x.id==='read'?'R':x.id==='yolo'?'Y':'A'}));
+}
+function composerPickerSelected(kind){
+  const session=activeChat();if(!session)return '';
+  return kind==='agent'?chatAgentKey(session):kind==='model'?session.model:session.mode;
+}
+function syncComposerPickerLabels(){
+  const session=activeChat();if(!session)return;
+  const profile=chatAgentProfile(),model=profile.models.find(x=>x.id===session.model),mode=profile.modes.find(x=>x.id===session.mode);
+  const agentValue=document.getElementById('chatAgentValue'),modelValue=document.getElementById('chatModelValue'),modeValue=document.getElementById('chatModeValue');
+  if(agentValue)agentValue.textContent=profile.label;
+  if(modelValue)modelValue.textContent=model?.label||session.model||'—';
+  if(modeValue)modeValue.textContent=mode?.label||session.mode||'—';
+}
+function closeComposerPicker(){
+  const pop=document.getElementById('composerPickerPopover');if(pop)pop.hidden=true;
+  ['chatAgentTrigger','chatModelTrigger','chatModeTrigger'].forEach(id=>document.getElementById(id)?.setAttribute('aria-expanded','false'));
+  composerPickerKind='';composerPickerAnchor=null;
+}
+function positionComposerPicker(anchor){
+  const pop=document.getElementById('composerPickerPopover');if(!pop||!anchor)return;
+  pop.style.visibility='hidden';pop.hidden=false;
+  const r=anchor.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight,gap=7;
+  const left=Math.max(10,Math.min(window.innerWidth-w-10,r.left));
+  const top=r.top-h-gap>=10?r.top-h-gap:Math.min(window.innerHeight-h-10,r.bottom+gap);
+  pop.style.left=`${left}px`;pop.style.top=`${Math.max(10,top)}px`;pop.style.visibility='';
+}
+function openComposerPicker(kind,anchor){
+  hideComposerSuggestions();
+  if(composerPickerKind===kind&&!document.getElementById('composerPickerPopover').hidden){closeComposerPicker();return}
+  closeComposerPicker();composerPickerKind=kind;composerPickerAnchor=anchor;
+  const pop=document.getElementById('composerPickerPopover'),title=document.getElementById('composerPickerTitle'),eyebrow=document.getElementById('composerPickerEyebrow'),host=document.getElementById('composerPickerOptions');
+  const labels={agent:'Agent',model:'Model',mode:'Permission mode'},selected=composerPickerSelected(kind),entries=composerPickerEntries(kind);
+  title.textContent=labels[kind];eyebrow.textContent=kind==='agent'?'CHAT AGENT':kind==='model'?chatAgentLabel(chatAgentKey()):'SAFETY / TOOLS';
+  host.innerHTML=entries.map(x=>`<button class="composer-picker-option ${x.id===selected?'active':''}" type="button" role="option" aria-selected="${x.id===selected?'true':'false'}" data-picker-value="${escapeAttr(x.id)}"><span class="composer-picker-option-icon">${escapeHtml(x.icon)}</span><span class="composer-picker-option-copy"><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description)}</small></span><span class="composer-picker-option-meta"><span class="composer-picker-option-chip">${escapeHtml(x.meta||'')}</span><span class="composer-picker-option-check">✓</span></span></button>`).join('');
+  host.querySelectorAll('[data-picker-value]').forEach(btn=>btn.onclick=()=>{
+    const select=document.getElementById(kind==='agent'?'chatAgent':kind==='model'?'chatModel':'chatMode');
+    select.value=btn.dataset.pickerValue;select.dispatchEvent(new Event('change',{bubbles:true}));closeComposerPicker();
+  });
+  anchor.setAttribute('aria-expanded','true');positionComposerPicker(anchor);
+}
+document.getElementById('chatAgentTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('agent',e.currentTarget)};
+document.getElementById('chatModelTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('model',e.currentTarget)};
+document.getElementById('chatModeTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('mode',e.currentTarget)};
+document.getElementById('composerPickerClose').onclick=closeComposerPicker;
+document.addEventListener('click',e=>{if(!e.target.closest('#composerPickerPopover')&&!e.target.closest('.composer-picker-trigger'))closeComposerPicker()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&composerPickerKind)closeComposerPicker()});
+window.addEventListener('resize',closeComposerPicker);window.addEventListener('scroll',closeComposerPicker,true);
+
 function chatAgentCommand(text){
   const match=String(text||'').match(/^\s*\/([^\s]+)(?:\s+([\s\S]*))?\s*$/);
   return match?{matched:true,token:'/'+match[1],args:String(match[2]||'').trim()}:{matched:false,token:'',args:''};
@@ -1066,7 +1121,7 @@ document.getElementById('chatAgent').onchange=e=>{
 };
 document.getElementById('chatModel').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.model=e.target.value;showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+  session.model=e.target.value;syncComposerPickerLabels();showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
 };
 document.getElementById('chatMode').onchange=e=>{
   const session=activeChat();if(!session)return;
