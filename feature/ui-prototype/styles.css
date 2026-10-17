@@ -488,3 +488,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   opacity:.5;
 }
 .plan-add-task-plus{font-size:13px;line-height:1}
+
+/* Chat-origin Task editing must be a true viewport overlay: never resize the Chat grid. */
+html{scrollbar-gutter:stable}
+#planModal,#newTaskModal{position:fixed!important;inset:0!important;isolation:isolate}
+#planModal{z-index:900!important}
+#newTaskModal{z-index:920!important}
+#planModal>.plan-modal-card,#planModal>.plan-subview-mount,#newTaskModal>.task-create-modal{flex:none}
