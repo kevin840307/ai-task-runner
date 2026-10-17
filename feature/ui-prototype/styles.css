@@ -495,3 +495,6 @@ html{scrollbar-gutter:stable}
 #planModal{z-index:900!important}
 #newTaskModal{z-index:920!important}
 #planModal>.plan-modal-card,#planModal>.plan-subview-mount,#newTaskModal>.task-create-modal{flex:none}
+
+/* Validation/error feedback must remain visible above the right-side editor. */
+.toast{z-index:1200!important}
