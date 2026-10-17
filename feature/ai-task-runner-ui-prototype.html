@@ -2577,6 +2577,124 @@ document.getElementById('cleanupWorktreeDemo').onclick=()=>{const t=taskMap[curr
 const dialogPlanOpenTask=openTaskById;
 openTaskById=function(id){dialogPlanOpenTask(id);const t=taskMap[id];if(t)renderWorkspaceResult(t)};
 
+// --- Canonical Task List model: every Board Task owns items[]; one item is the simple case. ---
+function canonicalTaskItems(t){
+  if(!t)return [];
+  let raw=Array.isArray(t.items)&&t.items.length?t.items:(Array.isArray(t.listItems)&&t.listItems.length?t.listItems:[singleTaskItem(t)]);
+  const items=raw.map((x,i)=>planItemDefaults(x,t,i));
+  t.items=items;t.listItems=t.items;t.kind='task_list';
+  const count=items.length;
+  const baseTags=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x))&&x!=='Task List');
+  t.tags=[`${count} task${count===1?'':'s'}`,...baseTags].slice(0,4);
+  return t.items;
+}
+function normalizeAllTaskLists(){Object.values(taskMap).forEach(canonicalTaskItems)}
+isSequenceTask=function(t){return canonicalTaskItems(t).length>1};
+planItemsForTask=function(t){return cloneBatch(canonicalTaskItems(t))};
+setPlanDraftForTask=function(t){
+  if(!t)return;batchParentTaskId=t.id;batchDraft=cloneBatch(canonicalTaskItems(t));batchState=deriveStepState(t);
+  if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
+};
+commitPlanDraft=function(t,{markDirty=false}={}){
+  if(!t)return;batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  t.kind='task_list';t.items=cloneBatch(batchDraft);t.listItems=t.items;
+  const count=t.items.length,x=t.items[0];
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  if(count===1){
+    t.workflow=x.workflow;t.goal=x.prompt;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    if(t.workspaceKind==='batch')t.workspaceKind='main';
+    t.executionRoot=t.executionRoot==='Child task workspaces'?(projectMeta[t.project]?.path||t.project):t.executionRoot;
+  }else{
+    t.workflow='Task List';t.workspaceKind='batch';t.executionRoot=`${count} child workspaces`;t.goal=`${count} ordered tasks`;
+  }
+  canonicalTaskItems(t);
+  t.desc=count===1?'Single task':`${count} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused Task · current task changed · restart required.'}
+};
+
+// Board / create / preset paths all normalize through the same Task List adapter.
+const canonicalBoardFromMap=renderBoardFromMap;
+renderBoardFromMap=function(){normalizeAllTaskLists();canonicalBoardFromMap()};
+const canonicalBoardPreset=renderBoard;
+renderBoard=function(preset=currentPreset){canonicalBoardPreset(preset);normalizeAllTaskLists();canonicalBoardFromMap()};
+
+// A 'Move existing' source is just a one-item Task List that has never run.
+eligibleMoveTasks=function(owner){
+  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&canonicalTaskItems(t).length===1);
+};
+
+// Project click is now the Chat navigation. Tasks remains the only Work nav item.
+const canonicalSelectProject=selectProject;
+selectProject=function(key){
+  canonicalSelectProject(key);
+  const meta=projectMeta[key];if(!meta)return;
+  document.getElementById('chatProjectTitle').textContent=key;
+  document.getElementById('chatProjectLine').textContent=`${meta.path} · Project Chat · 不建立 Runner Task`;
+  document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered task-list model`;
+};
+document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
+  selectProject(p.dataset.project);showView('chat');document.getElementById('chatInput').focus();
+}));
+
+// Drawer summary always exposes the same Plan dialog, even for a one-item list.
+renderDrawerPlan=(function(base){return function(t){
+  canonicalTaskItems(t);base(t);
+  document.getElementById('openFullPlan').hidden=false;
+  document.getElementById('openFullPlan').textContent='Open plan';
+  const n=t.items.length;
+  document.getElementById('taskListEditHint').textContent=`${n} task${n===1?'':'s'} · same Task List`;
+  document.getElementById('taskListParentHint').textContent=n===1?'Single-item Task List':`${n} tasks · executed top to bottom`;
+};})(renderDrawerPlan);
+
+// Moved New task contributes its single item, then its standalone Board identity is retired.
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  if(addTaskMode==='create'){
+    const prompt=document.getElementById('addPlanPrompt').value.trim();if(!prompt){showToast('Task prompt is required');return}
+    const projectKey=document.getElementById('addPlanProject').value,workflow=document.getElementById('addPlanWorkflow').value;
+    batchDraft.push(planItemDefaults({prompt,project:projectMeta[projectKey]?.path||projectKey,workflow},owner,batchDraft.length));
+    pushTaskHistory(owner,'New task added to Task List');
+  }else{
+    const source=taskMap[selectedMoveTaskId];
+    if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
+    const sourceItem=cloneBatch(canonicalTaskItems(source))[0];
+    const item=planItemDefaults(sourceItem,owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
+    batchDraft.push(item);delete taskMap[source.id];
+    pushTaskHistory(owner,`Moved ${source.id} into Task List · standalone Board identity retired`);
+  }
+  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();
+  closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
+  showToast(addTaskMode==='create'?'Task added':'New Task moved into Task List');
+};
+
+// Workspace result uses item count, not a separate Task/List type flag.
+renderWorkspaceResult=(function(base){return function(t){canonicalTaskItems(t);base(t);
+  if(t.items.length>1){
+    const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
+    section.hidden=false;state.textContent=`${t.items.length} tasks`;hint.textContent='Each execution item resolves its own Main / Worktree workspace at run time.';
+    grid.innerHTML='<span>Merge</span><strong>Handled per item result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';
+    ['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);
+  }
+};})(renderWorkspaceResult);
+
+// Merge with Chat now navigates directly to the owning Project chat with merge context.
+document.getElementById('mergeChatDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  const target=projectMeta[t.project]?.branch||'main';
+  document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
+  selectProject(t.project);showView('chat');
+  const session=activeChat();
+  session.messages.push(['user',`Review and merge ${t.id}: ${t.branch||'task branch'} → ${target}. Worktree: ${t.executionRoot||'—'}`]);
+  session.messages.push(['assistant','已帶入 Task / branch / target / worktree context。這裡做 merge review；Runner Task 本身不會自動 merge。']);
+  renderChatSession();showToast('Opened Project Chat with merge context');
+};
+
+// Ensure every Task opened after legacy handlers is normalized to the one-list model.
+const canonicalListOpenTask=openTaskById;
+openTaskById=function(id){const t=taskMap[id];if(t)canonicalTaskItems(t);canonicalListOpenTask(id);const current=taskMap[id];if(current){setPlanDraftForTask(current);renderDrawerPlan(current);renderWorkspaceResult(current)}};
+
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
