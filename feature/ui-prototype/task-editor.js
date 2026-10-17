@@ -665,7 +665,7 @@ function processMockChatPrompt(session,text,projectKey){
 }
 function startMockChatTurn(session,text,{fromQueue=false}={}){
   const value=String(text||'').trim();if(!session||!value)return;
-  if(chatTurnState(session)!=='idle'||ensureChatQueue(session).length){
+  if(chatTurnState(session)!=='idle'||(!fromQueue&&ensureChatQueue(session).length)){
     enqueueChatMessage(session,value,{notify:false});
     if(activeChat()===session)showToast(chatTurnState(session)==='idle'?'已有待處理訊息，已加入 Queue':'Agent 正在處理，已自動加入 Queue');
     if(chatTurnState(session)==='idle')drainChatQueue(session);
