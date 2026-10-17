@@ -1152,6 +1152,9 @@ const chatInputForSuggestions=document.getElementById('chatInput');
 chatInputForSuggestions.addEventListener('input',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('click',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key.toLowerCase()==='q'){
+    const value=chatInputForSuggestions.value.trim();if(value){e.preventDefault();e.stopImmediatePropagation();enqueueChatMessage(activeChat(),value);chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}return;
+  }
   const pop=document.getElementById('composerSuggest');
   if(pop?.hidden||!composerSuggestionItems.length)return;
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -1182,14 +1185,13 @@ document.getElementById('chatMode').onchange=e=>{
   showToast(`Mock Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
 };
 document.getElementById('chatAsk').onclick=()=>{
-  const input=document.getElementById('chatInput'),profile=chatAgentProfile();
-  if(!profile.sideQuestion){showToast('Selected Agent does not support side questions');return}
-  if(!/^\s*(?:\/|\?)btw\b/i.test(input.value))input.value=input.value.trim()?'/btw '+input.value:'/btw ';
-  input.focus();input.setSelectionRange(input.value.length,input.value.length);resizeChatComposer();renderComposerSuggestions();
+  const input=document.getElementById('chatInput'),profile=chatAgentProfile(),session=activeChat();
+  if(!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
+  const context=input.value.trim()||[...(session?.messages||[])].reverse().find(x=>x[0]==='user')?.[1]||'Mock clarification';
+  startMockAskFlow(session,context);
 };
-document.getElementById('dismissSideQuestion').onclick=()=>{
-  const session=activeChat();if(session)session.sideQuestion=null;renderSideQuestion(session);
-};
+document.getElementById('composerAskNext').onclick=()=>advanceAskFlow(activeChat());
+document.getElementById('composerAskCancel').onclick=()=>{const session=activeChat();if(session)session.askFlow=null;renderAskFlow(session);showToast('Ask cancelled')};
 document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hideComposerSuggestions()});
 
 
