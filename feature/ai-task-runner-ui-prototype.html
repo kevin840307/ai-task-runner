@@ -320,6 +320,12 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 /* Context menu is actions only; Info opens the normal right-side Drawer. */
 #taskContextMenu{width:205px!important;display:block!important;padding:5px!important}
 #taskContextMenu[hidden]{display:none!important}
+
+/* Task Editor basics stay calm: one full-width field per row. */
+.task-create-modal{width:min(720px,94vw)}
+.task-create-modal .task-basics{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+.task-create-modal .task-basics>.field{grid-column:1/-1!important}
+.task-create-modal .field-help{margin-top:4px;line-height:1.4}
 </style>
 </head>
 <body>
@@ -528,8 +534,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-body">
       <div class="modal-grid task-basics">
         <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
-        <div class="field"><label>Project</label><input id="newTaskProject" list="projectOptions" autocomplete="off" placeholder="Select a project or type a path"><datalist id="projectOptions"></datalist><small class="field-help">Existing Project name or a new local path.</small></div>
-        <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
+        <div class="field full"><label>Project</label><input id="newTaskProject" list="projectOptions" autocomplete="off" placeholder="Select a project or type a path"><datalist id="projectOptions"></datalist><small class="field-help" id="projectFieldHelp">Current Project is the default. You can also type a new local path.</small></div>
+        <div class="field full" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
       <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
@@ -3687,6 +3693,29 @@ openListContextMenu=function(e,t){
 };
 const contextInfoButton=taskContextMenu.querySelector('[data-context-action="info"]');
 contextInfoButton.onclick=()=>{if(contextInfoButton.disabled||!taskContextState)return;openContextInfoDrawer({...taskContextState})};
+
+// --- Project combobox polish: all Projects, current first, current as create default. ---
+renderProjectOptions=function(priorityKey=currentProjectKey){
+  const dl=document.getElementById('projectOptions');if(!dl)return;
+  const entries=Object.entries(projectMeta).sort(([a],[b])=>{if(a===priorityKey)return -1;if(b===priorityKey)return 1;return a.localeCompare(b)});
+  dl.innerHTML=entries.map(([k,m])=>`<option value="${escapeAttr(k)}" label="${escapeAttr(m.path)}${k===priorityKey?' · current':''}"></option>`).join('');
+  const help=document.getElementById('projectFieldHelp'),meta=projectMeta[priorityKey];
+  if(help)help.textContent=meta?`Current: ${priorityKey} · ${meta.path} · or type a new local path.`:'Select a Project or type a new local path.';
+};
+const projectPriorityLoadTaskEditor=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  renderProjectOptions(currentProjectKey);
+  projectPriorityLoadTaskEditor(mode,args);
+  const input=document.getElementById('newTaskProject');
+  if(mode!=='edit-item'){input.value=currentProjectKey}else{
+    const owner=taskMap[args.ownerId],item=owner?canonicalTaskItems(owner)[args.index]:null;
+    if(item){const key=Object.keys(projectMeta).find(k=>projectRefMatches(item.project,k));input.value=key||item.project}
+  }
+  renderNewTaskWorkspace();
+};
+const projectOptionSelect=selectProject;
+selectProject=function(key){projectOptionSelect(key);renderProjectOptions(key)};
+renderProjectOptions(currentProjectKey);
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
