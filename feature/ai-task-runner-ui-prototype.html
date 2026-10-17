@@ -270,6 +270,13 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 .ai-override-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ai-override-actions .simple-source-select{min-width:100px}
+
+#newTaskModal{z-index:210}
+.task-editor-handoff{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left;color:var(--text);cursor:pointer}
+.task-editor-handoff:hover{border-color:#9fbab6;background:#f8fcfb}.task-editor-handoff-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e9f6f4;color:var(--accent);font-size:18px;font-weight:800}
+.task-editor-handoff strong{display:block;font-size:10px}.task-editor-handoff small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.task-editor-handoff b{color:var(--accent);font-size:8px}
+.plan-row-compact{border:1px solid #e1e7ee;border-radius:10px;background:#fff}.plan-row-compact.current{border-color:rgba(15,118,110,.34);background:#fbfefd}.plan-row-compact.done{opacity:.68}
+.plan-row-compact .plan-row-head{min-height:54px}.plan-workspace-chip{padding:3px 6px;border-radius:999px;background:#eef6f5;color:#0f766e;font-size:7px;font-weight:850}
 </style>
 </head>
 <body>
@@ -449,19 +456,19 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
-        <div class="field full"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from first task prompt" value=""></div>
+        <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
         <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
       <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
       <div id="newTaskListSetup" class="task-list-setup" hidden></div>
-      <div class="workspace-selector-wrap">
-        <div class="workspace-selector-title"><div><strong>Workspace isolation</strong><small>同一個實際路徑最多一個 Running Task</small></div><span class="workspace-recommended">Auto recommended</span></div>
-        <div id="newTaskWorkspace"></div>
-      </div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
+      <div class="workspace-selector-wrap">
+        <div class="workspace-selector-title"><div><strong>Workspace</strong><small>Auto / Main / isolated Worktree</small></div><span class="workspace-recommended">Auto recommended</span></div>
+        <div id="newTaskWorkspace"></div>
+      </div>
       <div hidden><button type="button" id="addNextTaskFromNew"></button><button type="button" id="addExistingTaskFromNew"></button></div>
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
       <div class="state-hint">建立後先放在 <strong>New</strong>。Workflow 需要的驗證欄位才會出現；不需要的設定不佔畫面。</div>
@@ -511,12 +518,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <button type="button" data-add-task-mode="move">Move existing</button>
       </div>
       <div id="addTaskCreatePanel">
-        <div class="modal-grid">
-          <div class="field full"><label>Task prompt</label><textarea id="addPlanPrompt" placeholder="Describe the next task..."></textarea></div>
-          <div class="field"><label>Project</label><select id="addPlanProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
-          <div class="field"><label>Workflow</label><select id="addPlanWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
-        </div>
-        <div class="state-hint">先快速加入，再到 Plan 裡選該 Task 編輯 Validator / AI Prompt 等完整設定。</div>
+        <button class="task-editor-handoff" id="openUnifiedTaskEditor" type="button">
+          <span class="task-editor-handoff-icon">＋</span>
+          <span><strong>Create new task</strong><small>Use the same Task Editor for Prompt, Workflow, Validation and Workspace.</small></span>
+          <b>Open editor →</b>
+        </button>
       </div>
       <div id="addTaskMovePanel" hidden>
         <div class="move-task-note"><strong>Only unused New tasks can be moved.</strong><span>加入後原本 Board 卡片會移除，並保留原 Task ID 作為來源紀錄。</span></div>
