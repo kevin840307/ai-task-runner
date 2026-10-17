@@ -547,8 +547,8 @@ document.getElementById('editTaskDemo').onclick=()=>{const t=taskMap[currentTask
 
 const createTaskAction=document.getElementById('createTaskConfirm').onclick;
 document.getElementById('createTaskConfirm').onclick=()=>{
-  if(taskFormMode!=='edit')return createTaskAction();
-  const t=taskMap[editingTaskId];if(!t||!taskEditable(t))return;
+  if(taskFormMode!=='edit'||!editingTaskId||!taskMap[editingTaskId])return createTaskAction();
+  const t=taskMap[editingTaskId];if(!taskEditable(t))return;
   const before=taskRuntimeFingerprint(t);
   const title=document.getElementById('newTaskTitle').value.trim();if(!title){showToast('Task title 不可空白');return}
   const project=document.getElementById('newTaskProject').value;
