@@ -477,7 +477,9 @@ const mockSystemPrompts=[
   {token:'@task-single',title:'Create one Task',description:'Force the generated TaskDraft to contain exactly one Task.',source:'Runner'},
   {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
   {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
-  {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'}
+  {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'},
+  {token:'@queue',title:'Mock queued prompt',description:'Add a prompt to the Queue so Edit/Delete UI can be tested.',source:'Mock'},
+  {token:'@ask-demo',title:'Mock AI clarification',description:'Force a multi-question AI clarification flow.',source:'Mock'}
 ];
 const mockAgentProfiles={
   qwen:{
@@ -493,7 +495,7 @@ const mockAgentProfiles={
       {id:'yolo',label:'YOLO',native:'yolo',description:'Qwen YOLO · auto-approve all tool calls'}
     ],
     defaultMode:'auto',
-    sideQuestion:true
+    askQuestions:true
   },
   opencode:{
     label:'OpenCode',
@@ -509,7 +511,7 @@ const mockAgentProfiles={
       {id:'yolo',label:'YOLO',native:'allow-all',description:'OpenCode profile · allow all supported tools'}
     ],
     defaultMode:'auto',
-    sideQuestion:true
+    askQuestions:true
   }
 };
 const mockAgentCapabilities={
@@ -545,14 +547,14 @@ function syncChatAgentControl(){
   mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
   model.value=session.model;mode.value=session.mode;
   if(modeControl){modeControl.dataset.mode=session.mode;modeControl.title=profile.modes.find(x=>x.id===session.mode)?.description||''}
-  if(ask){ask.disabled=!profile.sideQuestion;ask.title=profile.sideQuestion?'Ask a side question without changing main Chat history':'Selected Agent does not expose side questions'}
+  if(ask){ask.disabled=!profile.askQuestions;ask.title=profile.askQuestions?'Force a mock AI clarification flow':'Selected Agent does not expose interactive questions'}
   syncComposerPickerLabels();
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
 let composerPickerKind='',composerPickerAnchor=null;
 function composerPickerEntries(kind){
   const profile=chatAgentProfile();
-  if(kind==='agent')return Object.entries(mockAgentProfiles).map(([id,p])=>({id,label:p.label,description:`${p.models.length} models · ${p.modes.length} modes · side question ${p.sideQuestion?'on':'off'}`,meta:id==='qwen'?'Qwen CLI':'OpenCode CLI',icon:id==='qwen'?'Q':'O'}));
+  if(kind==='agent')return Object.entries(mockAgentProfiles).map(([id,p])=>({id,label:p.label,description:`${p.models.length} models · ${p.modes.length} modes · Ask ${p.askQuestions?'supported':'off'}`,meta:id==='qwen'?'Qwen CLI':'OpenCode CLI',icon:id==='qwen'?'Q':'O'}));
   if(kind==='model')return profile.models.map(x=>({id:x.id,label:x.label,description:x.id,meta:'Model',icon:'M'}));
   return profile.modes.map(x=>({id:x.id,label:x.label,description:x.description,meta:x.native,icon:x.id==='read'?'R':x.id==='yolo'?'Y':'A'}));
 }
@@ -563,10 +565,12 @@ function composerPickerSelected(kind){
 function syncComposerPickerLabels(){
   const session=activeChat();if(!session)return;
   const profile=chatAgentProfile(),model=profile.models.find(x=>x.id===session.model),mode=profile.modes.find(x=>x.id===session.mode);
-  const agentValue=document.getElementById('chatAgentValue'),modelValue=document.getElementById('chatModelValue'),modeValue=document.getElementById('chatModeValue');
+  const agentValue=document.getElementById('chatAgentValue'),modelValue=document.getElementById('chatModelValue'),modeValue=document.getElementById('chatModeValue'),agentMark=document.getElementById('chatAgentMark'),modeMark=document.getElementById('chatModeMark');
   if(agentValue)agentValue.textContent=profile.label;
   if(modelValue)modelValue.textContent=model?.label||session.model||'—';
   if(modeValue)modeValue.textContent=mode?.label||session.mode||'—';
+  if(agentMark)agentMark.textContent=chatAgentKey(session)==='qwen'?'Q':'O';
+  if(modeMark)modeMark.textContent=session.mode==='read'?'R':session.mode==='yolo'?'Y':'A';
 }
 function closeComposerPicker(){
   const pop=document.getElementById('composerPickerPopover');if(pop)pop.hidden=true;
