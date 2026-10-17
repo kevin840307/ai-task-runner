@@ -1,0 +1,380 @@
+AI Task Runner — Chat / Task / Workspace 整體待辦
+================================================
+
+版本日期：2026-10-17
+目標分支：feature/ui
+範圍：產品 UI、Chat API、Agent Adapter、TaskDraft、Runner 整合、Worktree、Merge、測試與 24H 穩定性。
+
+本檔是「實作待辦」，與根目錄 future.txt 的產品方向同步；不複製 release/v4 舊版規格。
+[ ] 完成項目需在同一變更中補測試、更新必要文件，並清除已被取代的舊路徑。
+[ ] Prototype 的 Mock 行為不能被當成正式 Backend / Runner 功能已完成。
+[ ] 未完成真實 Browser / API / Live 測試前，不得宣稱整體完成或已證明 24H 穩定。
+
+
+0. 不可違反的設計原則
+----------------------
+
+[ ] 保留目前 AI Task Runner 的 UI 視覺語言，改善原有介面，不另造一套陌生的 ChatGPT 外殼。
+[ ] Chat 負責對話、排隊與釐清；Task 負責工作紀錄；Runner Core 負責執行、Stage 路由、Retry、Recovery、Resume 與真實 Runtime 狀態。
+[ ] Chat 不能因一般對話而偷偷建立或啟動 Runner Task。
+[ ] UI、CLI、YAML、API、Dry Run 必須共用同一份核心契約，不可各自實作第二套排程或復原邏輯。
+[ ] Task Draft 是暫存規劃資料，不是已建立 Task，也不能帶入假 Runtime / 假執行結果。
+[ ] 建立 Task 後一律進入 New / idle；不得自動 Run。
+[ ] Main workspace 永遠保留；Worktree 是可選的隔離策略，不是另一套 Runner。
+[ ] Task 完成不代表自動 Merge。Git 整合是使用者明確執行的另一個動作。
+[ ] 無法使用的按鈕必須 disabled 並說明原因；Backend 仍要再次驗證，不能只依賴 UI。
+[ ] 避免 Dialog 疊 Dialog、俄羅斯娃娃式流程與重複資料副本。
+[ ] 優先處理 24H 無人值守可靠性、恢復能力與可診斷性，不為 UI 功能另造 Scheduler / Recovery Engine。
+
+
+1. Prototype 目前狀態與待驗證項目
+-------------------------------
+
+下列項目在 feature/ui prototype 中已有 Mock 實作；仍需實際開啟 HTML 操作驗證，不能視為正式功能完成。
+
+[x] Chat 有自訂 Agent / Model / Mode Picker；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
+[x] 輸入框以 @ 顯示 Runner 系統指令，以 / 顯示目前 Agent 的 Mock Skills / Commands。
+[x] @task 隨機產生單筆 Task 或多筆 Task List；@task-single 強制單筆；@task-list 至少兩筆。
+[x] Chat 顯示精簡 TaskDraft 預覽，提供 Edit / Create Task / Dismiss。
+[x] TaskDraft Edit 共用既有 Task Editor / Task List，不在 Chat 裡複製一套完整表單。
+[x] Chat Queue Mock 有新增、編輯、刪除；Queue 區塊位於 Composer 上方。
+[x] 有 Ctrl+Q 與 @queue <message> 的 Queue Mock 入口。
+[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
+[x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
+[x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
+[x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
+[ ] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
+[ ] 驗證開啟 Editor 時 Chat 不縮窄、不位移、不被浮層蓋住；Editor / Picker / Suggestion 的層級正確。
+[ ] 驗證 @task / @task-single / @task-list 三條路徑與錯誤提示都能直接操作。
+[ ] 驗證 Queue 編輯 / 刪除後順序、計數與切換 Chat session 的資料隔離。
+[ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
+[ ] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
+[ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
+[ ] 將 Mock 功能入口做得容易發現；不要要求使用者只能靠猜特殊指令才能測試。
+
+
+2. Project 與 Chat 導覽
+-----------------------
+
+[ ] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
+[ ] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
+[ ] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
+[ ] 每個 Project 可以有多個獨立 Chat session；切換 session 不混用訊息、Queue、Ask、Agent / Model / Mode 設定。
+[ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
+[ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
+[ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
+[ ] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
+[ ] Chat history 與 Task runtime history 分開儲存與顯示。
+
+
+3. Composer 與指令自動提示
+--------------------------
+
+[ ] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
+[ ] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
+[ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
+[ ] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
+[ ] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
+[ ] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
+[ ] 自動提示支援文字篩選、↑ / ↓、Enter / Tab 接受、Escape 關閉；接受後只插入文字，不自動送出。
+[ ] 提示清單顯示名稱、描述、來源與啟用狀態；停用或無權限的能力不應被列為可執行項目。
+[ ] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
+[ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
+[ ] @task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
+[ ] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
+[ ] 顯示 Ask Mock 的明確入口，方便測試多問題流程。
+
+
+4. Agent / Model / Mode Picker
+------------------------------
+
+[ ] 保留自訂 Picker，不顯示瀏覽器原生下拉的視覺。
+[ ] Agent / Model / Mode 觸發器要有一致的尺寸、主副文字、選取狀態、Hover、Focus、鍵盤操作與適當的寬度。
+[ ] Picker 使用 viewport 定位；不可因為打開選單而撐開、縮窄或重新排版 Chat。
+[ ] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
+[ ] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
+[ ] UI 提供 Read / Auto / YOLO 三種產品層級模式，但它們不是假設所有 Agent 的原生模式完全相同。
+[ ] Adapter 必須回報每個模式是否支援，以及對應的原生設定；不支援的模式需隱藏或 disabled，不可默默模擬。
+[ ] Qwen Code：Read 對應原生 Plan / read-only；Auto 與 YOLO 依目前 CLI 支援的 approval mode 映射。
+[ ] OpenCode：Read 對應禁止 edit / write / bash 等修改權限的 permission profile；Auto 使用安全預設與必要 Ask；YOLO 只有在 Agent 真正支援時才映射為允許全部工具。
+[ ] UI 顯示目前模式的簡短安全說明，尤其 YOLO 要清楚指出可能自動核准工具。
+[ ] 真正的權限設定與工具核准仍由 Agent / Backend adapter 執行；不能只在 UI 顯示文字。
+[ ] 測試切換 Agent 後 Model 是否重設到合法預設，且不會留下另一個 Agent 的 Model ID。
+
+
+5. Agent Skills / Slash Commands 的取得方式
+-------------------------------------------
+
+[ ] 新增統一的 Agent capability discovery 介面，前端只顯示 Backend 回傳的能力，不自行掃描本機檔案系統。
+[ ] 能力資料至少包含：token / name、description、kind、source、user_invocable、enabled、permission / availability。
+[ ] Qwen Code adapter 優先使用 Qwen Code 的 SkillManager / slash-command registry 或目前 Agent process 可提供的能力投影。
+[ ] Qwen Code 要尊重內建命令、擴充命令、專案 / 個人 Skills、path-gated Skills 與 user-invocable 設定；不要只用檔名猜測。
+[ ] OpenCode adapter 使用其 resolved command / skill registry 或官方 UI/TUI 使用的能力來源。
+[ ] OpenCode 要尊重專案與全域 Skills、命令設定、Agent 的 skill permission、deny / ask / allow 與停用 skill tool 的規則。
+[ ] OpenCode 的 Skills 可能來自 .opencode/skills、.claude/skills、.agents/skills 及使用者全域目錄；由 OpenCode 自己決定解析結果，前端不重做搜尋。
+[ ] 不把 Skill 全文塞入前端清單；列表只呈現摘要，使用者選取後交由 Agent 原生機制載入。
+[ ] capability 結果可以快取作為 UI 投影，但 Agent、Project、設定或權限改變時必須重新整理。
+[ ] Mock Qwen / OpenCode 的 / 清單應不同，讓使用者可以測試切換 Agent 的效果。
+[ ] 正式版若某個能力取得失敗，要顯示錯誤 / Retry，不可退回一份看似真實的硬編碼清單。
+[ ] 保留 /btw 等 Agent 原生 side question 命令；它與本系統 Ask（暫停目前 turn 向使用者詢問）不是同一功能。
+
+參考：
+- OpenCode Skills： https://opencode.ai/docs/skills/
+- OpenCode Commands： https://dev.opencode.ai/docs/commands
+- OpenCode Tools / question： https://opencode.ai/docs/tools/
+- Qwen Code Skills： https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/
+- Qwen Code Commands： https://qwenlm.github.io/qwen-code-docs/en/users/features/commands/
+
+
+6. Chat Queue（對話排隊）
+-------------------------
+
+[ ] Queue 與 Runner Task List 是完全不同的概念；Chat Queue 只保存尚待送給目前 Chat Agent 的 Prompt。
+[ ] Queue 以 Chat session 為單位儲存，切換 Project / Chat 不可串錯。
+[ ] 有 Agent turn 執行中時，使用者送出的後續 Prompt 應依 Agent 原生能力加入 Queue；若 Agent 沒有原生 Queue，Backend 提供相同產品契約。
+[ ] Queue 項目直接顯示在 Composer 上方；沒有項目時整塊隱藏。
+[ ] 每個項目顯示順序、可閱讀的摘要與 Edit / Delete。
+[ ] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
+[ ] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
+[ ] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
+[ ] 以 Qwen Code 原生 queued-next-turn 行為為參考（例如 Ctrl+Q）；由 adapter 決定是否支援原生快捷鍵。
+[ ] Prototype 提供可見的 Queue 按鈕、@queue <message> 與 Ctrl+Q，方便不用等待 Agent turn 就能測試。
+[ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
+[ ] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
+[ ] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
+[ ] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。
+
+
+7. AI Ask / Clarification（反問使用者）
+--------------------------------------
+
+[ ] Ask 指的是 Agent 在目前工作過程中遇到需要使用者決定的事項，暫停目前 turn 並向使用者提問。
+[ ] Ask 不是 Qwen /btw 這種獨立 side question；/btw 保持為 Agent 原生能力。
+[ ] 統一 Ask 問題資料格式，避免 Qwen 與 OpenCode 各做一套前端流程。
+[ ] 一次 Ask 可以有多個問題；每題可為選項題或自由文字題。
+[ ] 選項題最後固定提供「其他／自行輸入」，選擇後顯示文字輸入框。
+[ ] 選項題未選選項、Other 沒填文字、文字題空白時，不可 Next / Submit。
+[ ] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
+[ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
+[ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
+[ ] Ask 面板顯示在 Composer 上方，與 Queue 區塊視覺上區分；打開時不能遮住最後一則訊息或把 Chat 撐壞。
+[ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
+[ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
+[ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
+[ ] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
+[ ] Prototype 的一般訊息可以隨機觸發 Ask；Ask mock 按鈕 / @ask-demo 可以強制觸發，不依賴機率。
+[ ] Mock 至少覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session。
+[ ] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
+[ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
+
+
+8. @task / @task-single / @task-list 與 TaskDraft
+-----------------------------------------------
+
+[ ] 只有明確的 Runner 指令才可建立 TaskDraft；一般訊息提到 task / run / 建立任務不得觸發。
+[ ] @task <spec>：由 AI 判斷產生單筆 Task 或多筆有序 Task List。
+[ ] @task-single <spec>：強制產生且只產生一筆 Task。
+[ ] @task-list <spec>：強制產生至少兩筆有序 child Task。
+[ ] 三種命令共用同一個 Backend endpoint / service、固定 Prompt、TaskDraft schema、驗證與 Create 流程；只有 mode 參數不同（auto / single / list）。
+[ ] 固定的 Generate Task Prompt 放在 Backend，參照既有 Generate Workflow 的做法；不可把整段 Prompt 寫死在瀏覽器。
+[ ] Prompt 必須要求 AI 輸出結構化資料，不可以只回傳自由文字；驗證失敗要 fail closed。
+[ ] 產生結果先顯示精簡 Draft 預覽，使用者可 Edit、Create Task 或 Dismiss。
+[ ] TaskDraft 最低欄位包含 title、Project reference、ordered items[]；每個 item 至少包含 title、task prompt、Workflow、Project、workspace policy。
+[ ] Validator / Prompt source override 只在需要時加入；不把無關 runtime 欄位塞進 Draft。
+[ ] Draft 不包含 Runner runtime、Retry、Recovery、Merge 狀態；不得在建立前寫入正式 Task history。
+[ ] 單筆 Draft 的 Edit 使用既有 canonical Task Editor。
+[ ] 多筆 Draft 的 Edit 使用既有 Task List workspace；每個 child 的 Add / Edit 繼續使用同一個 canonical Task Editor。
+[ ] 不新增 Chat 專用 Task 編輯表單；不要同步兩份平行 Draft state。
+[ ] 從 Chat Draft 進入編輯時，Task Editor 必須是 viewport 上層的右側 overlay；Chat 留在背景、不縮窄、不位移。
+[ ] 單筆 Editor 的 Back / Cancel / 遮罩關閉回到原 Chat Draft。
+[ ] 多筆 Task List 關閉回到原 Chat Draft；從 List 進 child Editor，Back 先回 List，關閉 List 再回 Chat Draft。
+[ ] 由 Task Info 進入 Add / Edit 時 Back 回 Info；由 Task List 進入時 Back 回 Task List。返回目的地由來源狀態決定，不可一律回 YAML。
+[ ] Create Task 前再次驗證 items 不為空、Prompt / Project / Workflow / workspace policy 合法。
+[ ] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
+[ ] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
+[ ] Create / Dismiss / Retry / Edit / Back / Create Again 必須有明確的重複操作語義；不能重複建立同一 Draft。
+[ ] Prototype 的 @task 隨機單筆 / 多筆；測試可使用固定 fixture / seed，避免自動化測試被隨機結果影響。
+[ ] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
+[ ] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在、Worktree 不可建立都要有測試。
+[ ] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
+
+
+9. Task、Task List、狀態與編輯政策
+---------------------------------
+
+[ ] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
+[ ] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
+[ ] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
+[ ] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
+[ ] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
+[ ] Edit Task 的 Back 依來源回 Info / Task List / Chat Draft；關閉按鈕、Cancel、Escape 與遮罩關閉行為需一致。
+[ ] Delete Task 前顯示確認視窗，指出 Task ID、名稱、Project 與刪除後果。
+[ ] Delete 不可在使用者確認前改動資料；Cancel 不改資料。
+[ ] 刪除正在執行、Recovering、或有不可安全刪除狀態的 Task 時必須阻擋，並顯示原因。
+[ ] Paused / Closed 重設回 New 必須確認；已完成 Run 保留 History，舊的 resumable run 需標記 abandoned。
+[ ] 建立或編輯錯誤時，錯誤訊息要出現在對應 overlay 上層且可見；避免 Toast 一閃而過或被 Drawer 蓋住。
+[ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
+[ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
+[ ] UI 不得在不同入口建立重複的 Task Editor / Task List renderer。
+
+
+10. Workspace / Worktree
+------------------------
+
+[ ] Workspace policy 支援 Auto / Main / Worktree。
+[ ] Main workspace 永遠可選；若同一路徑已有另一個 Task 在執行，禁止同一路徑第二個 Task 同時執行。
+[ ] Auto：Main 可安全使用時走 Main；Main 被其他 Task 占用時依策略建立 Worktree。
+[ ] Worktree 必須有醒目的 WORKTREE badge / banner、Branch、Execution Path、隔離提示；不可只藏在 Info 欄位。
+[ ] 每個 child Task 可以有自己的 Workspace policy；Task List 的多筆 Task 不可錯把全部當成同一個工作目錄。
+[ ] Worktree 建立前檢查 Git repository、branch 名稱、path、權限、磁碟空間與既有 worktree；失敗時不建立半成品。
+[ ] Workspace resolver 是唯一決定 Project path / Main path / Worktree path 的來源；UI 不自行拼出正式路徑。
+[ ] Backend 對 path 做正規化與保護，避免 path traversal、跨 Project 寫入與錯刪資料夾。
+[ ] Stop / Resume / Restart / process recovery 必須保留 Workspace identity；不能 Resume 到另一個路徑。
+[ ] Task 刪除、Task reset、Run 完成與 Worktree 清理政策分開；不能默默刪掉尚未 Merge 的修改。
+[ ] 平行 Agent 仍使用 Worktree 做隔離；不以多個 Agent 直接同時寫同一份 working tree 取代隔離。
+
+
+11. Workspace Results 與 Merge
+-------------------------------
+
+[ ] Merge UI 依 Project 分組列出 Worktree / branch 結果，而不是每個 child Task 各自產生一套互相重複的 Merge 面板。
+[ ] 每個結果清楚顯示 Project、來源 Branch、來源 Path、目標 Branch、Task / Task List、最近狀態與衝突摘要。
+[ ] Merge 面板只提供兩個主要動作：Merge、Merge Chat。
+[ ] Backend 先做 merge preflight / conflict check；不能只依前端 Mock 狀態判斷。
+[ ] 無衝突且檢查通過：允許 Merge，顯示確認與結果；不自動執行。
+[ ] 有衝突：直接 Merge disabled，只能 Merge Chat。
+[ ] Merge Chat 建立該 Project 的新 Chat session，預填完整 prompt，但絕不自動送出。
+[ ] Merge Chat prompt 包含來源 Worktree path、來源 Branch、目標 Project path / target branch、衝突檔案摘要、要求先檢查差異再安全整合的指示。
+[ ] 多 Task / 多 child 產生同一 Worktree 時，應以實際 Workspace / branch 為整合單位去重，避免每個 child 重複 Merge 同一 branch。
+[ ] 同 Project 不同 Worktree 的結果要分開顯示；不允許把不同 branch 當成一筆。
+[ ] Merge 完成後保存結果、commit / merge reference 與錯誤；UI 更新 Workspace Results。
+[ ] 不因 Task Closed 自動 Merge；不新增 Waiting Merge / Merged / Cleanup 等 Board 欄位。
+[ ] Merge Chat 只建立新 Chat session 與預填內容；不得偷送訊息或自動啟動 Task。
+[ ] Merge 失敗時保留 Worktree / branch 與變更；不可自動清除使用者的未整合修改。
+
+
+12. 共用 Chat Backend 與 API
+---------------------------
+
+[ ] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
+[ ] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
+[ ] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
+[ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
+    - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
+    - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
+    - Agent / Model / Mode 能力與目前選擇
+    - 取得 Agent commands / Skills / permission / Ask capability
+    - Queue list / enqueue / edit / delete / reorder（若產品允許排序）
+    - Ask request event / answer submit / cancel
+    - generate TaskDraft / validate TaskDraft / create Task
+    - Merge preflight / direct merge / Merge Chat handoff context
+[ ] 所有 API 使用穩定的 session_id、turn_id、message_id、queue_item_id、ask_id、draft_id、task_id。
+[ ] POST / send / create 等操作需要 request ID 或 idempotency key，避免重試後重複建立訊息或 Task。
+[ ] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
+[ ] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。
+[ ] Chat stream 與 Runner Task runtime stream 必須明確分開；不能混用 Task Stage event 代表 Chat tool call。
+[ ] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
+[ ] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。
+[ ] Chat history、Queue 與等待中的 Ask 有清楚的持久化策略；重啟後不可以讓 UI 顯示假的執行中狀態。
+[ ] 不把完整 system prompt、憑證、API key 或敏感本機環境資訊回傳給 UI。
+[ ] API contract 要有 unit / integration test 與最小可讀文件；UI Mock 與正式 API 共用 schema。
+
+
+13. Agent Adapter
+-----------------
+
+[ ] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
+[ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
+[ ] Agent 原生能力不可用時，回報不支援；不要在 UI 假裝可用或以不同語義硬模擬。
+[ ] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
+[ ] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
+[ ] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
+[ ] Model 列表與預設值由 Adapter 回傳；不要在 production frontend 硬編碼模型名稱。
+[ ] Mode profile 是產品層抽象；Adapter 回報 native mapping、支援狀態與安全描述。
+[ ] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
+[ ] Queue 優先使用 Agent 原生 queued-next-turn；無原生能力時由共用 Chat service 提供 FIFO Queue。
+[ ] Slash skill 只顯示 Agent 實際解析且允許使用的能力；保留原生權限與 user-invocable 限制。
+[ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
+[ ] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
+
+
+14. Runner 必要變更
+-------------------
+
+[ ] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
+[ ] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
+[ ] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
+[ ] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
+[ ] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
+[ ] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
+[ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
+[ ] 建立後只進 New / idle；Run 是另外一個明確動作。
+[ ] 同一路徑只能有一個 Task 同時處於執行中；檢查必須在 Backend / Runner，不可只做 UI disabled。
+[ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
+[ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
+[ ] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
+[ ] Ask Cancel / timeout / client disconnect 要明確終止或取消等待狀態，避免 runner / agent process 永久卡住。
+[ ] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
+[ ] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
+[ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
+[ ] Merge preflight 與 direct merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；衝突時拒絕 direct merge。
+[ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
+[ ] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
+[ ] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。
+[ ] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
+
+
+15. 測試策略與驗收
+-----------------
+
+[ ] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
+[ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
+[ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
+[ ] Browser 測試：Project 點擊進 Chat、Agent/Model/Mode Picker、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+[ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
+[ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
+[ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
+[ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
+[ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
+[ ] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
+[ ] Mock 測試：Ask 隨機觸發、Ask mock 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
+[ ] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
+[ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
+[ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
+[ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
+[ ] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
+[ ] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
+[ ] 只有實際執行 Browser / API / Live 測試並保存結果後，才能將對應項目標記完成。
+[ ] 24H soak 排在單元、整合、Browser、故障恢復測試之後；只有實際跑完才能宣稱 24H 驗證完成。
+
+
+16. 建議實作順序
+-----------------
+
+[ ] 第 1 階段：穩定 Prototype UI，修正 overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
+[ ] 第 2 階段：確立共用 Chat API / schema / streaming events 與 AgentAdapter 介面。
+[ ] 第 3 階段：實作 Qwen Code / OpenCode 的 capability、Model、Mode、Slash、Ask 與 Queue adapter。
+[ ] 第 4 階段：實作固定 Prompt 的 generate-task service、TaskDraft schema、驗證與 idempotent Create。
+[ ] 第 5 階段：把 UI Mock 換成 API projection，但保留 deterministic Mock / fixture。
+[ ] 第 6 階段：完成 Worktree resolver、Workspace Results、Merge preflight、Merge 與 Merge Chat handoff。
+[ ] 第 7 階段：補齊 unit / API / Browser / Agent live regression 與故障恢復測試。
+[ ] 第 8 階段：完成長時間 soak；修復所有發現的 race、orphan process、重複建立與恢復問題。
+[ ] 每階段完成後更新此檔、根目錄 future.txt、必要的 AGENTS / DevFollow / 文件與測試；不以單純打勾取代驗證。
+
+
+17. 完成定義
+------------
+
+每項功能需同時符合以下條件才可標記完成：
+
+[ ] UI 行為符合本檔，且沒有改壞現有風格與相鄰操作。
+[ ] Backend / Runner ownership 正確，沒有第二份狀態機或重複 runtime。
+[ ] Mock 能覆蓋正常路徑與錯誤路徑，必要時可固定 fixture。
+[ ] 自動化測試通過；需要 Browser / Live 的功能不能只做語法檢查。
+[ ] 錯誤、Cancel、Retry、Back、重送與重啟行為明確。
+[ ] 文件、API schema、UI、CLI、YAML、Dry Run 與測試沒有互相矛盾。
+[ ] 沒有留下已被替代的舊 handler、重複 store、死路徑或只靠前端保護的安全假設。
+[ ] 未做過的測試必須明確列為未驗證，不能聲稱 PASS。
+
+
+End of todo.txt
