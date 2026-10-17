@@ -474,11 +474,12 @@ syncChatSessionSelect=function(){
   const sessions=ensureProjectChats(currentProjectKey),select=document.getElementById('chatPreset'),id=projectActiveChat[currentProjectKey];
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
-function chatTaskCreateIntent(text){
-  return /(?:建立|新增|產生|create|generate).{0,10}(?:task|任務)|(?:task|任務).{0,10}(?:建立|新增|產生|create|generate)/i.test(String(text||''));
+function chatTaskCommand(text){
+  const match=String(text||'').match(/^\s*@task(?:\s+([\s\S]*?))?\s*$/i);
+  return match?{matched:true,spec:String(match[1]||'').trim()}:{matched:false,spec:''};
 }
 function mockTaskDraftTitle(text){
-  const cleaned=String(text||'').replace(/^(?:請|麻煩)?\s*(?:幫我)?\s*(?:建立|新增|產生|create|generate)\s*(?:一個|一份)?\s*(?:task\s*list|task|任務清單|任務)?\s*[:：,\-]?\s*/i,'').trim();
+  const cleaned=String(text||'').replace(/^(?:請|麻煩)?\s*(?:幫我)?\s*/i,'').trim();
   return (cleaned.split(/\n/).find(Boolean)||'AI generated Task').slice(0,72);
 }
 function mockTaskDraftWantsList(text){
@@ -490,115 +491,84 @@ function mockTaskDraftItems(text,wantsList){
   if(wantsList&&bullets.length>=2)return bullets.map(x=>({title:x.slice(0,56),prompt:x}));
   if(wantsList)return [
     {title:'實作需求',prompt:source},
-    {title:'測試與驗證',prompt:`針對「${source}」執行 focused tests，確認沒有影響既有行為與相鄰功能。`},
-    {title:'最終 Review',prompt:`Review「${source}」的最終修改、測試結果與可能 regression；若有問題先修正再完成。`}
+    {title:'測試與驗證',prompt:`針對「${source}」執行 focused verification，確認沒有影響既有行為與相鄰功能。`}
   ];
   return [{title:mockTaskDraftTitle(source),prompt:source}];
 }
-function mockBuildChatTaskDraft(text,projectKey=currentProjectKey){
-  const source=String(text||'').trim(),wantsList=mockTaskDraftWantsList(source);
+let chatDraftSequence=0;
+function mockBuildChatTaskDraft(spec,projectKey=currentProjectKey){
+  const source=String(spec||'').trim(),wantsList=mockTaskDraftWantsList(source);
   const workspacePolicy=/worktree/i.test(source)?'worktree':/(?:main workspace|主工作區|直接用 main)/i.test(source)?'main':'auto';
   const workflow=/dynamic\s*handoff/i.test(source)?'dynamic_handoff.yaml':/\bmixed\b/i.test(source)?'mixed.yaml':'ralphy_ai_validate.yaml';
-  return {mock:true,kind:wantsList?'list':'task',title:mockTaskDraftTitle(source),projectKey,workflow,workspacePolicy,items:mockTaskDraftItems(source,wantsList),editing:false,createdTaskId:''};
-}
-function chatDraftWorkflowOptions(selected){
-  const select=document.getElementById('newTaskWorkflow');
-  const values=select?[...select.options].map(o=>o.value):['ralphy_ai_validate.yaml','mixed.yaml','dynamic_handoff.yaml'];
-  return [...new Set(values)].map(x=>`<option value="${escapeAttr(x)}" ${x===selected?'selected':''}>${escapeHtml(x)}</option>`).join('');
-}
-function chatDraftProjectOptions(selected){
-  return Object.keys(projectMeta).map(key=>`<option value="${escapeAttr(key)}" ${key===selected?'selected':''}>${escapeHtml(key)}</option>`).join('');
-}
-function normalizeChatDraftKind(draft,nextKind){
-  if(nextKind===draft.kind)return;
-  draft.kind=nextKind;
-  if(nextKind==='task'){draft.items=[draft.items[0]||{title:draft.title,prompt:draft.title}];return}
-  if(draft.items.length<2){
-    const source=draft.items[0]?.prompt||draft.title;
-    draft.items=mockTaskDraftItems(source,true);
-  }
-}
-function captureChatTaskDraftForm(session){
-  const draft=session?.taskDraft;if(!draft)return;
-  const title=document.querySelector('[data-chat-draft-title]'),kind=document.querySelector('[data-chat-draft-kind]'),project=document.querySelector('[data-chat-draft-project]'),workflow=document.querySelector('[data-chat-draft-workflow]'),workspace=document.querySelector('[data-chat-draft-workspace]');
-  if(title)draft.title=title.value.trim()||draft.title;
-  if(project&&projectMeta[project.value])draft.projectKey=project.value;
-  if(workflow)draft.workflow=workflow.value;
-  if(workspace)draft.workspacePolicy=workspace.value;
-  if(kind)normalizeChatDraftKind(draft,kind.value);
-  document.querySelectorAll('[data-chat-draft-item]').forEach(el=>{
-    const i=+el.dataset.chatDraftItem;if(!draft.items[i])return;
-    const titleInput=el.querySelector('[data-chat-draft-item-title]'),promptInput=el.querySelector('[data-chat-draft-item-prompt]');
-    if(titleInput)draft.items[i].title=titleInput.value.trim()||draft.items[i].title;
-    if(promptInput)draft.items[i].prompt=promptInput.value;
+  const id=`DRAFT-${++chatDraftSequence}`,placeholder={id,project:projectKey},raw=mockTaskDraftItems(source,wantsList);
+  const items=raw.map((x,i)=>{
+    const resolved=resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,workspacePolicy);
+    return planItemDefaults({title:x.title,prompt:x.prompt,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow,validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',workspacePolicy,workspaceKind:resolved.ok?resolved.kind:'main',branch:resolved.ok?resolved.branch:'',executionRoot:resolved.ok?resolved.root:''},placeholder,i);
   });
+  const count=items.length,first=items[0];
+  const model={id,_chatDraft:true,kind:'task_list',status:'new',title:mockTaskDraftTitle(source),runtime:'idle',desc:'Mock AI Task Draft',tags:[`${count} task${count===1?'':'s'}`],workflow:count===1?first.workflow:'Tasks',project:projectKey,projectContext:projectKey,progress:[0,count],elapsed:'—',stage:'Draft',session:'—',goal:count===1?first.prompt:`${count} ordered tasks`,items,listItems:items};
+  if(count===1)Object.assign(model,{promptSource:{goalMode:first.goalMode,prompt:first.prompt,goalFile:first.goalFile,goalAsset:first.goalAsset,validator:first.validator,aiMode:first.aiMode,aiPrompt:first.aiPrompt,aiFile:first.aiFile,aiAsset:first.aiAsset},workspacePolicy:first.workspacePolicy,workspaceKind:first.workspaceKind,branch:first.branch,executionRoot:first.executionRoot});
+  else Object.assign(model,{workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
+  taskMap[id]=model;
+  return {mock:true,originalSpec:source,projectKey,model,createdTaskId:''};
+}
+function discardChatTaskDraft(session,{render=true}={}){
+  const draft=session?.taskDraft,model=draft?.model;
+  if(model?._chatDraft&&taskMap[model.id]===model)delete taskMap[model.id];
+  if(session)session.taskDraft=null;
+  if(render)renderChatSession();
+}
+function openChatTaskDraftEditor(session){
+  const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId)return;
+  taskMap[model.id]=model;
+  showView('tasks');
+  const items=canonicalTaskItems(model);
+  if(items.length===1){loadTaskEditor('edit-item',{ownerId:model.id,index:0,returnTarget:'chat'});return}
+  openPlanDialog(model.id);
 }
 function createTaskFromChatDraft(session){
-  const draft=session?.taskDraft;if(!draft||draft.createdTaskId)return;
-  const projectKey=projectMeta[draft.projectKey]?draft.projectKey:currentProjectKey;
-  const rawItems=(draft.items||[]).filter(x=>String(x.prompt||'').trim());
-  if(!rawItems.length){showToast('Task Draft 至少需要一個 Task Prompt');return}
-  const id='T-'+(++taskSequence),placeholder={id,project:projectKey};
-  const resolved=rawItems.map((x,i)=>resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,draft.workspacePolicy));
-  const failed=resolved.find(x=>!x.ok);if(failed){taskSequence--;showToast(failed.reason);return}
-  const items=rawItems.map((x,i)=>planItemDefaults({
-    title:x.title||`Task ${i+1}`,prompt:x.prompt,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow:draft.workflow,
-    validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',
-    workspacePolicy:draft.workspacePolicy,workspaceKind:resolved[i].kind,branch:resolved[i].branch,executionRoot:resolved[i].root
-  },placeholder,i));
-  const count=items.length,first=items[0],title=String(draft.title||planTitle(first,0)||'New Task').trim().slice(0,72);
-  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:count===1?'1 task':`${count} ordered tasks`,tags:[`${count} task${count===1?'':'s'}`],workflow:count===1?first.workflow:'Tasks',project:projectKey,progress:[0,count],elapsed:'—',stage:'Idle',session:'—',goal:count===1?first.prompt:`${count} ordered tasks`,items,listItems:items};
-  if(count===1){
-    Object.assign(t,{promptSource:{goalMode:first.goalMode,prompt:first.prompt,goalFile:first.goalFile,goalAsset:first.goalAsset,validator:first.validator,aiMode:first.aiMode,aiPrompt:first.aiPrompt,aiFile:first.aiFile,aiAsset:first.aiAsset},workspacePolicy:first.workspacePolicy,workspaceKind:first.workspaceKind,branch:first.branch,executionRoot:first.executionRoot});
-  }else Object.assign(t,{workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
-  taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
-  draft.createdTaskId=id;draft.editing=false;
-  session.messages.push(['assistant',`${id} 已建立在 New；尚未執行。你可以先到 Tasks 檢查或繼續在 Chat 調整下一個需求。`]);
-  renderChatSession();showToast(`Task created · ${id}`);
+  const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId)return;
+  const items=canonicalTaskItems(model);
+  if(!items.length){showToast('Task Draft 至少需要一個 Task');return}
+  if(items.some(x=>x.goalMode==='inline'&&!String(x.prompt||'').trim())){showToast('Task Draft contains an empty Task Prompt');return}
+  const oldId=model.id,id='T-'+(++taskSequence);
+  for(let i=0;i<items.length;i++){
+    const item=items[i],projectKey=projectKeyFromPath(item.project,model.projectContext||currentProjectKey),resolved=resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,item.workspacePolicy||'auto');
+    if(!resolved.ok){taskSequence--;showToast(resolved.reason);return}
+    item.workspaceKind=resolved.kind;item.branch=resolved.branch;item.executionRoot=resolved.root;item.itemId=`${id}-I${i+1}`;
+  }
+  delete taskMap[oldId];model.id=id;delete model._chatDraft;model.status='new';model.runtime='idle';model.stage='Idle';model.progress=[0,items.length];
+  model.tags=[`${items.length} task${items.length===1?'':'s'}`];model.desc=items.length===1?'1 task':`${items.length} ordered tasks`;
+  if(items.length===1){
+    const x=items[0],projectKey=projectKeyFromPath(x.project,model.projectContext||currentProjectKey);
+    Object.assign(model,{project:projectKey,workflow:x.workflow,goal:x.prompt,promptSource:{goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset},workspacePolicy:x.workspacePolicy,workspaceKind:x.workspaceKind,branch:x.branch,executionRoot:x.executionRoot});
+  }else Object.assign(model,{workflow:'Tasks',goal:`${items.length} ordered tasks`,workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
+  taskMap[id]=model;draft.createdTaskId=id;persistCurrentPresetFromTaskMap();renderBoardFromMap();
+  session.messages.push(['assistant',`${id} 已建立在 New；尚未執行。`]);renderChatSession();showToast(`Task created · ${id}`);
 }
 function renderChatTaskDraft(session,box){
-  const draft=session?.taskDraft;if(!draft)return;
+  const draft=session?.taskDraft,model=draft?.model;if(!draft||!model)return;
   const card=document.createElement('section');card.className='chat-task-draft';
+  const items=canonicalTaskItems(model);
   if(draft.createdTaskId){
-    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge chat-task-draft-created">CREATED</span><h3>${escapeHtml(draft.title)}</h3></div><strong>${escapeHtml(draft.createdTaskId)}</strong></div><div class="chat-task-draft-meta"><span>${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span><span>${escapeHtml(draft.projectKey)}</span><span>New · not running</span></div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn primary" type="button" data-chat-draft-open>Open Task</button></div>`;
-  }else if(draft.editing){
-    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>Edit before creating</h3></div></div>
-      <div class="chat-task-draft-form">
-        <label class="wide">Title<input data-chat-draft-title value="${escapeAttr(draft.title)}"></label>
-        <label>Type<select data-chat-draft-kind><option value="task" ${draft.kind==='task'?'selected':''}>Task</option><option value="list" ${draft.kind==='list'?'selected':''}>Task List</option></select></label>
-        <label>Project<select data-chat-draft-project>${chatDraftProjectOptions(draft.projectKey)}</select></label>
-        <label>Workflow<select data-chat-draft-workflow>${chatDraftWorkflowOptions(draft.workflow)}</select></label>
-        <label>Workspace<select data-chat-draft-workspace><option value="auto" ${draft.workspacePolicy==='auto'?'selected':''}>Auto</option><option value="main" ${draft.workspacePolicy==='main'?'selected':''}>Main</option><option value="worktree" ${draft.workspacePolicy==='worktree'?'selected':''}>Worktree</option></select></label>
-        ${draft.items.map((x,i)=>`<label class="wide" data-chat-draft-item="${i}">Task ${i+1}<input data-chat-draft-item-title value="${escapeAttr(x.title||'')}"><textarea data-chat-draft-item-prompt>${escapeHtml(x.prompt||'')}</textarea></label>`).join('')}
-      </div>
-      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-cancel>Cancel</button><button class="btn primary" type="button" data-chat-draft-save>Save Draft</button></div>`;
+    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge chat-task-draft-created">CREATED</span><h3>${escapeHtml(model.title)}</h3></div><strong>${escapeHtml(draft.createdTaskId)}</strong></div><div class="chat-task-draft-meta"><span>${items.length>1?'Task List':'Task'}</span><span>${escapeHtml(model.projectContext||model.project)}</span><span>New · not running</span></div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn primary" type="button" data-chat-draft-open>Open Task</button></div>`;
   }else{
-    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>${escapeHtml(draft.title)}</h3></div><span class="pill">${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span></div>
-      <div class="chat-task-draft-meta"><span>${escapeHtml(draft.projectKey)}</span><span>${escapeHtml(draft.workflow)}</span><span>${escapeHtml(draft.workspacePolicy)}</span><span>${draft.items.length} task${draft.items.length===1?'':'s'}</span></div>
-      <div class="chat-task-draft-items">${draft.items.map((x,i)=>`<div class="chat-task-draft-item"><strong>${i+1}. ${escapeHtml(x.title||`Task ${i+1}`)}</strong><p>${escapeHtml(x.prompt||'')}</p></div>`).join('')}</div>
-      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn" type="button" data-chat-draft-edit>Edit</button><button class="btn primary" type="button" data-chat-draft-create>Create Task</button></div>`;
+    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>${escapeHtml(model.title)}</h3></div><span class="pill">${items.length>1?'Task List':'Task'}</span></div><div class="chat-task-draft-meta"><span>${escapeHtml(model.projectContext||model.project)}</span><span>${items.length} task${items.length===1?'':'s'}</span><span>Review before Create</span></div><div class="chat-task-draft-items">${items.map((x,i)=>`<div class="chat-task-draft-item"><strong>${i+1}. ${escapeHtml(planTitle(x,i))}</strong><p>${escapeHtml(x.prompt||'')}</p><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)} · ${escapeHtml(x.workspacePolicy||'auto')}</small></div>`).join('')}</div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn" type="button" data-chat-draft-edit>Edit</button><button class="btn primary" type="button" data-chat-draft-create>Create Task</button></div>`;
   }
   box.appendChild(card);
-  card.querySelector('[data-chat-draft-edit]')?.addEventListener('click',()=>{draft.editing=true;renderChatSession()});
-  card.querySelector('[data-chat-draft-cancel]')?.addEventListener('click',()=>{draft.editing=false;renderChatSession()});
-  card.querySelector('[data-chat-draft-save]')?.addEventListener('click',()=>{captureChatTaskDraftForm(session);draft.editing=false;renderChatSession();showToast('Task Draft updated')});
-  card.querySelector('[data-chat-draft-kind]')?.addEventListener('change',e=>{captureChatTaskDraftForm(session);normalizeChatDraftKind(draft,e.target.value);renderChatSession()});
+  card.querySelector('[data-chat-draft-edit]')?.addEventListener('click',()=>openChatTaskDraftEditor(session));
   card.querySelector('[data-chat-draft-create]')?.addEventListener('click',()=>createTaskFromChatDraft(session));
-  card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>{session.taskDraft=null;renderChatSession()});
+  card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
 }
-function generateChatTaskDraft(text,{recordMessage=true}={}){
+function generateChatTaskDraft(spec){
   const session=activeChat();if(!session)return;
-  let source=String(text||'').trim();
-  if(!source){
-    const last=[...(session.messages||[])].reverse().find(x=>x[0]==='user');source=last?.[1]||'';
-  }
-  if(!source){showToast('先在 Chat 輸入你希望 AI 建立的 Task');return}
-  if(recordMessage)session.messages.push(['user',source]);
-  session.messages.push(['assistant','我先產生一份 Task Draft。這是 Mock AI 規劃結果；確認或編輯後才會建立，而且不會自動執行。']);
-  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey);
-  const input=document.getElementById('chatInput');if(input&&input.value.trim()===source){input.value='';resizeChatComposer()}
-  renderChatSession();
+  const source=String(spec||'').trim();if(!source){session.messages.push(['assistant','Usage: @task <spec>']);showToast('Usage: @task <spec>');renderChatSession();return}
+  if(/^mock:error\b/i.test(source)){session.messages.push(['assistant','Mock generate-task backend error · Task Draft was not created.']);showToast('Mock backend error');renderChatSession();return}
+  if(/^mock:invalid\b/i.test(source)){session.messages.push(['assistant','Mock AI returned an invalid TaskDraft · validation failed closed.']);showToast('Invalid TaskDraft');renderChatSession();return}
+  if(session.taskDraft&&!session.taskDraft.createdTaskId)discardChatTaskDraft(session,{render:false});
+  session.messages.push(['assistant','Mock generate-task completed. Review the Task Draft before creating it.']);
+  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey);renderChatSession();
 }
 
 renderChatSession=function(){
