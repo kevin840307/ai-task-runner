@@ -53,10 +53,18 @@
       <div class="chatbody">
         <div class="messages" id="chatMessages"></div>
         <div class="composerwrap">
+          <div class="composer-suggest" id="composerSuggest" hidden>
+            <div class="composer-suggest-head"><strong id="composerSuggestTitle">Commands</strong><span id="composerSuggestHint">Type to filter</span></div>
+            <div class="composer-suggest-list" id="composerSuggestList"></div>
+          </div>
           <div class="composer">
-            <textarea id="chatInput" placeholder="傳訊息給 AI…  使用 @task <spec> 建立 Task Draft"></textarea>
+            <textarea id="chatInput" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
             <div class="composerfoot">
-              <div class="chips"><span class="chip">Project context</span><span class="chip">Default backend</span><button class="btn ghost" id="chatToTask" type="button" title="Insert @task command">@task</button></div>
+              <div class="chips">
+                <span class="chip">Project context</span>
+                <label class="composer-agent-chip" title="Mock: / suggestions change with the selected Agent"><span>Agent</span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
+                <button class="btn ghost" id="chatToTask" type="button" title="Insert @task command">@task</button>
+              </div>
               <button class="btn primary" id="chatSend">傳送</button>
             </div>
           </div>
