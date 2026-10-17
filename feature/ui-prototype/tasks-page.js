@@ -201,6 +201,13 @@ newDropzone.addEventListener('drop',e=>{
   requestTaskResetToNew(t);
 },true);
 
+const taskRerunBeforeResetPolicy=document.getElementById('taskSecondaryDemo').onclick;
+document.getElementById('taskSecondaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];
+  if(t?.status==='closed'){requestTaskResetToNew(t);return}
+  taskRerunBeforeResetPolicy();
+};
+
 function openTaskFromBoard(t){
   if(!t)return;
   if(t.status==='new'){openPlanDialog(t.id);return}
@@ -224,10 +231,9 @@ renderTaskList=function(){
     row.onclick=()=>openTaskFromBoard(taskMap[row.dataset.taskrow]);
   });
 };
-renderTasksProjectFilter();
-
 renderTaskKindUi=function(){};
 renderNewTaskSources();
 renderChatSession();
 renderBoard('today');
+renderTasksProjectFilter();
 renderTaskKindUi();
