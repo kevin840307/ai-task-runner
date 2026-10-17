@@ -16,6 +16,22 @@ from ..workspace import ensure_instruction_file, update_goal_reference
 from .backend import BackendError, BackendMode, BackendResult, BaseBackend
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
+_QWEN_AUTH_TYPES = {
+    "openai",
+    "openai-responses",
+    "qwen-oauth",
+    "gemini",
+    "vertex-ai",
+    "anthropic",
+}
+_QWEN_AUTH_MODEL_ENV_VARS = {
+    "openai": ("OPENAI_MODEL", "QWEN_MODEL"),
+    "openai-responses": ("OPENAI_MODEL",),
+    "qwen-oauth": (),
+    "gemini": ("GEMINI_MODEL",),
+    "vertex-ai": ("GOOGLE_MODEL",),
+    "anthropic": ("ANTHROPIC_MODEL",),
+}
 QWEN_COMPUTER_USE_TOOLS = (
     "computer_use__bring_to_front",
     "computer_use__check_for_update",
@@ -201,6 +217,80 @@ def _read_qwen_settings(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _qwen_replace_setting(
+    layers: Sequence[dict[str, Any]],
+    key: str,
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for settings in layers:
+        candidate = settings.get(key)
+        if isinstance(candidate, dict):
+            value = candidate
+    return value
+
+
+def _qwen_selected_model(layers: Sequence[dict[str, Any]]) -> str:
+    value = ""
+    for settings in layers:
+        model = settings.get("model")
+        if isinstance(model, dict) and isinstance(model.get("name"), str):
+            value = model["name"].strip()
+    return value
+
+
+def _qwen_selected_auth_type(layers: Sequence[dict[str, Any]]) -> str:
+    value = ""
+    for settings in layers:
+        security = settings.get("security")
+        auth = security.get("auth") if isinstance(security, dict) else None
+        selected = auth.get("selectedType") if isinstance(auth, dict) else None
+        if isinstance(selected, str) and selected.strip():
+            value = selected.strip()
+    if value in _QWEN_AUTH_TYPES:
+        return value
+
+    if os.environ.get("QWEN_OAUTH"):
+        return "qwen-oauth"
+    if (
+        os.environ.get("OPENAI_API_KEY")
+        and (os.environ.get("OPENAI_MODEL") or os.environ.get("QWEN_MODEL"))
+        and os.environ.get("OPENAI_BASE_URL")
+    ):
+        return "openai"
+    if os.environ.get("GEMINI_API_KEY") and os.environ.get("GEMINI_MODEL"):
+        return "gemini"
+    if os.environ.get("GOOGLE_API_KEY") and os.environ.get("GOOGLE_MODEL"):
+        return "vertex-ai"
+    if os.environ.get("GOOGLE_CLOUD_PROJECT") and os.environ.get("GOOGLE_MODEL"):
+        return "vertex-ai"
+    if (
+        os.environ.get("ANTHROPIC_API_KEY")
+        and os.environ.get("ANTHROPIC_MODEL")
+        and os.environ.get("ANTHROPIC_BASE_URL")
+    ):
+        return "anthropic"
+    return ""
+
+
+def _qwen_model_protocol(
+    provider_id: str,
+    model: dict[str, Any],
+    provider_protocol: dict[str, Any],
+) -> str:
+    protocol = provider_protocol.get(provider_id, provider_id)
+    if protocol not in _QWEN_AUTH_TYPES:
+        return ""
+    wire_api = model.get("wireApi")
+    if wire_api is None:
+        return str(protocol)
+    if (
+        wire_api not in ("chat-completions", "responses")
+        or protocol not in ("openai", "openai-responses")
+    ):
+        return ""
+    return "openai-responses" if wire_api == "responses" else "openai"
+
+
 QWEN_RUNTIME_EXCLUDED_TOOLS = (
     "todo_write",
     "skill",
@@ -316,38 +406,58 @@ class QwenBackend(BaseBackend):
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
-        values: set[str] = set()
         layers = [_read_qwen_settings(path) for path in _qwen_settings_paths(root)]
+        providers = _qwen_replace_setting(layers, "modelProviders")
+        provider_protocol = _qwen_replace_setting(layers, "providerProtocol")
+        auth_type = _qwen_selected_auth_type(layers)
+        values: set[str] = set()
 
-        # Qwen applies settings by precedence. modelProviders is a replace-style
-        # catalog, so only the highest-precedence layer that defines it is effective.
-        effective_providers: dict[str, Any] = {}
-        for settings in layers:
-            providers = settings.get("modelProviders")
-            if isinstance(providers, dict):
-                effective_providers = providers
-        for items in effective_providers.values():
+        for provider_id, items in providers.items():
             if not isinstance(items, list):
                 continue
             for item in items:
-                if isinstance(item, dict) and isinstance(item.get("id"), str):
-                    values.add(item["id"].strip())
+                if not isinstance(item, dict):
+                    continue
+                model_id = item.get("id")
+                if not isinstance(model_id, str) or not model_id.strip():
+                    continue
+                # Match Qwen's normal Model dialog: auxiliary-only models do not
+                # belong in the main model selector.
+                if any(
+                    item.get(flag) is True
+                    for flag in (
+                        "fastOnly",
+                        "voiceOnly",
+                        "imageOnly",
+                        "visionOnly",
+                    )
+                ):
+                    continue
+                protocol = _qwen_model_protocol(
+                    str(provider_id),
+                    item,
+                    provider_protocol,
+                )
+                if (
+                    not protocol
+                    or (protocol == "qwen-oauth" and auth_type != "qwen-oauth")
+                    or (auth_type and protocol != auth_type)
+                ):
+                    continue
+                values.add(model_id.strip())
 
-        # model.name follows normal settings precedence; environment model ids
-        # override settings at runtime and remain valid raw --model selections.
-        selected_model = ""
-        for settings in layers:
-            model = settings.get("model")
-            if isinstance(model, dict) and isinstance(model.get("name"), str):
-                selected_model = model["name"].strip()
+        selected_model = _qwen_selected_model(layers)
         if selected_model:
+            # Preserve the effective current/runtime model even if it is not in
+            # modelProviders, matching Qwen's runtime-model behavior.
             values.add(selected_model)
-
-        for key in ("QWEN_MODEL", "OPENAI_MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL", "GOOGLE_MODEL"):
-            value = str(os.environ.get(key) or "").strip()
-            if value:
-                values.add(value)
-        return sorted(value for value in values if value)
+        elif auth_type:
+            for key in _QWEN_AUTH_MODEL_ENV_VARS[auth_type]:
+                value = str(os.environ.get(key) or "").strip()
+                if value:
+                    values.add(value)
+                    break
+        return sorted(values)
 
     @classmethod
     def configure_args(
