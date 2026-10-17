@@ -631,7 +631,7 @@ function renderChatQueue(session=activeChat()){
     :`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><span class="composer-queue-copy" title="${escapeAttr(item.text)}">${escapeHtml(item.text)}</span><span class="composer-queue-actions"><button type="button" data-queue-edit>Edit</button><button class="danger" type="button" data-queue-delete>Delete</button></span></div>`).join('');
   host.querySelectorAll('[data-queue-id]').forEach(row=>{
     const item=queue.find(x=>String(x.id)===row.dataset.queueId);if(!item)return;
-    row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>x.editing=false);item.editing=true;renderChatQueue(session);setTimeout(()=>row.querySelector('[data-queue-edit-input]')?.focus(),0)});
+    row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>x.editing=false);item.editing=true;renderChatQueue(session);setTimeout(()=>document.querySelector(`#composerQueueList [data-queue-id="${item.id}"] [data-queue-edit-input]`)?.focus(),0)});
     row.querySelector('[data-queue-delete]')?.addEventListener('click',()=>{const i=queue.indexOf(item);if(i>=0)queue.splice(i,1);renderChatQueue(session);resizeChatComposer()});
     row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;renderChatQueue(session)});
     row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=row.querySelector('[data-queue-edit-input]')?.value.trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;renderChatQueue(session);showToast('Queue updated')});
