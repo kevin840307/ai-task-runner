@@ -104,6 +104,11 @@ class StaticContractTests(unittest.TestCase):
         ):
             self.assertIn(token, self.html)
         self.assertIn("/api/environment/check", self.js)
+        self.assertIn('class="backend-picker-chevron" aria-hidden="true"></span>', self.html)
+        self.assertNotIn('backend-picker-chevron" aria-hidden="true">⌄</span>', self.html)
+        self.assertIn("environment-check-toggle", self.app_js)
+        self.assertIn("environment-check-details", self.app_js)
+        self.assertIn(".backend-picker-chevron::before", self.runner_css)
 
     def test_clear_history_is_disabled_while_selected_project_runs(self):
         self.assertIn('$("clearHistoryButton").disabled = isRunning', self.js)
