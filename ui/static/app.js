@@ -1963,8 +1963,13 @@ $("workflowDropdownButton").onclick = (event) => { event.stopPropagation(); if (
 $("backendDropdownButton").onclick = (event) => { event.stopPropagation(); if (runConfigurationLocked()) return; const menu = $("backendDropdownMenu"); menu.hidden ? openBackendDropdown() : closeBackendDropdown(); };
 function renderEnvironmentCheck(data) {
   const root = $("environmentCheckResult"); if (!root) return; root.hidden = false; root.innerHTML = "";
-  const head = document.createElement("div"); head.className = `environment-check-summary ${data.status || ""}`; head.textContent = data.status === "pass" ? "Environment ready" : data.status === "warn" ? "Environment ready with warnings" : "Environment check failed"; root.appendChild(head);
-  for (const item of data.checks || []) { const row = document.createElement("div"); row.className = `environment-check-row ${item.status || ""}`; const mark = document.createElement("strong"); mark.textContent = String(item.status || "").toUpperCase(); const copy = document.createElement("span"); copy.textContent = `${item.name}: ${item.detail}`; row.append(mark, copy); root.appendChild(row); }
+  const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "environment-check-toggle"; toggle.setAttribute("aria-expanded", "true"); toggle.setAttribute("aria-controls", "environmentCheckDetails");
+  const head = document.createElement("span"); head.className = `environment-check-summary ${data.status || ""}`; head.textContent = data.status === "pass" ? "Environment ready" : data.status === "warn" ? "Environment ready with warnings" : "Environment check failed";
+  const caret = document.createElement("span"); caret.className = "environment-check-caret"; caret.setAttribute("aria-hidden", "true"); toggle.append(head, caret);
+  const details = document.createElement("div"); details.id = "environmentCheckDetails"; details.className = "environment-check-details";
+  for (const item of data.checks || []) { const row = document.createElement("div"); row.className = `environment-check-row ${item.status || ""}`; const mark = document.createElement("strong"); mark.textContent = String(item.status || "").toUpperCase(); const copy = document.createElement("span"); copy.textContent = `${item.name}: ${item.detail}`; row.append(mark, copy); details.appendChild(row); }
+  toggle.onclick = () => { const expanded = toggle.getAttribute("aria-expanded") === "true"; toggle.setAttribute("aria-expanded", String(!expanded)); details.hidden = expanded; };
+  root.append(toggle, details);
 }
 async function checkEnvironment() {
   const button = $("environmentCheckButton"), result = $("environmentCheckResult"); if (!button) return; button.disabled = true; button.textContent = t("env.checking", "Checking…"); if (result) { result.hidden = false; result.textContent = t("env.checking_detail", "Checking local environment…"); }
