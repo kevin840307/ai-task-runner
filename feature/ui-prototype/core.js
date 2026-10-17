@@ -68,6 +68,15 @@ document.getElementById('chatSend').onclick=()=>{
   input.value='';box.scrollTop=box.scrollHeight;
 };
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
+function resizeChatComposer(){
+  const input=document.getElementById('chatInput'),wrap=input?.closest('.composerwrap'),messages=document.getElementById('chatMessages');if(!input)return;
+  const min=44,max=180;input.style.height='auto';
+  const next=Math.min(max,Math.max(min,input.scrollHeight));input.style.height=`${next}px`;input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
+  if(wrap&&messages)requestAnimationFrame(()=>messages.style.setProperty('--composer-space',`${wrap.offsetHeight+16}px`));
+}
+document.getElementById('chatInput').addEventListener('input',resizeChatComposer);
+window.addEventListener('resize',resizeChatComposer);
+resizeChatComposer();
 document.getElementById('chatToTask').onclick=()=>{
   const input=document.getElementById('chatInput').value.trim();
   document.getElementById('newTaskGoal').value=input||'Convert the current Chat discussion into a tracked Runner Task.';
@@ -1130,7 +1139,7 @@ document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),text=input.value.trim();if(!text)return;
   const session=activeChat();session.messages.push(['user',text]);
   const reply=/task|執行|run/i.test(text)?'這是一般 Chat。若要長時間執行，可用「建立 Task」帶到 Task 表單。':'收到。這則回覆只屬於目前 Chat session；切換其他 Chat 後會保留各自歷史。';
-  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+  session.messages.push(['assistant',reply]);input.value='';resizeChatComposer();renderChatSession();
 };
 
 // Task List is the only batch-facing UI concept; YAML is an editor mode only.
