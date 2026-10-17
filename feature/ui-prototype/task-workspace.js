@@ -392,13 +392,13 @@ function showWorkspaceItemInfo(owner,index){
 }
 
 // Primary Add task goes straight to the same embedded Task Editor.
-function createTaskDirectlyInWorkspace(ownerId=currentTaskId){
+function createTaskDirectlyInWorkspace(ownerId=currentTaskId,returnTarget=detectTaskEditorReturnTarget()){
   const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
-  loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length});
+  loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length,returnTarget});
 }
-document.getElementById('planAddTask').onclick=()=>createTaskDirectlyInWorkspace(currentTaskId);
-document.getElementById('drawerAddStep').onclick=()=>{const t=taskMap[currentTaskId];if(!t)return;openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
+document.getElementById('planAddTask').onclick=()=>createTaskDirectlyInWorkspace(currentTaskId,'list');
+document.getElementById('drawerAddStep').onclick=()=>createTaskDirectlyInWorkspace(currentTaskId,'info');
 
 // Move existing remains a secondary operation; only it uses the small chooser.
 document.getElementById('planAddExisting').onclick=()=>{
@@ -452,12 +452,12 @@ document.getElementById('planBackToTask').onclick=()=>{workspaceInfoRef=null;wor
 const directEmptyRenderFull=renderFullPlan;
 renderFullPlan=function(t){
   directEmptyRenderFull(t);
-  const first=document.getElementById('planEmptyAddTask');if(first)first.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+  const first=document.getElementById('planEmptyAddTask');if(first)first.onclick=()=>createTaskDirectlyInWorkspace(t.id,'list');
 };
 const directEmptyRenderDrawer=renderDrawerPlan;
 renderDrawerPlan=function(t){
   directEmptyRenderDrawer(t);
-  const first=document.getElementById('emptyPlanAddTask');if(first)first.onclick=()=>{openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
+  const first=document.getElementById('emptyPlanAddTask');if(first)first.onclick=()=>{openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id,'list')};
 };
 
 
@@ -530,7 +530,7 @@ renderFullPlan=function(t){
   add.innerHTML='<span class="plan-add-task-plus">＋</span><strong>Add task</strong>';
   add.disabled=!taskEditable(t);
   add.title=add.disabled?(t.status==='ongoing'?'Pause before adding tasks':'Task List is read-only'):'Add task';
-  add.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+  add.onclick=()=>createTaskDirectlyInWorkspace(t.id,'list');
   host.appendChild(add);
 };
 
