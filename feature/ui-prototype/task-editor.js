@@ -472,6 +472,82 @@ syncChatSessionSelect=function(){
   const sessions=ensureProjectChats(currentProjectKey),select=document.getElementById('chatPreset'),id=projectActiveChat[currentProjectKey];
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
+const mockSystemPrompts=[
+  {token:'@task',title:'Create Task Draft',description:'Use the Runner generate-task prompt for this spec.',source:'Runner'},
+  {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
+  {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'}
+];
+const mockAgentCapabilities={
+  qwen:[
+    {token:'/skills',title:'Browse Skills',description:'Qwen Code skill registry / panel entry.',source:'Built-in'},
+    {token:'/review',title:'Code review',description:'Mock project skill discovered by Qwen SkillManager.',source:'Mock skill'},
+    {token:'/frontend-design',title:'Frontend design',description:'Mock project skill for UI/UX implementation.',source:'Mock skill'},
+    {token:'/test',title:'Focused tests',description:'Mock project skill for focused verification.',source:'Mock skill'}
+  ],
+  opencode:[
+    {token:'/git-release',title:'Git release',description:'Mock slash-enabled OpenCode SKILL.md capability.',source:'Mock skill'},
+    {token:'/code-review',title:'Code review',description:'Mock OpenCode skill resolved for this agent.',source:'Mock skill'},
+    {token:'/plan',title:'Plan',description:'Mock OpenCode custom/built-in command.',source:'Command'},
+    {token:'/test',title:'Focused tests',description:'Mock OpenCode project command.',source:'Command'}
+  ]
+};
+function chatAgentKey(session=activeChat()){return session?.agent||'qwen'}
+function chatAgentLabel(key){return key==='opencode'?'OpenCode':'Qwen Code'}
+function syncChatAgentControl(){
+  const select=document.getElementById('chatAgent'),session=activeChat();if(!select||!session)return;
+  select.value=chatAgentKey(session);
+}
+function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
+function chatAgentCommand(text){
+  const match=String(text||'').match(/^\s*\/([^\s]+)(?:\s+([\s\S]*))?\s*$/);
+  return match?{matched:true,token:'/'+match[1],args:String(match[2]||'').trim()}:{matched:false,token:'',args:''};
+}
+function chatSystemCommand(text){
+  const match=String(text||'').match(/^\s*@([^\s]+)(?:\s+([\s\S]*))?\s*$/);
+  return match?{matched:true,token:'@'+match[1].toLowerCase(),args:String(match[2]||'').trim()}:{matched:false,token:'',args:''};
+}
+function mockInvokeAgentCommand(session,command){
+  const item=agentCapabilityItems().find(x=>x.token.toLowerCase()===command.token.toLowerCase());
+  if(!item){session.messages.push(['assistant',`Mock ${chatAgentLabel(chatAgentKey())}: unknown Agent command ${command.token}.`]);return}
+  session.messages.push(['assistant',`MOCK ${chatAgentLabel(chatAgentKey())} · ${item.token} selected${command.args?` · args: ${command.args}`:''}. Formal implementation will invoke the selected Agent's resolved command/skill capability, not a frontend copy of SKILL.md.`]);
+}
+function mockInvokeSystemPrompt(session,command){
+  if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
+  if(command.token==='@project'){const meta=projectMeta[currentProjectKey]||{};session.messages.push(['assistant',`Project · ${currentProjectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
+  session.messages.push(['assistant',`Unknown Runner command ${command.token}. Type @ to see available system prompts.`]);
+}
+let composerSuggestionItems=[],composerSuggestionIndex=0;
+function composerTrigger(){
+  const input=document.getElementById('chatInput');if(!input)return null;
+  const before=input.value.slice(0,input.selectionStart);
+  const match=before.match(/^\s*([@\/])([a-zA-Z0-9:_-]*)$/);if(!match)return null;
+  return {prefix:match[1],query:match[2].toLowerCase()};
+}
+function hideComposerSuggestions(){
+  const pop=document.getElementById('composerSuggest');if(pop)pop.hidden=true;
+  composerSuggestionItems=[];composerSuggestionIndex=0;resizeChatComposer();
+}
+function acceptComposerSuggestion(index=composerSuggestionIndex){
+  const item=composerSuggestionItems[index],input=document.getElementById('chatInput');if(!item||!input)return;
+  const suffix=input.value.slice(input.selectionStart).replace(/^\s+/,'');
+  input.value=item.token+' '+suffix;input.focus();input.setSelectionRange(item.token.length+1,item.token.length+1);
+  hideComposerSuggestions();resizeChatComposer();
+}
+function renderComposerSuggestions(){
+  const pop=document.getElementById('composerSuggest'),list=document.getElementById('composerSuggestList'),title=document.getElementById('composerSuggestTitle'),hint=document.getElementById('composerSuggestHint');
+  if(!pop||!list)return;
+  const trigger=composerTrigger();if(!trigger){hideComposerSuggestions();return}
+  const source=trigger.prefix==='@'?mockSystemPrompts:agentCapabilityItems(),q=trigger.query;
+  composerSuggestionItems=source.filter(x=>!q||x.token.slice(1).toLowerCase().includes(q)||x.title.toLowerCase().includes(q));
+  if(!composerSuggestionItems.length){hideComposerSuggestions();return}
+  composerSuggestionIndex=Math.min(composerSuggestionIndex,composerSuggestionItems.length-1);
+  title.textContent=trigger.prefix==='@'?'Runner prompts':`${chatAgentLabel(chatAgentKey())} · Skills / Commands`;
+  hint.textContent=trigger.prefix==='@'?'@ = AI Task Runner':`/ = selected Agent · MOCK ${chatAgentLabel(chatAgentKey())}`;
+  list.innerHTML=composerSuggestionItems.map((x,i)=>`<button class="composer-suggest-item ${i===composerSuggestionIndex?'active':''}" type="button" data-composer-suggest="${i}"><span class="composer-suggest-token">${escapeHtml(x.token)}</span><span class="composer-suggest-copy"><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.description)}</small></span><span class="composer-suggest-source">${escapeHtml(x.source)}</span></button>`).join('');
+  list.querySelectorAll('[data-composer-suggest]').forEach(b=>b.onclick=()=>acceptComposerSuggestion(+b.dataset.composerSuggest));
+  pop.hidden=false;resizeChatComposer();
+}
+
 function chatTaskCommand(text){
   const match=String(text||'').match(/^\s*@task(?:\s+([\s\S]*?))?\s*$/i);
   return match?{matched:true,spec:String(match[1]||'').trim()}:{matched:false,spec:''};
@@ -570,7 +646,7 @@ function generateChatTaskDraft(spec){
 }
 
 renderChatSession=function(){
-  syncChatSessionSelect();
+  syncChatSessionSelect();syncChatAgentControl();
   const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
   (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
   renderChatTaskDraft(session,box);
@@ -588,9 +664,12 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 };
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
-  const session=activeChat(),command=chatTaskCommand(textValue);session.messages.push(['user',textValue]);
-  if(command.matched)generateChatTaskDraft(command.spec);
-  else{session.messages.push(['assistant','收到。這則訊息只保存在目前 Project 的 Chat session。使用 @task <spec> 才會建立 Task Draft。']);renderChatSession()}
+  const session=activeChat(),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
+  session.messages.push(['user',textValue]);hideComposerSuggestions();
+  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec);
+  else if(agentCommand.matched){mockInvokeAgentCommand(session,agentCommand);renderChatSession()}
+  else if(systemCommand.matched){mockInvokeSystemPrompt(session,systemCommand);renderChatSession()}
+  else{session.messages.push(['assistant','收到。一般 Chat 不會建立 Task。使用 @ 查看 Runner prompts；使用 / 查看目前 Agent 的 Skills / Commands。']);renderChatSession()}
   input.value='';resizeChatComposer();
 };
 
