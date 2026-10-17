@@ -674,7 +674,7 @@ function startMockChatTurn(session,text,{fromQueue=false}={}){
   const projectKey=session.projectKey||currentProjectKey;session.projectKey=projectKey;
   session.turnState='running';session.pendingTurnText=value;session.messages.push(['user',value]);
   if(activeChat()===session)renderChatSession();
-  const delay=1350+Math.floor(Math.random()*850);
+  const delay=2200+Math.floor(Math.random()*800);
   session._mockTurnTimer=setTimeout(()=>{
     session._mockTurnTimer=null;session.pendingTurnText='';
     try{processMockChatPrompt(session,value,projectKey)}catch(error){session.messages.push(['assistant',`Mock Agent error: ${String(error?.message||error)}`])}
