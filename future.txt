@@ -172,7 +172,7 @@ Product-level Mode UI:
 - An option question always exposes a final `Other / custom answer` choice with text input.
 - User answers the current question, presses Next, and presses Submit on the final question.
 - Submit returns ONE structured answers object to the suspended Agent/tool call; the original Agent turn then resumes.
-- Ask UI appears above the Composer and must be visually distinct from normal Chat messages and Queue.
+- Ask appears as an interactive card inside the Chat message stream, visually distinct from ordinary messages and Queue; never use a floating panel that hides the conversation or Composer.
 - Ask capability is Agent-specific. Disable/hide the Ask trigger if the selected Agent cannot surface interactive questions.
 - Qwen adapter should map its `ask_user_question` tool contract (questions[] -> answers keyed by index).
 - OpenCode adapter should map its `question` tool contract (header/question/options/custom answer).
