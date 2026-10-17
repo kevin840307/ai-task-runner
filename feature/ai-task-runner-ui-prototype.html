@@ -247,7 +247,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 .workspace-result-section{margin-top:2px}.workspace-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.workspace-result-head h3{margin:0!important}.workspace-result-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.workspace-result-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:6px 9px;margin-top:9px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#fbfcfd;font-size:8px}.workspace-result-grid span{color:var(--muted)}.workspace-result-grid strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-result-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.workspace-result-actions .btn:disabled{opacity:.45;cursor:not-allowed}
 
-#planModal{z-index:80}#addPlanTaskModal,#yamlPlanModal,#pathPickerModal{z-index:100}
+#planModal{z-index:180}#addPlanTaskModal,#yamlPlanModal,#pathPickerModal{z-index:190}
 </style>
 </head>
 <body>
@@ -476,7 +476,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   </div>
 </div>
 
-<div id="existingTaskModal" hidden></div>
+<div id="existingTaskModal" hidden><div id="existingTaskPicker"></div></div>
 
 <div class="modal-overlay" id="addPlanTaskModal">
   <div class="modal-card add-plan-task-modal">
@@ -2368,7 +2368,7 @@ function renderDrawerPlan(t){
     const x=items[0],s=planStateFor(t,0,1);
     host.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${s.cls}">${escapeHtml(s.label)}</span></div>`;
   }else{
-    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open full plan to edit</div>`:'');
+    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open plan to edit</div>`:'');
   }
   ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
 }
@@ -2412,7 +2412,7 @@ function renderExecutionPlan(t){
     const s=planStateFor(t,i,items.length);
     return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`;
   }).join('');
-  if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(t);
+  if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(t);
 }
 
 // Final renderer replaces all previous batch/sequence visual wrappers.
@@ -2447,7 +2447,7 @@ openExistingTaskPicker=function(context){
   host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
     const owner=taskMap[currentTaskId],source=taskMap[b.dataset.existingId];if(!owner||!source||!taskEditable(owner))return;
     if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);batchDraft.push(planItemDefaults(taskToListItem(source),owner,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});closeModal('existingTaskModal');renderBoardFromMap();renderExecutionPlan(owner);
-    if(context==='drawer')openFullPlanPage(owner.id);else if(document.getElementById('view-plan').classList.contains('active'))renderFullPlan(owner);showToast('Existing Task copied into execution plan');
+    if(context==='drawer')openFullPlanPage(owner.id);else if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(owner);showToast('Existing Task copied into execution plan');
   });openModal('existingTaskModal');
 };
 document.getElementById('drawerAddExisting').onclick=()=>{const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;openExistingTaskPicker('drawer')};
@@ -2469,6 +2469,10 @@ document.getElementById('applyYamlPlan').onclick=()=>{
 const canonicalPlanOpenTask=openTaskById;
 openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t);document.getElementById('drawerItemsTab').hidden=true}};
 
+function persistCurrentPresetFromTaskMap(){
+  if(!taskPresets[currentPreset])return;
+  taskPresets[currentPreset]=Object.values(taskMap).map(t=>cloneBatch([t])[0]);
+}
 // --- Dialog-first Plan UX + move-only New Task composition ---
 let addPlanOwnerId=null;
 let addTaskMode='create';
@@ -2519,7 +2523,7 @@ document.getElementById('confirmAddPlanTask').onclick=()=>{
     delete taskMap[source.id];
     pushTaskHistory(owner,`Moved ${source.id} into execution plan · original Board Task retired`);
   }
-  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
+  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
   showToast(addTaskMode==='create'?'Task added':'New Task moved into plan');
 };
 
