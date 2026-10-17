@@ -10,7 +10,7 @@ let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planRetur
 
 function setSurfaceBackBehavior(surface,type,returnTarget='list'){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
-  const label=returnTarget==='info'?'Back to Info':'Back to Task List';
+  const label=returnTarget==='info'?'Back to Info':returnTarget==='chat'?'Back to Chat Draft':'Back to Task List';
   if(close){close.textContent='←';close.title=label;close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
   if(cancel){cancel.textContent=label;cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
 }
@@ -41,6 +41,9 @@ function leavePlanSubview(){
     closeModal('planModal');openTaskById(ownerId);
     if(index!=null)setTimeout(()=>{selectTaskItem(owner,index);document.querySelector(`#formList [data-drawer-item="${index}"]`)?.scrollIntoView({block:'nearest'})},0);
     return;
+  }
+  if(returnTarget==='chat'){
+    closeModal('planModal');showView('chat');renderChatSession();return;
   }
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
   if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
@@ -190,7 +193,7 @@ function taskRelatedToProject(t,key=currentProjectKey){
   if(t.projectContext===key||projectRefMatches(t.project,key))return true;
   return canonicalTaskItems(t).some(x=>projectRefMatches(x.project,key));
 }
-function visibleProjectTasks(){return Object.values(taskMap).filter(t=>taskRelatedToProject(t,currentProjectKey))}
+function visibleProjectTasks(){return productTaskRecords().filter(t=>taskRelatedToProject(t,currentProjectKey))}
 
 function renderProjectOptions(){
   const dl=document.getElementById('projectOptions');if(!dl)return;
@@ -424,7 +427,12 @@ const workspaceOpenPlan=openPlanDialog;
 openPlanDialog=function(id=currentTaskId){
   if(planSubviewType)leavePlanSubview();
   workspaceOpenPlan(id);
-  const t=taskMap[id];if(t)resetWorkspaceInspector(t);
+  const t=taskMap[id],back=document.getElementById('planBackToTask');
+  if(t){
+    resetWorkspaceInspector(t);
+    if(t._chatDraft){back.textContent='←';back.title='Back to Chat Draft';document.getElementById('planPageMeta').textContent=`MOCK AI Draft · ${canonicalTaskItems(t).length} task${canonicalTaskItems(t).length===1?'':'s'}`}
+    else{back.textContent='×';back.title=''}
+  }
 };
 openFullPlanPage=openPlanDialog;
 
@@ -446,7 +454,12 @@ renderFullPlan=function(t){
 };
 
 const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
-document.getElementById('planBackToTask').onclick=()=>{workspaceInfoRef=null;workspaceClosePlan()};
+document.getElementById('planBackToTask').onclick=()=>{
+  workspaceInfoRef=null;
+  const t=taskMap[currentTaskId];
+  if(t?._chatDraft){clearTaskSelection();closeModal('planModal');showView('chat');renderChatSession();return}
+  workspaceClosePlan();
+};
 
 // --- Empty-list CTAs use the same embedded Task Editor too. ---
 const directEmptyRenderFull=renderFullPlan;
@@ -535,7 +548,7 @@ renderFullPlan=function(t){
 };
 
 renderTaskList=function(){
-  const host=document.getElementById('taskListView'),rows=Object.values(taskMap);
+  const host=document.getElementById('taskListView'),rows=productTaskRecords();
   if(!rows.length){host.innerHTML='<div class="task-list-empty">No tasks in this board.</div>';return}
   const body=rows.map(t=>{
     const items=canonicalTaskItems(t),related=items.filter(x=>projectRefMatches(x.project,currentProjectKey)).length;
