@@ -307,7 +307,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-context-menu button:hover:not(:disabled){background:#f3f7f6}.task-context-menu button:disabled{opacity:.38;cursor:not-allowed}.task-context-menu .danger-item{color:#b42318}.task-context-menu kbd{font:700 7px/1 Inter,Segoe UI,sans-serif;color:#94a3b8}.context-separator{height:1px;margin:4px 3px;background:#edf0f3}
 .task-info-modal{width:min(540px,94vw)}.task-info-grid{display:grid;grid-template-columns:112px minmax(0,1fr);gap:7px 12px;align-items:start}.task-info-grid span{color:var(--muted);font-size:8px}.task-info-grid strong{font-size:8.5px;overflow-wrap:anywhere}
 .plan-row-compact,.drawer-plan-row{user-select:none}
-</style>
+#taskInfoModal{z-index:340}\n</style>
 </head>
 <body>
 <div class="app">
@@ -3289,11 +3289,11 @@ renderFullPlan=function(t){
   document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
   document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   if(items.length===0){host.innerHTML='<button class="empty-plan-cta large" id="planEmptyAddTask" type="button"><strong>No tasks yet</strong><span>+ Add first task</span></button>';document.getElementById('planEmptyAddTask').onclick=()=>openAddTaskDialog(t.id)}
-  else host.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div></article>`}).join('');
+  else host.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<1||(t.status==='paused'&&i-1<=batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div></article>`}).join('');
   host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit})});
   host.querySelectorAll('[data-plan-row]').forEach(r=>r.ondblclick=()=>{const i=+r.dataset.planRow,s=planStateFor(t,i,items.length);if(editable&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})});
-  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planUp;if(i<1||(t.status==='paused'&&i-1<=batchState.index))return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planDown;if((t.status==='paused'&&i<=batchState.index)||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   host.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planRemove;if(i<batchState.index)return;batchDraft.splice(i,1);commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
 };
@@ -3456,7 +3456,7 @@ function openItemContextMenu(e,owner,index){
   const canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
   taskContextState={scope:'item',ownerId:owner.id,index};
   setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
-  setContextAction('up',{visible:true,enabled:canRestructure&&index>0,label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
+  setContextAction('up',{visible:true,enabled:canRestructure&&index>0&&(owner.status!=='paused'||index-1>batchState.index),label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
   positionTaskContextMenu(e.clientX,e.clientY);
 }
 function openListContextMenu(e,t){
@@ -3497,7 +3497,7 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
 });
 document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();if(planSubviewType)leavePlanSubview()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','emptyListModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
 window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
 
 const renderFullPlanBeforeContext=renderFullPlan;
