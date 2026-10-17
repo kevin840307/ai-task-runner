@@ -623,6 +623,12 @@ function mockInvokeAgentCommand(session,command){
 
 let chatQueueSequence=0;
 function ensureChatQueue(session=activeChat()){if(!session)return[];if(!Array.isArray(session.queue))session.queue=[];return session.queue}
+function chatTurnState(session=activeChat()){if(!session)return 'idle';if(!session.turnState)session.turnState='idle';return session.turnState}
+function renderChatTurnStatus(session=activeChat()){
+  const el=document.getElementById('composerTurnStatus');if(!el||!session||activeChat()!==session)return;
+  const state=chatTurnState(session);el.hidden=state==='idle';
+  el.textContent=state==='waiting_ask'?'Agent 正在等待 Ask 回答；新訊息會排隊':'Agent 正在處理；送出訊息會自動加入 Queue';
+}
 function renderChatQueue(session=activeChat()){
   const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
   const queue=ensureChatQueue(session);panel.hidden=!queue.length;if(count)count.textContent=queue.length;
@@ -638,10 +644,42 @@ function renderChatQueue(session=activeChat()){
   });
   resizeChatComposer();
 }
-function enqueueChatMessage(session,text){
+function enqueueChatMessage(session,text,{notify=true}={}){
   const value=String(text||'').trim();if(!session||!value)return false;
-  ensureChatQueue(session).push({id:String(++chatQueueSequence),text:value,editing:false});renderChatQueue(session);showToast('Added to Queue');return true;
+  ensureChatQueue(session).push({id:String(++chatQueueSequence),text:value,editing:false});
+  if(activeChat()===session){renderChatQueue(session);renderChatTurnStatus(session)}
+  if(notify)showToast('Added to Queue');return true;
 }
+function drainChatQueue(session=activeChat()){
+  if(!session||chatTurnState(session)!=='idle'||session.askFlow)return;
+  const queue=ensureChatQueue(session);if(!queue.length)return;
+  const next=queue.shift();if(activeChat()===session)renderChatQueue(session);
+  startMockChatTurn(session,next.text,{fromQueue:true});
+}
+function processMockChatPrompt(session,text,projectKey){
+  const taskCommand=chatTaskCommand(text),agentCommand=chatAgentCommand(text),systemCommand=chatSystemCommand(text);
+  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode,session,projectKey);
+  else if(agentCommand.matched)mockInvokeAgentCommand(session,agentCommand);
+  else if(systemCommand.matched)mockInvokeSystemPrompt(session,systemCommand,projectKey);
+  else if(Math.random()<.45)startMockAskFlow(session,text);
+  else session.messages.push(['assistant','MOCK Agent 回覆完成。這次沒有觸發 clarification；重複輸入或按 Ask mock 可測試 AI 反問。']);
+}
+function startMockChatTurn(session,text,{fromQueue=false}={}){
+  const value=String(text||'').trim();if(!session||!value)return;
+  if(chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});if(activeChat()===session)showToast('Agent 正在處理，已自動加入 Queue');return}
+  const projectKey=session.projectKey||currentProjectKey;session.projectKey=projectKey;
+  session.turnState='running';session.pendingTurnText=value;session.messages.push(['user',value]);
+  if(activeChat()===session)renderChatSession();
+  const delay=1350+Math.floor(Math.random()*850);
+  session._mockTurnTimer=setTimeout(()=>{
+    session._mockTurnTimer=null;session.pendingTurnText='';
+    try{processMockChatPrompt(session,value,projectKey)}catch(error){session.messages.push(['assistant',`Mock Agent error: ${String(error?.message||error)}`])}
+    session.turnState=session.askFlow?'waiting_ask':'idle';
+    if(activeChat()===session)renderChatSession();
+    if(session.turnState==='idle')drainChatQueue(session);
+  },delay);
+}
+
 
 function mockAskQuestions(context=''){
   const short=String(context||'').trim().slice(0,80);
