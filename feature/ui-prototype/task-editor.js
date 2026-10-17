@@ -620,32 +620,81 @@ function mockInvokeAgentCommand(session,command){
   if(!item){session.messages.push(['assistant',`Mock ${chatAgentLabel(chatAgentKey())}: unknown Agent command ${command.token}.`]);return}
   session.messages.push(['assistant',`MOCK ${chatAgentLabel(chatAgentKey())} · ${item.token} selected${command.args?` · args: ${command.args}`:''}. Formal implementation will invoke the selected Agent's resolved command/skill capability, not a frontend copy of SKILL.md.`]);
 }
-function chatSideQuestionCommand(text){
-  const match=String(text||'').match(/^\s*(?:\/|\?)btw(?:\s+([\s\S]*?))?\s*$/i);
-  return match?{matched:true,question:String(match[1]||'').trim()}:{matched:false,question:''};
-}
-function renderSideQuestion(session=activeChat()){
-  const panel=document.getElementById('composerSideQuestion'),agent=document.getElementById('sideQuestionAgent'),query=document.getElementById('sideQuestionQuery'),answer=document.getElementById('sideQuestionAnswer');
-  if(!panel)return;
-  const side=session?.sideQuestion;if(!side){panel.hidden=true;resizeChatComposer();return}
-  panel.hidden=false;
-  if(agent)agent.textContent=`${chatAgentLabel(side.agent)} · ${side.model}`;
-  if(query)query.textContent=`/btw ${side.question}`;
-  if(answer)answer.textContent=side.answer;
+
+let chatQueueSequence=0;
+function ensureChatQueue(session=activeChat()){if(!session)return[];if(!Array.isArray(session.queue))session.queue=[];return session.queue}
+function renderChatQueue(session=activeChat()){
+  const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
+  const queue=ensureChatQueue(session);panel.hidden=!queue.length;if(count)count.textContent=queue.length;
+  host.innerHTML=queue.map((item,index)=>item.editing
+    ?`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><div class="composer-queue-edit"><textarea data-queue-edit-input>${escapeHtml(item.text)}</textarea><button type="button" data-queue-save>Save</button><button type="button" data-queue-cancel>Cancel</button></div></div>`
+    :`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><span class="composer-queue-copy" title="${escapeAttr(item.text)}">${escapeHtml(item.text)}</span><span class="composer-queue-actions"><button type="button" data-queue-edit>Edit</button><button class="danger" type="button" data-queue-delete>Delete</button></span></div>`).join('');
+  host.querySelectorAll('[data-queue-id]').forEach(row=>{
+    const item=queue.find(x=>String(x.id)===row.dataset.queueId);if(!item)return;
+    row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>x.editing=false);item.editing=true;renderChatQueue(session);setTimeout(()=>row.querySelector('[data-queue-edit-input]')?.focus(),0)});
+    row.querySelector('[data-queue-delete]')?.addEventListener('click',()=>{const i=queue.indexOf(item);if(i>=0)queue.splice(i,1);renderChatQueue(session);resizeChatComposer()});
+    row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;renderChatQueue(session)});
+    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=row.querySelector('[data-queue-edit-input]')?.value.trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;renderChatQueue(session);showToast('Queue updated')});
+  });
   resizeChatComposer();
 }
-function mockAskSideQuestion(session,question){
-  const profile=chatAgentProfile(),q=String(question||'').trim();
-  if(!profile.sideQuestion){showToast('Selected Agent does not support side questions');return}
-  if(!q){showToast('Usage: /btw <question>');return}
-  session.sideQuestion={
-    agent:chatAgentKey(session),
-    model:session.model||profile.defaultModel,
-    mode:session.mode||profile.defaultMode,
-    question:q,
-    answer:`Mock answer · this uses recent Chat context with ${chatAgentLabel(chatAgentKey(session))}, but it is not added to the main conversation history.`
-  };
-  renderSideQuestion(session);
+function enqueueChatMessage(session,text){
+  const value=String(text||'').trim();if(!session||!value)return false;
+  ensureChatQueue(session).push({id:String(++chatQueueSequence),text:value,editing:false});renderChatQueue(session);showToast('Added to Queue');return true;
+}
+
+function mockAskQuestions(context=''){
+  const short=String(context||'').trim().slice(0,80);
+  const base=[
+    {header:'Implementation scope',question:short?`針對「${short}」你希望優先採用哪種處理方式？`:'你希望優先採用哪種處理方式？',type:'choice',options:[
+      {label:'最小修改',description:'只改必要範圍，降低 regression'},
+      {label:'完整優化',description:'連同鄰近 UX / code ownership 一起整理'},
+      {label:'先分析',description:'先確認設計與風險，再進行修改'}
+    ]},
+    {header:'Verification',question:'這次驗證希望做到什麼程度？',type:'choice',options:[
+      {label:'Focused tests',description:'只跑直接相關測試'},
+      {label:'Regression tests',description:'包含鄰近功能 regression'},
+      {label:'Mock first',description:'先完成 Mock / prototype 驗證'}
+    ]},
+    {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[]}
+  ];
+  return Math.random()<.5?[base[0],base[2]]:base;
+}
+function startMockAskFlow(session=activeChat(),context=''){
+  const profile=chatAgentProfile();if(!session||!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
+  session.askFlow={agent:chatAgentKey(session),model:session.model||profile.defaultModel,index:0,questions:mockAskQuestions(context),answers:{},selected:{}};
+  renderAskFlow(session);
+}
+function currentAskQuestion(flow){return flow?.questions?.[flow.index]||null}
+function renderAskFlow(session=activeChat()){
+  const panel=document.getElementById('composerAsk'),title=document.getElementById('composerAskTitle'),progress=document.getElementById('composerAskProgress'),question=document.getElementById('composerAskQuestion'),options=document.getElementById('composerAskOptions'),textInput=document.getElementById('composerAskText'),next=document.getElementById('composerAskNext');if(!panel)return;
+  const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q){panel.hidden=true;resizeChatComposer();return}
+  panel.hidden=false;title.textContent=q.header||'Clarification';progress.textContent=`${flow.index+1} / ${flow.questions.length}`;question.textContent=q.question||'';
+  const answer=flow.answers[String(flow.index)]||'',selected=flow.selected[String(flow.index)]||'';
+  if(q.type==='choice'){
+    const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
+    options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class="composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}" type="button" data-ask-option="${i}"><span class="composer-ask-radio"></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
+    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],key=String(flow.index);flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(flow.answers[key]===flow.selected[key])flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
+    textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';
+    textInput.placeholder='Type a custom answer…';
+  }else{
+    options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder='Type your answer…';
+  }
+  textInput.oninput=()=>{flow.answers[String(flow.index)]=textInput.value};
+  next.textContent=flow.index===flow.questions.length-1?'Submit':'Next';
+  resizeChatComposer();
+}
+function advanceAskFlow(session=activeChat()){
+  const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
+  const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
+  if(q.type==='choice'&&!selected){showToast('Choose an option');return}
+  if((q.type==='text'||selected==='__other__')&&!answer){showToast('Please enter an answer');return}
+  if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
+  if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
+  const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
+  session.messages.push(['user',`Clarification answers\n${summary}`]);
+  session.messages.push(['assistant','Mock Agent 已收到所有回答，正式版會把結構化 answers 回傳給目前 Agent tool call，然後繼續原本 turn。']);
+  session.askFlow=null;renderChatSession();
 }
 
 function mockInvokeSystemPrompt(session,command){
