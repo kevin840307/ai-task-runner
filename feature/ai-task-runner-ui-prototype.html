@@ -52,7 +52,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 /* Existing-page placeholders */
 .assetbody{min-height:0;display:grid;place-items:center;padding:30px}.assetcard{width:min(760px,90%);padding:28px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;box-shadow:var(--shadow-sm)}.assetcard h2{margin:0 0 8px;font-size:16px}.assetcard p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
 /* Drawer */
-.overlay{position:fixed;inset:0;z-index:80;background:rgba(14,23,38,.28);backdrop-filter:blur(2px);display:none}.overlay.open{display:block}.drawer{position:absolute;top:0;right:0;width:min(520px,92vw);height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:#fff;border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(15,23,42,.16);transform:translateX(100%);transition:.18s}.overlay.open .drawer{transform:translateX(0)}.drawerhead{padding:15px 16px 12px;border-bottom:1px solid var(--line)}.drawerheadtop{display:flex;gap:10px;align-items:start}.drawerhead h2{flex:1;margin:0;font-size:15px;line-height:1.35}.close{width:30px;height:30px;border:0;background:transparent;color:var(--muted);font-size:22px}.drawerhead p{margin:5px 0 0;color:var(--muted);font-size:10px}.drawertabs{display:flex;gap:3px;padding:0 12px;border-bottom:1px solid var(--line);background:#fbfcfe}.drawertab{height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:850}.drawertab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.drawerbody{min-height:0;overflow:auto;padding:14px 16px}.section{margin-bottom:14px}.section h3{margin:0 0 8px;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;font-size:10px}.kv span{color:var(--muted)}.kv strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.runtimebox{padding:11px;border:1px solid rgba(15,118,110,.18);border-radius:11px;background:#f7fcfb}.runtop{display:flex;align-items:center;justify-content:space-between}.runtop strong{font-size:11px}.stagerow{display:flex;gap:8px;align-items:center;margin-top:9px}.stagebar{flex:1;height:6px;background:#e7edf1;border-radius:999px;overflow:hidden}.stagebar i{display:block;width:64%;height:100%;background:var(--accent);border-radius:999px}.timeline{display:grid;gap:0;margin-top:8px}.event{position:relative;padding:7px 0 7px 22px;font-size:10px}.event:before{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid #d9e0e7}.event:after{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;background:#cbd5e1;border:2px solid #fff}.event.done:after{background:#16a34a}.event.now:after{background:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.10)}.event small{display:block;color:var(--muted);margin-top:2px}.console{max-height:230px;overflow:auto;padding:11px;border:1px solid #d9e2ec;border-radius:10px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.drawerfoot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:#fbfcfe}
+.overlay{position:fixed;inset:0;z-index:80;background:rgba(14,23,38,.28);backdrop-filter:blur(2px);display:none}.overlay.open{display:block}.drawer{position:absolute;top:0;right:0;width:clamp(620px,46vw,720px);max-width:92vw;height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:#fff;border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(15,23,42,.16);transform:translateX(100%);transition:transform .18s ease,width .16s ease}.overlay.open .drawer{transform:translateX(0)}.drawerhead{padding:15px 16px 12px;border-bottom:1px solid var(--line)}.drawerheadtop{display:flex;gap:10px;align-items:start}.drawerhead h2{flex:1;margin:0;font-size:15px;line-height:1.35}.close{width:30px;height:30px;border:0;background:transparent;color:var(--muted);font-size:22px}.drawerhead p{margin:5px 0 0;color:var(--muted);font-size:10px}.drawertabs{display:flex;gap:3px;padding:0 12px;border-bottom:1px solid var(--line);background:#fbfcfe}.drawertab{height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:850}.drawertab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.drawerbody{min-height:0;overflow:auto;padding:14px 16px}.section{margin-bottom:14px}.section h3{margin:0 0 8px;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;font-size:10px}.kv span{color:var(--muted)}.kv strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.runtimebox{padding:11px;border:1px solid rgba(15,118,110,.18);border-radius:11px;background:#f7fcfb}.runtop{display:flex;align-items:center;justify-content:space-between}.runtop strong{font-size:11px}.stagerow{display:flex;gap:8px;align-items:center;margin-top:9px}.stagebar{flex:1;height:6px;background:#e7edf1;border-radius:999px;overflow:hidden}.stagebar i{display:block;width:64%;height:100%;background:var(--accent);border-radius:999px}.timeline{display:grid;gap:0;margin-top:8px}.event{position:relative;padding:7px 0 7px 22px;font-size:10px}.event:before{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid #d9e0e7}.event:after{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;background:#cbd5e1;border:2px solid #fff}.event.done:after{background:#16a34a}.event.now:after{background:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.10)}.event small{display:block;color:var(--muted);margin-top:2px}.console{max-height:230px;overflow:auto;padding:11px;border:1px solid #d9e2ec;border-radius:10px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.drawerfoot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:#fbfcfe}
 /* toast */
 .toast{position:fixed;left:50%;bottom:18px;z-index:150;transform:translate(-50%,12px);opacity:0;pointer-events:none;padding:9px 12px;border-radius:999px;background:#17202c;color:#fff;font-size:10px;font-weight:800;box-shadow:var(--shadow-pop);transition:.18s}.toast.show{opacity:1;transform:translate(-50%,0)}
 .proto{position:fixed;left:12px;bottom:10px;z-index:20;padding:4px 7px;border:1px solid rgba(15,118,110,.18);border-radius:999px;background:rgba(255,255,255,.88);color:var(--accent-dark);font-size:8px;font-weight:900;backdrop-filter:blur(6px)}
@@ -211,8 +211,12 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .sequence-add-row{position:relative;z-index:1;display:flex;align-items:center;gap:7px;margin:2px 0 0 47px}.sequence-add-row .btn{height:31px;font-size:9px}
 .existing-task-picker{display:grid;gap:6px}.existing-task-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:left;color:var(--text)}.existing-task-option:hover{border-color:#aebbc7;background:#fbfcfd}.existing-task-option strong{display:block;font-size:10px}.existing-task-option small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.existing-task-option span{font-size:8px;font-weight:900;color:var(--accent-dark)}
 
-/* Unified Task Details: Steps are edited in-place; no separate Task List editor page. */
-.drawer.steps-mode{width:min(760px,94vw)}
+/* Unified Task Details: one stable Task Workspace width across tabs. */
+.drawer.expanded{width:min(920px,96vw);max-width:96vw}
+.drawer-expand{display:grid;place-items:center;width:30px;height:30px;flex:0 0 30px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer}
+.drawer-expand:hover{background:#f1f6f5;color:var(--accent-dark)}
+.drawer-expand[aria-pressed="true"]{background:#eef8f6;color:var(--accent-dark)}
+@media(max-width:900px){#taskOverlay .drawer,#taskOverlay .drawer.expanded{width:100vw;max-width:100vw}.drawer-expand{display:none}}
 .steps-section{margin:0}.steps-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}.steps-toolbar h3{margin:0!important}.steps-toolbar p{margin:3px 0 0;color:var(--muted);font-size:8px}.steps-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .steps-summary{margin:0 0 10px;padding:8px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#f8fafb;color:#64748b;font-size:8px}
 .steps-mode-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.tabs.compact{height:32px;border:1px solid var(--line);border-radius:8px;background:#f6f8fa;padding:2px}.tabs.compact .tab{height:26px;padding:0 9px;border:0;border-radius:6px}.tabs.compact .tab.active{background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.08)}
@@ -551,7 +555,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 <div class="overlay" id="taskOverlay">
   <aside class="drawer">
     <div class="drawerhead">
-      <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="close" id="closeDrawer">×</button></div>
+      <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button><button class="close" id="closeDrawer">×</button></div>
       <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
     </div>
     <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
@@ -1165,6 +1169,17 @@ document.querySelectorAll('[data-drawertab]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('[data-drawertab]').forEach(x=>x.classList.toggle('active',x===b));
   document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-'+b.dataset.drawertab));
 });
+const taskDrawer=document.querySelector('#taskOverlay .drawer');
+const drawerExpand=document.getElementById('drawerExpand');
+function syncDrawerExpand(){
+  const expanded=taskDrawer.classList.contains('expanded');
+  drawerExpand.setAttribute('aria-pressed',String(expanded));
+  drawerExpand.setAttribute('aria-label',expanded?'Collapse task workspace':'Expand task workspace');
+  drawerExpand.title=expanded?'Collapse task workspace':'Expand task workspace';
+  drawerExpand.textContent=expanded?'⤡':'⤢';
+}
+drawerExpand.onclick=()=>{taskDrawer.classList.toggle('expanded');syncDrawerExpand()};
+syncDrawerExpand();
 document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
 document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
@@ -2265,7 +2280,6 @@ openTaskListEditor=function(id){
   prepareStepsForTask(t);
   document.querySelectorAll('.drawertab').forEach(b=>b.classList.toggle('active',b.dataset.drawertab==='items'));
   document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-items'));
-  document.querySelector('#taskOverlay .drawer').classList.add('steps-mode');
 };
 
 const finalBaseOpenTaskById=openTaskById;
@@ -2274,12 +2288,7 @@ openTaskById=function(id){
   const t=taskMap[id];if(!t)return;
   document.getElementById('drawerItemsTab').hidden=false;
   prepareStepsForTask(t);
-  document.querySelector('#taskOverlay .drawer').classList.remove('steps-mode');
 };
-
-document.querySelectorAll('[data-drawertab]').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelector('#taskOverlay .drawer').classList.remove('steps-mode');
-}));
 
 document.getElementById('drawerAddStep').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
