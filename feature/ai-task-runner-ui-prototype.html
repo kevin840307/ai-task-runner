@@ -3564,31 +3564,37 @@ const taskEditorHome=document.getElementById('newTaskModal');
 const taskEditorSurface=taskEditorHome.querySelector('.task-create-modal');
 const yamlEditorHome=document.getElementById('yamlPlanModal');
 const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
-let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0;
+let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
 
-function setSurfaceBackBehavior(surface,type){
+function setSurfaceBackBehavior(surface,type,returnTarget='list'){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
-  if(close){close.textContent='←';close.title='Back';close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
-  if(cancel){cancel.textContent='Back';cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+  const label=returnTarget==='info'?'Back to Info':'Back to Task List';
+  if(close){close.textContent='←';close.title=label;close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+  if(cancel){cancel.textContent=label;cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
 }
 function restoreSurfaceCloseBehavior(surface,overlayId){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
   if(close){close.textContent='×';close.title='';close.onclick=()=>closeModal(overlayId)}
   if(cancel){cancel.textContent=overlayId==='newTaskModal'?'Cancel':'Cancel';cancel.onclick=()=>closeModal(overlayId)}
 }
-function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null){
+function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null,returnTarget='list'){
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
-  planReturnScroll=scrollHost.scrollTop||0;planSubviewType=type;planSubviewOwnerId=ownerId;planSubviewIndex=index;
+  planReturnScroll=scrollHost.scrollTop||0;planSubviewType=type;planSubviewOwnerId=ownerId;planSubviewIndex=index;planSubviewReturnTarget=returnTarget;
   closeModal(sourceOverlay.id);planSubviewMount.appendChild(surface);planSubviewMount.hidden=false;planModalEl.classList.add('subview-open');openModal('planModal');
-  setSurfaceBackBehavior(surface,type);
+  setSurfaceBackBehavior(surface,type,returnTarget);
 }
 function leavePlanSubview(){
   if(!planSubviewType)return;
-  const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex;
+  const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex,returnTarget=planSubviewReturnTarget;
   if(type==='task'){taskEditorHome.appendChild(taskEditorSurface);restoreSurfaceCloseBehavior(taskEditorSurface,'newTaskModal')}
   if(type==='yaml'){yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal')}
-  planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
+  planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewReturnTarget='list';planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
   const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  if(returnTarget==='info'&&owner){
+    closeModal('planModal');openTaskById(ownerId);
+    if(index!=null)setTimeout(()=>document.querySelector(`#formList [data-drawer-item="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
+    return;
+  }
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
   if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
 }
@@ -3602,13 +3608,14 @@ loadTaskEditor=function(mode,args={}){
     return taskEditorLoadBeforeSubview(mode,args);
   }
   const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
+  const returnTarget=document.getElementById('taskOverlay').classList.contains('open')&&!planModalEl.classList.contains('open')?'info':'list';
   if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
   closeModal('addPlanTaskModal');
   isolatedTaskEditorLoad(mode,args);
   document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
   document.getElementById('taskFormHelp').textContent=mode==='edit-item'?'Edit this task only.':'Configure this task only.';
   document.getElementById('editTaskScopeNote').hidden=true;
-  enterPlanSubview('task',taskEditorSurface,taskEditorHome,ownerId,args.index??canonicalTaskItems(owner).length);
+  enterPlanSubview('task',taskEditorSurface,taskEditorHome,ownerId,args.index??canonicalTaskItems(owner).length,returnTarget);
 };
 
 const taskEditorSaveBeforeSubview=document.getElementById('createTaskConfirm').onclick;
@@ -4361,6 +4368,7 @@ const pausedPolicyRenderDrawerPlan=renderDrawerPlan;
 renderDrawerPlan=function(t){
   pausedPolicyRenderDrawerPlan(t);
   const items=canonicalTaskItems(t);
+  const openList=document.getElementById('openFullPlan');if(openList)openList.textContent=t.status==='paused'?'Edit Task List':'Open list';
   document.querySelectorAll('#formList [data-drawer-item]').forEach(row=>{
     const i=+row.dataset.drawerItem,canEdit=taskItemCanEdit(t,i);
     const edit=row.querySelector('[data-drawer-edit]');if(edit)edit.disabled=!canEdit;
@@ -4415,15 +4423,15 @@ newDropzone.addEventListener('drop',e=>{
 
 function openTaskFromBoard(t){
   if(!t)return;
-  if(t.status==='ongoing'||t.status==='closed'){openTaskById(t.id);return}
-  openPlanDialog(t.id);
+  if(t.status==='new'){openPlanDialog(t.id);return}
+  openTaskById(t.id);
 }
 const lifecycleBindTaskCards=bindTaskCards;
 bindTaskCards=function(){
   lifecycleBindTaskCards();
   document.querySelectorAll('.taskcard').forEach(card=>{
     const t=taskMap[card.dataset.id];if(!t)return;
-    card.title=(t.status==='ongoing'||t.status==='closed')?'Open Task info':'Open Task list';
+    card.title=t.status==='new'?'Open Task list':'Open Task info';
     card.onclick=()=>{if(!card.classList.contains('dragging'))openTaskFromBoard(taskMap[card.dataset.id])};
   });
 };
@@ -4432,7 +4440,7 @@ renderTaskList=function(){
   lifecycleRenderTaskList();
   document.querySelectorAll('#taskListView [data-taskrow]').forEach(row=>{
     const t=taskMap[row.dataset.taskrow];if(!t)return;
-    row.title=(t.status==='ongoing'||t.status==='closed')?'Open Task info':'Open Task list';
+    row.title=t.status==='new'?'Open Task list':'Open Task info';
     row.onclick=()=>openTaskFromBoard(taskMap[row.dataset.taskrow]);
   });
 };
