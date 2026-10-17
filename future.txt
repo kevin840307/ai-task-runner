@@ -112,17 +112,26 @@ Suggested capability shape:
     user_invocable,
     enabled.
 
-3. CHAT COMMAND: @task <spec>
-============================
+3. CHAT COMMANDS: @task / @task-single / @task-list
+====================================================
 
-[ ] Make `@task <spec>` the canonical explicit Chat command for creating a Task.
+[ ] Support three explicit Runner Task-generation commands.
 
 Command semantics:
-- `@task <spec>` means: ask AI to plan a Runner Task from `<spec>` for the current Project.
-- Only the explicit `@task` command triggers this Task-generation path.
+- `@task <spec>`
+    AI decides whether the result should contain one Task or multiple ordered Tasks.
+    Production uses the backend Task-generation prompt to make that decision.
+    Interactive Mock mode may randomly return single vs multi so both UI paths can be exercised easily.
+- `@task-single <spec>`
+    Force exactly one generated Task.
+- `@task-list <spec>`
+    Force a Task List with at least two ordered child Tasks.
+- Only these explicit Runner commands trigger Task-generation.
 - Ordinary conversation containing words such as `task`, `run`, `建立任務`, etc. must NOT be guessed
   as Task creation intent.
 - The optional UI button may insert/focus `@task `, but it must not own a separate creation path.
+- All three commands MUST use the same backend generate-task endpoint, fixed backend prompt, TaskDraft schema,
+  canonical Task/Task List editor and Create flow. The command only supplies a generation mode constraint.
 
 Backend generation contract:
 - Frontend sends the user `<spec>` plus minimal current Project context.
@@ -185,7 +194,11 @@ Confirmation / editing:
 
 Mock support:
 - Mock mode must exercise the SAME request/response TaskDraft contract as the real AI path.
-- Mock generation must be deterministic enough for browser/unit tests.
+- Interactive prototype behavior:
+    `@task` may randomly choose single Task or multi-Task List for hands-on UI testing.
+    `@task-single` always returns exactly one Task.
+    `@task-list` always returns at least two Tasks.
+- Automated browser/unit tests must be able to replace randomness with a fixed seed/fixture/mode so tests remain deterministic.
 - Do not create a separate mock-only UI model.
 - Mock should cover at least:
     single Task,
@@ -264,7 +277,10 @@ Open behavior:
 
 Task editor scope:
 - Editing a child Task shows Task fields, not unrelated Task List controls.
-- Reuse the same Task Editor for root Task creation, child Add/Edit, and AI-generated TaskDraft editing.
+- Reuse ONE canonical Task Editor for root Task creation, normal Task edit, child Add/Edit and AI-generated TaskDraft editing.
+- The canonical Task Editor is a fixed right-side overlay sheet above the source surface; it must not resize/reflow Chat,
+  Task Info or Task List underneath it.
+- Do not move the Task Editor DOM between unrelated layout containers. Source-specific behavior is context/Back navigation only.
 - AI-generated multi-item TaskDrafts reuse the same Task List surface used by manually created multi-task work.
 - Do not implement a separate Chat TaskDraft editor with a duplicated Project / Workflow / Prompt / Workspace form.
 - Avoid stacked modal flows; use one workspace/surface transition where possible.
