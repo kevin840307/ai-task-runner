@@ -913,7 +913,10 @@ def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatc
     (qwen_home / "settings.json").write_text(
         json.dumps({
             "security": {"auth": {"selectedType": "openai"}},
-            "providerProtocol": {"lmstudio": "openai"},
+            "providerProtocol": {
+                "lmstudio": "openai",
+                "broken": {"unexpected": True},
+            },
             "modelProviders": {
                 "openai": [
                     {"id": "main"},
@@ -925,6 +928,7 @@ def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatc
                 ],
                 "lmstudio": [{"id": "local-main"}],
                 "anthropic": [{"id": "claude"}],
+                "broken": [{"id": "broken-model"}],
                 "unknown-provider": [{"id": "unknown"}],
             },
         }),
