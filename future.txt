@@ -137,9 +137,16 @@ Task vs Task List:
 - This is still one durable parent Task record with items[].
 - Do not invent a separate scheduler/DAG just because AI returned multiple items.
 
-Confirmation:
+Confirmation / editing:
 - `@task` expresses explicit create intent, but AI output should first be reviewable as TaskDraft.
-- User may Edit the draft before creation.
+- Chat only needs a compact TaskDraft summary/preview; do NOT build a second full Task editor inside Chat.
+- A TaskDraft may contain one Task or multiple ordered child Tasks.
+- Pressing `Edit` must open/reuse the existing canonical Task / Task List create-edit UI.
+- Single-item draft -> reuse the normal Task create/edit UI.
+- Multi-item draft -> reuse the normal Task List UI, where each child Task uses the same existing Add/Edit Task editor.
+- Reuse the same Project / Workflow / Prompt / Validator / Workspace controls and validation rules as manual creation.
+- Back navigation must still return to the originating Chat/Draft context when Edit was opened from Chat.
+- Changes made in the canonical editor update the same TaskDraft; do not maintain a parallel Chat-only editable copy.
 - `Create Task` creates the durable Task in New/idle state.
 - Creating a Task must NOT automatically press Run.
 
@@ -224,7 +231,9 @@ Open behavior:
 
 Task editor scope:
 - Editing a child Task shows Task fields, not unrelated Task List controls.
-- Reuse the same Task Editor for root Task creation and child Add/Edit.
+- Reuse the same Task Editor for root Task creation, child Add/Edit, and AI-generated TaskDraft editing.
+- AI-generated multi-item TaskDrafts reuse the same Task List surface used by manually created multi-task work.
+- Do not implement a separate Chat TaskDraft editor with a duplicated Project / Workflow / Prompt / Workspace form.
 - Avoid stacked modal flows; use one workspace/surface transition where possible.
 
 Back navigation is source-aware:
