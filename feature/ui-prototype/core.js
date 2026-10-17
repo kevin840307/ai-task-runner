@@ -102,6 +102,7 @@ const taskPresets={
 };
 let currentPreset='today';
 let taskMap={};
+function productTaskRecords(){return Object.values(taskMap).filter(t=>!t._chatDraft)}
 let runningOnly=false;
 let dragged=null;
 let listMode=false;
@@ -254,7 +255,7 @@ document.querySelectorAll('.dropzone').forEach(zone=>{
 function updateCounts(){
   document.querySelectorAll('.col').forEach(c=>c.querySelector('.count').textContent=c.querySelectorAll('.taskcard:not([hidden])').length);
   document.getElementById('taskNavCount').textContent=Object.keys(taskMap).length;
-  const n=Object.values(taskMap).filter(t=>['running','recover'].includes(t.runtime)).length;
+  const n=productTaskRecords().filter(t=>['running','recover'].includes(t.runtime)).length;
   document.getElementById('runningCount').textContent=`${n} Running`;
 }
 function applyTaskFilter(){
@@ -290,7 +291,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 };
 function renderTaskList(){
   const host=document.getElementById('taskListView');
-  host.innerHTML=Object.values(taskMap).map(t=>`<div class="taskrow" data-taskrow="${t.id}"><span class="pill">${statusLabel(t.status)}</span><strong>${escapeHtml(t.title)}</strong><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span><span>${escapeHtml(t.workflow)}</span><span>${t.progress[0]} / ${t.progress[1]}</span></div>`).join('');
+  host.innerHTML=productTaskRecords().map(t=>`<div class="taskrow" data-taskrow="${t.id}"><span class="pill">${statusLabel(t.status)}</span><strong>${escapeHtml(t.title)}</strong><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span><span>${escapeHtml(t.workflow)}</span><span>${t.progress[0]} / ${t.progress[1]}</span></div>`).join('');
   host.querySelectorAll('[data-taskrow]').forEach(r=>r.onclick=()=>openTaskById(r.dataset.taskrow));
 }
 document.getElementById('listMode').onclick=e=>{
@@ -300,7 +301,7 @@ document.getElementById('listMode').onclick=e=>{
 
 function renderBoardFromMap(){
   document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
-  Object.values(taskMap).forEach(t=>{    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+  productTaskRecords().forEach(t=>{    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
     if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
   });
   bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
@@ -909,7 +910,7 @@ function captureNewTaskSources(){
 }
 let newTaskWorkspaceMode='auto';
 function mainBusyTask(project){
-  return Object.values(taskMap||{}).find(t=>t.project===project&&t.workspaceKind==='main'&&['running','recover'].includes(t.runtime));
+  return productTaskRecords().find(t=>t.project===project&&t.workspaceKind==='main'&&['running','recover'].includes(t.runtime));
 }
 function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
   const busy=mainBusyTask(project);
