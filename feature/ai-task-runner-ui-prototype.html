@@ -326,6 +326,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-create-modal .task-basics{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
 .task-create-modal .task-basics>.field{grid-column:1/-1!important}
 .task-create-modal .field-help{margin-top:4px;line-height:1.4}
+
+.project-combobox{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 30px}
+.project-combobox>input{border-radius:7px 0 0 7px!important;border-right:0!important}
+.project-combobox>button{border:1px solid var(--line);border-radius:0 7px 7px 0;background:#fff;color:var(--muted);cursor:pointer}
+.project-combobox>button:hover{background:#f6faf9;color:var(--text)}
+.project-dropdown{position:absolute;z-index:320;top:calc(100% + 5px);left:0;right:0;max-height:230px;overflow:auto;padding:4px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:0 16px 34px rgba(15,23,42,.16)}
+.project-dropdown[hidden]{display:none}
+.project-dropdown-option{display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text);cursor:pointer}
+.project-dropdown-option:hover,.project-dropdown-option.selected{background:#eef7f5}
+.project-dropdown-option strong{display:block;font-size:9px}.project-dropdown-option small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-dropdown-empty{padding:9px;color:var(--muted);font-size:8px}
 </style>
 </head>
 <body>
@@ -534,7 +545,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-body">
       <div class="modal-grid task-basics">
         <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
-        <div class="field full"><label>Project</label><input id="newTaskProject" list="projectOptions" autocomplete="off" placeholder="Select a project or type a path"><datalist id="projectOptions"></datalist><small class="field-help" id="projectFieldHelp">Current Project is the default. You can also type a new local path.</small></div>
+        <div class="field full"><label>Project</label><div class="project-combobox"><input id="newTaskProject" autocomplete="off" placeholder="Select a project or type a path"><button type="button" id="projectDropdownToggle" aria-label="Show all projects">⌄</button><div class="project-dropdown" id="projectDropdown" hidden></div></div><small class="field-help" id="projectFieldHelp">Current Project is the default. You can also type a new local path.</small><datalist id="projectOptions" hidden></datalist></div>
         <div class="field full" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
@@ -3716,6 +3727,36 @@ loadTaskEditor=function(mode,args={}){
 const projectOptionSelect=selectProject;
 selectProject=function(key){projectOptionSelect(key);renderProjectOptions(key)};
 renderProjectOptions(currentProjectKey);
+
+// --- Explicit Project combobox: always show every added Project. ---
+const projectDropdown=document.getElementById('projectDropdown');
+const projectDropdownToggle=document.getElementById('projectDropdownToggle');
+const projectComboInput=document.getElementById('newTaskProject');
+function projectRegistryEntries(){
+  const out=[],seen=new Set();
+  document.querySelectorAll('.project[data-project]').forEach(btn=>{const key=btn.dataset.project;if(projectMeta[key]&&!seen.has(key)){seen.add(key);out.push([key,projectMeta[key]])}});
+  Object.entries(projectMeta).forEach(([key,meta])=>{if(!seen.has(key)){seen.add(key);out.push([key,meta])}});
+  return out;
+}
+function renderProjectDropdown(filter=''){
+  const q=String(filter||'').trim().toLowerCase();
+  const entries=projectRegistryEntries().filter(([key,meta])=>!q||key.toLowerCase().includes(q)||String(meta.path||'').toLowerCase().includes(q));
+  projectDropdown.innerHTML=entries.length?entries.map(([key,meta])=>`<button type="button" class="project-dropdown-option ${projectRefMatches(projectComboInput.value,key)?'selected':''}" data-project-choice="${escapeAttr(key)}"><strong>${escapeHtml(key)}${key===currentProjectKey?' · current':''}</strong><small>${escapeHtml(meta.path||'')}</small></button>`).join(''):'<div class="project-dropdown-empty">No matching Project. Type a local path to add it when saving.</div>';
+  projectDropdown.querySelectorAll('[data-project-choice]').forEach(b=>b.onclick=()=>{projectComboInput.value=b.dataset.projectChoice;projectDropdown.hidden=true;renderNewTaskWorkspace()});
+}
+function openProjectDropdown(showAll=true){renderProjectDropdown(showAll?'':projectComboInput.value);projectDropdown.hidden=false}
+projectDropdownToggle.onclick=e=>{e.preventDefault();e.stopPropagation();if(projectDropdown.hidden)openProjectDropdown(true);else projectDropdown.hidden=true};
+projectComboInput.addEventListener('focus',()=>openProjectDropdown(true));
+projectComboInput.addEventListener('input',()=>{renderProjectDropdown(projectComboInput.value);projectDropdown.hidden=false;renderNewTaskWorkspace()});
+projectComboInput.addEventListener('keydown',e=>{if(e.key==='Escape')projectDropdown.hidden=true});
+document.addEventListener('click',e=>{if(!e.target.closest('.project-combobox'))projectDropdown.hidden=true});
+
+// Keep legacy datalist population harmless, but drive visible choices from the custom menu.
+const visibleProjectOptions=renderProjectOptions;
+renderProjectOptions=function(priorityKey=currentProjectKey){
+  visibleProjectOptions(priorityKey);
+  renderProjectDropdown('');
+};
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
