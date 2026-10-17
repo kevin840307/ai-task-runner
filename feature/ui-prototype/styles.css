@@ -303,9 +303,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .ai-override-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ai-override-actions .simple-source-select{min-width:100px}
 
-#newTaskModal{z-index:210}
-#newTaskModal.chat-draft-editor-overlay{place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
-#newTaskModal.chat-draft-editor-overlay>.task-create-modal{width:min(720px,94vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18)}
+#newTaskModal{z-index:400;place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
+#newTaskModal>.task-create-modal{width:min(720px,94vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
+#newTaskModal>.task-create-modal>.modal-body{min-height:0;overflow:auto}
 #planModal.chat-draft-plan-overlay{place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
 #planModal.chat-draft-plan-overlay>.plan-modal-card{width:min(1040px,96vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18)}
 
