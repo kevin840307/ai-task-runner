@@ -246,6 +246,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .plan-modal-card{width:min(1120px,96vw);height:min(780px,92vh);max-height:92vh;display:flex;flex-direction:column}.plan-modal-head{flex:0 0 auto}.plan-modal-head-actions{display:flex;align-items:center;gap:6px}.plan-modal-card .plan-page-body{flex:1 1 auto;min-height:0;border-radius:0 0 12px 12px}.plan-modal-card .plan-main,.plan-modal-card .plan-side-card{box-shadow:none}
 
 .workspace-result-section{margin-top:2px}.workspace-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.workspace-result-head h3{margin:0!important}.workspace-result-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.workspace-result-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:6px 9px;margin-top:9px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#fbfcfd;font-size:8px}.workspace-result-grid span{color:var(--muted)}.workspace-result-grid strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-result-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.workspace-result-actions .btn:disabled{opacity:.45;cursor:not-allowed}
+
+#planModal{z-index:80}#addPlanTaskModal,#yamlPlanModal,#pathPickerModal{z-index:100}
 </style>
 </head>
 <body>
@@ -2298,7 +2300,8 @@ function planItemDefaults(x={},t=null,i=0){
     goalMode:x.goalMode||'inline',goalFile:x.goalFile||'',goalAsset:x.goalAsset||'common/review.md',
     project:x.project||fallbackProject,workflow:x.workflow||'ralphy_ai_validate.yaml',
     validatorMode:x.validatorMode||((x.validator&&x.validator!=='ai')?'file':x.validator==='ai'?'ai':'none'),validator:x.validator&&x.validator!=='ai'?x.validator:'',
-    aiMode:x.aiMode||'default',aiPrompt:x.aiPrompt||'',aiFile:x.aiFile||'',aiAsset:x.aiAsset||'common/ai_validator.md'
+    aiMode:x.aiMode||'default',aiPrompt:x.aiPrompt||'',aiFile:x.aiFile||'',aiAsset:x.aiAsset||'common/ai_validator.md',
+    originTaskId:x.originTaskId||x.origin_task_id||'',originTaskTitle:x.originTaskTitle||''
   };
 }
 function planItemsForTask(t){
@@ -2465,6 +2468,108 @@ document.getElementById('applyYamlPlan').onclick=()=>{
 // Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
 const canonicalPlanOpenTask=openTaskById;
 openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t);document.getElementById('drawerItemsTab').hidden=true}};
+
+// --- Dialog-first Plan UX + move-only New Task composition ---
+let addPlanOwnerId=null;
+let addTaskMode='create';
+let selectedMoveTaskId=null;
+function eligibleMoveTasks(owner){
+  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&!isSequenceTask(t)&&t.workspaceKind!=='batch');
+}
+function setAddTaskMode(mode){
+  addTaskMode=mode;selectedMoveTaskId=null;
+  document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
+  document.getElementById('addTaskCreatePanel').hidden=mode!=='create';
+  document.getElementById('addTaskMovePanel').hidden=mode!=='move';
+  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Add task':'Move into plan';
+  renderMoveTaskPicker();
+}
+function renderMoveTaskPicker(){
+  const owner=taskMap[addPlanOwnerId],host=document.getElementById('moveTaskPicker');if(!owner||!host)return;
+  const items=eligibleMoveTasks(owner);
+  if(!items.length){host.innerHTML='<div class="empty-panel">No eligible New tasks. Only standalone New + Idle tasks can be moved.</div>';document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move';return}
+  host.innerHTML=items.map(t=>`<button type="button" class="existing-task-option ${selectedMoveTaskId===t.id?'selected':''}" data-move-task-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>New</span></button>`).join('');
+  host.querySelectorAll('[data-move-task-id]').forEach(b=>b.onclick=()=>{selectedMoveTaskId=b.dataset.moveTaskId;renderMoveTaskPicker()});
+  document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move'&&!selectedMoveTaskId;
+}
+function openAddTaskDialog(ownerId=currentTaskId){
+  const owner=taskMap[ownerId];if(!owner)return;
+  if(!taskEditable(owner)){showToast(owner.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
+  addPlanOwnerId=ownerId;addTaskMode='create';selectedMoveTaskId=null;
+  document.getElementById('addPlanPrompt').value='';
+  document.getElementById('addPlanProject').value=projectKeyForTask(owner);
+  document.getElementById('addPlanWorkflow').value='ralphy_ai_validate.yaml';
+  document.getElementById('confirmAddPlanTask').disabled=false;
+  setAddTaskMode('create');openModal('addPlanTaskModal');
+}
+document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.onclick=()=>setAddTaskMode(b.dataset.addTaskMode));
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  if(addTaskMode==='create'){
+    const prompt=document.getElementById('addPlanPrompt').value.trim();if(!prompt){showToast('Task prompt is required');return}
+    const projectKey=document.getElementById('addPlanProject').value,workflow=document.getElementById('addPlanWorkflow').value;
+    batchDraft.push(planItemDefaults({prompt,project:projectMeta[projectKey]?.path||projectKey,workflow},owner,batchDraft.length));
+    pushTaskHistory(owner,'New task added to execution plan');
+  }else{
+    const source=taskMap[selectedMoveTaskId];
+    if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
+    const item=planItemDefaults(taskToListItem(source),owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
+    batchDraft.push(item);
+    delete taskMap[source.id];
+    pushTaskHistory(owner,`Moved ${source.id} into execution plan · original Board Task retired`);
+  }
+  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
+  showToast(addTaskMode==='create'?'Task added':'New Task moved into plan');
+};
+
+function openPlanDialog(id=currentTaskId){
+  const t=taskMap[id];if(!t)return;currentTaskId=id;setPlanDraftForTask(t);renderFullPlan(t);openModal('planModal');
+}
+openFullPlanPage=openPlanDialog;
+document.getElementById('openFullPlan').onclick=()=>openPlanDialog(currentTaskId);
+document.getElementById('planBackToTask').onclick=()=>closeModal('planModal');
+document.getElementById('drawerAddStep').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('planAddTask').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('drawerAddExisting').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('planAddExisting').onclick=()=>openAddTaskDialog(currentTaskId);
+
+renderExecutionPlan=function(t){
+  if(!t)return;renderDrawerPlan(t);
+  const preview=document.getElementById('batchPreview'),items=batchDraft.length?batchDraft:planItemsForTask(t);
+  preview.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`}).join('');
+  if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(t);
+};
+renderDrawerPlan=(function(base){return function(t){base(t);document.getElementById('drawerAddExisting').hidden=true;document.getElementById('openFullPlan').textContent='Open plan';};})(renderDrawerPlan);
+
+// Show moved provenance in the full plan without creating a second Task identity.
+renderFullPlan=(function(base){return function(t){base(t);document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{const i=+row.dataset.planRow,x=batchDraft[i];if(x?.originTaskId){const small=row.querySelector('.plan-row-copy small');if(small)small.textContent+=` · moved ${x.originTaskId}`;}});};})(renderFullPlan);
+
+function renderWorkspaceResult(t){
+  const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
+  const isolated=t.workspaceKind==='worktree';
+  const multi=t.workspaceKind==='batch';
+  section.hidden=!isolated&&!multi;
+  if(multi){state.textContent='Multi-step';hint.textContent='Each child task may use its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
+  if(!isolated)return;
+  const ready=['done'].includes(t.runtime)||t.status==='closed';
+  const merged=t.mergeState==='merged',cleaned=!!t.worktreeCleaned;
+  state.textContent=cleaned?'Cleaned':merged?'Merged':ready?'Ready to merge':'Worktree';
+  hint.textContent=cleaned?'Worktree removed after merge.':merged?'Merged successfully · cleanup is now safe.':ready?'Runtime completed · review before merge.':'Worktree is still in use by this Task.';
+  const target=projectMeta[t.project]?.branch||'main';
+  grid.innerHTML=`<span>Branch</span><strong>${escapeHtml(t.branch||'—')}</strong><span>Target</span><strong>${escapeHtml(target)}</strong><span>Path</span><strong>${escapeHtml(t.executionRoot||'—')}</strong><span>Result</span><strong>${cleaned?'Merged + cleaned':merged?`Merged ${t.mergedCommit||''}`:ready?'Not merged':'In progress'}</strong>`;
+  document.getElementById('reviewChangesDemo').disabled=!ready||cleaned;
+  document.getElementById('mergeChatDemo').disabled=!ready||merged||cleaned;
+  document.getElementById('mergeTaskDemo').disabled=!ready||merged||cleaned;
+  document.getElementById('cleanupWorktreeDemo').disabled=!merged||cleaned;
+}
+document.getElementById('reviewChangesDemo').onclick=()=>showToast('Mock diff review · changed files / tests / branch comparison');
+document.getElementById('mergeChatDemo').onclick=()=>showToast('Mock Chat receives branch, target, diff and test context for merge review');
+document.getElementById('mergeTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.workspaceKind!=='worktree'||!(['done'].includes(t.runtime)||t.status==='closed'))return;t.mergeState='merged';t.mergedCommit='mock-a1b2c3d';pushTaskHistory(t,'Worktree merged into target branch');renderWorkspaceResult(t);showToast('Mock merge completed · worktree preserved until Cleanup')};
+document.getElementById('cleanupWorktreeDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.mergeState!=='merged')return;t.worktreeCleaned=true;pushTaskHistory(t,'Worktree cleaned after successful merge');renderWorkspaceResult(t);showToast('Mock worktree cleanup completed')};
+
+const dialogPlanOpenTask=openTaskById;
+openTaskById=function(id){dialogPlanOpenTask(id);const t=taskMap[id];if(t)renderWorkspaceResult(t)};
 
 renderChatSession();
 renderBoard('today');
