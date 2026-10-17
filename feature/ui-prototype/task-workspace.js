@@ -76,6 +76,9 @@ loadTaskEditor=function(mode,args={}){
   if(mode!=='create-item'&&mode!=='edit-item')return taskEditorLoadBeforeOverlay(mode,args);
   const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
   const returnTarget=args.returnTarget||detectTaskEditorReturnTarget();
+  if(typeof hideComposerSuggestions==='function')hideComposerSuggestions();
+  if(typeof closeComposerPicker==='function')closeComposerPicker();
+  if(returnTarget==='chat')showView('chat');
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
   closeModal('addPlanTaskModal');
   taskEditorLoadBeforeOverlay(mode,args);
