@@ -490,8 +490,8 @@ function mockTaskDraftItems(text,wantsList){
   if(wantsList&&bullets.length>=2)return bullets.map(x=>({title:x.slice(0,56),prompt:x}));
   if(wantsList)return [
     {title:'實作需求',prompt:source},
-    {title:'測試與驗證',prompt:\`針對「\${source}」執行 focused tests，確認沒有影響既有行為與相鄰功能。\`},
-    {title:'最終 Review',prompt:\`Review「\${source}」的最終修改、測試結果與可能 regression；若有問題先修正再完成。\`}
+    {title:'測試與驗證',prompt:`針對「${source}」執行 focused tests，確認沒有影響既有行為與相鄰功能。`},
+    {title:'最終 Review',prompt:`Review「${source}」的最終修改、測試結果與可能 regression；若有問題先修正再完成。`}
   ];
   return [{title:mockTaskDraftTitle(source),prompt:source}];
 }
@@ -504,10 +504,10 @@ function mockBuildChatTaskDraft(text,projectKey=currentProjectKey){
 function chatDraftWorkflowOptions(selected){
   const select=document.getElementById('newTaskWorkflow');
   const values=select?[...select.options].map(o=>o.value):['ralphy_ai_validate.yaml','mixed.yaml','dynamic_handoff.yaml'];
-  return [...new Set(values)].map(x=>\`<option value="\${escapeAttr(x)}" \${x===selected?'selected':''}>\${escapeHtml(x)}</option>\`).join('');
+  return [...new Set(values)].map(x=>`<option value="${escapeAttr(x)}" ${x===selected?'selected':''}>${escapeHtml(x)}</option>`).join('');
 }
 function chatDraftProjectOptions(selected){
-  return Object.keys(projectMeta).map(key=>\`<option value="\${escapeAttr(key)}" \${key===selected?'selected':''}>\${escapeHtml(key)}</option>\`).join('');
+  return Object.keys(projectMeta).map(key=>`<option value="${escapeAttr(key)}" ${key===selected?'selected':''}>${escapeHtml(key)}</option>`).join('');
 }
 function normalizeChatDraftKind(draft,nextKind){
   if(nextKind===draft.kind)return;
@@ -539,44 +539,44 @@ function createTaskFromChatDraft(session){
   const rawItems=(draft.items||[]).filter(x=>String(x.prompt||'').trim());
   if(!rawItems.length){showToast('Task Draft 至少需要一個 Task Prompt');return}
   const id='T-'+(++taskSequence),placeholder={id,project:projectKey};
-  const resolved=rawItems.map((x,i)=>resolveTaskWorkspace(projectKey,\`\${id}-I\${i+1}\`,draft.workspacePolicy));
+  const resolved=rawItems.map((x,i)=>resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,draft.workspacePolicy));
   const failed=resolved.find(x=>!x.ok);if(failed){taskSequence--;showToast(failed.reason);return}
   const items=rawItems.map((x,i)=>planItemDefaults({
-    title:x.title||\`Task \${i+1}\`,prompt:x.prompt,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow:draft.workflow,
+    title:x.title||`Task ${i+1}`,prompt:x.prompt,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow:draft.workflow,
     validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',
     workspacePolicy:draft.workspacePolicy,workspaceKind:resolved[i].kind,branch:resolved[i].branch,executionRoot:resolved[i].root
   },placeholder,i));
   const count=items.length,first=items[0],title=String(draft.title||planTitle(first,0)||'New Task').trim().slice(0,72);
-  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:count===1?'1 task':\`\${count} ordered tasks\`,tags:[\`\${count} task\${count===1?'':'s'}\`],workflow:count===1?first.workflow:'Tasks',project:projectKey,progress:[0,count],elapsed:'—',stage:'Idle',session:'—',goal:count===1?first.prompt:\`\${count} ordered tasks\`,items,listItems:items};
+  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:count===1?'1 task':`${count} ordered tasks`,tags:[`${count} task${count===1?'':'s'}`],workflow:count===1?first.workflow:'Tasks',project:projectKey,progress:[0,count],elapsed:'—',stage:'Idle',session:'—',goal:count===1?first.prompt:`${count} ordered tasks`,items,listItems:items};
   if(count===1){
     Object.assign(t,{promptSource:{goalMode:first.goalMode,prompt:first.prompt,goalFile:first.goalFile,goalAsset:first.goalAsset,validator:first.validator,aiMode:first.aiMode,aiPrompt:first.aiPrompt,aiFile:first.aiFile,aiAsset:first.aiAsset},workspacePolicy:first.workspacePolicy,workspaceKind:first.workspaceKind,branch:first.branch,executionRoot:first.executionRoot});
   }else Object.assign(t,{workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
   taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
   draft.createdTaskId=id;draft.editing=false;
-  session.messages.push(['assistant',\`\${id} 已建立在 New；尚未執行。你可以先到 Tasks 檢查或繼續在 Chat 調整下一個需求。\`]);
-  renderChatSession();showToast(\`Task created · \${id}\`);
+  session.messages.push(['assistant',`${id} 已建立在 New；尚未執行。你可以先到 Tasks 檢查或繼續在 Chat 調整下一個需求。`]);
+  renderChatSession();showToast(`Task created · ${id}`);
 }
 function renderChatTaskDraft(session,box){
   const draft=session?.taskDraft;if(!draft)return;
   const card=document.createElement('section');card.className='chat-task-draft';
   if(draft.createdTaskId){
-    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge chat-task-draft-created">CREATED</span><h3>\${escapeHtml(draft.title)}</h3></div><strong>\${escapeHtml(draft.createdTaskId)}</strong></div><div class="chat-task-draft-meta"><span>\${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span><span>\${escapeHtml(draft.projectKey)}</span><span>New · not running</span></div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn primary" type="button" data-chat-draft-open>Open Task</button></div>\`;
+    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge chat-task-draft-created">CREATED</span><h3>${escapeHtml(draft.title)}</h3></div><strong>${escapeHtml(draft.createdTaskId)}</strong></div><div class="chat-task-draft-meta"><span>${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span><span>${escapeHtml(draft.projectKey)}</span><span>New · not running</span></div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn primary" type="button" data-chat-draft-open>Open Task</button></div>`;
   }else if(draft.editing){
-    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>Edit before creating</h3></div></div>
+    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>Edit before creating</h3></div></div>
       <div class="chat-task-draft-form">
-        <label class="wide">Title<input data-chat-draft-title value="\${escapeAttr(draft.title)}"></label>
-        <label>Type<select data-chat-draft-kind><option value="task" \${draft.kind==='task'?'selected':''}>Task</option><option value="list" \${draft.kind==='list'?'selected':''}>Task List</option></select></label>
-        <label>Project<select data-chat-draft-project>\${chatDraftProjectOptions(draft.projectKey)}</select></label>
-        <label>Workflow<select data-chat-draft-workflow>\${chatDraftWorkflowOptions(draft.workflow)}</select></label>
-        <label>Workspace<select data-chat-draft-workspace><option value="auto" \${draft.workspacePolicy==='auto'?'selected':''}>Auto</option><option value="main" \${draft.workspacePolicy==='main'?'selected':''}>Main</option><option value="worktree" \${draft.workspacePolicy==='worktree'?'selected':''}>Worktree</option></select></label>
-        \${draft.items.map((x,i)=>\`<label class="wide" data-chat-draft-item="\${i}">Task \${i+1}<input data-chat-draft-item-title value="\${escapeAttr(x.title||'')}"><textarea data-chat-draft-item-prompt>\${escapeHtml(x.prompt||'')}</textarea></label>\`).join('')}
+        <label class="wide">Title<input data-chat-draft-title value="${escapeAttr(draft.title)}"></label>
+        <label>Type<select data-chat-draft-kind><option value="task" ${draft.kind==='task'?'selected':''}>Task</option><option value="list" ${draft.kind==='list'?'selected':''}>Task List</option></select></label>
+        <label>Project<select data-chat-draft-project>${chatDraftProjectOptions(draft.projectKey)}</select></label>
+        <label>Workflow<select data-chat-draft-workflow>${chatDraftWorkflowOptions(draft.workflow)}</select></label>
+        <label>Workspace<select data-chat-draft-workspace><option value="auto" ${draft.workspacePolicy==='auto'?'selected':''}>Auto</option><option value="main" ${draft.workspacePolicy==='main'?'selected':''}>Main</option><option value="worktree" ${draft.workspacePolicy==='worktree'?'selected':''}>Worktree</option></select></label>
+        ${draft.items.map((x,i)=>`<label class="wide" data-chat-draft-item="${i}">Task ${i+1}<input data-chat-draft-item-title value="${escapeAttr(x.title||'')}"><textarea data-chat-draft-item-prompt>${escapeHtml(x.prompt||'')}</textarea></label>`).join('')}
       </div>
-      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-cancel>Cancel</button><button class="btn primary" type="button" data-chat-draft-save>Save Draft</button></div>\`;
+      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-cancel>Cancel</button><button class="btn primary" type="button" data-chat-draft-save>Save Draft</button></div>`;
   }else{
-    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>\${escapeHtml(draft.title)}</h3></div><span class="pill">\${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span></div>
-      <div class="chat-task-draft-meta"><span>\${escapeHtml(draft.projectKey)}</span><span>\${escapeHtml(draft.workflow)}</span><span>\${escapeHtml(draft.workspacePolicy)}</span><span>\${draft.items.length} task\${draft.items.length===1?'':'s'}</span></div>
-      <div class="chat-task-draft-items">\${draft.items.map((x,i)=>\`<div class="chat-task-draft-item"><strong>\${i+1}. \${escapeHtml(x.title||\`Task \${i+1}\`)}</strong><p>\${escapeHtml(x.prompt||'')}</p></div>\`).join('')}</div>
-      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn" type="button" data-chat-draft-edit>Edit</button><button class="btn primary" type="button" data-chat-draft-create>Create Task</button></div>\`;
+    card.innerHTML=`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>${escapeHtml(draft.title)}</h3></div><span class="pill">${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span></div>
+      <div class="chat-task-draft-meta"><span>${escapeHtml(draft.projectKey)}</span><span>${escapeHtml(draft.workflow)}</span><span>${escapeHtml(draft.workspacePolicy)}</span><span>${draft.items.length} task${draft.items.length===1?'':'s'}</span></div>
+      <div class="chat-task-draft-items">${draft.items.map((x,i)=>`<div class="chat-task-draft-item"><strong>${i+1}. ${escapeHtml(x.title||`Task ${i+1}`)}</strong><p>${escapeHtml(x.prompt||'')}</p></div>`).join('')}</div>
+      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn" type="button" data-chat-draft-edit>Edit</button><button class="btn primary" type="button" data-chat-draft-create>Create Task</button></div>`;
   }
   box.appendChild(card);
   card.querySelector('[data-chat-draft-edit]')?.addEventListener('click',()=>{draft.editing=true;renderChatSession()});
