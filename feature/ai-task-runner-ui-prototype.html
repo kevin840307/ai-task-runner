@@ -251,6 +251,12 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 /* Project is the Chat entry; Chat is no longer a sidebar destination. */
 .project-list-item.active{background:#eef8f6}
+
+/* Final task-list polish */
+.execution-plan-head{align-items:center}.execution-plan-head h3{text-transform:none!important;letter-spacing:0!important;font-size:11px!important}
+.drawer-plan-summary{margin-top:1px}
+.plan-modal-card .plan-intro{padding-bottom:9px;border-bottom:1px solid #edf1f4}
+.plan-row-copy small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56vw}
 </style>
 </head>
 <body>
@@ -314,7 +320,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <!-- Tasks -->
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
-        <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered task-list model</p></div>
+        <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered tasks</p></div>
         <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
@@ -384,8 +390,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <div class="task-edit-notice" id="taskEditNotice" hidden></div>
         <section class="section execution-plan-section">
           <div class="execution-plan-head">
-            <div><h3>Execution plan</h3><p id="taskListEditHint">1 task · runs as one Task</p></div>
-            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button" hidden></button><button class="btn ghost" id="openFullPlan" type="button" hidden>Open plan</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
+            <div><h3>Tasks</h3><p id="taskListEditHint">1 task</p></div>
+            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button" hidden></button><button class="btn ghost" id="openFullPlan" type="button" hidden>Open list</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
           </div>
           <div class="steps-summary" id="taskListParentHint">1 task · same Board item</div>
           <div id="yaml-form"><div class="formlist drawer-plan-summary" id="formList"></div></div>
@@ -469,7 +475,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="yamlPlanModal">
   <div class="modal-card yaml-plan-modal">
-    <div class="modal-head"><div><h2>Edit execution plan YAML</h2><p>Advanced view of the same execution plan. Apply returns to Task Overview.</p></div><button class="close" data-close-modal="yamlPlanModal">×</button></div>
+    <div class="modal-head"><div><h2>Edit task list YAML</h2><p>Advanced view of the same execution plan. Apply returns to Task Overview.</p></div><button class="close" data-close-modal="yamlPlanModal">×</button></div>
     <div class="modal-body">
       <textarea class="code yaml-plan-editor" id="yamlEditor"></textarea>
       <div class="yaml-plan-status" id="yamlPlanStatus">No changes.</div>
@@ -483,7 +489,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 <div class="modal-overlay" id="addPlanTaskModal">
   <div class="modal-card add-plan-task-modal">
     <div class="modal-head">
-      <div><h2>Add task</h2><p>Add a new task to this execution plan, or move an unused New task from the Board.</p></div>
+      <div><h2>Add task</h2><p>Add a new task, or move an unused New task from the Board.</p></div>
       <button class="close" data-close-modal="addPlanTaskModal">×</button>
     </div>
     <div class="modal-body">
@@ -514,17 +520,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 <div class="modal-overlay" id="planModal">
   <div class="modal-card plan-modal-card">
     <div class="modal-head plan-modal-head">
-      <div><h2 id="planPageTitle">Execution plan</h2><p id="planPageMeta">T-000 · New · 1 task</p></div>
+      <div><h2 id="planPageTitle">Tasks</h2><p id="planPageMeta">T-000 · New · 1 task</p></div>
       <div class="plan-modal-head-actions"><button class="btn" id="planAddTask" type="button">+ Add task</button><button class="btn" id="planAddExisting" type="button" hidden></button><button class="btn" id="planEditYaml" type="button">Edit YAML</button><button class="close" id="planBackToTask" type="button">×</button></div>
     </div>
     <div class="plan-page-body">
       <main class="plan-main">
-        <div class="plan-intro"><div><strong>Execution order</strong><span>同一張 Board Task，由上到下依序執行。</span></div><span class="pill" id="planStatePill">Editable</span></div>
+        <div class="plan-intro"><div><strong>Task order</strong><span>同一張 Board Task，由上到下依序執行。</span></div><span class="pill" id="planStatePill">Editable</span></div>
         <div class="plan-list" id="planFormList"></div>
       </main>
       <aside class="plan-side">
         <section class="plan-side-card"><h3>Task</h3><div class="plan-side-kv" id="planTaskSummary"></div></section>
-        <section class="plan-side-card"><h3>Rules</h3><p>New / Paused 可編輯；Ongoing / Closed 唯讀。</p><p>只有尚未執行的 New Task 可以 Move into plan。</p></section>
+        <section class="plan-side-card"><h3>Rules</h3><p>New / Paused 可編輯；Ongoing / Closed 唯讀。</p><p>只有尚未執行的 New Task 可以 Move here。</p></section>
       </aside>
     </div>
   </div>
@@ -2106,7 +2112,7 @@ function openYamlPlanModal(){
   if(batchParentTaskId!==t.id)prepareStepsForTask(t);
   pendingYamlPlan=null;
   document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
-  const status=document.getElementById('yamlPlanStatus');status.className='yaml-plan-status';status.textContent='Editing the same execution plan. Validate before Apply.';
+  const status=document.getElementById('yamlPlanStatus');status.className='yaml-plan-status';status.textContent='Editing the same ordered task list. Validate before Apply.';
   document.getElementById('applyYamlPlan').disabled=true;
   openModal('yamlPlanModal');
 }
@@ -2133,7 +2139,7 @@ document.getElementById('applyYamlPlan').onclick=()=>{
     const x=batchDraft[0];t.kind='task';t.workspaceKind='main';t.workflow=x.workflow;t.goal=x.prompt||t.goal;t.listItems=null;t.tags=['workflow'];
     t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
   }
-  renderBatchDraft();renderBoardFromMap();closeModal('yamlPlanModal');pendingYamlPlan=null;showToast('Execution plan YAML applied');
+  renderBatchDraft();renderBoardFromMap();closeModal('yamlPlanModal');pendingYamlPlan=null;showToast('Task list YAML applied');
 };
 
 // New Task always creates one Task. Composition happens later from Overview.
@@ -2370,7 +2376,7 @@ function renderDrawerPlan(t){
     const x=items[0],s=planStateFor(t,0,1);
     host.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${s.cls}">${escapeHtml(s.label)}</span></div>`;
   }else{
-    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open plan to edit</div>`:'');
+    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open list to edit</div>`:'');
   }
   ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
 }
@@ -2459,12 +2465,12 @@ function openPlanYamlForTask(t){
   if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
   if(t.status==='paused'&&(t.progress?.[0]||0)>0){showToast('已有完成 tasks；請用 Full Plan 編輯 current / future tasks，避免改寫 PASS 歷史');return}
   if(batchParentTaskId!==t.id)setPlanDraftForTask(t);pendingYamlPlan=null;document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
-  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Editing the same execution plan. Validate before Apply.';document.getElementById('applyYamlPlan').disabled=true;openModal('yamlPlanModal');
+  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Editing the same ordered task list. Validate before Apply.';document.getElementById('applyYamlPlan').disabled=true;openModal('yamlPlanModal');
 }
 openYamlPlanModal=function(){const t=taskMap[currentTaskId];if(t)openPlanYamlForTask(t)};
 document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;document.getElementById('planEditYaml').onclick=openYamlPlanModal;
 document.getElementById('applyYamlPlan').onclick=()=>{
-  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t,{markDirty:t.status==='paused'});pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Execution plan YAML applied');
+  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t,{markDirty:t.status==='paused'});pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Task list YAML applied');
 };
 
 // Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
@@ -2487,7 +2493,7 @@ function setAddTaskMode(mode){
   document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
   document.getElementById('addTaskCreatePanel').hidden=mode!=='create';
   document.getElementById('addTaskMovePanel').hidden=mode!=='move';
-  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Add task':'Move into plan';
+  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Add task':'Move here';
   renderMoveTaskPicker();
 }
 function renderMoveTaskPicker(){
@@ -2546,7 +2552,7 @@ renderExecutionPlan=function(t){
   preview.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`}).join('');
   if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(t);
 };
-renderDrawerPlan=(function(base){return function(t){base(t);document.getElementById('drawerAddExisting').hidden=true;document.getElementById('openFullPlan').textContent='Open plan';};})(renderDrawerPlan);
+renderDrawerPlan=(function(base){return function(t){base(t);document.getElementById('drawerAddExisting').hidden=true;document.getElementById('openFullPlan').textContent='Open list';};})(renderDrawerPlan);
 
 // Show moved provenance in the full plan without creating a second Task identity.
 renderFullPlan=(function(base){return function(t){base(t);document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{const i=+row.dataset.planRow,x=batchDraft[i];if(x?.originTaskId){const small=row.querySelector('.plan-row-copy small');if(small)small.textContent+=` · moved ${x.originTaskId}`;}});};})(renderFullPlan);
@@ -2556,7 +2562,7 @@ function renderWorkspaceResult(t){
   const isolated=t.workspaceKind==='worktree';
   const multi=t.workspaceKind==='batch';
   section.hidden=!isolated&&!multi;
-  if(multi){state.textContent='Multi-step';hint.textContent='Each child task may use its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
+  if(multi){state.textContent='Task workspaces';hint.textContent='Each task may resolve its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
   if(!isolated)return;
   const ready=['done'].includes(t.runtime)||t.status==='closed';
   const merged=t.mergeState==='merged',cleaned=!!t.worktreeCleaned;
@@ -2613,7 +2619,7 @@ commitPlanDraft=function(t,{markDirty=false}={}){
   if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused Task · current task changed · restart required.'}
 };
 
-// Board / create / preset paths all normalize through the same Task List adapter.
+// Board / create / preset paths all normalize through the same work item adapter.
 const canonicalBoardFromMap=renderBoardFromMap;
 renderBoardFromMap=function(){normalizeAllTaskLists();canonicalBoardFromMap()};
 const canonicalBoardPreset=renderBoard;
@@ -2631,7 +2637,7 @@ selectProject=function(key){
   const meta=projectMeta[key];if(!meta)return;
   document.getElementById('chatProjectTitle').textContent=key;
   document.getElementById('chatProjectLine').textContent=`${meta.path} · Project Chat · 不建立 Runner Task`;
-  document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered task-list model`;
+  document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered tasks`;
 };
 document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
   selectProject(p.dataset.project);showView('chat');document.getElementById('chatInput').focus();
@@ -2641,10 +2647,10 @@ document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListene
 renderDrawerPlan=(function(base){return function(t){
   canonicalTaskItems(t);base(t);
   document.getElementById('openFullPlan').hidden=false;
-  document.getElementById('openFullPlan').textContent='Open plan';
+  document.getElementById('openFullPlan').textContent='Open list';
   const n=t.items.length;
-  document.getElementById('taskListEditHint').textContent=`${n} task${n===1?'':'s'} · same Task List`;
-  document.getElementById('taskListParentHint').textContent=n===1?'Single-item Task List':`${n} tasks · executed top to bottom`;
+  document.getElementById('taskListEditHint').textContent=`${n} task${n===1?'':'s'} · same work item`;
+  document.getElementById('taskListParentHint').textContent=n===1?'1 task':`${n} tasks · executed top to bottom`;
 };})(renderDrawerPlan);
 
 // Moved New task contributes its single item, then its standalone Board identity is retired.
@@ -2662,11 +2668,11 @@ document.getElementById('confirmAddPlanTask').onclick=()=>{
     const sourceItem=cloneBatch(canonicalTaskItems(source))[0];
     const item=planItemDefaults(sourceItem,owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
     batchDraft.push(item);delete taskMap[source.id];
-    pushTaskHistory(owner,`Moved ${source.id} into Task List · standalone Board identity retired`);
+    pushTaskHistory(owner,`Moved ${source.id} here · standalone Board identity retired`);
   }
   sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();
   closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
-  showToast(addTaskMode==='create'?'Task added':'New Task moved into Task List');
+  showToast(addTaskMode==='create'?'Task added':'New Task moved here');
 };
 
 // Workspace result uses item count, not a separate Task/List type flag.
