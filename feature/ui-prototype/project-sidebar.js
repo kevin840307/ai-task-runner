@@ -81,8 +81,10 @@ function deleteProject(key){
   renderProjectOptions(currentProjectKey);renderBoardFromMap();closeModal('projectManageModal');showToast(`Project removed · ${key}`);
 }
 document.getElementById('projectScroll').addEventListener('click',e=>{
-  const more=e.target.closest('.project-more');if(!more)return;
-  e.preventDefault();e.stopPropagation();openProjectActionMenu(more);
+  const more=e.target.closest('.project-more');
+  if(more){e.preventDefault();e.stopPropagation();openProjectActionMenu(more);return}
+  const project=e.target.closest('.project[data-project]');if(!project)return;
+  e.preventDefault();selectProject(project.dataset.project);showView('chat');renderChatSession();
 });
 projectActionMenu.querySelector('[data-project-action="rename"]').onclick=()=>openProjectManage('rename');
 projectActionMenu.querySelector('[data-project-action="delete"]').onclick=()=>openProjectManage('delete');
