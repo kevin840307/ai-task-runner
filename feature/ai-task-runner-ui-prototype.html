@@ -57,6 +57,10 @@
             <div class="composer-suggest-head"><strong id="composerSuggestTitle">Commands</strong><span id="composerSuggestHint">Type to filter</span></div>
             <div class="composer-suggest-list" id="composerSuggestList"></div>
           </div>
+          <div class="composer-picker-popover" id="composerPickerPopover" hidden>
+            <div class="composer-picker-popover-head"><div><span id="composerPickerEyebrow">CHAT</span><strong id="composerPickerTitle">Select</strong></div><button type="button" id="composerPickerClose" aria-label="Close selector">×</button></div>
+            <div class="composer-picker-options" id="composerPickerOptions" role="listbox"></div>
+          </div>
           <div class="composer-side-question" id="composerSideQuestion" hidden>
             <div class="composer-side-question-head"><div><span class="side-question-badge">SIDE QUESTION</span><strong id="sideQuestionAgent">Agent</strong></div><button type="button" id="dismissSideQuestion" aria-label="Dismiss side question">×</button></div>
             <div class="composer-side-question-query" id="sideQuestionQuery"></div>
@@ -67,9 +71,24 @@
             <div class="composerfoot">
               <div class="composer-controls">
                 <span class="chip">Project</span>
-                <label class="composer-control agent-control" title="Selected coding Agent"><span>Agent</span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
-                <label class="composer-control model-control" title="Model list comes from the selected Agent"><span>Model</span><select id="chatModel"></select></label>
-                <label class="composer-control mode-control" id="chatModeControl" title="Simplified permission profile mapped to the selected Agent"><span>Mode</span><select id="chatMode"></select></label>
+                <div class="composer-picker agent-control">
+                  <button class="composer-picker-trigger" id="chatAgentTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="composer-picker-copy"><small>Agent</small><strong id="chatAgentValue">Qwen Code</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                  </button>
+                  <select id="chatAgent" hidden><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select>
+                </div>
+                <div class="composer-picker model-control">
+                  <button class="composer-picker-trigger" id="chatModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="composer-picker-copy"><small>Model</small><strong id="chatModelValue">—</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                  </button>
+                  <select id="chatModel" hidden></select>
+                </div>
+                <div class="composer-picker mode-control" id="chatModeControl">
+                  <button class="composer-picker-trigger" id="chatModeTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="composer-picker-copy"><small>Mode</small><strong id="chatModeValue">Auto</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                  </button>
+                  <select id="chatMode" hidden></select>
+                </div>
                 <button class="composer-mini-action" id="chatAsk" type="button" title="Ask a side question without adding it to the main Chat history">Ask</button>
                 <button class="composer-mini-action" id="chatToTask" type="button" title="Insert @task command">@task</button>
               </div>
