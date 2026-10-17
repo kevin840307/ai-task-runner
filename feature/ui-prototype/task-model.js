@@ -61,13 +61,6 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
 };
 
-document.getElementById('chatToTask').onclick=()=>{
-  const input=document.getElementById('chatInput').value.trim();newTaskKind='task';
-  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
-  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
-  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderTaskKindUi();openModal('newTaskModal');
-};
-
 function syncTaskListDraftToParent(){
   const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
   t.kind='list';t.listItems=cloneBatch(batchDraft);t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];
