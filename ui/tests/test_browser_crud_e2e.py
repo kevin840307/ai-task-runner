@@ -157,6 +157,15 @@ def _bridge_for(state: UIState):
                     ]
                 elif path == "/api/workflow/catalog":
                     data = {"stage_types": {}, "node_options": {}}
+                elif path == "/api/environment/check":
+                    data = {
+                        "ok": True,
+                        "status": "pass",
+                        "checks": [
+                            {"name": "Python", "status": "pass", "detail": "Ready"},
+                            {"name": "Backend", "status": "pass", "detail": "Ready"},
+                        ],
+                    }
                 elif path == "/api/backends":
                     data = state.backend_catalog()
                 elif path == "/api/studio/files":
@@ -413,6 +422,19 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 page.add_style_tag(path=str(css))
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
+
+            # Environment diagnostics stay readable but the completed checklist can collapse.
+            page.locator("#optionsButton").click()
+            page.locator("#environmentCheckButton").click()
+            page.wait_for_function("document.querySelector('.environment-check-toggle')?.getAttribute('aria-expanded') === 'true'")
+            assert page.locator("#environmentCheckDetails").is_visible()
+            page.locator(".environment-check-toggle").click()
+            assert page.locator(".environment-check-toggle").get_attribute("aria-expanded") == "false"
+            assert page.locator("#environmentCheckDetails").is_hidden()
+            page.locator(".environment-check-toggle").click()
+            assert page.locator(".environment-check-toggle").get_attribute("aria-expanded") == "true"
+            assert page.locator("#environmentCheckDetails").is_visible()
+            page.locator("#optionsCloseButton").click()
 
             # Shared dialogs must restore keyboard focus to the control that opened them.
             page.locator("#openProject").focus()
