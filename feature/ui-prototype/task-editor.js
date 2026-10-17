@@ -687,52 +687,66 @@ function mockAskQuestions(context=''){
     {header:'Implementation scope',question:short?`針對「${short}」你希望優先採用哪種處理方式？`:'你希望優先採用哪種處理方式？',type:'choice',options:[
       {label:'最小修改',description:'只改必要範圍，降低 regression'},
       {label:'完整優化',description:'連同鄰近 UX / code ownership 一起整理'},
-      {label:'先分析',description:'先確認設計與風險，再進行修改'}
+      {label:'先分析',description:'先確認設計與風險，再進行修改'},
+      {label:'先做 UI Mock',description:'先完成可操作 prototype，再接正式 backend'},
+      {label:'先做 Backend',description:'先定義 API、資料結構與 Runner contract'},
+      {label:'測試優先',description:'先補測試與失敗情境，再修改實作'},
+      {label:'維護性優先',description:'整理責任邊界，避免再增加 wrapper / duplicate logic'},
+      {label:'效能優先',description:'優先減少延遲、資源用量與不必要操作'}
     ]},
     {header:'Verification',question:'這次驗證希望做到什麼程度？',type:'choice',options:[
       {label:'Focused tests',description:'只跑直接相關測試'},
       {label:'Regression tests',description:'包含鄰近功能 regression'},
-      {label:'Mock first',description:'先完成 Mock / prototype 驗證'}
+      {label:'Mock first',description:'先完成 Mock / prototype 驗證'},
+      {label:'Live integration',description:'接真實 Agent / backend 驗證'},
+      {label:'長時間可靠性',description:'補 retry、resume、timeout 與 soak 測試'}
     ]},
     {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[]}
   ];
   return Math.random()<.5?[base[0],base[2]]:base;
 }
 function startMockAskFlow(session=activeChat(),context=''){
-  const profile=chatAgentProfile();if(!session||!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
+  const profile=chatAgentProfile(chatAgentKey(session));if(!session||!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
   session.askFlow={agent:chatAgentKey(session),model:session.model||profile.defaultModel,index:0,questions:mockAskQuestions(context),answers:{},selected:{}};
-  renderAskFlow(session);
+  session.turnState='waiting_ask';
+  if(activeChat()===session)renderChatSession();
 }
 function currentAskQuestion(flow){return flow?.questions?.[flow.index]||null}
 function renderAskFlow(session=activeChat()){
-  const panel=document.getElementById('composerAsk'),title=document.getElementById('composerAskTitle'),progress=document.getElementById('composerAskProgress'),question=document.getElementById('composerAskQuestion'),options=document.getElementById('composerAskOptions'),textInput=document.getElementById('composerAskText'),next=document.getElementById('composerAskNext');if(!panel)return;
-  const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q){panel.hidden=true;resizeChatComposer();return}
-  panel.hidden=false;title.textContent=q.header||'Clarification';progress.textContent=`${flow.index+1} / ${flow.questions.length}`;question.textContent=q.question||'';
-  const answer=flow.answers[String(flow.index)]||'',selected=flow.selected[String(flow.index)]||'';
+  const box=document.getElementById('chatMessages');if(!box)return;
+  box.querySelector('#composerAsk')?.remove();
+  const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
+  const panel=document.createElement('section');panel.id='composerAsk';panel.className='composer-ask chat-ask-card';
+  panel.innerHTML=`<div class='composer-ask-head'><div><span class='ask-badge'>ASK · MOCK</span><strong id='composerAskTitle'></strong></div><span id='composerAskProgress'></span></div><div class='composer-ask-question' id='composerAskQuestion'></div><div class='composer-ask-options' id='composerAskOptions'></div><textarea class='composer-ask-text' id='composerAskText' rows='2'></textarea><div class='composer-ask-foot'><button class='btn' type='button' id='composerAskCancel'>Cancel</button><button class='btn primary' type='button' id='composerAskNext'>Next</button></div>`;
+  panel.querySelector('#composerAskTitle').textContent=q.header||'Clarification';
+  panel.querySelector('#composerAskProgress').textContent=`Question ${flow.index+1} of ${flow.questions.length}`;
+  panel.querySelector('#composerAskQuestion').textContent=q.question||'';
+  const options=panel.querySelector('#composerAskOptions'),textInput=panel.querySelector('#composerAskText'),next=panel.querySelector('#composerAskNext');
+  const key=String(flow.index),answer=flow.answers[key]||'',selected=flow.selected[key]||'';
   if(q.type==='choice'){
     const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
-    options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class="composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}" type="button" data-ask-option="${i}"><span class="composer-ask-radio"></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
-    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],key=String(flow.index),wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
-    textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';
-    textInput.placeholder='Type a custom answer…';
-  }else{
-    options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder='Type your answer…';
-  }
-  textInput.oninput=()=>{flow.answers[String(flow.index)]=textInput.value};
+    options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
+    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
+    textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
+  }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder='輸入你的回答…'}
+  textInput.oninput=()=>{flow.answers[key]=textInput.value};
   next.textContent=flow.index===flow.questions.length-1?'Submit':'Next';
-  resizeChatComposer();
+  panel.querySelector('#composerAskNext').onclick=()=>advanceAskFlow(session);
+  panel.querySelector('#composerAskCancel').onclick=()=>{session.askFlow=null;session.turnState='idle';session.messages.push(['assistant','Mock Ask 已取消；未提交任何答案。']);if(activeChat()===session)renderChatSession();drainChatQueue(session)};
+  box.appendChild(panel);box.scrollTop=box.scrollHeight;
 }
 function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
-  if(q.type==='choice'&&!selected){showToast('Choose an option');return}
-  if((q.type==='text'||selected==='__other__')&&!answer){showToast('Please enter an answer');return}
+  if(q.type==='choice'&&!selected){showToast('請先選擇一個選項');return}
+  if((q.type==='text'||selected==='__other__')&&!answer){showToast('請填寫回答');return}
   if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
   if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
   const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
   session.messages.push(['user',`Clarification answers\n${summary}`]);
   session.messages.push(['assistant','Mock Agent 已收到所有回答，正式版會把結構化 answers 回傳給目前 Agent tool call，然後繼續原本 turn。']);
-  session.askFlow=null;renderChatSession();
+  session.askFlow=null;session.turnState='idle';
+  if(activeChat()===session)renderChatSession();drainChatQueue(session);
 }
 
 function mockInvokeSystemPrompt(session,command){
