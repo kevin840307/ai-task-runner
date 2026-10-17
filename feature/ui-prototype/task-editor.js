@@ -624,8 +624,9 @@ function drainChatQueue(session=activeChat()){
   startMockChatTurn(session,next.text,{fromQueue:true});
 }
 function processMockChatPrompt(session,text,projectKey){
-  const taskCommand=chatTaskCommand(text),agentCommand=chatAgentCommand(text),systemCommand=chatSystemCommand(text);
-  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode,session,projectKey);
+  const runCommand=chatRunCommand(text),taskCommand=chatTaskCommand(text),agentCommand=chatAgentCommand(text),systemCommand=chatSystemCommand(text);
+  if(runCommand.matched)runChatTaskNow(runCommand.spec,session,projectKey);
+  else if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode,session,projectKey);
   else if(agentCommand.matched)mockInvokeAgentCommand(session,agentCommand);
   else if(systemCommand.matched)mockInvokeSystemPrompt(session,systemCommand,projectKey);
   else if(Math.random()<.45)startMockAskFlow(session,text);
@@ -762,6 +763,10 @@ function renderComposerSuggestions(){
   pop.hidden=false;resizeChatComposer();
 }
 
+function chatRunCommand(text){
+  const match=String(text||'').match(/^\s*@run(?:\s+([\s\S]*?))?\s*$/i);
+  return match?{matched:true,spec:String(match[1]||'').trim()}:{matched:false,spec:''};
+}
 function chatTaskCommand(text){
   const match=String(text||'').match(/^\s*@(task|task-single|task-list)(?:\s+([\s\S]*?))?\s*$/i);
   if(!match)return {matched:false,mode:'',spec:''};
@@ -848,6 +853,28 @@ function renderChatTaskDraft(session,box){
   card.querySelector('[data-chat-draft-create]')?.addEventListener('click',()=>createTaskFromChatDraft(session));
   card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
+}
+function runChatTaskNow(spec,targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
+  const session=targetSession,source=String(spec||'').trim();if(!session)return;
+  if(!source){session.messages.push(['assistant','Usage: @run <需求>']);showToast('Usage: @run <需求>');return}
+  const workflow=chatWorkflowKey(session),caps=workflowCaps(workflow);
+  if(caps.file){
+    session.messages.push(['assistant',`Quick Run 未啟動：${workflow} 需要 File Validator。請用 @task 建立後補齊設定，或在 ⚙ 切換可直接執行的 Workflow。`]);
+    showToast('Selected Workflow needs extra validation input');return;
+  }
+  const id='T-'+(++taskSequence),resolved=resolveTaskWorkspace(projectKey,`${id}-I1`,'auto');
+  if(!resolved.ok){taskSequence--;session.messages.push(['assistant',`Quick Run failed: ${resolved.reason}`]);showToast(resolved.reason);return}
+  const placeholder={id,project:projectKey};
+  const item=planItemDefaults({title:mockTaskDraftTitle(source),prompt:source,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow,
+    validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',
+    workspacePolicy:'auto',workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root},placeholder,0);
+  item.itemId=`${id}-I1`;
+  const t={id,kind:'task_list',status:'ongoing',title:mockTaskDraftTitle(source),runtime:'running',desc:'Quick Run · running',tags:['1 task','Quick Run'],workflow,project:projectKey,progress:[0,1],elapsed:'0m',stage:'execute',session:'same',goal:source,
+    items:[item],listItems:[item],promptSource:{goalMode:'inline',prompt:source,goalFile:'',goalAsset:item.goalAsset,validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:item.aiAsset},
+    workspacePolicy:'auto',workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root};
+  taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
+  session.messages.push(['assistant',`Quick Run started · ${id} · ${workflow}`]);
+  showToast(`Run started · ${workflow.replace(/\.yaml$/,'')}`);
 }
 function generateChatTaskDraft(spec,mode='auto',targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
   const session=targetSession;if(!session)return;
@@ -1197,9 +1224,13 @@ document.getElementById('chatAgent').onchange=e=>{
   syncChatAgentControl();renderComposerSuggestions();
   showToast(`Mock Agent · ${chatAgentLabel(e.target.value)}`);
 };
+document.getElementById('chatWorkflow').onchange=e=>{
+  const session=activeChat();if(!session)return;
+  session.workflow=e.target.value;showToast(`Workflow · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+};
 document.getElementById('chatModel').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.model=e.target.value;syncComposerPickerLabels();showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+  session.model=e.target.value;showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
 };
 document.getElementById('chatMode').onchange=e=>{
   const session=activeChat();if(!session)return;
