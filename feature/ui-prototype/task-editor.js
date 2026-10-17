@@ -1206,9 +1206,11 @@ chatInputForSuggestions.addEventListener('input',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('click',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='q'){
+    e.preventDefault();e.stopImmediatePropagation();
     const value=chatInputForSuggestions.value.trim(),session=activeChat();
-    if(value&&chatTurnState(session)!=='idle'){e.preventDefault();e.stopImmediatePropagation();enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
+    if(value&&chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
     else if(value)showToast('Agent 目前沒有執行中的 turn，請直接傳送');
+    else showToast('先輸入訊息；Agent 忙碌時按 Ctrl+Q 可排隊');
     return;
   }
   const pop=document.getElementById('composerSuggest');
