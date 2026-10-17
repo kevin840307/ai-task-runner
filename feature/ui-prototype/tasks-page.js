@@ -184,10 +184,11 @@ function requestTaskResetToNew(t){
   openModal('taskResetToNewModal');
 }
 document.getElementById('confirmTaskResetToNew').onclick=()=>{
-  const t=taskMap[pendingResetToNewTaskId];pendingResetToNewTaskId=null;
-  closeModal('taskResetToNewModal');
+  const t=taskMap[pendingResetToNewTaskId],fromInfo=document.getElementById('taskOverlay').classList.contains('open');
+  pendingResetToNewTaskId=null;closeModal('taskResetToNewModal');
   if(!t||!['paused','closed'].includes(t.status))return;
   const wasClosed=t.status==='closed';resetTaskToNew(t);
+  if(fromInfo){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(t.id)}
   showToast(wasClosed?'Task moved to New · previous run preserved':'Task moved to New · execution reset from start');
 };
 
