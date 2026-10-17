@@ -61,8 +61,9 @@
             <div class="composer-picker-popover-head"><div><span id="composerPickerEyebrow">CHAT</span><strong id="composerPickerTitle">Select</strong></div><button type="button" id="composerPickerClose" aria-label="Close selector">×</button></div>
             <div class="composer-picker-options" id="composerPickerOptions" role="listbox"></div>
           </div>
+          <div class="composer-turn-status" id="composerTurnStatus" hidden>Agent 正在處理；送出訊息會自動加入 Queue</div>
           <div class="composer-queue" id="composerQueue" hidden>
-            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> pending</strong></div><small>Runs after the current Agent turn</small></div>
+            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> pending</strong></div><small>Agent 忙碌時，送出會自動排隊</small></div>
             <div class="composer-queue-list" id="composerQueueList"></div>
           </div>
           <div class="composer">
