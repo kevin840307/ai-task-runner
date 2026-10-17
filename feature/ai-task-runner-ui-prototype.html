@@ -248,6 +248,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .workspace-result-section{margin-top:2px}.workspace-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.workspace-result-head h3{margin:0!important}.workspace-result-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.workspace-result-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:6px 9px;margin-top:9px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#fbfcfd;font-size:8px}.workspace-result-grid span{color:var(--muted)}.workspace-result-grid strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-result-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.workspace-result-actions .btn:disabled{opacity:.45;cursor:not-allowed}
 
 #planModal{z-index:180}#addPlanTaskModal,#yamlPlanModal,#pathPickerModal{z-index:190}
+
+/* Project is the Chat entry; Chat is no longer a sidebar destination. */
+.project-list-item.active{background:#eef8f6}
 </style>
 </head>
 <body>
@@ -261,7 +264,6 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="sidebar-scroll">
       <div class="navgroup-label">Work</div>
       <nav class="nav nav-compact">
-        <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
         <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
       </nav>
       <div class="navgroup-label">Assets</div>
@@ -288,7 +290,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <!-- Chat -->
     <section class="view page" id="view-chat">
       <header class="header chat-header">
-        <div class="title"><h1>Chat</h1><p id="chatProjectLine">C:\Users\kevin\ai-task-runner · 一般對話，不建立 Runner Task</p></div>
+        <div class="title"><h1 id="chatProjectTitle">ai-task-runner</h1><p id="chatProjectLine">C:\Users\kevin\ai-task-runner · Project Chat · 不建立 Runner Task</p></div>
         <div class="actions chat-session-actions">
           <select class="mockselect session-select" id="chatPreset"></select>
           <button class="btn" id="renameChat">Rename</button>
@@ -312,7 +314,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <!-- Tasks -->
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
-        <div class="title"><h1>Tasks</h1><p>C:\Users\kevin\ai-task-runner · Board 管理狀態與 Runner runtime 分離</p></div>
+        <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered task-list model</p></div>
         <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
