@@ -112,6 +112,54 @@ Suggested capability shape:
     user_invocable,
     enabled.
 
+2.4 Agent / Model / Mode / Side Question controls
+-------------------------------------------------
+- Chat must expose the currently selected Agent, Model and permission Mode without hiding them in Settings.
+- Agent picker should be compact and visually clear; changing Agent refreshes its Model / Mode / slash-command capabilities.
+- Model list is Agent-owned capability data, not a frontend hardcoded production list.
+- Qwen Code direction:
+    use the same live model registry/picker source behind `/model`,
+    use live SkillManager/slash-command capabilities,
+    preserve native approval modes even if this UI exposes a smaller product-level set.
+- OpenCode direction:
+    use the same configured provider/model list exposed by `/models`,
+    use resolved Agent/skill/command capabilities,
+    preserve per-tool permission semantics.
+
+Product-level Mode UI:
+- Keep the main Chat control simple:
+    Read,
+    Auto,
+    YOLO.
+- These are product profiles, NOT assumptions that every Agent has identical native modes.
+- Adapter maps the selected profile to each Agent:
+    Qwen Read -> native Plan/read-only,
+    Qwen Auto -> native Auto,
+    Qwen YOLO -> native YOLO,
+    OpenCode Read -> deny write/edit/shell/task mutation permissions,
+    OpenCode Auto -> normal/safe permission profile with asks where required,
+    OpenCode YOLO -> allow-all/yolo-equivalent profile when supported.
+- Unsupported profiles must be omitted/disabled by capability discovery rather than silently emulated.
+- UI should surface a short native mapping/description so the safety level is understandable.
+- Backend/Agent adapter remains authoritative for the actual permission configuration.
+
+Side Question / Ask:
+- Support an Agent side-question capability similar to `/btw <question>` when the selected Agent exposes it.
+- Side questions use recent Chat context but do NOT become part of the main Chat history.
+- Render the side-question result above the Composer so the main Chat can continue independently.
+- The Ask control is only shown/enabled when the selected Agent reports side-question support.
+- Slash completion should also expose `/btw` when supported.
+- Dismiss/cancel must not mutate the main conversation.
+- Agent-originated approval/question requests should use a similarly explicit interrupt surface rather than being
+  confused with normal assistant messages.
+
+Mock requirements:
+- Prototype can use deterministic/mock Agent capability profiles for Qwen Code and OpenCode.
+- Mock Agent switch must visibly change model/options and `/` suggestions.
+- Mock Mode must show the simplified Read / Auto / YOLO mapping.
+- Mock Ask must demonstrate a side answer that is not appended to Chat history.
+- Production later replaces the profile with live adapter discovery; UI contract stays the same.
+
 3. CHAT COMMANDS: @task / @task-single / @task-list
 ====================================================
 
