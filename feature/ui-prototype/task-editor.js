@@ -247,10 +247,20 @@ renderDrawerPlan=(function(base){return function(t){base(t);document.getElementB
 // Show moved provenance in the full plan without creating a second Task identity.
 renderFullPlan=(function(base){return function(t){base(t);document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{const i=+row.dataset.planRow,x=batchDraft[i];if(x?.originTaskId){const small=row.querySelector('.plan-row-copy small');if(small)small.textContent+=` · moved ${x.originTaskId}`;}});};})(renderFullPlan);
 
+function itemUsesWorktree(x){return !!x&&(x.workspaceKind==='worktree'||x.workspacePolicy==='worktree')}
+function taskWorktreeItems(t){return t?canonicalTaskItems(t).filter(itemUsesWorktree):[]}
+function taskUsesWorktree(t){return !!t&&(t.workspaceKind==='worktree'||t.workspacePolicy==='worktree'||taskWorktreeItems(t).length>0)}
+
 function renderWorkspaceResult(t){
   const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
-  const isolated=t.workspaceKind==='worktree';
-  const multi=t.workspaceKind==='batch';
+  const worktreeItems=taskWorktreeItems(t),banner=document.getElementById('drawerWorktreeBanner');
+  const isolated=t.workspaceKind==='worktree'||(worktreeItems.length===1&&canonicalTaskItems(t).length===1);
+  const multi=canonicalTaskItems(t).length>1;
+  if(banner){
+    banner.hidden=!taskUsesWorktree(t);
+    const detail=document.getElementById('drawerWorktreeBannerDetail');
+    if(detail)detail.textContent=multi?`${worktreeItems.length} task${worktreeItems.length===1?'':'s'} use isolated Worktrees · changes are not in Main until merged.`:'Isolated development · changes are not in Main until merged.';
+  }
   section.hidden=!isolated&&!multi;
   if(multi){state.textContent='Task workspaces';hint.textContent='Each task may resolve its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
   if(!isolated)return;
@@ -448,7 +458,13 @@ workspaceName=(function(base){return function(t){
 
 // Remove legacy type words from card/Drawer presentation.
 taskCardHtml=(function(base){return function(t){
-  canonicalTaskItems(t);return base(t).replace('Task List','Tasks').replace('Multi-step','Per-task workspaces');
+  canonicalTaskItems(t);
+  let html=base(t).replace('Task List','Tasks').replace('Multi-step','Per-task workspaces');
+  if(taskUsesWorktree(t)){
+    html=html.replace('class="taskcard ','class="taskcard worktree-card ');
+    html=html.replace('<div class="cardmeta">','<div class="cardmeta"><span class="tag worktree-highlight">WORKTREE</span>');
+  }
+  return html;
 };})(taskCardHtml);
 
 // --- Simplified Task editor: one vertical flow, advanced prompt sources on demand ---
@@ -639,12 +655,13 @@ renderNewTaskWorkspace=function(){
   const host=document.getElementById('newTaskWorkspace');if(!host)return;
   const project=document.getElementById('newTaskProject')?.value||currentProjectKey;
   const ref=editorItemRef(),busy=mainBusyTask(project),resolved=resolveTaskWorkspace(project,ref,newTaskWorkspaceMode);
-  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${mode==='worktree'?'worktree-option':''} ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  const worktree=resolved.ok&&resolved.kind==='worktree';
   host.innerHTML=`<div class="workspace-options">
     ${option('auto','Auto','Use Main when available; create a Worktree when Main is busy.',busy?`Main busy → Worktree`:'Main available')}
     ${option('main','Main workspace','Use the project working tree directly.',busy?`Busy · ${busy.id}`:'Available',!!busy)}
     ${option('worktree','Isolated worktree','Create an isolated branch/path for this task.',`task/${ref}`)}
-  </div><div class="workspace-preview"><strong>Preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
+  </div><div class="workspace-preview ${worktree?'worktree-active':''}"><strong>${worktree?'WORKTREE · ISOLATED DEVELOPMENT':'Execution preview'}</strong><br>${resolved.ok?(worktree?`Branch · ${resolved.branch}<br>Path · ${resolved.root}<br>Changes stay isolated until merged.`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
   host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
 };
 
@@ -699,7 +716,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 // obsolete create-entry capture handler removed; final dropdown owns this entry.
 document.getElementById('chatToTask').onclick=()=>{const textValue=document.getElementById('chatInput').value.trim();loadTaskEditor('root-create',{fromChat:textValue});document.getElementById('newTaskTitle').value=textValue?textValue.slice(0,72):''};
 
-function workspaceLabelForItem(x){return x.workspacePolicy==='worktree'?'Worktree':x.workspacePolicy==='main'?'Main':'Auto'}
+function workspaceLabelForItem(x){return itemUsesWorktree(x)?'WORKTREE':x.workspaceKind==='main'||x.workspacePolicy==='main'?'Main':'Auto'}
 renderFullPlan=function(t){
   const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:canonicalTaskItems(t),editable=taskEditable(t);
   document.getElementById('planPageTitle').textContent=t.title;
@@ -708,7 +725,7 @@ renderFullPlan=function(t){
   document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   host.innerHTML=items.map((x,i)=>{
     const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
-    return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure||items.length<=1?'disabled':''}>×</button></div></div></div></article>`;
+    return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure||items.length<=1?'disabled':''}>×</button></div></div></div></article>`;
   }).join('');
   document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
   host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=()=>loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit}));
@@ -724,11 +741,32 @@ setAddTaskMode=function(mode){
   document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Open editor':'Move here';
   document.getElementById('confirmAddPlanTask').disabled=false;renderMoveTaskPicker();
 };
+let addTaskReturnTarget='list';
+function detectAddTaskReturnTarget(){
+  if(document.getElementById('planModal').classList.contains('open'))return 'list';
+  if(document.getElementById('taskOverlay').classList.contains('open'))return 'info';
+  return 'list';
+}
+function renderAddTaskBackTarget(){
+  const modal=document.getElementById('addPlanTaskModal'),label=addTaskReturnTarget==='info'?'Back to Info':'Back to Task List';
+  const close=modal.querySelector('.modal-head .close'),back=modal.querySelector('.modal-foot [data-close-modal]');
+  if(close){close.textContent='←';close.title=label;close.setAttribute('aria-label',label)}
+  if(back)back.textContent=label;
+}
+function returnAfterAddTask(owner){
+  if(!owner)return;
+  if(addTaskReturnTarget==='info'){closeModal('planModal');openTaskById(owner.id);return}
+  document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(owner.id);
+}
 openAddTaskDialog=function(ownerId=currentTaskId){
   const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
-  addPlanOwnerId=ownerId;setAddTaskMode('create');openModal('addPlanTaskModal');
+  addTaskReturnTarget=detectAddTaskReturnTarget();addPlanOwnerId=ownerId;setAddTaskMode('create');renderAddTaskBackTarget();openModal('addPlanTaskModal');
 };
-function openCreateItemFromAdd(){const owner=taskMap[addPlanOwnerId];if(!owner)return;closeModal('addPlanTaskModal');loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length})}
+function openCreateItemFromAdd(){
+  const owner=taskMap[addPlanOwnerId];if(!owner)return;
+  const returnTarget=addTaskReturnTarget;closeModal('addPlanTaskModal');
+  loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length,returnTarget});
+}
 document.getElementById('openUnifiedTaskEditor').onclick=openCreateItemFromAdd;
 document.getElementById('confirmAddPlanTask').onclick=()=>{
   if(addTaskMode==='create'){openCreateItemFromAdd();return}
@@ -736,7 +774,7 @@ document.getElementById('confirmAddPlanTask').onclick=()=>{
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
   const sourceItem=cloneBatch(canonicalTaskItems(source))[0];sourceItem.originTaskId=source.id;sourceItem.originTaskTitle=source.title;
   batchDraft.push(planItemDefaults(sourceItem,owner,batchDraft.length));delete taskMap[source.id];commitPlanDraft(owner,{markDirty:false});pushTaskHistory(owner,`Moved ${source.id} here`);
-  persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);showToast('New Task moved here');
+  persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);returnAfterAddTask(owner);showToast('New Task moved here');
 };
 document.getElementById('drawerAddStep').onclick=()=>openAddTaskDialog(currentTaskId);document.getElementById('planAddTask').onclick=()=>openAddTaskDialog(currentTaskId);
 
@@ -864,8 +902,8 @@ renderDrawerPlan=function(t){
   document.getElementById('taskListParentHint').textContent=items.length===0?'No tasks yet':items.length===1?'1 task':`${items.length} tasks · executed top to bottom`;
   document.getElementById('openFullPlan').hidden=false;document.getElementById('openFullPlan').textContent='Open list';
   if(items.length===0){host.innerHTML='<button class="empty-plan-cta" id="emptyPlanAddTask" type="button"><strong>No tasks yet</strong><span>Add the first task using the standard Task Editor →</span></button>';document.getElementById('emptyPlanAddTask').onclick=()=>openAddTaskDialog(t.id)}
-  else if(items.length===1){const x=items[0],s=planStateFor(t,0,1);host.innerHTML=`<div class="drawer-plan-row ${s.current?'current':''}" data-drawer-item="0"><span class="n">1</span><div><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)} · ${workspaceLabelForItem(x)}</small></div><div class="drawer-task-actions"><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="0">Edit</button></div></div>`}
-  else host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}" data-drawer-item="${i}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)} · ${workspaceLabelForItem(x)}</small></div><div class="drawer-task-actions"><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="${i}" ${editable&&!s.done?'':'disabled'}>Edit</button></div></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open list</div>`:'');
+  else if(items.length===1){const x=items[0],s=planStateFor(t,0,1);host.innerHTML=`<div class="drawer-plan-row ${s.current?'current':''} ${itemUsesWorktree(x)?'worktree-row':''}" data-drawer-item="0"><span class="n">1</span><div><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="drawer-task-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="0">Edit</button></div></div>`}
+  else host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''} ${itemUsesWorktree(x)?'worktree-row':''}" data-drawer-item="${i}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="drawer-task-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="${i}" ${editable&&!s.done?'':'disabled'}>Edit</button></div></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open list</div>`:'');
   host.querySelectorAll('[data-drawer-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.drawerEdit})});
   host.querySelectorAll('[data-drawer-item]').forEach(r=>r.ondblclick=()=>{const i=+r.dataset.drawerItem,s=planStateFor(t,i,items.length);if(editable&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})});
   ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
@@ -878,7 +916,7 @@ renderFullPlan=function(t){
   document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
   document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   if(items.length===0){host.innerHTML='<button class="empty-plan-cta large" id="planEmptyAddTask" type="button"><strong>No tasks yet</strong><span>+ Add first task</span></button>';document.getElementById('planEmptyAddTask').onclick=()=>openAddTaskDialog(t.id)}
-  else host.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<1||(t.status==='paused'&&i-1<=batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div></article>`}).join('');
+  else host.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<1||(t.status==='paused'&&i-1<=batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div></article>`}).join('');
   host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit})});
   host.querySelectorAll('[data-plan-row]').forEach(r=>r.ondblclick=()=>{const i=+r.dataset.planRow,s=planStateFor(t,i,items.length);if(editable&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})});
   host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planUp;if(i<1||(t.status==='paused'&&i-1<=batchState.index))return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
