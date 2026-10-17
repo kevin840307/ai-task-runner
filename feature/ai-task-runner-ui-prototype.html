@@ -944,7 +944,7 @@ function taskProjectKeys(t){
   const refs=[];
   if(t?.project)refs.push(t.project);
   if(t?.projectContext)refs.push(t.projectContext);
-  const items=typeof canonicalTaskItems==='function'?canonicalTaskItems(t):(t?.items||t?.listItems||[]);
+  const items=Array.isArray(t?.items)&&t.items.length?t.items:(Array.isArray(t?.listItems)?t.listItems:[]);
   items.forEach(x=>{if(x?.project)refs.push(x.project)});
   const keys=[];
   refs.forEach(ref=>{
@@ -4216,12 +4216,13 @@ const tasksProjectFilterButton=document.getElementById('tasksProjectFilterButton
 const tasksProjectFilterMenu=document.getElementById('tasksProjectFilterMenu');
 const tasksProjectFilterOptions=document.getElementById('tasksProjectFilterOptions');
 const tasksProjectFilterSummary=document.getElementById('tasksProjectFilterSummary');
-let selectedTaskProjectKeys=new Set(projectMeta[currentProjectKey]?[currentProjectKey]:[]);
+let selectedTaskProjectKeys=new Set(Object.keys(projectMeta));
 
 function availableTaskProjectKeys(){return projectRegistryEntries().map(([key])=>key).filter(key=>projectMeta[key])}
 function taskMatchesSelectedProjects(t){
   if(!t||selectedTaskProjectKeys.size===0)return false;
-  return [...selectedTaskProjectKeys].some(key=>taskRelatedToProject(t,key));
+  const keys=taskProjectKeys(t);
+  return keys.some(key=>selectedTaskProjectKeys.has(key));
 }
 function selectedTaskProjects(){
   // Board identity is the parent Task ID. A multi-Project Task List is still one Board card.
