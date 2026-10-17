@@ -277,6 +277,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-editor-handoff strong{display:block;font-size:10px}.task-editor-handoff small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.task-editor-handoff b{color:var(--accent);font-size:8px}
 .plan-row-compact{border:1px solid #e1e7ee;border-radius:10px;background:#fff}.plan-row-compact.current{border-color:rgba(15,118,110,.34);background:#fbfefd}.plan-row-compact.done{opacity:.68}
 .plan-row-compact .plan-row-head{min-height:54px}.plan-workspace-chip{padding:3px 6px;border-radius:999px;background:#eef6f5;color:#0f766e;font-size:7px;font-weight:850}
+
+/* Prompt source is a small fixed choice: tags are faster than dropdowns here. */
+.simple-source-head .source-tabs{flex:0 0 auto}
+.simple-source-head .source-tabs button{min-width:46px}
 </style>
 </head>
 <body>
@@ -3071,6 +3075,49 @@ const oneEditorOpenTask=openTaskById;
 openTaskById=function(id){
   oneEditorOpenTask(id);const t=taskMap[id];if(!t)return;const edit=document.getElementById('editTaskDemo'),items=canonicalTaskItems(t),editable=taskEditable(t);
   edit.disabled=!editable;edit.textContent=editable?(items.length===1?'Edit task':'Edit tasks'):(t.status==='ongoing'?'Pause to edit':'Read-only');
+};
+
+// --- Restore tag-based Prompt source switching in the one canonical Task Editor ---
+renderNewTaskSources=function(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head">
+        <div><strong>Task Prompt</strong><small>Choose how this task gets its prompt</small></div>
+        ${sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode')}
+      </div>
+      <div class="source-body">${newTaskPromptBodySimple()}</div>
+    </div>`;
+  const rows=[];
+  if(caps.file)rows.push(`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div>
+      <div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div></div>
+    </div>`);
+  if(caps.ai)rows.push(`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head">
+        <div><strong>AI Validation</strong><small>${newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source'}</small></div>
+        ${sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode')}
+      </div>
+      <div class="source-body">${newTaskAiBodySimple()}</div>
+    </div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
+
+  document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{
+    captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources();
+  });
+  document.querySelectorAll('[data-task-ai-mode]').forEach(b=>b.onclick=()=>{
+    captureNewTaskSources();newTaskDraft.aiMode=b.dataset.sourceValue;
+    if(newTaskDraft.aiMode==='default'){newTaskDraft.aiPrompt='';newTaskDraft.aiFile=''}
+    renderNewTaskSources();
+  });
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  renderNewTaskWorkspace();
 };
 
 renderNewTaskSources();
