@@ -1203,14 +1203,10 @@ openTaskById=function(id){
   setPlanDraftForTask(t);renderDrawerPlan(t);
 };
 
-// --- Isolated Task Editor: editing a task never shows Task List context. ---
+// --- Canonical Task Editor: every Task create/edit entry uses the same overlay surface. ---
 const isolatedTaskEditorLoad=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
-  if(mode==='create-item'||mode==='edit-item'){
-    closeModal('addPlanTaskModal');
-    closeModal('planModal');
-    document.getElementById('taskOverlay').classList.remove('open');
-  }
+  if(mode==='create-item'||mode==='edit-item')closeModal('addPlanTaskModal');
   isolatedTaskEditorLoad(mode,args);
   document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
   document.getElementById('taskFormHelp').textContent=mode==='edit-item'
