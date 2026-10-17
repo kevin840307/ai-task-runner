@@ -68,7 +68,7 @@ function leavePlanSubview(){
 planModalEl.addEventListener('click',e=>{
   if(e.target!==planModalEl)return;
   if(planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview();return}
-  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();planModalEl.classList.remove('chat-draft-plan-overlay');closeModal('planModal');showView('chat');renderChatSession()}
+  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();closeModal('planModal');showView('chat');renderChatSession()}
 },true);
 
 const taskEditorLoadBeforeOverlay=loadTaskEditor;
@@ -484,7 +484,7 @@ const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
 document.getElementById('planBackToTask').onclick=()=>{
   workspaceInfoRef=null;
   const t=taskMap[currentTaskId];
-  if(t?._chatDraft){clearTaskSelection();planModalEl.classList.remove('chat-draft-plan-overlay');closeModal('planModal');showView('chat');renderChatSession();return}
+  if(t?._chatDraft){clearTaskSelection();closeModal('planModal');showView('chat');renderChatSession();return}
   workspaceClosePlan();
 };
 
