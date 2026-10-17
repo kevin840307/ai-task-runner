@@ -48,7 +48,11 @@ function leavePlanSubview(){
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
   if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
 }
-planModalEl.addEventListener('click',e=>{if(e.target===planModalEl&&planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview()}},true);
+planModalEl.addEventListener('click',e=>{
+  if(e.target!==planModalEl)return;
+  if(planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview();return}
+  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();closeModal('planModal');showView('chat');renderChatSession()}
+},true);
 
 // Reuse the exact same Task Editor DOM inside the list dialog.
 const taskEditorLoadBeforeSubview=loadTaskEditor;
