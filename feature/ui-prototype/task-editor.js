@@ -665,7 +665,12 @@ function processMockChatPrompt(session,text,projectKey){
 }
 function startMockChatTurn(session,text,{fromQueue=false}={}){
   const value=String(text||'').trim();if(!session||!value)return;
-  if(chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});if(activeChat()===session)showToast('Agent 正在處理，已自動加入 Queue');return}
+  if(chatTurnState(session)!=='idle'||ensureChatQueue(session).length){
+    enqueueChatMessage(session,value,{notify:false});
+    if(activeChat()===session)showToast(chatTurnState(session)==='idle'?'已有待處理訊息，已加入 Queue':'Agent 正在處理，已自動加入 Queue');
+    if(chatTurnState(session)==='idle')drainChatQueue(session);
+    return;
+  }
   const projectKey=session.projectKey||currentProjectKey;session.projectKey=projectKey;
   session.turnState='running';session.pendingTurnText=value;session.messages.push(['user',value]);
   if(activeChat()===session)renderChatSession();
@@ -725,7 +730,7 @@ function renderAskFlow(session=activeChat()){
   if(q.type==='choice'){
     const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
-    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
+    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
     textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
   }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder='輸入你的回答…'}
   textInput.oninput=()=>{flow.answers[key]=textInput.value};
