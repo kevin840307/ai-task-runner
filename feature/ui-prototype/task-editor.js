@@ -590,15 +590,10 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 };
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
-  const session=activeChat();session.messages.push(['user',textValue]);
-  if(chatTaskCreateIntent(textValue)){
-    session.messages.push(['assistant','我先產生一份 Task Draft。這是 Mock AI 規劃結果；確認或編輯後才會建立，而且不會自動執行。']);
-    session.taskDraft=mockBuildChatTaskDraft(textValue,currentProjectKey);
-  }else{
-    const reply=/task|執行|run/i.test(textValue)?'如果要交給 Runner 執行，可以直接按「AI 建立 Task」讓我先產生 Task Draft。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
-    session.messages.push(['assistant',reply]);
-  }
-  input.value='';resizeChatComposer();renderChatSession();
+  const session=activeChat(),command=chatTaskCommand(textValue);session.messages.push(['user',textValue]);
+  if(command.matched)generateChatTaskDraft(command.spec);
+  else{session.messages.push(['assistant','收到。這則訊息只保存在目前 Project 的 Chat session。使用 @task <spec> 才會建立 Task Draft。']);renderChatSession()}
+  input.value='';resizeChatComposer();
 };
 
 // Project-aware navigation refreshes Chat immediately.
@@ -879,7 +874,11 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 
 // Suppress legacy New Task listeners and route root creation into the canonical editor.
 // obsolete create-entry capture handler removed; final dropdown owns this entry.
-document.getElementById('chatToTask').onclick=()=>generateChatTaskDraft(document.getElementById('chatInput').value.trim(),{recordMessage:true});
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput'),raw=input.value;
+  if(!/^\s*@task\b/i.test(raw))input.value=raw.trim()?'@task '+raw:'@task ';
+  input.focus();input.setSelectionRange(input.value.length,input.value.length);resizeChatComposer();
+};
 
 function workspaceLabelForItem(x){return itemUsesWorktree(x)?'WORKTREE':x.workspaceKind==='main'||x.workspacePolicy==='main'?'Main':'Auto'}
 renderFullPlan=function(t){
