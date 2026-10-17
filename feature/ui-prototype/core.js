@@ -77,14 +77,6 @@ function resizeChatComposer(){
 document.getElementById('chatInput').addEventListener('input',resizeChatComposer);
 window.addEventListener('resize',resizeChatComposer);
 resizeChatComposer();
-document.getElementById('chatToTask').onclick=()=>{
-  const input=document.getElementById('chatInput').value.trim();
-  document.getElementById('newTaskGoal').value=input||'Convert the current Chat discussion into a tracked Runner Task.';
-  document.getElementById('newTaskTitle').value=input ? input.slice(0,72) : 'Task from Chat';
-  document.getElementById('newTaskModal').classList.add('open');
-};
-
-
 const taskPresets={
   today:[
     {id:'T-104',status:'new',title:'新增 Task List UI',runtime:'idle',desc:'讓 YAML List 能用 Form / YAML 兩種方式編排與執行。',tags:['ralphy_ai_validate','UI'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,5],elapsed:'—',stage:'Idle',session:'—',goal:'新增 YAML List 的 UI builder，維持同一套 RunRequest / Runner contract。'},
