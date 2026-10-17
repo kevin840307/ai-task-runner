@@ -309,7 +309,14 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .task-context-info{min-width:0;padding:9px 10px;border-left:1px solid #e5eaf0;background:#fafbfc}.task-context-info-head{padding-bottom:7px;margin-bottom:7px;border-bottom:1px solid #e8edf2}.task-context-info-head strong{display:block;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-context-info-head span{display:block;margin-top:2px;color:var(--muted);font-size:7.5px}.task-context-info-grid{display:grid;grid-template-columns:78px minmax(0,1fr);gap:5px 8px;align-items:start}.task-context-info-grid span{color:var(--muted);font-size:7.5px}.task-context-info-grid strong{font-size:8px;font-weight:750;overflow-wrap:anywhere}
 .task-info-modal{width:min(540px,94vw)}.task-info-grid{display:grid;grid-template-columns:112px minmax(0,1fr);gap:7px 12px;align-items:start}.task-info-grid span{color:var(--muted);font-size:8px}.task-info-grid strong{font-size:8.5px;overflow-wrap:anywhere}
 .plan-row-compact,.drawer-plan-row{user-select:none}
-#taskInfoModal{z-index:340}\n</style>
+#taskInfoModal{z-index:340}\n
+.field-help{display:block;margin-top:4px;color:var(--muted);font-size:7.5px}
+#planFormList [data-plan-up],#planFormList [data-plan-down]{display:none!important}
+.plan-row-compact[draggable="true"]{cursor:grab}.plan-row-compact.dragging{opacity:.5}.plan-row-compact.drag-over{outline:2px solid rgba(15,118,110,.28);outline-offset:2px}
+.plan-row-compact.selected,.drawer-plan-row.selected{border-color:#75aaa4!important;background:#f3fbf9!important;box-shadow:0 0 0 1px rgba(15,118,110,.08)}
+.plan-row-num .drag-grip{margin-right:5px;color:#94a3b8;font-weight:900}
+.project-combobox-new{font-weight:800}
+</style>
 </head>
 <body>
 <div class="app">
@@ -377,7 +384,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
-        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；執行中不可直接 Closed</span><div class="toggle"><button class="active">Board</button><button id="listMode">List</button></div></div>
+        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；執行中不可直接 Closed</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
         <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
@@ -477,7 +484,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   </section></div>
       <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
     </div>
-    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="editTaskDemo">Edit Task</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo">Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
+    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="editTaskDemo">Edit Task</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo" hidden>Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
   </aside>
 </div>
 
@@ -517,7 +524,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-body">
       <div class="modal-grid task-basics">
         <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
-        <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
+        <div class="field"><label>Project</label><input id="newTaskProject" list="projectOptions" autocomplete="off" placeholder="Select a project or type a path"><datalist id="projectOptions"></datalist><small class="field-help">Existing Project name or a new local path.</small></div>
         <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
@@ -600,7 +607,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="modal-card plan-modal-card">
     <div class="modal-head plan-modal-head">
       <div><h2 id="planPageTitle">Tasks</h2><p id="planPageMeta">T-000 · New · 1 task</p></div>
-      <div class="plan-modal-head-actions"><button class="btn" id="planAddTask" type="button">+ Add task</button><button class="btn" id="planAddExisting" type="button" hidden></button><button class="btn" id="planEditYaml" type="button">Edit YAML</button><button class="close" id="planBackToTask" type="button">×</button></div>
+      <div class="plan-modal-head-actions"><button class="btn" id="planOpenWorkflow" type="button" hidden>Open Workflow</button><button class="btn" id="planAddTask" type="button">+ Add task</button><button class="btn" id="planAddExisting" type="button" hidden></button><button class="btn" id="planEditYaml" type="button">Edit YAML</button><button class="close" id="planBackToTask" type="button">×</button></div>
     </div>
     <div class="plan-page-body">
       <main class="plan-main">
@@ -620,9 +627,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="task-context-actions">
     <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
     <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+    <button type="button" data-context-action="workflow" hidden><span>Open Workflow</span><kbd>↗</kbd></button>
     <div class="context-separator"></div>
-    <button type="button" data-context-action="up"><span>Move up</span><kbd>↑</kbd></button>
-    <button type="button" data-context-action="down"><span>Move down</span><kbd>↓</kbd></button>
     <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
   </div>
   <aside class="task-context-info">
@@ -3073,7 +3079,7 @@ renderNewTaskWorkspace=function(){
 
 function buildEditorItem(owner,index){
   captureNewTaskSources();
-  const projectKey=document.getElementById('newTaskProject').value,workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  const rawProject=document.getElementById('newTaskProject').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
   const title=document.getElementById('newTaskTitle').value.trim();
   let promptValue='';
   if(newTaskDraft.goalMode==='inline')promptValue=newTaskDraft.prompt.trim();
@@ -3082,6 +3088,8 @@ function buildEditorItem(owner,index){
   if(newTaskDraft.goalMode==='inline'&&!newTaskDraft.prompt.trim()){showToast('Task Prompt 不可空白');return null}
   if(newTaskDraft.goalMode==='file'&&!newTaskDraft.goalFile.trim()){showToast('Prompt file is required');return null}
   if(caps.file&&!newTaskDraft.validator.trim()){showToast('This Workflow requires File Validator');return null}
+  if(!rawProject){showToast('Project is required');return null}
+  const projectKey=ensureProjectFromInput(rawProject);
   const resolved=resolveTaskWorkspace(projectKey,editorItemRef(),newTaskWorkspaceMode);if(!resolved.ok){showToast(resolved.reason);return null}
   return planItemDefaults({title,prompt:newTaskDraft.prompt||promptValue,goalMode:newTaskDraft.goalMode,goalFile:newTaskDraft.goalFile,goalAsset:newTaskDraft.goalAsset,
     project:projectMeta[projectKey]?.path||projectKey,workflow,validatorMode:caps.file?'file':'none',validator:newTaskDraft.validator,
@@ -3539,6 +3547,110 @@ bindTaskCards=function(){
   bindTaskCardsBeforeContext();
   document.querySelectorAll('.taskcard').forEach(card=>card.oncontextmenu=e=>{const t=taskMap[card.dataset.id];if(t)openListContextMenu(e,t)});
 };
+
+// --- Task selection, drag ordering, Project scope and editable Project combobox ---
+let selectedTaskRef=null;
+function projectPathFor(key){return projectMeta[key]?.path||key||''}
+function normalizeProjectRef(v){return String(v||'').replace(/[\\/]+$/,'').toLowerCase()}
+function projectRefMatches(ref,key){const a=normalizeProjectRef(ref),b=normalizeProjectRef(key),p=normalizeProjectRef(projectMeta[key]?.path);return !!a&&(a===b||a===p)}
+function taskRelatedToProject(t,key=currentProjectKey){
+  if(!t)return false;
+  if(t.projectContext===key||projectRefMatches(t.project,key))return true;
+  return canonicalTaskItems(t).some(x=>projectRefMatches(x.project,key));
+}
+function visibleProjectTasks(){return Object.values(taskMap).filter(t=>taskRelatedToProject(t,currentProjectKey))}
+
+function renderProjectOptions(){
+  const dl=document.getElementById('projectOptions');if(!dl)return;
+  dl.innerHTML=Object.entries(projectMeta).flatMap(([k,m])=>[`<option value="${escapeAttr(k)}" label="${escapeAttr(m.path)}"></option>`,`<option value="${escapeAttr(m.path)}" label="${escapeAttr(k)}"></option>`]).join('');
+}
+function uniqueProjectKey(base,path){
+  let clean=String(base||'project').trim().replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'project',key=clean,n=2;
+  while(projectMeta[key]&&normalizeProjectRef(projectMeta[key].path)!==normalizeProjectRef(path))key=`${clean}-${n++}`;
+  return key;
+}
+function bindDynamicProjectButton(btn){btn.onclick=()=>{const key=btn.dataset.project;selectProject(key);showView('chat');document.getElementById('chatInput').focus()}}
+function ensureProjectFromInput(raw){
+  raw=String(raw||'').trim();if(projectMeta[raw])return raw;
+  const found=Object.keys(projectMeta).find(k=>normalizeProjectRef(projectMeta[k].path)===normalizeProjectRef(raw));if(found)return found;
+  const key=uniqueProjectKey(basename(raw),raw);projectMeta[key]={path:raw,branch:'main'};
+  const host=document.getElementById('projectScroll'),btn=document.createElement('button');btn.className='project project-list-item project-combobox-new';btn.type='button';btn.dataset.project=key;btn.innerHTML=`<span class="dot"></span><span class="project-copy"><strong>${escapeHtml(key)}</strong><small>main · Added from Task</small></span>`;host.appendChild(btn);bindDynamicProjectButton(btn);
+  renderProjectOptions();showToast(`Project added · ${key}`);return key;
+}
+renderProjectOptions();
+document.getElementById('newTaskProject').addEventListener('input',()=>renderNewTaskWorkspace());
+
+function setTaskViewMode(mode){
+  listMode=mode==='list';document.getElementById('board').classList.toggle('hiddenboard',listMode);document.getElementById('taskListView').classList.toggle('active',listMode);
+  document.getElementById('boardMode').classList.toggle('active',!listMode);document.getElementById('listMode').classList.toggle('active',listMode);
+}
+document.getElementById('boardMode').onclick=()=>setTaskViewMode('board');document.getElementById('listMode').onclick=()=>setTaskViewMode('list');
+
+applyTaskFilter=function(){
+  const q=document.getElementById('taskSearch').value.trim().toLowerCase();
+  document.querySelectorAll('.taskcard').forEach(card=>{const t=taskMap[card.dataset.id],projectOk=taskRelatedToProject(t,currentProjectKey),queryOk=!q||card.textContent.toLowerCase().includes(q),runOk=!runningOnly||['running','recover'].includes(t?.runtime);card.hidden=!(projectOk&&queryOk&&runOk)});
+  document.querySelectorAll('#taskListView [data-taskrow]').forEach(row=>{const t=taskMap[row.dataset.taskrow],projectOk=taskRelatedToProject(t,currentProjectKey),queryOk=!q||row.textContent.toLowerCase().includes(q),runOk=!runningOnly||['running','recover'].includes(t?.runtime);row.hidden=!(projectOk&&queryOk&&runOk)});
+  updateCounts();
+};
+const projectScopedRenderTaskList=renderTaskList;
+renderTaskList=function(){projectScopedRenderTaskList();applyTaskFilter()};
+const projectScopedUpdateCounts=updateCounts;
+updateCounts=function(){
+  projectScopedUpdateCounts();const visible=visibleProjectTasks();document.getElementById('taskNavCount').textContent=visible.length;document.getElementById('runningCount').textContent=`${visible.filter(t=>['running','recover'].includes(t.runtime)).length} Running`;
+};
+const projectScopedSelect=selectProject;
+selectProject=function(key){projectScopedSelect(key);if(typeof renderBoardFromMap==='function')renderBoardFromMap()};
+
+function selectedItem(){if(!selectedTaskRef)return null;const owner=taskMap[selectedTaskRef.ownerId],item=owner?canonicalTaskItems(owner)[selectedTaskRef.index]:null;return owner&&item?{owner,item,index:selectedTaskRef.index}:null}
+function syncWorkflowActions(){
+  const s=selectedItem(),ok=!!(s?.item?.workflow&&s.item.workflow!=='—'&&s.item.workflow!=='Tasks');
+  const planBtn=document.getElementById('planOpenWorkflow'),drawerBtn=document.getElementById('openWorkflowDemo');
+  planBtn.hidden=!(ok&&document.getElementById('planModal').classList.contains('open'));
+  drawerBtn.hidden=!(ok&&document.getElementById('taskOverlay').classList.contains('open')&&s.owner.id===currentTaskId);
+}
+function selectTaskItem(owner,index){
+  if(!owner||!canonicalTaskItems(owner)[index])return;selectedTaskRef={ownerId:owner.id,index};
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(r=>r.classList.toggle('selected',owner.id===selectedTaskRef.ownerId&&+r.dataset.planRow===index));
+  document.querySelectorAll('#formList [data-drawer-item]').forEach(r=>r.classList.toggle('selected',owner.id===selectedTaskRef.ownerId&&+r.dataset.drawerItem===index));
+  syncWorkflowActions();
+}
+function clearTaskSelection(){selectedTaskRef=null;syncWorkflowActions()}
+function openSelectedWorkflow(){const s=selectedItem();if(!s)return;closeModal('planModal');document.getElementById('taskOverlay').classList.remove('open');showView('workflows');showToast(`Open Workflow · ${s.item.workflow}`)}
+document.getElementById('planOpenWorkflow').onclick=openSelectedWorkflow;document.getElementById('openWorkflowDemo').onclick=openSelectedWorkflow;
+
+function canDragTaskItem(t,index){const items=canonicalTaskItems(t),s=planStateFor(t,index,items.length);if(!taskEditable(t)||s.done)return false;if(t.status==='paused'&&index<=batchState.index)return false;return true}
+let planDragIndex=null;
+function bindPlanSelectionAndDrag(t){
+  const host=document.getElementById('planFormList');
+  host.querySelectorAll('[data-plan-row]').forEach(row=>{
+    const i=+row.dataset.planRow,canDrag=canDragTaskItem(t,i);row.draggable=canDrag;
+    const num=row.querySelector('.plan-row-num');if(num&&!num.querySelector('.drag-grip'))num.insertAdjacentHTML('afterbegin','<span class="drag-grip">⠿</span>');
+    row.onclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i)};
+    row.ondblclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i);const s=planStateFor(t,i,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})};
+    row.ondragstart=e=>{if(!canDrag){e.preventDefault();return}planDragIndex=i;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
+    row.ondragover=e=>{if(planDragIndex==null||!canDragTaskItem(t,i))return;e.preventDefault();row.classList.add('drag-over')};
+    row.ondragleave=()=>row.classList.remove('drag-over');
+    row.ondrop=e=>{e.preventDefault();row.classList.remove('drag-over');if(planDragIndex==null||planDragIndex===i||!canDragTaskItem(t,i))return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const moved=batchDraft.splice(planDragIndex,1)[0];let target=i;if(planDragIndex<i)target--;batchDraft.splice(target,0,moved);commitPlanDraft(t);persistCurrentPresetFromTaskMap();selectedTaskRef={ownerId:t.id,index:target};planDragIndex=null;renderBoardFromMap();renderFullPlan(t);renderDrawerPlan(t);showToast('Task order updated')};
+    row.ondragend=()=>{planDragIndex=null;row.classList.remove('dragging');host.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'))};
+  });
+}
+
+const taskSelectRenderFullPlan=renderFullPlan;
+renderFullPlan=function(t){taskSelectRenderFullPlan(t);bindPlanSelectionAndDrag(t);if(selectedTaskRef?.ownerId===t.id&&canonicalTaskItems(t)[selectedTaskRef.index])selectTaskItem(t,selectedTaskRef.index);else syncWorkflowActions()};
+const taskSelectRenderDrawerPlan=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  taskSelectRenderDrawerPlan(t);document.querySelectorAll('#formList [data-drawer-item]').forEach(row=>{const i=+row.dataset.drawerItem;row.onclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i)};row.ondblclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i);const s=planStateFor(t,i,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})}});
+  if(selectedTaskRef?.ownerId===t.id&&canonicalTaskItems(t)[selectedTaskRef.index])selectTaskItem(t,selectedTaskRef.index);else syncWorkflowActions();
+};
+const taskSelectOpenTask=openTaskById;
+openTaskById=function(id){clearTaskSelection();taskSelectOpenTask(id);syncWorkflowActions()};
+
+// Right-click selects the Task, keeps Info on the right, and offers only useful actions.
+const contextItemBeforeSelection=openItemContextMenu;
+openItemContextMenu=function(e,owner,index){selectTaskItem(owner,index);contextItemBeforeSelection(e,owner,index);setContextAction('workflow',{visible:true,enabled:!!canonicalTaskItems(owner)[index]?.workflow,label:'Open Workflow'});setContextAction('up',{visible:false});setContextAction('down',{visible:false})};
+const contextListBeforeWorkflow=openListContextMenu;
+openListContextMenu=function(e,t){contextListBeforeWorkflow(e,t);setContextAction('workflow',{visible:false})};
+const contextWorkflowButton=taskContextMenu.querySelector('[data-context-action="workflow"]');if(contextWorkflowButton)contextWorkflowButton.onclick=()=>{if(contextWorkflowButton.disabled||!taskContextState)return;const state={...taskContextState};hideTaskContextMenu();if(state.scope==='item'){selectTaskItem(taskMap[state.ownerId],state.index);openSelectedWorkflow()}};
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
