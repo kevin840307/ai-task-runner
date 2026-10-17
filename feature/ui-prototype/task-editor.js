@@ -474,11 +474,139 @@ syncChatSessionSelect=function(){
   const sessions=ensureProjectChats(currentProjectKey),select=document.getElementById('chatPreset'),id=projectActiveChat[currentProjectKey];
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
+function chatTaskCreateIntent(text){
+  return /(?:建立|新增|產生|create|generate).{0,10}(?:task|任務)|(?:task|任務).{0,10}(?:建立|新增|產生|create|generate)/i.test(String(text||''));
+}
+function mockTaskDraftTitle(text){
+  const cleaned=String(text||'').replace(/^(?:請|麻煩)?\s*(?:幫我)?\s*(?:建立|新增|產生|create|generate)\s*(?:一個|一份)?\s*(?:task\s*list|task|任務清單|任務)?\s*[:：,\-]?\s*/i,'').trim();
+  return (cleaned.split(/\n/).find(Boolean)||'AI generated Task').slice(0,72);
+}
+function mockTaskDraftWantsList(text){
+  const bullets=String(text||'').split(/\n/).filter(x=>/^\s*(?:[-*]|\d+[.)、])\s+/.test(x));
+  return bullets.length>=2||/(?:task\s*list|任務清單|多任務|多步驟|拆成|分成|依序.+(?:task|任務)|multiple\s+tasks)/i.test(String(text||''));
+}
+function mockTaskDraftItems(text,wantsList){
+  const source=String(text||'').trim(),bullets=source.split(/\n/).map(x=>x.trim()).filter(x=>/^(?:[-*]|\d+[.)、])\s+/.test(x)).map(x=>x.replace(/^(?:[-*]|\d+[.)、])\s+/,'').trim()).filter(Boolean);
+  if(wantsList&&bullets.length>=2)return bullets.map(x=>({title:x.slice(0,56),prompt:x}));
+  if(wantsList)return [
+    {title:'實作需求',prompt:source},
+    {title:'測試與驗證',prompt:\`針對「\${source}」執行 focused tests，確認沒有影響既有行為與相鄰功能。\`},
+    {title:'最終 Review',prompt:\`Review「\${source}」的最終修改、測試結果與可能 regression；若有問題先修正再完成。\`}
+  ];
+  return [{title:mockTaskDraftTitle(source),prompt:source}];
+}
+function mockBuildChatTaskDraft(text,projectKey=currentProjectKey){
+  const source=String(text||'').trim(),wantsList=mockTaskDraftWantsList(source);
+  const workspacePolicy=/worktree/i.test(source)?'worktree':/(?:main workspace|主工作區|直接用 main)/i.test(source)?'main':'auto';
+  const workflow=/dynamic\s*handoff/i.test(source)?'dynamic_handoff.yaml':/\bmixed\b/i.test(source)?'mixed.yaml':'ralphy_ai_validate.yaml';
+  return {mock:true,kind:wantsList?'list':'task',title:mockTaskDraftTitle(source),projectKey,workflow,workspacePolicy,items:mockTaskDraftItems(source,wantsList),editing:false,createdTaskId:''};
+}
+function chatDraftWorkflowOptions(selected){
+  const select=document.getElementById('newTaskWorkflow');
+  const values=select?[...select.options].map(o=>o.value):['ralphy_ai_validate.yaml','mixed.yaml','dynamic_handoff.yaml'];
+  return [...new Set(values)].map(x=>\`<option value="\${escapeAttr(x)}" \${x===selected?'selected':''}>\${escapeHtml(x)}</option>\`).join('');
+}
+function chatDraftProjectOptions(selected){
+  return Object.keys(projectMeta).map(key=>\`<option value="\${escapeAttr(key)}" \${key===selected?'selected':''}>\${escapeHtml(key)}</option>\`).join('');
+}
+function normalizeChatDraftKind(draft,nextKind){
+  if(nextKind===draft.kind)return;
+  draft.kind=nextKind;
+  if(nextKind==='task'){draft.items=[draft.items[0]||{title:draft.title,prompt:draft.title}];return}
+  if(draft.items.length<2){
+    const source=draft.items[0]?.prompt||draft.title;
+    draft.items=mockTaskDraftItems(source,true);
+  }
+}
+function captureChatTaskDraftForm(session){
+  const draft=session?.taskDraft;if(!draft)return;
+  const title=document.querySelector('[data-chat-draft-title]'),kind=document.querySelector('[data-chat-draft-kind]'),project=document.querySelector('[data-chat-draft-project]'),workflow=document.querySelector('[data-chat-draft-workflow]'),workspace=document.querySelector('[data-chat-draft-workspace]');
+  if(title)draft.title=title.value.trim()||draft.title;
+  if(project&&projectMeta[project.value])draft.projectKey=project.value;
+  if(workflow)draft.workflow=workflow.value;
+  if(workspace)draft.workspacePolicy=workspace.value;
+  if(kind)normalizeChatDraftKind(draft,kind.value);
+  document.querySelectorAll('[data-chat-draft-item]').forEach(el=>{
+    const i=+el.dataset.chatDraftItem;if(!draft.items[i])return;
+    const titleInput=el.querySelector('[data-chat-draft-item-title]'),promptInput=el.querySelector('[data-chat-draft-item-prompt]');
+    if(titleInput)draft.items[i].title=titleInput.value.trim()||draft.items[i].title;
+    if(promptInput)draft.items[i].prompt=promptInput.value;
+  });
+}
+function createTaskFromChatDraft(session){
+  const draft=session?.taskDraft;if(!draft||draft.createdTaskId)return;
+  const projectKey=projectMeta[draft.projectKey]?draft.projectKey:currentProjectKey;
+  const rawItems=(draft.items||[]).filter(x=>String(x.prompt||'').trim());
+  if(!rawItems.length){showToast('Task Draft 至少需要一個 Task Prompt');return}
+  const id='T-'+(++taskSequence),placeholder={id,project:projectKey};
+  const resolved=rawItems.map((x,i)=>resolveTaskWorkspace(projectKey,\`\${id}-I\${i+1}\`,draft.workspacePolicy));
+  const failed=resolved.find(x=>!x.ok);if(failed){taskSequence--;showToast(failed.reason);return}
+  const items=rawItems.map((x,i)=>planItemDefaults({
+    title:x.title||\`Task \${i+1}\`,prompt:x.prompt,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow:draft.workflow,
+    validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',
+    workspacePolicy:draft.workspacePolicy,workspaceKind:resolved[i].kind,branch:resolved[i].branch,executionRoot:resolved[i].root
+  },placeholder,i));
+  const count=items.length,first=items[0],title=String(draft.title||planTitle(first,0)||'New Task').trim().slice(0,72);
+  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:count===1?'1 task':\`\${count} ordered tasks\`,tags:[\`\${count} task\${count===1?'':'s'}\`],workflow:count===1?first.workflow:'Tasks',project:projectKey,progress:[0,count],elapsed:'—',stage:'Idle',session:'—',goal:count===1?first.prompt:\`\${count} ordered tasks\`,items,listItems:items};
+  if(count===1){
+    Object.assign(t,{promptSource:{goalMode:first.goalMode,prompt:first.prompt,goalFile:first.goalFile,goalAsset:first.goalAsset,validator:first.validator,aiMode:first.aiMode,aiPrompt:first.aiPrompt,aiFile:first.aiFile,aiAsset:first.aiAsset},workspacePolicy:first.workspacePolicy,workspaceKind:first.workspaceKind,branch:first.branch,executionRoot:first.executionRoot});
+  }else Object.assign(t,{workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
+  taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
+  draft.createdTaskId=id;draft.editing=false;
+  session.messages.push(['assistant',\`\${id} 已建立在 New；尚未執行。你可以先到 Tasks 檢查或繼續在 Chat 調整下一個需求。\`]);
+  renderChatSession();showToast(\`Task created · \${id}\`);
+}
+function renderChatTaskDraft(session,box){
+  const draft=session?.taskDraft;if(!draft)return;
+  const card=document.createElement('section');card.className='chat-task-draft';
+  if(draft.createdTaskId){
+    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge chat-task-draft-created">CREATED</span><h3>\${escapeHtml(draft.title)}</h3></div><strong>\${escapeHtml(draft.createdTaskId)}</strong></div><div class="chat-task-draft-meta"><span>\${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span><span>\${escapeHtml(draft.projectKey)}</span><span>New · not running</span></div><div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn primary" type="button" data-chat-draft-open>Open Task</button></div>\`;
+  }else if(draft.editing){
+    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>Edit before creating</h3></div></div>
+      <div class="chat-task-draft-form">
+        <label class="wide">Title<input data-chat-draft-title value="\${escapeAttr(draft.title)}"></label>
+        <label>Type<select data-chat-draft-kind><option value="task" \${draft.kind==='task'?'selected':''}>Task</option><option value="list" \${draft.kind==='list'?'selected':''}>Task List</option></select></label>
+        <label>Project<select data-chat-draft-project>\${chatDraftProjectOptions(draft.projectKey)}</select></label>
+        <label>Workflow<select data-chat-draft-workflow>\${chatDraftWorkflowOptions(draft.workflow)}</select></label>
+        <label>Workspace<select data-chat-draft-workspace><option value="auto" \${draft.workspacePolicy==='auto'?'selected':''}>Auto</option><option value="main" \${draft.workspacePolicy==='main'?'selected':''}>Main</option><option value="worktree" \${draft.workspacePolicy==='worktree'?'selected':''}>Worktree</option></select></label>
+        \${draft.items.map((x,i)=>\`<label class="wide" data-chat-draft-item="\${i}">Task \${i+1}<input data-chat-draft-item-title value="\${escapeAttr(x.title||'')}"><textarea data-chat-draft-item-prompt>\${escapeHtml(x.prompt||'')}</textarea></label>\`).join('')}
+      </div>
+      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-cancel>Cancel</button><button class="btn primary" type="button" data-chat-draft-save>Save Draft</button></div>\`;
+  }else{
+    card.innerHTML=\`<div class="chat-task-draft-head"><div><span class="chat-task-draft-badge">MOCK AI · TASK DRAFT</span><h3>\${escapeHtml(draft.title)}</h3></div><span class="pill">\${escapeHtml(draft.kind==='list'?'Task List':'Task')}</span></div>
+      <div class="chat-task-draft-meta"><span>\${escapeHtml(draft.projectKey)}</span><span>\${escapeHtml(draft.workflow)}</span><span>\${escapeHtml(draft.workspacePolicy)}</span><span>\${draft.items.length} task\${draft.items.length===1?'':'s'}</span></div>
+      <div class="chat-task-draft-items">\${draft.items.map((x,i)=>\`<div class="chat-task-draft-item"><strong>\${i+1}. \${escapeHtml(x.title||\`Task \${i+1}\`)}</strong><p>\${escapeHtml(x.prompt||'')}</p></div>\`).join('')}</div>
+      <div class="chat-task-draft-actions"><button class="btn" type="button" data-chat-draft-dismiss>Dismiss</button><button class="btn" type="button" data-chat-draft-edit>Edit</button><button class="btn primary" type="button" data-chat-draft-create>Create Task</button></div>\`;
+  }
+  box.appendChild(card);
+  card.querySelector('[data-chat-draft-edit]')?.addEventListener('click',()=>{draft.editing=true;renderChatSession()});
+  card.querySelector('[data-chat-draft-cancel]')?.addEventListener('click',()=>{draft.editing=false;renderChatSession()});
+  card.querySelector('[data-chat-draft-save]')?.addEventListener('click',()=>{captureChatTaskDraftForm(session);draft.editing=false;renderChatSession();showToast('Task Draft updated')});
+  card.querySelector('[data-chat-draft-kind]')?.addEventListener('change',e=>{captureChatTaskDraftForm(session);normalizeChatDraftKind(draft,e.target.value);renderChatSession()});
+  card.querySelector('[data-chat-draft-create]')?.addEventListener('click',()=>createTaskFromChatDraft(session));
+  card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>{session.taskDraft=null;renderChatSession()});
+  card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
+}
+function generateChatTaskDraft(text,{recordMessage=true}={}){
+  const session=activeChat();if(!session)return;
+  let source=String(text||'').trim();
+  if(!source){
+    const last=[...(session.messages||[])].reverse().find(x=>x[0]==='user');source=last?.[1]||'';
+  }
+  if(!source){showToast('先在 Chat 輸入你希望 AI 建立的 Task');return}
+  if(recordMessage)session.messages.push(['user',source]);
+  session.messages.push(['assistant','我先產生一份 Task Draft。這是 Mock AI 規劃結果；確認或編輯後才會建立，而且不會自動執行。']);
+  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey);
+  const input=document.getElementById('chatInput');if(input&&input.value.trim()===source){input.value='';resizeChatComposer()}
+  renderChatSession();
+}
+
 renderChatSession=function(){
   syncChatSessionSelect();
   const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
   (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
-  if(!(session?.messages||[]).length)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
+  renderChatTaskDraft(session,box);
+  if(!(session?.messages||[]).length&&!session?.taskDraft)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
   box.scrollTop=box.scrollHeight;
 };
 document.getElementById('chatPreset').onchange=e=>{projectActiveChat[currentProjectKey]=e.target.value;renderChatSession()};
@@ -493,8 +621,14 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
   const session=activeChat();session.messages.push(['user',textValue]);
-  const reply=/task|執行|run/i.test(textValue)?'若要長時間執行，可用「建立 Task」把目前內容帶到 Tasks。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
-  session.messages.push(['assistant',reply]);input.value='';resizeChatComposer();renderChatSession();
+  if(chatTaskCreateIntent(textValue)){
+    session.messages.push(['assistant','我先產生一份 Task Draft。這是 Mock AI 規劃結果；確認或編輯後才會建立，而且不會自動執行。']);
+    session.taskDraft=mockBuildChatTaskDraft(textValue,currentProjectKey);
+  }else{
+    const reply=/task|執行|run/i.test(textValue)?'如果要交給 Runner 執行，可以直接按「AI 建立 Task」讓我先產生 Task Draft。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
+    session.messages.push(['assistant',reply]);
+  }
+  input.value='';resizeChatComposer();renderChatSession();
 };
 
 // Project-aware navigation refreshes Chat immediately.
@@ -775,7 +909,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 
 // Suppress legacy New Task listeners and route root creation into the canonical editor.
 // obsolete create-entry capture handler removed; final dropdown owns this entry.
-document.getElementById('chatToTask').onclick=()=>{const textValue=document.getElementById('chatInput').value.trim();loadTaskEditor('root-create',{fromChat:textValue});document.getElementById('newTaskTitle').value=textValue?textValue.slice(0,72):''};
+document.getElementById('chatToTask').onclick=()=>generateChatTaskDraft(document.getElementById('chatInput').value.trim(),{recordMessage:true});
 
 function workspaceLabelForItem(x){return itemUsesWorktree(x)?'WORKTREE':x.workspaceKind==='main'||x.workspacePolicy==='main'?'Main':'Auto'}
 renderFullPlan=function(t){
