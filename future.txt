@@ -112,10 +112,11 @@ Suggested capability shape:
     user_invocable,
     enabled.
 
-2.4 Agent / Model / Mode / Side Question controls
--------------------------------------------------
+2.4 Agent / Model / Mode controls
+----------------------------------
 - Chat must expose the currently selected Agent, Model and permission Mode without hiding them in Settings.
-- Agent picker should be compact and visually clear; changing Agent refreshes its Model / Mode / slash-command capabilities.
+- Agent / Model / Mode use compact custom picker UI, not visible browser-native select styling.
+- Agent picker should be visually clear; changing Agent refreshes its Model / Mode / slash-command / Ask capabilities.
 - Model list is Agent-owned capability data, not a frontend hardcoded production list.
 - Qwen Code direction:
     use the same live model registry/picker source behind `/model`,
@@ -143,22 +144,44 @@ Product-level Mode UI:
 - UI should surface a short native mapping/description so the safety level is understandable.
 - Backend/Agent adapter remains authoritative for the actual permission configuration.
 
-Side Question / Ask:
-- Support an Agent side-question capability similar to `/btw <question>` when the selected Agent exposes it.
-- Side questions use recent Chat context but do NOT become part of the main Chat history.
-- Render the side-question result above the Composer so the main Chat can continue independently.
-- The Ask control is only shown/enabled when the selected Agent reports side-question support.
-- Slash completion should also expose `/btw` when supported.
-- Dismiss/cancel must not mutate the main conversation.
-- Agent-originated approval/question requests should use a similarly explicit interrupt surface rather than being
-  confused with normal assistant messages.
+2.5 Chat Queue
+--------------
+- Chat supports queued prompts while an Agent turn is active and explicit queueing when supported.
+- Queue is Chat-session scoped and completely separate from Runner Tasks / Task List execution order.
+- Queue appears directly above the Composer only when at least one item exists.
+- Each queued prompt can be edited or deleted before execution.
+- Preserve FIFO order unless the selected Agent exposes another explicit ordering contract.
+- Backend owns queue state/order; UI only renders and edits that projection.
+- If the Agent has native queue semantics, adapter maps them into the same product contract.
+- Qwen direction includes native queued-next-turn behavior (for example Ctrl+Q).
+- Prototype must provide an obvious Mock path such as `@queue <message>` plus Ctrl+Q.
+
+2.6 AI clarification / Ask
+--------------------------
+- Ask means the Agent asks the USER for clarification during the CURRENT turn.
+- Ask is NOT Qwen `/btw` side question. `/btw` may still exist independently in the Agent slash palette.
+- One Ask request can contain multiple questions.
+- Supported question kinds:
+    option question,
+    free-text question.
+- An option question always exposes a final `Other / custom answer` choice with text input.
+- User answers the current question, presses Next, and presses Submit on the final question.
+- Submit returns ONE structured answers object to the suspended Agent/tool call; the original Agent turn then resumes.
+- Ask UI appears above the Composer and must be visually distinct from normal Chat messages and Queue.
+- Ask capability is Agent-specific. Disable/hide the Ask trigger if the selected Agent cannot surface interactive questions.
+- Qwen adapter should map its `ask_user_question` tool contract (questions[] -> answers keyed by index).
+- OpenCode adapter should map its `question` tool contract (header/question/options/custom answer).
+- Do not implement separate Ask state machines per Agent; normalize into one Chat Ask projection.
+- Cancel must explicitly deny/cancel the pending Agent question rather than fabricate an answer.
 
 Mock requirements:
-- Prototype can use deterministic/mock Agent capability profiles for Qwen Code and OpenCode.
+- Prototype can use mock Agent capability profiles for Qwen Code and OpenCode.
 - Mock Agent switch must visibly change model/options and `/` suggestions.
 - Mock Mode must show the simplified Read / Auto / YOLO mapping.
-- Mock Ask must demonstrate a side answer that is not appended to Chat history.
-- Production later replaces the profile with live adapter discovery; UI contract stays the same.
+- Mock Ask supports multiple questions, options, free text, Other/custom text, Next and final Submit.
+- Ordinary Mock Chat may randomly emit an Ask request so the interrupt flow is easy to exercise.
+- Provide a force-demo path/button so tests do not rely only on randomness.
+- Production later replaces mock profiles with live adapter discovery; UI contract stays the same.
 
 3. CHAT COMMANDS: @task / @task-single / @task-list
 ====================================================
@@ -469,7 +492,7 @@ Important:
 ===================================
 
 - Project Chat is where users discuss normal engineering work.
-- `@task <spec>` is the explicit bridge from Chat to Runner Task creation.
+- `@task <spec>`, `@task-single <spec>` and `@task-list <spec>` are the explicit bridges from Chat to Runner Task creation.
 - Task execution remains visible in Tasks/Task Info, not mixed into normal Chat.
 - Completed/attention Tasks may provide a lightweight path back to Project Chat for discussion.
 - Merge Chat is a specific Project Chat handoff with prefilled integration context.
@@ -479,11 +502,15 @@ Important:
 10. MOCK / TESTABILITY
 ======================
 
-- Every major future UI flow should have a deterministic mock path that uses the same frontend contract
+- Every major future UI flow should have a deterministic/controllable mock path that uses the same frontend contract
   as production:
-    @task generation,
+    @task / @task-single / @task-list generation,
     TaskDraft validation,
     Task/List creation,
+    Agent / Model / Mode capabilities,
+    per-Agent slash commands / Skills,
+    Chat Queue,
+    multi-question Ask,
     workspace resolution,
     merge preflight Ready/Conflict/Blocked/Merged,
     Merge Chat prefill.
@@ -508,6 +535,11 @@ Critical browser-flow coverage eventually required:
 - Ready -> Merge.
 - Conflict -> Merge disabled + Merge Chat.
 - Merge Chat -> correct Project + new Chat + prefilled unsent prompt.
+- Agent switch -> model/mode/slash capability list refreshes.
+- `/` palette -> selected Agent commands/Skills only.
+- Queue -> appears above Composer, supports Edit/Delete and preserves order.
+- Ask -> multiple questions, option + Other/custom text + free text, Next, final Submit.
+- Chat Draft Edit -> same canonical right-side Task Editor overlay; Chat underneath does not reflow.
 
 
 11. RUNTIME / RELIABILITY NON-REGRESSION
@@ -543,15 +575,17 @@ Critical browser-flow coverage eventually required:
 Recommended sequence:
 
 1. Stabilize current Project Chat + Tasks shell while preserving current UI style.
-2. Implement backend `@task <spec>` generate-task contract + deterministic mock.
-3. Replace prototype browser heuristics with backend TaskDraft generation.
-4. Reuse canonical Task Editor / Task List for TaskDraft Edit/Create.
-5. Finish state-aware Task actions, source-aware Back, Delete/error/composer polish.
-6. Connect production Worktree workspace resolution and visible workspace results.
-7. Implement backend merge preflight and explicit direct Merge.
-8. Implement Merge Chat handoff using new Project Chat + unsent prompt.
-9. Add focused browser/API/mock/live regression coverage.
-10. Only then consider deeper parallel-agent/shared-workspace experiments.
+2. Add shared Chat backend + AgentAdapter contract (Agent/Model/Mode/commands/Skills/Ask/Queue capabilities).
+3. Implement Chat session/message streaming, Queue and normalized Ask request/answer APIs.
+4. Implement backend `@task*` generate-task contract + deterministic mock.
+5. Replace prototype browser heuristics with backend TaskDraft generation.
+6. Reuse canonical right-side Task Editor / Task List for TaskDraft Edit/Create.
+7. Finish state-aware Task actions, source-aware Back, Delete/error/composer polish.
+8. Connect production Worktree workspace resolution and visible workspace results.
+9. Implement backend merge preflight and explicit direct Merge.
+10. Implement Merge Chat handoff using new Project Chat + unsent prompt.
+11. Add focused browser/API/mock/live regression coverage.
+12. Only then consider deeper parallel-agent/shared-workspace experiments.
 
 
 14. NON-GOALS
@@ -587,6 +621,63 @@ Before considering a future feature complete, verify:
 - Did UI/CLI/YAML/API/Dry Run behavior stay aligned where applicable?
 - Are deterministic tests present?
 - Are live/reliability tests added when the change can affect 24H execution?
+
+
+16. CHAT API / BACKEND OWNERSHIP
+================================
+
+- Add one shared Chat backend/service boundary for the Web UI and future clients.
+- Chat backend owns:
+    Project Chat sessions/messages,
+    selected Agent/Model/Mode,
+    active turn identity/status,
+    queued prompts,
+    pending Ask requests/answers,
+    TaskDraft generation requests.
+- Agent-specific CLI/SDK details stay behind AgentAdapter implementations.
+- Do not expose Qwen/OpenCode process-specific details directly to frontend state.
+
+Suggested AgentAdapter capabilities:
+    list_models(project/session context),
+    list_commands_and_skills(project/session context),
+    map_permission_mode(Read/Auto/YOLO),
+    send/stream/cancel turn,
+    queue/edit/delete pending prompt if natively supported or via Chat service,
+    surface normalized Ask requests,
+    submit Ask answers,
+    capability flags.
+
+Suggested Chat API capabilities (route naming may change):
+    GET    /api/chat/agents
+    GET    /api/chat/agents/{agent}/models
+    GET    /api/chat/agents/{agent}/capabilities
+    GET    /api/chat/projects/{project}/sessions
+    POST   /api/chat/projects/{project}/sessions
+    PATCH  /api/chat/sessions/{session}
+    POST   /api/chat/sessions/{session}/messages
+    POST   /api/chat/sessions/{session}/cancel
+    GET    /api/chat/sessions/{session}/queue
+    POST   /api/chat/sessions/{session}/queue
+    PATCH  /api/chat/sessions/{session}/queue/{item}
+    DELETE /api/chat/sessions/{session}/queue/{item}
+    POST   /api/chat/sessions/{session}/asks/{ask_id}/answers
+    POST   /api/chat/sessions/{session}/asks/{ask_id}/cancel
+    POST   /api/chat/task-drafts/generate
+
+Streaming/event projection should distinguish at least:
+    assistant text,
+    thinking/tool activity,
+    Ask request,
+    Queue update,
+    turn status/completion/error,
+    TaskDraft generation result.
+
+Runner boundary:
+- Normal Chat messages MUST NOT be routed through FlowEngine/StageExecutor merely to reuse execution code.
+- Runner starts owning work only when a durable Task is started.
+- TaskDraft generation is planning/service logic, not a new Stage graph.
+- Runner changes should be limited to consuming frozen Task inputs, workspace/path ownership and exposing canonical runtime projection.
+- Queue/Ask are Chat/Agent interaction concerns and must not contaminate RunState retry/recovery semantics.
 
 
 End of new future roadmap.
