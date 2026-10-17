@@ -3612,7 +3612,7 @@ function openItemContextMenu(e,owner,index){
 function openListContextMenu(e,t){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
   taskContextState={scope:'list',ownerId:t.id,index:null};
-  setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
+  setContextAction('open',{visible:true,enabled:true,label:'Open Task'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
   setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
   renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
 }
@@ -3798,7 +3798,7 @@ openListContextMenu=function(e,t){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
   const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
   taskContextState={scope:'list',ownerId:t.id,index:null};
-  setContextAction('open',{visible:true,enabled:true,label:'Open list'});
+  setContextAction('open',{visible:true,enabled:true,label:'Open Task'});
   setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
   setContextAction('info',{visible:false});
   setContextAction('workflow',{visible:false});setContextAction('up',{visible:false});setContextAction('down',{visible:false});
@@ -4053,6 +4053,8 @@ function syncCompactTaskInspector(t){
   if(!t)return;
   document.getElementById('inspectorCurrentStage').textContent=t.stage||runtimeLabel(t.runtime)||'—';
   document.getElementById('inspectorCurrentProgress').textContent=t.progress?.[1]?`${t.progress[0]} / ${t.progress[1]}`:'—';
+  const runtimeAction=document.getElementById('taskPrimaryDemo');
+  if(runtimeAction&&!runtimeAction.classList.contains('danger'))runtimeAction.className='btn';
 }
 const compactInspectorOpenTask=openTaskById;
 openTaskById=function(id){compactInspectorOpenTask(id);syncCompactTaskInspector(taskMap[id])};
