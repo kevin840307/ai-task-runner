@@ -43,7 +43,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 .chatbody{position:relative;min-height:0;display:grid;grid-template-rows:minmax(0,1fr);overflow:hidden}.messages{overflow:auto;padding:24px max(24px,calc((100% - 880px)/2)) 180px;display:flex;flex-direction:column;gap:14px}
 .msg{max-width:82%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow-sm);font-size:13px;line-height:1.55}.msg.user{align-self:flex-end;border-color:rgba(15,118,110,.26);background:#fbfffe}.msg.assistant{align-self:flex-start}.msgmeta{display:flex;align-items:center;gap:7px;margin-bottom:6px;color:var(--muted);font-size:10px;font-weight:800}.avatar{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:900}.composerwrap{position:absolute;left:0;right:0;bottom:0;padding:25px max(14px,calc((100% - 900px)/2)) 14px;background:linear-gradient(to bottom,rgba(245,247,250,0),var(--bg) 25px,var(--bg) 100%)}.composer{border:1px solid var(--line);border-radius:15px;background:var(--panel);box-shadow:0 12px 32px rgba(15,23,42,.10);overflow:hidden}.composer textarea{display:block;width:100%;height:76px;resize:none;border:0;outline:0;padding:14px;background:transparent;color:var(--text);font-size:13px}.composerfoot{display:flex;align-items:center;justify-content:space-between;padding:8px;border-top:1px solid #edf1f5}.chips{display:flex;gap:6px;align-items:center}.chip{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:10px;font-weight:800}
 /* Board */
-.boardpage{grid-template-rows:68px 54px minmax(0,1fr)}.boardtools{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--panel-2)}.search{width:min(330px,38vw);height:34px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)}.toggle{display:flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#fff}.toggle button{height:27px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:10px;font-weight:800}.toggle button.active{background:var(--accent-soft);color:var(--accent-dark)}
+.boardpage{grid-template-rows:68px 54px minmax(0,1fr)}.task-title-context{min-width:0}.task-title-row{display:flex;align-items:center;gap:12px}.tasks-project-switcher{display:flex;align-items:center;gap:6px;padding:3px 4px 3px 8px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}.tasks-project-switcher select{max-width:210px;height:27px;padding:0 24px 0 7px;border:0;border-radius:6px;background:#fff;color:var(--text);font-size:10px;font-weight:850;text-transform:none;letter-spacing:0;outline:0}.tasks-project-switcher:focus-within{border-color:rgba(15,118,110,.36);box-shadow:0 0 0 2px rgba(15,118,110,.07)}.boardtools{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--panel-2)}.search{width:min(330px,38vw);height:34px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text)}.toggle{display:flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#fff}.toggle button{height:27px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:10px;font-weight:800}.toggle button.active{background:var(--accent-soft);color:var(--accent-dark)}
 .board{min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:12px;padding:14px 18px 20px}.col{min-width:245px;display:flex;flex-direction:column;min-height:0;border:1px solid #e4e9f0;border-radius:12px;background:#f8fafc}.colhead{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border-bottom:1px solid #e5eaf0}.colhead strong{font-size:12px}.count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:9px;font-weight:900}.coladd{margin-left:auto;border:0;background:transparent;color:var(--muted);font-size:18px}.dropzone{flex:1;min-height:140px;overflow:auto;padding:9px;display:flex;flex-direction:column;gap:8px}.dropzone.over{background:rgba(15,118,110,.06);outline:2px dashed rgba(15,118,110,.25);outline-offset:-5px;border-radius:10px}
 .taskcard{padding:10px;border:1px solid #dce3eb;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);cursor:grab;transition:.12s}.taskcard:hover{transform:translateY(-1px);border-color:rgba(15,118,110,.30);box-shadow:0 8px 18px rgba(15,23,42,.07)}.taskcard.dragging{opacity:.45}.cardtop{display:flex;align-items:flex-start;gap:8px}.handle{color:#a3adba;font-size:12px;letter-spacing:-2px;user-select:none}.tasktitle{flex:1;font-size:12px;font-weight:850;line-height:1.35}.runtime{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:#eef2f6;color:#64748b;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.03em}.runtime.running{background:#dff8ee;color:#047857}.runtime.stopped{background:#fee4df;color:#b42318}.runtime.done{background:#e9f8ed;color:#15803d}.runtime.recover{background:#fff7df;color:#9a5b00}.carddesc{margin:7px 0 9px;color:var(--muted);font-size:10px;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-overflow:ellipsis}.cardmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.tag{padding:2px 6px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:850}.cardfoot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:8px;border-top:1px solid #eef1f4;color:var(--muted);font-size:9px}.progress{display:flex;align-items:center;gap:6px}.bar{width:48px;height:4px;border-radius:999px;background:#e8edf2;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
 /* YAML */
@@ -458,6 +458,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       <div class="navgroup-label">Work</div>
       <nav class="nav nav-compact">
         <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
+        <button class="navbtn" data-view="chat"><span class="navico">◌</span><span>Chat</span></button>
       </nav>
       <div class="navgroup-label">Assets</div>
       <nav class="nav nav-compact asset-nav">
@@ -507,7 +508,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <!-- Tasks -->
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
-        <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered tasks</p></div>
+        <div class="title task-title-context"><div class="task-title-row"><h1>Tasks</h1><label class="tasks-project-switcher"><span>Project</span><select id="tasksProjectSelect" aria-label="Switch Task Project"></select></label></div><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered tasks</p></div>
         <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
@@ -4189,6 +4190,50 @@ window.addEventListener('resize',hideProjectActionMenu);window.addEventListener(
 const ensureProjectFromInputBeforeMenu=ensureProjectFromInput;
 ensureProjectFromInput=function(raw){const key=ensureProjectFromInputBeforeMenu(raw);syncProjectRowMenus();return key};
 syncProjectRowMenus();
+
+// --- Task navigation polish: Project is visible in Tasks; card click follows lifecycle intent. ---
+const tasksProjectSelect=document.getElementById('tasksProjectSelect');
+function renderTasksProjectSelect(){
+  if(!tasksProjectSelect)return;
+  const entries=projectRegistryEntries().filter(([key])=>projectMeta[key]);
+  tasksProjectSelect.innerHTML=entries.map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.branch||'main')}</option>`).join('');
+  tasksProjectSelect.value=projectMeta[currentProjectKey]?currentProjectKey:(entries[0]?.[0]||'');
+}
+const taskProjectSelectBefore=selectProject;
+selectProject=function(key){
+  taskProjectSelectBefore(key);
+  renderTasksProjectSelect();
+  if(tasksProjectSelect&&projectMeta[key])tasksProjectSelect.value=key;
+};
+tasksProjectSelect.onchange=()=>{if(projectMeta[tasksProjectSelect.value])selectProject(tasksProjectSelect.value)};
+
+const ensureProjectBeforeTaskSwitcher=ensureProjectFromInput;
+ensureProjectFromInput=function(raw){const key=ensureProjectBeforeTaskSwitcher(raw);renderTasksProjectSelect();return key};
+
+function openTaskFromBoard(t){
+  if(!t)return;
+  if(t.status==='ongoing'||t.status==='closed'){openTaskById(t.id);return}
+  openPlanDialog(t.id);
+}
+const lifecycleBindTaskCards=bindTaskCards;
+bindTaskCards=function(){
+  lifecycleBindTaskCards();
+  document.querySelectorAll('.taskcard').forEach(card=>{
+    const t=taskMap[card.dataset.id];if(!t)return;
+    card.title=(t.status==='ongoing'||t.status==='closed')?'Open Task info':'Open Task list';
+    card.onclick=()=>{if(!card.classList.contains('dragging'))openTaskFromBoard(taskMap[card.dataset.id])};
+  });
+};
+const lifecycleRenderTaskList=renderTaskList;
+renderTaskList=function(){
+  lifecycleRenderTaskList();
+  document.querySelectorAll('#taskListView [data-taskrow]').forEach(row=>{
+    const t=taskMap[row.dataset.taskrow];if(!t)return;
+    row.title=(t.status==='ongoing'||t.status==='closed')?'Open Task info':'Open Task list';
+    row.onclick=()=>openTaskFromBoard(taskMap[row.dataset.taskrow]);
+  });
+};
+renderTasksProjectSelect();
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
