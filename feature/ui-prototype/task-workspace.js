@@ -55,7 +55,7 @@ loadTaskEditor=function(mode,args={}){
     return taskEditorLoadBeforeSubview(mode,args);
   }
   const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
-  const returnTarget=detectTaskEditorReturnTarget();
+  const returnTarget=args.returnTarget||detectTaskEditorReturnTarget();
   if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
   closeModal('addPlanTaskModal');
   isolatedTaskEditorLoad(mode,args);
@@ -540,9 +540,10 @@ renderTaskList=function(){
   const body=rows.map(t=>{
     const items=canonicalTaskItems(t),related=items.filter(x=>projectRefMatches(x.project,currentProjectKey)).length;
     const projectSummary=items.length>1?(`${related}/${items.length} in ${currentProjectKey}`):(items[0]?basename(items[0].project):currentProjectKey);
-    return `<div class="taskrow taskrow-data" data-taskrow="${t.id}">
+    const worktree=taskUsesWorktree(t);
+    return `<div class="taskrow taskrow-data ${worktree?'worktree-row':''}" data-taskrow="${t.id}">
       <span class="pill">${escapeHtml(statusLabel(t.status))}</span>
-      <span class="taskrow-title"><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.desc||'')}</small></span>
+      <span class="taskrow-title"><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.desc||'')}${worktree?' · WORKTREE':''}</small></span>
       <span class="taskrow-count">${items.length}</span>
       <span class="runtime ${runtimeClass(t.runtime)}">${escapeHtml(runtimeLabel(t.runtime))}</span>
       <span class="taskrow-project">${escapeHtml(projectSummary)}</span>
