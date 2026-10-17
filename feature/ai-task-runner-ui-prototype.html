@@ -61,10 +61,16 @@
             <div class="composer-picker-popover-head"><div><span id="composerPickerEyebrow">CHAT</span><strong id="composerPickerTitle">Select</strong></div><button type="button" id="composerPickerClose" aria-label="Close selector">×</button></div>
             <div class="composer-picker-options" id="composerPickerOptions" role="listbox"></div>
           </div>
-          <div class="composer-side-question" id="composerSideQuestion" hidden>
-            <div class="composer-side-question-head"><div><span class="side-question-badge">SIDE QUESTION</span><strong id="sideQuestionAgent">Agent</strong></div><button type="button" id="dismissSideQuestion" aria-label="Dismiss side question">×</button></div>
-            <div class="composer-side-question-query" id="sideQuestionQuery"></div>
-            <div class="composer-side-question-answer" id="sideQuestionAnswer"></div>
+          <div class="composer-queue" id="composerQueue" hidden>
+            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> pending</strong></div><small>Runs after the current Agent turn</small></div>
+            <div class="composer-queue-list" id="composerQueueList"></div>
+          </div>
+          <div class="composer-ask" id="composerAsk" hidden>
+            <div class="composer-ask-head"><div><span class="ask-badge">AI QUESTION</span><strong id="composerAskTitle">Clarification</strong></div><span id="composerAskProgress">1 / 1</span></div>
+            <div class="composer-ask-question" id="composerAskQuestion"></div>
+            <div class="composer-ask-options" id="composerAskOptions"></div>
+            <textarea class="composer-ask-text" id="composerAskText" placeholder="Type your answer…" hidden></textarea>
+            <div class="composer-ask-foot"><button class="btn ghost" id="composerAskCancel" type="button">Cancel</button><button class="btn primary" id="composerAskNext" type="button">Next</button></div>
           </div>
           <div class="composer">
             <textarea id="chatInput" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
@@ -73,23 +79,23 @@
                 <span class="chip">Project</span>
                 <div class="composer-picker agent-control">
                   <button class="composer-picker-trigger" id="chatAgentTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="composer-picker-copy"><small>Agent</small><strong id="chatAgentValue">Qwen Code</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                    <span class="composer-picker-mark" id="chatAgentMark">Q</span><span class="composer-picker-copy"><small>Agent</small><strong id="chatAgentValue">Qwen Code</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
                   </button>
                   <select id="chatAgent" hidden><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select>
                 </div>
                 <div class="composer-picker model-control">
                   <button class="composer-picker-trigger" id="chatModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="composer-picker-copy"><small>Model</small><strong id="chatModelValue">—</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                    <span class="composer-picker-mark">M</span><span class="composer-picker-copy"><small>Model</small><strong id="chatModelValue">—</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
                   </button>
                   <select id="chatModel" hidden></select>
                 </div>
                 <div class="composer-picker mode-control" id="chatModeControl">
                   <button class="composer-picker-trigger" id="chatModeTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="composer-picker-copy"><small>Mode</small><strong id="chatModeValue">Auto</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+                    <span class="composer-picker-mark" id="chatModeMark">A</span><span class="composer-picker-copy"><small>Mode</small><strong id="chatModeValue">Auto</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
                   </button>
                   <select id="chatMode" hidden></select>
                 </div>
-                <button class="composer-mini-action" id="chatAsk" type="button" title="Ask a side question without adding it to the main Chat history">Ask</button>
+                <button class="composer-mini-action" id="chatAsk" type="button" title="Force a mock AI clarification flow">Ask mock</button>
                 <button class="composer-mini-action" id="chatToTask" type="button" title="Insert @task command">@task</button>
               </div>
               <button class="btn primary" id="chatSend">傳送</button>
