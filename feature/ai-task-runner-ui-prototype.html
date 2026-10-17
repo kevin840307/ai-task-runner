@@ -257,6 +257,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .drawer-plan-summary{margin-top:1px}
 .plan-modal-card .plan-intro{padding-bottom:9px;border-bottom:1px solid #edf1f4}
 .plan-row-copy small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56vw}
+
+.field-optional{margin-left:5px;color:#94a3b8;font-size:8px;font-weight:650;text-transform:none;letter-spacing:0}
 </style>
 </head>
 <body>
@@ -436,7 +438,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
-        <div class="field full"><label>Task title</label><input id="newTaskTitle" value="Implement mock interaction"></div>
+        <div class="field full"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from first task prompt" value=""></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
         <div class="field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
       </div>
@@ -1476,13 +1478,14 @@ document.getElementById('chatToTask').onclick=()=>{
 };
 document.getElementById('createTaskConfirm').onclick=()=>{
   captureNewTaskSources();
-  const title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
   let goal='';
   if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
   else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
   else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
-  if(!title||!goal){showToast('Task title / Prompt 不可空白');return}
+  if(!goal){showToast('Task Prompt 不可空白');return}
   if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  if(!title)title=(newTaskDraft.prompt||goal).replace(/^goal_file:\s*/,'').slice(0,72)||'New Task';
   const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
   const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
   if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
@@ -1713,13 +1716,14 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     closeModal('newTaskModal');openTaskListEditor(t.id);showToast('Task List created · New');return;
   }
   captureNewTaskSources();
-  const title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
   let goal='';
   if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
   else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
   else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
-  if(!title||!goal){showToast('Task title / Prompt 不可空白');return}
+  if(!goal){showToast('Task Prompt 不可空白');return}
   if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  if(!title)title=(newTaskDraft.prompt||goal).replace(/^goal_file:\s*/,'').slice(0,72)||'New Task';
   const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
   const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
   if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
