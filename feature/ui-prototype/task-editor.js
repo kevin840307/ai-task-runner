@@ -630,6 +630,10 @@ function editorItemRef(){
 }
 function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
 function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
+  if(mode==='root-create'){
+    setTaskFormCreateMode();
+    document.getElementById('createTaskConfirm').disabled=false;
+  }
   taskEditorContext={mode,ownerId,index};
   const owner=ownerId?taskMap[ownerId]:null;
   let item=null;
@@ -982,7 +986,7 @@ function handleCreateEntryClick(e){
 }
 document.getElementById('newTask').addEventListener('click',handleCreateEntryClick,true);
 document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',handleCreateEntryClick,true));
-createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{hideCreateTypeMenu();loadTaskEditor('root-create')};
+createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{hideCreateTypeMenu();setTaskFormCreateMode();loadTaskEditor('root-create')};
 createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{hideCreateTypeMenu();createEmptyTaskListAndOpen()};
 document.addEventListener('click',e=>{if(!createTypeMenu.hidden&&!createTypeMenu.contains(e.target)&&e.target!==createMenuAnchor)hideCreateTypeMenu()});
 window.addEventListener('resize',hideCreateTypeMenu);window.addEventListener('scroll',hideCreateTypeMenu,true);
