@@ -518,7 +518,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
-        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；Paused → New 會從頭重置並先確認</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
+        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；Paused / Closed → New 都會先確認</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
         <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
@@ -765,12 +765,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="taskResetToNewModal">
   <div class="modal-card project-manage-modal">
-    <div class="modal-head"><div><h2>Move Task back to New?</h2><p id="taskResetToNewMeta"></p></div><button class="close" data-close-modal="taskResetToNewModal">×</button></div>
+    <div class="modal-head"><div><h2 id="taskResetToNewTitle">Move Task back to New?</h2><p id="taskResetToNewMeta"></p></div><button class="close" data-close-modal="taskResetToNewModal">×</button></div>
     <div class="modal-body">
-      <div class="project-delete-note">
-        <strong>This restarts the Task from the beginning.</strong><br>
-        Current execution progress and resumable runtime state will be reset. Task configuration stays intact, and the previous run remains visible in History.
-      </div>
+      <div class="project-delete-note" id="taskResetToNewNote"></div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="taskResetToNewModal">Cancel</button><button class="btn danger" id="confirmTaskResetToNew">Move to New & Reset</button></div>
   </div>
@@ -992,7 +989,7 @@ const BOARD_TRANSITIONS={
   new:new Set(['ongoing','closed']),
   ongoing:new Set(['paused','closed']),
   paused:new Set(['new','ongoing','closed']),
-  closed:new Set(['ongoing'])
+  closed:new Set(['new'])
 };
 function boardMoveAllowed(t,target){
   if(!t||!target)return {ok:false,reason:'Unknown target'};
@@ -4385,40 +4382,53 @@ openItemContextMenu=function(e,owner,index){
 };
 
 let pendingResetToNewTaskId=null;
-function resetPausedTaskToNew(t){
-  if(!t||t.status!=='paused')return;
-  const items=canonicalTaskItems(t),previousProgress=t.progress?.[0]||0;
-  pushTaskHistory(t,`Paused → New · execution reset from start after ${previousProgress}/${items.length} completed`);
+function resetTaskToNew(t){
+  if(!t||!['paused','closed'].includes(t.status))return;
+  const items=canonicalTaskItems(t),previousStatus=t.status,previousProgress=t.progress?.[0]||0,previousElapsed=t.elapsed||'—';
+  if(previousStatus==='closed'){
+    const completedRun=t.runNumber||1;
+    pushTaskHistory(t,`Run #${completedRun} preserved · Completed · ${previousProgress}/${items.length} · ${previousElapsed}`);
+    t.runNumber=completedRun+1;
+    pushTaskHistory(t,`Run #${t.runNumber} prepared · Closed → New`);
+  }else{
+    pushTaskHistory(t,`Paused → New · resumable execution abandoned after ${previousProgress}/${items.length} completed`);
+  }
   t.status='new';t.runtime='idle';t.progress=[0,items.length];t.stage='Ready';t.session='—';t.elapsed='—';t.configDirty=false;
-  t.desc=items.length===1?'Ready to run from the beginning':`${items.length} ordered tasks · reset to run from the beginning`;
+  t.desc=items.length===1?'Ready to run from the beginning':`${items.length} ordered tasks · ready to run from the beginning`;
   if(batchParentTaskId===t.id){
     clearInterval(batchRunTimer);batchRunTimer=null;
     batchDraft=cloneBatch(items);batchState={status:'idle',index:0,recovered:false,currentDirty:false};setBatchControls();
   }
   persistCurrentPresetFromTaskMap();renderBoardFromMap();
 }
-function requestPausedTaskResetToNew(t){
-  if(!t||t.status!=='paused')return;
+function requestTaskResetToNew(t){
+  if(!t||!['paused','closed'].includes(t.status))return;
   pendingResetToNewTaskId=t.id;
-  const items=canonicalTaskItems(t),done=Math.min(t.progress?.[0]||0,items.length);
+  const items=canonicalTaskItems(t),done=Math.min(t.progress?.[0]||0,items.length),closed=t.status==='closed';
+  document.getElementById('taskResetToNewTitle').textContent=closed?'Run this Task again from the beginning?':'Move Task back to New?';
   document.getElementById('taskResetToNewMeta').textContent=`${t.id} · ${t.title} · progress ${done}/${items.length}`;
+  document.getElementById('taskResetToNewNote').innerHTML=closed
+    ?'<strong>The completed run stays in History.</strong><br>Task configuration stays intact. A new execution starts from Task 1 with fresh runtime state.'
+    :'<strong>This abandons the current resumable execution.</strong><br>Task configuration stays intact, execution progress resets to the beginning, and the abandoned run remains visible in History.';
+  document.getElementById('confirmTaskResetToNew').textContent=closed?'Move to New & Run Again':'Move to New & Reset';
   openModal('taskResetToNewModal');
 }
 document.getElementById('confirmTaskResetToNew').onclick=()=>{
   const t=taskMap[pendingResetToNewTaskId];pendingResetToNewTaskId=null;
   closeModal('taskResetToNewModal');
-  if(!t||t.status!=='paused')return;
-  resetPausedTaskToNew(t);showToast('Task moved to New · execution reset from start');
+  if(!t||!['paused','closed'].includes(t.status))return;
+  const wasClosed=t.status==='closed';resetTaskToNew(t);
+  showToast(wasClosed?'Task moved to New · previous run preserved':'Task moved to New · execution reset from start');
 };
 
-// Intercept Paused → New before the generic Board drop handler mutates status.
+// Intercept Paused / Closed → New before the generic Board drop handler mutates status.
 const newDropzone=document.querySelector('.col[data-status="new"] .dropzone');
 newDropzone.addEventListener('drop',e=>{
   if(!dragged)return;
   const t=taskMap[dragged.dataset.id];
-  if(t?.status!=='paused')return;
+  if(!['paused','closed'].includes(t?.status))return;
   e.preventDefault();e.stopImmediatePropagation();newDropzone.classList.remove('over');
-  requestPausedTaskResetToNew(t);
+  requestTaskResetToNew(t);
 },true);
 
 function openTaskFromBoard(t){
