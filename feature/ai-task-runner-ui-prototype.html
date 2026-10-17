@@ -2892,7 +2892,7 @@ eligibleMoveTasks=function(owner){
   return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&canonicalTaskItems(t).length===1);
 };
 
-// Project click is now the Chat navigation. Tasks remains the only Work nav item.
+// Project click changes the shared Project context and preserves the current workspace.
 const canonicalSelectProject=selectProject;
 selectProject=function(key){
   canonicalSelectProject(key);
@@ -2902,7 +2902,7 @@ selectProject=function(key){
   document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered tasks`;
 };
 document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
-  selectProject(p.dataset.project);showView('chat');document.getElementById('chatInput').focus();
+  selectProject(p.dataset.project);
 }));
 
 // Drawer summary always exposes the same Plan dialog, even for a one-item list.
@@ -3714,7 +3714,7 @@ function uniqueProjectKey(base,path){
   while(projectMeta[key]&&normalizeProjectRef(projectMeta[key].path)!==normalizeProjectRef(path))key=`${clean}-${n++}`;
   return key;
 }
-function bindDynamicProjectButton(btn){btn.onclick=()=>{const key=btn.dataset.project;selectProject(key);showView('chat');document.getElementById('chatInput').focus()}}
+function bindDynamicProjectButton(btn){btn.onclick=()=>selectProject(btn.dataset.project)}
 function ensureProjectFromInput(raw){
   raw=String(raw||'').trim();if(projectMeta[raw])return raw;
   const found=Object.keys(projectMeta).find(k=>normalizeProjectRef(projectMeta[k].path)===normalizeProjectRef(raw));if(found)return found;
