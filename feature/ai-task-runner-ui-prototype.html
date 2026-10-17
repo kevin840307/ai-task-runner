@@ -377,6 +377,59 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .taskrow-project{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475569}.taskrow-count{font-weight:800;color:#475569}.taskrow-progress{color:var(--muted);font-variant-numeric:tabular-nums}
 .task-list-empty{padding:26px;border:1px dashed #cbd5df;border-radius:10px;background:#fff;text-align:center;color:var(--muted);font-size:9px}
 @media(max-width:900px){#planModal>.plan-modal-card,#planModal>.plan-subview-mount{width:100vw!important}.plan-page-body{grid-template-columns:minmax(0,1fr)!important}.plan-side{display:none!important}}
+
+/* Task List row alignment + one stable Add task footer */
+.plan-row-compact .plan-row-head{
+  grid-template-columns:18px 28px minmax(0,1fr) auto!important;
+  column-gap:8px!important;
+  align-items:center!important;
+}
+.plan-row-head>.drag-grip{
+  display:grid;place-items:center;
+  width:18px;height:28px;
+  margin:0!important;
+  color:#94a3b8;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+  cursor:grab;
+  user-select:none;
+}
+.plan-row-head>.drag-grip:active{cursor:grabbing}
+.plan-row-num{
+  width:28px!important;height:28px!important;
+  margin:0!important;
+  display:grid!important;place-items:center!important;
+  line-height:1!important;
+  align-self:center!important;
+}
+.plan-row-num>.drag-grip{display:none!important}
+#planAddTask{display:none!important}
+.plan-add-task-footer{
+  width:100%;
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  margin-top:2px;
+  border:1px dashed #b8c5d1;
+  border-radius:9px;
+  background:#fbfcfd;
+  color:var(--accent);
+  font-size:9px;
+  font-weight:850;
+  cursor:pointer;
+}
+.plan-add-task-footer:hover:not(:disabled){
+  border-color:#7ba9a3;
+  background:#f4faf8;
+}
+.plan-add-task-footer:disabled{
+  cursor:not-allowed;
+  opacity:.5;
+}
+.plan-add-task-plus{font-size:13px;line-height:1}
 </style>
 </head>
 <body>
@@ -3679,7 +3732,7 @@ function bindPlanSelectionAndDrag(t){
   const host=document.getElementById('planFormList');
   host.querySelectorAll('[data-plan-row]').forEach(row=>{
     const i=+row.dataset.planRow,canDrag=canDragTaskItem(t,i);row.draggable=canDrag;
-    const num=row.querySelector('.plan-row-num');if(num&&!num.querySelector('.drag-grip'))num.insertAdjacentHTML('afterbegin','<span class="drag-grip">⠿</span>');
+    const num=row.querySelector('.plan-row-num');if(num){num.querySelectorAll('.drag-grip').forEach(x=>x.remove());if(!row.querySelector('.plan-row-head > .drag-grip'))num.insertAdjacentHTML('beforebegin','<span class="drag-grip" aria-hidden="true">⠿</span>')}
     row.onclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i)};
     row.ondblclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i);const s=planStateFor(t,i,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})};
     row.ondragstart=e=>{if(!canDrag){e.preventDefault();return}planDragIndex=i;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
@@ -3944,6 +3997,18 @@ const practicalRenderFullPlan=renderFullPlan;
 renderFullPlan=function(t){
   practicalRenderFullPlan(t);polishTaskRows(t);
   const rename=document.getElementById('planRenameList');if(rename)rename.disabled=!taskEditable(t);
+
+  const host=document.getElementById('planFormList');
+  host.querySelectorAll('#planEmptyAddTask,.empty-plan-cta,.plan-add-task-footer').forEach(x=>x.remove());
+
+  const add=document.createElement('button');
+  add.type='button';
+  add.className='plan-add-task-footer';
+  add.innerHTML='<span class="plan-add-task-plus">＋</span><strong>Add task</strong>';
+  add.disabled=!taskEditable(t);
+  add.title=add.disabled?(t.status==='ongoing'?'Pause before adding tasks':'Task List is read-only'):'Add task';
+  add.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+  host.appendChild(add);
 };
 
 renderTaskList=function(){
