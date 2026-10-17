@@ -3485,7 +3485,7 @@ function setContextAction(name,{visible=true,enabled=true,label=null}={}){
 }
 function renderContextSideInfo(state){
   const t=taskMap[state.ownerId];if(!t)return;
-  const title=document.getElementById('contextInfoTitle'),meta=document.getElementById('contextInfoMeta'),body=document.getElementById('contextInfoBody');
+  const title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta'),body=document.getElementById('taskInfoBody');
   if(state.scope==='list'){
     const items=canonicalTaskItems(t);
     title.textContent=t.title;meta.textContent=`${t.id} · Task List`;
