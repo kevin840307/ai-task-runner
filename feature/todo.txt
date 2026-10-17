@@ -212,7 +212,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Delete 不可在使用者確認前改動資料；Cancel 不改資料。
 [ ] 刪除正在執行、Recovering、或有不可安全刪除狀態的 Task 時必須阻擋，並顯示原因。
 [ ] Paused / Closed 重設回 New 必須確認；已完成 Run 保留 History，舊的 resumable run 需標記 abandoned。
-[ ] 建立或編輯錯誤時，錯誤訊息要出現在對應 overlay 上層且可見；避免 Toast 一閃而過或被 Drawer 蓋住。
+[x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
+[ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [ ] UI 不得在不同入口建立重複的 Task Editor / Task List renderer。
