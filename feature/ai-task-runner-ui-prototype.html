@@ -2898,6 +2898,194 @@ bindFullPlan=(function(base){return function(t){
   document.querySelectorAll('[data-plan-ai-reset]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planAiReset;if(!batchDraft[i])return;batchDraft[i].aiMode='default';batchDraft[i].aiPrompt='';batchDraft[i].aiFile='';commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 };})(bindFullPlan);
 
+// --- One canonical Task Editor for root task, list task creation, and list task editing ---
+let taskItemSequence=1000;
+let taskEditorContext={mode:'root-create',ownerId:null,index:null};
+const baseUnifiedPlanItemDefaults=planItemDefaults;
+planItemDefaults=function(x={},t=null,i=0){
+  const y=baseUnifiedPlanItemDefaults(x,t,i);
+  return {...y,
+    itemId:x.itemId||x.item_id||`${t?.id||'draft'}-I${i+1}-${++taskItemSequence}`,
+    title:x.title||x.itemTitle||'',
+    workspacePolicy:x.workspacePolicy||x.workspace_policy||'auto',
+    workspaceKind:x.workspaceKind||x.workspace_kind||'main',
+    branch:x.branch||'',executionRoot:x.executionRoot||x.execution_root||'',
+  };
+};
+itemTitle=(function(base){return function(item,index){return item?.title?.trim()||base(item,index)}})(itemTitle);
+singleTaskItem=function(t){
+  const p=t.promptSource||{};
+  return planItemDefaults({
+    title:canonicalTaskItems===undefined?'':(Array.isArray(t.items)&&t.items[0]?.title)||'',
+    prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
+    project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
+    validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md',
+    workspacePolicy:t.workspacePolicy||'auto',workspaceKind:t.workspaceKind||'main',branch:t.branch||'',executionRoot:t.executionRoot||''
+  },t,0);
+};
+
+commitPlanDraft=function(t,{markDirty=false}={}){
+  if(!t)return;
+  batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  t.kind='task_list';t.items=cloneBatch(batchDraft);t.listItems=t.items;
+  const count=t.items.length,x=t.items[0];
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  if(count===1){
+    t.workflow=x.workflow;t.goal=x.prompt;t.project=Object.keys(projectMeta).find(k=>projectMeta[k].path===x.project)||t.project;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    t.workspacePolicy=x.workspacePolicy;t.workspaceKind=x.workspaceKind;t.branch=x.branch;t.executionRoot=x.executionRoot;
+  }else{
+    t.workflow='Tasks';t.workspaceKind='per_item';t.workspacePolicy='per_item';t.branch='—';t.executionRoot='Per-task workspaces';t.goal=`${count} ordered tasks`;
+  }
+  const baseTags=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x))&&!['workflow','file validation','AI validation'].includes(x));
+  t.tags=[`${count} task${count===1?'':'s'}`,...baseTags].slice(0,4);
+  t.desc=count===1?'1 task':`${count} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused · current task changed · restart required.'}
+};
+
+function projectKeyFromPath(path, fallback=currentProjectKey){return Object.keys(projectMeta).find(k=>projectMeta[k].path===path)||projectMeta[path]?path:fallback}
+function editorOwner(){return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
+function editorItemRef(){
+  const owner=editorOwner();
+  if(taskEditorContext.mode==='root-create')return `T-${taskSequence+1}`;
+  return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
+}
+function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
+function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
+  taskEditorContext={mode,ownerId,index};
+  const owner=ownerId?taskMap[ownerId]:null;
+  let item=null;
+  if(owner&&index!=null){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
+  if(mode==='edit-item'&&!item)return;
+  newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
+  if(fromChat)newTaskDraft.prompt=fromChat;
+  newTaskWorkspaceMode=item?.workspacePolicy||'auto';
+  const projectKey=item?projectKeyFromPath(item.project,owner?.project||currentProjectKey):(owner?.project||currentProjectKey);
+  document.getElementById('newTaskProject').value=projectMeta[projectKey]?projectKey:currentProjectKey;
+  document.getElementById('newTaskWorkflow').value=item?.workflow||'ralphy_ai_validate.yaml';
+  document.getElementById('newTaskTitle').value=item?.title||'';
+  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='create-item'?'New task':'Edit task';
+  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
+  document.getElementById('createTaskConfirm').textContent=mode==='edit-item'?'Save changes':'Create task';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  document.getElementById('newTaskWorkflowField').hidden=false;document.getElementById('newTaskWorkflowCaps').hidden=false;
+  document.querySelector('.workspace-selector-wrap').hidden=false;document.getElementById('newTaskPromptSource').hidden=false;document.getElementById('newTaskValidationSource').hidden=false;
+  renderNewTaskSources();renderNewTaskWorkspace();openModal('newTaskModal');
+}
+
+renderNewTaskWorkspace=function(){
+  const host=document.getElementById('newTaskWorkspace');if(!host)return;
+  const project=document.getElementById('newTaskProject')?.value||currentProjectKey;
+  const ref=editorItemRef(),busy=mainBusyTask(project),resolved=resolveTaskWorkspace(project,ref,newTaskWorkspaceMode);
+  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  host.innerHTML=`<div class="workspace-options">
+    ${option('auto','Auto','Use Main when available; create a Worktree when Main is busy.',busy?`Main busy → Worktree`:'Main available')}
+    ${option('main','Main workspace','Use the project working tree directly.',busy?`Busy · ${busy.id}`:'Available',!!busy)}
+    ${option('worktree','Isolated worktree','Create an isolated branch/path for this task.',`task/${ref}`)}
+  </div><div class="workspace-preview"><strong>Preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
+  host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
+};
+
+function buildEditorItem(owner,index){
+  captureNewTaskSources();
+  const projectKey=document.getElementById('newTaskProject').value,workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  const title=document.getElementById('newTaskTitle').value.trim();
+  let promptValue='';
+  if(newTaskDraft.goalMode==='inline')promptValue=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')promptValue=`Prompt file · ${basename(newTaskDraft.goalFile)}`;
+  else promptValue=`Prompt asset · ${newTaskDraft.goalAsset}`;
+  if(newTaskDraft.goalMode==='inline'&&!newTaskDraft.prompt.trim()){showToast('Task Prompt 不可空白');return null}
+  if(newTaskDraft.goalMode==='file'&&!newTaskDraft.goalFile.trim()){showToast('Prompt file is required');return null}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('This Workflow requires File Validator');return null}
+  const resolved=resolveTaskWorkspace(projectKey,editorItemRef(),newTaskWorkspaceMode);if(!resolved.ok){showToast(resolved.reason);return null}
+  return planItemDefaults({title,prompt:newTaskDraft.prompt||promptValue,goalMode:newTaskDraft.goalMode,goalFile:newTaskDraft.goalFile,goalAsset:newTaskDraft.goalAsset,
+    project:projectMeta[projectKey]?.path||projectKey,workflow,validatorMode:caps.file?'file':'none',validator:newTaskDraft.validator,
+    aiMode:newTaskDraft.aiMode,aiPrompt:newTaskDraft.aiPrompt,aiFile:newTaskDraft.aiFile,aiAsset:newTaskDraft.aiAsset,
+    workspacePolicy:newTaskWorkspaceMode,workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root
+  },owner,index||0);
+}
+
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const ctx=taskEditorContext;
+  if(ctx.mode==='root-create'){
+    const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
+    const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
+    const boardTitle=document.getElementById('newTaskTitle').value.trim()||planTitle(item,0).slice(0,72)||'New Task';
+    const projectKey=projectKeyFromPath(item.project,currentProjectKey);
+    const t={id,kind:'task_list',status:'new',title:boardTitle,runtime:'idle',desc:'1 task',tags:['1 task'],workflow:item.workflow,project:projectKey,progress:[0,1],elapsed:'—',stage:'Idle',session:'—',goal:item.prompt,
+      items:[item],listItems:[item],promptSource:{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset},
+      workspacePolicy:item.workspacePolicy,workspaceKind:item.workspaceKind,branch:item.branch,executionRoot:item.executionRoot};
+    taskMap[id]=t;closeModal('newTaskModal');persistCurrentPresetFromTaskMap();renderBoardFromMap();showToast(`Task created · ${item.workspacePolicy==='worktree'?'Worktree':item.workspacePolicy}`);openTaskById(id);return;
+  }
+  const owner=taskMap[ctx.ownerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  const targetIndex=ctx.mode==='create-item'?batchDraft.length:ctx.index;
+  const item=buildEditorItem(owner,targetIndex);if(!item)return;
+  const markDirty=ctx.mode==='edit-item'&&owner.status==='paused'&&targetIndex===batchState.index;
+  if(ctx.mode==='create-item'){batchDraft.push(item);sequenceExpandedIndex=-1;pushTaskHistory(owner,'Task added');}
+  else{batchDraft[targetIndex]={...batchDraft[targetIndex],...item,itemId:batchDraft[targetIndex].itemId};pushTaskHistory(owner,`Task ${targetIndex+1} edited`)}
+  commitPlanDraft(owner,{markDirty});
+  if(owner.items.length===1&&item.title)owner.title=item.title;
+  persistCurrentPresetFromTaskMap();closeModal('newTaskModal');renderBoardFromMap();renderExecutionPlan(owner);renderWorkspaceResult(owner);
+  if(!document.getElementById('planModal').classList.contains('open'))openPlanDialog(owner.id);else renderFullPlan(owner);
+  showToast(markDirty?'Saved · current task will restart':'Task saved');
+};
+
+// Suppress legacy New Task listeners and route root creation into the canonical editor.
+document.getElementById('newTask').addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();loadTaskEditor('root-create');},true);
+document.getElementById('chatToTask').onclick=()=>{const textValue=document.getElementById('chatInput').value.trim();loadTaskEditor('root-create',{fromChat:textValue});document.getElementById('newTaskTitle').value=textValue?textValue.slice(0,72):''};
+
+function workspaceLabelForItem(x){return x.workspacePolicy==='worktree'?'Worktree':x.workspacePolicy==='main'?'Main':'Auto'}
+renderFullPlan=function(t){
+  const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:canonicalTaskItems(t),editable=taskEditable(t);
+  document.getElementById('planPageTitle').textContent=t.title;
+  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
+  host.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
+    return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure||items.length<=1?'disabled':''}>×</button></div></div></div></article>`;
+  }).join('');
+  document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
+  host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=()=>loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit}));
+  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);commitPlanDraft(t,{markDirty:false});persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+};
+
+setAddTaskMode=function(mode){
+  addTaskMode=mode;selectedMoveTaskId=null;
+  document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
+  document.getElementById('addTaskCreatePanel').hidden=mode!=='create';document.getElementById('addTaskMovePanel').hidden=mode!=='move';
+  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Open editor':'Move here';
+  document.getElementById('confirmAddPlanTask').disabled=false;renderMoveTaskPicker();
+};
+openAddTaskDialog=function(ownerId=currentTaskId){
+  const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
+  addPlanOwnerId=ownerId;setAddTaskMode('create');openModal('addPlanTaskModal');
+};
+function openCreateItemFromAdd(){const owner=taskMap[addPlanOwnerId];if(!owner)return;closeModal('addPlanTaskModal');loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length})}
+document.getElementById('openUnifiedTaskEditor').onclick=openCreateItemFromAdd;
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  if(addTaskMode==='create'){openCreateItemFromAdd();return}
+  const owner=taskMap[addPlanOwnerId],source=taskMap[selectedMoveTaskId];if(!owner||!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  const sourceItem=cloneBatch(canonicalTaskItems(source))[0];sourceItem.originTaskId=source.id;sourceItem.originTaskTitle=source.title;
+  batchDraft.push(planItemDefaults(sourceItem,owner,batchDraft.length));delete taskMap[source.id];commitPlanDraft(owner,{markDirty:false});pushTaskHistory(owner,`Moved ${source.id} here`);
+  persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);showToast('New Task moved here');
+};
+document.getElementById('drawerAddStep').onclick=()=>openAddTaskDialog(currentTaskId);document.getElementById('planAddTask').onclick=()=>openAddTaskDialog(currentTaskId);
+
+document.getElementById('editTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
+  const items=canonicalTaskItems(t);if(items.length===1)loadTaskEditor('edit-item',{ownerId:t.id,index:0});else openPlanDialog(t.id);
+};
+const oneEditorOpenTask=openTaskById;
+openTaskById=function(id){
+  oneEditorOpenTask(id);const t=taskMap[id];if(!t)return;const edit=document.getElementById('editTaskDemo'),items=canonicalTaskItems(t),editable=taskEditable(t);
+  edit.disabled=!editable;edit.textContent=editable?(items.length===1?'Edit task':'Edit tasks'):(t.status==='ongoing'?'Pause to edit':'Read-only');
+};
+
 renderNewTaskSources();
 renderChatSession();
 renderBoard('today');
