@@ -595,7 +595,6 @@ function discardChatTaskDraft(session,{render=true}={}){
 function openChatTaskDraftEditor(session){
   const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId)return;
   taskMap[model.id]=model;
-  showView('tasks');
   const items=canonicalTaskItems(model);
   if(items.length===1){loadTaskEditor('edit-item',{ownerId:model.id,index:0,returnTarget:'chat'});return}
   openPlanDialog(model.id);
