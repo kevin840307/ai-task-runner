@@ -211,13 +211,27 @@ document.getElementById('resetBatch').onclick=()=>{
 
 document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
 
-const baseDeleteTaskAction=document.getElementById('deleteTaskDemo').onclick;
-document.getElementById('deleteTaskDemo').onclick=()=>{
-  const id=currentTaskId,t=taskMap[id];if(!t)return;
+let pendingTaskDeleteId=null;
+function deleteTaskConfirmed(id){
+  const t=taskMap[id];if(!t)return;
   if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
   if(id===batchParentTaskId){clearInterval(batchRunTimer);batchRunTimer=null;batchParentTaskId=null;batchState={status:'idle',index:0,recovered:false,currentDirty:false}}
-  delete taskMap[id];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast(t.kind==='list'?'Task List deleted':'Mock Task deleted');
+  delete taskMap[id];persistCurrentPresetFromTaskMap();document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast('Task deleted');
+}
+function requestTaskDelete(id=currentTaskId){
+  const t=taskMap[id];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
+  pendingTaskDeleteId=id;
+  const items=canonicalTaskItems(t),worktrees=items.filter(itemUsesWorktree).length;
+  document.getElementById('taskDeleteMeta').textContent=`${t.id} · ${t.title}`;
+  document.getElementById('taskDeleteNote').innerHTML=`<strong>This cannot be undone.</strong><br>This removes the Task and its ${items.length} task${items.length===1?'':'s'} from the Board/history view.${worktrees?` <br>${worktrees} Worktree${worktrees===1?'':'s'} will not be merged automatically.`:''}`;
+  openModal('taskDeleteModal');
+}
+document.getElementById('confirmTaskDelete').onclick=()=>{
+  const id=pendingTaskDeleteId;pendingTaskDeleteId=null;closeModal('taskDeleteModal');
+  if(id)deleteTaskConfirmed(id);
 };
+document.getElementById('deleteTaskDemo').onclick=()=>requestTaskDelete(currentTaskId);
 
 // --- Sequence Composer: Task List is composed from the same Task configuration ---
 let sequenceExpandedIndex=0;
