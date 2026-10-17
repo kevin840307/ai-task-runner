@@ -561,6 +561,34 @@ function mockInvokeAgentCommand(session,command){
   if(!item){session.messages.push(['assistant',`Mock ${chatAgentLabel(chatAgentKey())}: unknown Agent command ${command.token}.`]);return}
   session.messages.push(['assistant',`MOCK ${chatAgentLabel(chatAgentKey())} · ${item.token} selected${command.args?` · args: ${command.args}`:''}. Formal implementation will invoke the selected Agent's resolved command/skill capability, not a frontend copy of SKILL.md.`]);
 }
+function chatSideQuestionCommand(text){
+  const match=String(text||'').match(/^\s*(?:\/|\?)btw(?:\s+([\s\S]*?))?\s*$/i);
+  return match?{matched:true,question:String(match[1]||'').trim()}:{matched:false,question:''};
+}
+function renderSideQuestion(session=activeChat()){
+  const panel=document.getElementById('composerSideQuestion'),agent=document.getElementById('sideQuestionAgent'),query=document.getElementById('sideQuestionQuery'),answer=document.getElementById('sideQuestionAnswer');
+  if(!panel)return;
+  const side=session?.sideQuestion;if(!side){panel.hidden=true;resizeChatComposer();return}
+  panel.hidden=false;
+  if(agent)agent.textContent=`${chatAgentLabel(side.agent)} · ${side.model}`;
+  if(query)query.textContent=`/btw ${side.question}`;
+  if(answer)answer.textContent=side.answer;
+  resizeChatComposer();
+}
+function mockAskSideQuestion(session,question){
+  const profile=chatAgentProfile(),q=String(question||'').trim();
+  if(!profile.sideQuestion){showToast('Selected Agent does not support side questions');return}
+  if(!q){showToast('Usage: /btw <question>');return}
+  session.sideQuestion={
+    agent:chatAgentKey(session),
+    model:session.model||profile.defaultModel,
+    mode:session.mode||profile.defaultMode,
+    question:q,
+    answer:`Mock answer · this uses recent Chat context with ${chatAgentLabel(chatAgentKey(session))}, but it is not added to the main conversation history.`
+  };
+  renderSideQuestion(session);
+}
+
 function mockInvokeSystemPrompt(session,command){
   if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
   if(command.token==='@project'){const meta=projectMeta[currentProjectKey]||{};session.messages.push(['assistant',`Project · ${currentProjectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
@@ -701,7 +729,7 @@ renderChatSession=function(){
   syncChatSessionSelect();syncChatAgentControl();
   const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
   (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
-  renderChatTaskDraft(session,box);
+  renderChatTaskDraft(session,box);renderSideQuestion(session);
   if(!(session?.messages||[]).length&&!session?.taskDraft)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
   box.scrollTop=box.scrollHeight;
 };
@@ -716,8 +744,13 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 };
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
-  const session=activeChat(),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
-  session.messages.push(['user',textValue]);hideComposerSuggestions();
+  const session=activeChat(),sideQuestion=chatSideQuestionCommand(textValue),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
+  hideComposerSuggestions();
+  if(sideQuestion.matched){
+    mockAskSideQuestion(session,sideQuestion.question);
+    input.value='';resizeChatComposer();return;
+  }
+  session.messages.push(['user',textValue]);
   if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode);
   else if(agentCommand.matched){mockInvokeAgentCommand(session,agentCommand);renderChatSession()}
   else if(systemCommand.matched){mockInvokeSystemPrompt(session,systemCommand);renderChatSession()}
