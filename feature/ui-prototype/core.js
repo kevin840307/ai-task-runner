@@ -254,7 +254,7 @@ document.querySelectorAll('.dropzone').forEach(zone=>{
 });
 function updateCounts(){
   document.querySelectorAll('.col').forEach(c=>c.querySelector('.count').textContent=c.querySelectorAll('.taskcard:not([hidden])').length);
-  document.getElementById('taskNavCount').textContent=Object.keys(taskMap).length;
+  document.getElementById('taskNavCount').textContent=productTaskRecords().length;
   const n=productTaskRecords().filter(t=>['running','recover'].includes(t.runtime)).length;
   document.getElementById('runningCount').textContent=`${n} Running`;
 }
