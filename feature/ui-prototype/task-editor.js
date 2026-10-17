@@ -570,6 +570,10 @@ function syncComposerPickerLabels(){
   if(modeValue)modeValue.textContent=mode?.label||session.mode||'—';
   if(agentMark)agentMark.textContent=chatAgentKey(session)==='qwen'?'Q':'O';
   if(modeMark)modeMark.textContent=session.mode==='read'?'R':session.mode==='yolo'?'Y':'A';
+  const agentTrigger=document.getElementById('chatAgentTrigger'),modelTrigger=document.getElementById('chatModelTrigger'),modeTrigger=document.getElementById('chatModeTrigger');
+  if(agentTrigger)agentTrigger.title=`Agent · ${profile.label}`;
+  if(modelTrigger)modelTrigger.title=`Model · ${model?.label||session.model||'—'}`;
+  if(modeTrigger)modeTrigger.title=`Mode · ${mode?.label||session.mode||'—'}`;
 }
 function closeComposerPicker(){
   const pop=document.getElementById('composerPickerPopover');if(pop)pop.hidden=true;
@@ -717,8 +721,9 @@ function startMockAskFlow(session=activeChat(),context=''){
   if(activeChat()===session)renderChatSession();
 }
 function currentAskQuestion(flow){return flow?.questions?.[flow.index]||null}
-function renderAskFlow(session=activeChat()){
+function renderAskFlow(session=activeChat(),{preserveScroll=false}={}){
   const box=document.getElementById('chatMessages');if(!box)return;
+  const outerScrollTop=preserveScroll?box.scrollTop:null;
   box.querySelector('#composerAsk')?.remove();
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const panel=document.createElement('section');panel.id='composerAsk';panel.className='composer-ask chat-ask-card';
@@ -732,14 +737,15 @@ function renderAskFlow(session=activeChat()){
   if(q.type==='choice'){
     const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
-    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
+    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session,{preserveScroll:true});const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus({preventScroll:true}),0)});
     textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
   }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder=q.required===false?'選填，可直接 Next':'輸入你的回答…'}
   textInput.oninput=()=>{flow.answers[key]=textInput.value};
   next.textContent=flow.index===flow.questions.length-1?'Submit':'Next';
   panel.querySelector('#composerAskNext').onclick=()=>advanceAskFlow(session);
   panel.querySelector('#composerAskCancel').onclick=()=>{session.askFlow=null;session.turnState='idle';session.messages.push(['assistant','Mock Ask 已取消；未提交任何答案。']);if(activeChat()===session)renderChatSession();drainChatQueue(session)};
-  box.appendChild(panel);box.scrollTop=box.scrollHeight;
+  box.appendChild(panel);
+  if(preserveScroll)box.scrollTop=outerScrollTop;else box.scrollTop=box.scrollHeight;
 }
 function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
