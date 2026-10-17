@@ -149,15 +149,17 @@ Product-level Mode UI:
 
 2.5 Chat Queue
 --------------
-- Chat supports queued prompts while an Agent turn is active and explicit queueing when supported.
+- When an Agent turn is running or paused while waiting for an Ask answer, pressing Send again automatically queues the new prompt.
+- Do NOT add a separate `+ Queue` button. Send is the default interaction: dispatch immediately when idle; enqueue when the current turn is unfinished.
 - Queue is Chat-session scoped and completely separate from Runner Tasks / Task List execution order.
-- Queue appears directly above the Composer only when at least one item exists.
-- Each queued prompt can be edited or deleted before execution.
+- Queue appears directly above the Composer only when at least one item exists; a compact status line explains when new sends will be queued.
+- Each queued prompt can be edited or deleted before dispatch.
 - Preserve FIFO order unless the selected Agent exposes another explicit ordering contract.
 - Backend owns queue state/order; UI only renders and edits that projection.
 - If the Agent has native queue semantics, adapter maps them into the same product contract.
-- Qwen direction includes native queued-next-turn behavior (for example Ctrl+Q).
-- Prototype must provide an obvious Mock path such as `@queue <message>` plus Ctrl+Q.
+- Qwen direction includes native queued-next-turn behavior (for example Ctrl+Q); any manual shortcut is optional and must not replace automatic queue-on-send.
+- Prototype Mock must simulate a turn-in-progress long enough to test several consecutive Send actions, FIFO dispatch, and Edit/Delete.
+- No visible Queue button or required `@queue` command is needed for the main flow.
 
 2.6 AI clarification / Ask
 --------------------------
@@ -182,6 +184,9 @@ Mock requirements:
 - Mock Agent switch must visibly change model/options and `/` suggestions.
 - Mock Mode must show the simplified Read / Auto / YOLO mapping.
 - Mock Ask supports multiple questions, options, free text, Other/custom text, Next and final Submit.
+- Ask renders as an interactive card inside the Chat message stream, not a floating layer over the Composer.
+- Long option lists scroll inside the options region; they must not cover the Composer or hide the final actions.
+- The Mock includes a deliberately long choice list so scrolling and selection can be tested.
 - Ordinary Mock Chat may randomly emit an Ask request so the interrupt flow is easy to exercise.
 - Provide a force-demo path/button so tests do not rely only on randomness.
 - Production later replaces mock profiles with live adapter discovery; UI contract stays the same.
