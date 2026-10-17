@@ -158,7 +158,7 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
   if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog('rename',t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
   if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
-  if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
+  if(action==='remove'&&state.scope==='list'){requestTaskDelete(t.id)}
 });
 document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','emptyListModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
