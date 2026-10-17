@@ -244,6 +244,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .edit-task-scope-note{margin:0 0 10px;padding:9px 10px;border:1px solid #dfe5fb;border-radius:9px;background:#f7f8ff;color:#59617f;font-size:9px;line-height:1.45}.edit-task-scope-note strong{color:#4338ca}
 .task-edit-lock{margin-left:auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:8px;font-weight:900}
 #editTaskDemo:disabled{opacity:.5;cursor:not-allowed}
+.btn:disabled,.mini-btn:disabled,.plan-title-edit:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 
 .task-edit-notice{margin:-4px 0 12px;padding:9px 10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed;color:#8a5500;font-size:9px;line-height:1.45}.task-edit-notice strong{color:#7a4800}
 
