@@ -250,35 +250,112 @@ renderFullPlan=(function(base){return function(t){base(t);document.querySelector
 function itemUsesWorktree(x){return !!x&&(x.workspaceKind==='worktree'||x.workspacePolicy==='worktree')}
 function taskWorktreeItems(t){return t?canonicalTaskItems(t).filter(itemUsesWorktree):[]}
 function taskUsesWorktree(t){return !!t&&(t.workspaceKind==='worktree'||t.workspacePolicy==='worktree'||taskWorktreeItems(t).length>0)}
-
-function renderWorkspaceResult(t){
-  const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
-  const worktreeItems=taskWorktreeItems(t),banner=document.getElementById('drawerWorktreeBanner');
-  const isolated=t.workspaceKind==='worktree'||(worktreeItems.length===1&&canonicalTaskItems(t).length===1);
-  const multi=canonicalTaskItems(t).length>1;
-  if(banner){
-    banner.hidden=!taskUsesWorktree(t);
-    const detail=document.getElementById('drawerWorktreeBannerDetail');
-    if(detail)detail.textContent=multi?`${worktreeItems.length} task${worktreeItems.length===1?'':'s'} use isolated Worktrees · changes are not in Main until merged.`:'Isolated development · changes are not in Main until merged.';
-  }
-  section.hidden=!isolated&&!multi;
-  if(multi){state.textContent='Task workspaces';hint.textContent='Each task may resolve its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
-  if(!isolated)return;
-  const ready=['done'].includes(t.runtime)||t.status==='closed';
-  const merged=t.mergeState==='merged',cleaned=!!t.worktreeCleaned;
-  state.textContent=cleaned?'Cleaned':merged?'Merged':ready?'Ready to merge':'Worktree';
-  hint.textContent=cleaned?'Worktree removed after merge.':merged?'Merged successfully · cleanup is now safe.':ready?'Runtime completed · review before merge.':'Worktree is still in use by this Task.';
-  const target=projectMeta[t.project]?.branch||'main';
-  grid.innerHTML=`<span>Branch</span><strong>${escapeHtml(t.branch||'—')}</strong><span>Target</span><strong>${escapeHtml(target)}</strong><span>Path</span><strong>${escapeHtml(t.executionRoot||'—')}</strong><span>Result</span><strong>${cleaned?'Merged + cleaned':merged?`Merged ${t.mergedCommit||''}`:ready?'Not merged':'In progress'}</strong>`;
-  document.getElementById('reviewChangesDemo').disabled=!ready||cleaned;
-  document.getElementById('mergeChatDemo').disabled=!ready||merged||cleaned;
-  document.getElementById('mergeTaskDemo').disabled=!ready||merged||cleaned;
-  document.getElementById('cleanupWorktreeDemo').disabled=!merged||cleaned;
+function worktreeProjectKey(item,t){
+  return Object.keys(projectMeta).find(key=>projectRefMatches(item.project,key))||(projectMeta[t?.project]?t.project:currentProjectKey);
 }
-document.getElementById('reviewChangesDemo').onclick=()=>showToast('Mock diff review · changed files / tests / branch comparison');
-document.getElementById('mergeChatDemo').onclick=()=>showToast('Mock Chat receives branch, target, diff and test context for merge review');
-document.getElementById('mergeTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.workspaceKind!=='worktree'||!(['done'].includes(t.runtime)||t.status==='closed'))return;t.mergeState='merged';t.mergedCommit='mock-a1b2c3d';pushTaskHistory(t,'Worktree merged into target branch');renderWorkspaceResult(t);showToast('Mock merge completed · worktree preserved until Cleanup')};
-document.getElementById('cleanupWorktreeDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.mergeState!=='merged')return;t.worktreeCleaned=true;pushTaskHistory(t,'Worktree cleaned after successful merge');renderWorkspaceResult(t);showToast('Mock worktree cleanup completed')};
+function worktreeMergePreflight(t,item,index){
+  if(item.mergeState==='merged')return {key:'merged',label:'Merged',detail:item.mergedCommit?`Merged · ${item.mergedCommit}`:'Merged',canMerge:false,canChat:false};
+  const items=canonicalTaskItems(t),step=planStateFor(t,index,items.length),ready=(t.status==='closed'||t.runtime==='done')&&step.done;
+  if(!ready)return {key:'blocked',label:'Blocked',detail:'Execution must complete before merge',canMerge:false,canChat:false};
+  if(item.mergeConflict||item.mergeState==='conflict')return {key:'conflict',label:'Conflict',detail:'Conflict detected · use Merge Chat',canMerge:false,canChat:true};
+  if(item.mergeBlockedReason)return {key:'blocked',label:'Blocked',detail:item.mergeBlockedReason,canMerge:false,canChat:true};
+  return {key:'ready',label:'Ready',detail:'No conflicts detected',canMerge:true,canChat:true};
+}
+function workspaceResultGroups(t){
+  const groups=new Map();
+  canonicalTaskItems(t).forEach((item,index)=>{
+    if(!itemUsesWorktree(item))return;
+    const projectKey=worktreeProjectKey(item,t),meta=projectMeta[projectKey]||{},entry={item,index,projectKey,projectPath:meta.path||item.project||projectKey,target:meta.branch||'main'};
+    if(!groups.has(projectKey))groups.set(projectKey,[]);
+    groups.get(projectKey).push(entry);
+  });
+  return [...groups.entries()];
+}
+function updateWorktreeResult(t,index,patch){
+  const items=canonicalTaskItems(t);if(!items[index])return;
+  Object.assign(items[index],patch);t.items=items;t.listItems=t.items;
+  if(items.length===1){t.mergeState=items[0].mergeState||'';t.mergedCommit=items[0].mergedCommit||''}
+  persistCurrentPresetFromTaskMap();
+}
+function mergeWorktreeResult(t,index){
+  const item=canonicalTaskItems(t)[index];if(!item)return;
+  const preflight=worktreeMergePreflight(t,item,index);if(!preflight.canMerge)return;
+  const projectKey=worktreeProjectKey(item,t),target=projectMeta[projectKey]?.branch||'main',commit=`merged-${t.id}-${index+1}`;
+  updateWorktreeResult(t,index,{mergeState:'merged',mergedCommit:commit,mergeConflict:false,mergeBlockedReason:''});
+  pushTaskHistory(t,`Task ${index+1} worktree merged · ${item.branch||'worktree'} → ${target}`);
+  renderWorkspaceResult(t);showToast(`Merged · ${projectKey}`);
+}
+function mergeChatPrompt(t,item,index,projectKey,preflight){
+  const meta=projectMeta[projectKey]||{},target=meta.branch||'main';
+  return `Please review and merge this worktree into the target Project.
+
+Task:
+${t.id} · ${t.title}
+Child task:
+${index+1} · ${planTitle(item,index)}
+
+Project:
+${projectKey}
+Project path:
+${meta.path||item.project||'—'}
+
+Worktree path:
+${item.executionRoot||'—'}
+Source branch:
+${item.branch||'—'}
+Target branch:
+${target}
+
+Merge preflight:
+${preflight.label} · ${preflight.detail}
+
+Please inspect the worktree changes and the current target branch, resolve conflicts safely when needed, preserve unrelated changes, follow the Project development rules, verify the merged result, and merge this worktree into the target Project.`;
+}
+function openWorktreeMergeChat(t,index){
+  const item=canonicalTaskItems(t)[index];if(!item)return;
+  const preflight=worktreeMergePreflight(t,item,index);if(!preflight.canChat)return;
+  const projectKey=worktreeProjectKey(item,t);if(!projectMeta[projectKey])return;
+  document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
+  selectProject(projectKey);showView('chat');
+  const sessions=ensureProjectChats(projectKey),id=`${projectKey}-chat-${++chatSequence}`;
+  sessions.unshift({id,name:`Merge ${t.id} · Task ${index+1}`,messages:[]});projectActiveChat[projectKey]=id;
+  renderChatSession();
+  const input=document.getElementById('chatInput');input.value=mergeChatPrompt(t,item,index,projectKey,preflight);input.focus();input.setSelectionRange(input.value.length,input.value.length);
+  showToast('Merge prompt prepared · not sent');
+}
+function renderWorkspaceResult(t){
+  const section=document.getElementById('workspaceResultSection'),list=document.getElementById('workspaceResultList'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
+  const items=canonicalTaskItems(t),worktreeItems=items.filter(itemUsesWorktree),groups=workspaceResultGroups(t),banner=document.getElementById('drawerWorktreeBanner');
+  if(banner){
+    banner.hidden=worktreeItems.length===0;
+    const detail=document.getElementById('drawerWorktreeBannerDetail');
+    if(detail)detail.textContent=worktreeItems.length>1?`${worktreeItems.length} tasks use isolated Worktrees · merge is managed per Project below.`:'Isolated development · merge is managed in Workspace results.';
+  }
+  section.hidden=worktreeItems.length===0;
+  if(!worktreeItems.length){state.textContent='No worktrees';list.innerHTML='';return}
+  const statuses=[];
+  list.innerHTML=groups.map(([projectKey,entries])=>{
+    const meta=projectMeta[projectKey]||{},rows=entries.map(({item,index,target})=>{
+      const preflight=worktreeMergePreflight(t,item,index);statuses.push(preflight.key);
+      const mergeClass=preflight.canMerge?'btn primary':'btn',chatClass=!preflight.canMerge&&preflight.canChat?'btn primary':'btn';
+      return `<article class="workspace-merge-row ${preflight.key}">
+        <div class="workspace-merge-main">
+          <div class="workspace-merge-title"><span class="workspace-merge-status ${preflight.key}">${escapeHtml(preflight.label)}</span><strong>${escapeHtml(planTitle(item,index))}</strong></div>
+          <div class="workspace-merge-meta"><span>Source</span><b>${escapeHtml(item.branch||'—')}</b><span>Target</span><b>${escapeHtml(target)}</b><span>Path</span><b title="${escapeAttr(item.executionRoot||'')}">${escapeHtml(item.executionRoot||'—')}</b><span>Preflight</span><b>${escapeHtml(preflight.detail)}</b></div>
+        </div>
+        <div class="workspace-merge-actions">
+          ${preflight.key==='merged'?'':`<button class="${mergeClass}" type="button" data-worktree-merge="${index}" ${preflight.canMerge?'':'disabled'} title="${preflight.canMerge?'Merge into target Project':escapeAttr(preflight.detail)}">Merge</button><button class="${chatClass}" type="button" data-worktree-merge-chat="${index}" ${preflight.canChat?'':'disabled'} title="${preflight.canChat?'Open a new Project Chat with a prepared merge prompt':escapeAttr(preflight.detail)}">Merge Chat</button>`}
+        </div>
+      </article>`;
+    }).join('');
+    return `<section class="workspace-project-group"><div class="workspace-project-head"><strong>${escapeHtml(projectKey)}</strong><small title="${escapeAttr(meta.path||'')}">${entries.length} worktree${entries.length===1?'':'s'} · ${escapeHtml(meta.branch||'main')}</small></div>${rows}</section>`;
+  }).join('');
+  const pending=statuses.filter(x=>x!=='merged').length,conflicts=statuses.filter(x=>x==='conflict').length;
+  state.textContent=pending?`${pending} pending`:'Merged';
+  hint.textContent=conflicts?`${conflicts} conflict${conflicts===1?'':'s'} · conflicted worktrees require Merge Chat.`:'Worktrees are grouped by Project. Merge is enabled only when preflight is safe.';
+  list.querySelectorAll('[data-worktree-merge]').forEach(btn=>btn.onclick=()=>mergeWorktreeResult(t,+btn.dataset.worktreeMerge));
+  list.querySelectorAll('[data-worktree-merge-chat]').forEach(btn=>btn.onclick=()=>openWorktreeMergeChat(t,+btn.dataset.worktreeMergeChat));
+}
 
 const dialogPlanOpenTask=openTaskById;
 openTaskById=function(id){dialogPlanOpenTask(id);const t=taskMap[id];if(t)renderWorkspaceResult(t)};
@@ -366,28 +443,6 @@ document.getElementById('confirmAddPlanTask').onclick=()=>{
   sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();
   closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
   showToast(addTaskMode==='create'?'Task added':'New Task moved here');
-};
-
-// Workspace result uses item count, not a separate Task/List type flag.
-renderWorkspaceResult=(function(base){return function(t){canonicalTaskItems(t);base(t);
-  if(t.items.length>1){
-    const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
-    section.hidden=false;state.textContent=`${t.items.length} tasks`;hint.textContent='Each execution item resolves its own Main / Worktree workspace at run time.';
-    grid.innerHTML='<span>Merge</span><strong>Handled per item result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';
-    ['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);
-  }
-};})(renderWorkspaceResult);
-
-// Merge with Chat now navigates directly to the owning Project chat with merge context.
-document.getElementById('mergeChatDemo').onclick=()=>{
-  const t=taskMap[currentTaskId];if(!t)return;
-  const target=projectMeta[t.project]?.branch||'main';
-  document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
-  selectProject(t.project);showView('chat');
-  const session=activeChat();
-  session.messages.push(['user',`Review and merge ${t.id}: ${t.branch||'task branch'} → ${target}. Worktree: ${t.executionRoot||'—'}`]);
-  session.messages.push(['assistant','已帶入 Task / branch / target / worktree context。這裡做 merge review；Runner Task 本身不會自動 merge。']);
-  renderChatSession();showToast('Opened Project Chat with merge context');
 };
 
 // Ensure every Task opened after legacy handlers is normalized to the one-list model.
@@ -588,6 +643,7 @@ planItemDefaults=function(x={},t=null,i=0){
     workspacePolicy:x.workspacePolicy||x.workspace_policy||'auto',
     workspaceKind:x.workspaceKind||x.workspace_kind||'main',
     branch:x.branch||'',executionRoot:x.executionRoot||x.execution_root||'',
+    mergeState:x.mergeState||'',mergedCommit:x.mergedCommit||'',mergeConflict:!!x.mergeConflict,mergeBlockedReason:x.mergeBlockedReason||'',
   };
 };
 itemTitle=(function(base){return function(item,index){return item?.title?.trim()||base(item,index)}})(itemTitle);
@@ -598,7 +654,8 @@ singleTaskItem=function(t){
     prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
     project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
     validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md',
-    workspacePolicy:t.workspacePolicy||'auto',workspaceKind:t.workspaceKind||'main',branch:t.branch||'',executionRoot:t.executionRoot||''
+    workspacePolicy:t.workspacePolicy||'auto',workspaceKind:t.workspaceKind||'main',branch:t.branch||'',executionRoot:t.executionRoot||'',
+    mergeState:t.mergeState||'',mergedCommit:t.mergedCommit||'',mergeConflict:!!t.mergeConflict,mergeBlockedReason:t.mergeBlockedReason||''
   },t,0);
 };
 
