@@ -329,9 +329,7 @@ selectProject=function(key){
   document.getElementById('chatProjectLine').textContent=`${meta.path} · Project Chat · 不建立 Runner Task`;
   document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered tasks`;
 };
-document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
-  selectProject(p.dataset.project);
-}));
+// Sidebar Project navigation is owned by project-sidebar.js.
 
 // Drawer summary always exposes the same Plan dialog, even for a one-item list.
 renderDrawerPlan=(function(base){return function(t){
