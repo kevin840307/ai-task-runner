@@ -139,6 +139,7 @@ Backend generation contract:
 - The fixed prompt is backend-owned. Do not hardcode/copy the full prompt template into frontend code.
 - The backend prompt instructs the AI to return a structured TaskDraft, not free-form prose.
 - Use one canonical generate-task service/endpoint for Chat, future UI buttons, tests and mock mode.
+- The request carries a generation mode only: `auto | single | list` corresponding to `@task | @task-single | @task-list`; do not fork three planners.
 - Do not build a second Task planner inside the browser.
 
 Suggested conceptual flow:
@@ -444,7 +445,9 @@ Important:
 
 Critical browser-flow coverage eventually required:
 - Project click -> Project Chat.
-- `@task <spec>` -> TaskDraft -> Edit -> Create -> New Board Task.
+- `@task <spec>` -> randomly/AI-decided single or multi TaskDraft -> Edit -> Create -> New Board Task.
+- `@task-single <spec>` -> exactly one Task.
+- `@task-list <spec>` -> at least two ordered Tasks.
 - `@task` invalid backend output -> visible error.
 - New Task validation error remains visible above dialog.
 - Info + Add/Edit -> Back to Info.
@@ -508,7 +511,7 @@ Recommended sequence:
 
 - Do not turn Tasks into another Workflow engine.
 - Do not make Chat execution-state authoritative.
-- Do not auto-run after `@task` Task creation.
+- Do not auto-run after any `@task*` Task creation.
 - Do not infer Task creation from ordinary Chat text once `@task` exists.
 - Do not auto-merge completed Tasks.
 - Do not add merge states to the main Task Board lifecycle.
