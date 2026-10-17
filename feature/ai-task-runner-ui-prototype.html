@@ -4052,7 +4052,7 @@ renderTaskList=function(){
 function syncCompactTaskInspector(t){
   if(!t)return;
   document.getElementById('inspectorCurrentStage').textContent=t.stage||runtimeLabel(t.runtime)||'—';
-  document.getElementById('inspectorCurrentProgress').textContent=t.progress?.[1]?\`${t.progress[0]} / ${t.progress[1]}\`:'—';
+  document.getElementById('inspectorCurrentProgress').textContent=t.progress?.[1]?`${t.progress[0]} / ${t.progress[1]}`:'—';
 }
 const compactInspectorOpenTask=openTaskById;
 openTaskById=function(id){compactInspectorOpenTask(id);syncCompactTaskInspector(taskMap[id])};
