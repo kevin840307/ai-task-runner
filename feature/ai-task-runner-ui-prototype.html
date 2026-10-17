@@ -359,6 +359,24 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 #addPlanTaskModal [data-add-task-mode="create"],#addTaskCreatePanel{display:none!important}
 #addPlanTaskModal .add-task-tabs{display:none!important}
+
+/* Practical Task Workspace polish */
+.plan-title-block{min-width:0}.plan-title-row{display:flex;align-items:center;gap:5px;min-width:0}.plan-title-row h2{min-width:0;max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-title-edit{display:grid;place-items:center;width:25px;height:25px;border:0;border-radius:6px;background:transparent;color:#94a3b8;font-size:11px;cursor:pointer}.plan-title-edit:hover{background:#f1f6f5;color:var(--accent-dark)}.plan-title-edit:disabled{display:none}
+#planPageTitle[contenteditable="true"]{max-width:520px;padding:2px 5px;border:1px solid #82aaa5;border-radius:6px;background:#fff;outline:none;overflow:visible;text-overflow:clip}
+.workspace-help-card{background:#fafbfc!important}.workspace-help-card p{line-height:1.5}.workspace-help-card strong{color:#475569}
+.plan-row-controls [data-plan-up],.plan-row-controls [data-plan-down]{display:none!important}
+.plan-row-controls .row-more{min-width:30px;font-size:14px;letter-spacing:1px;color:var(--muted)}
+.plan-row-controls .row-more:hover{background:#f1f6f5;color:var(--text)}
+.plan-row-num .drag-grip{cursor:grab}
+.task-list-table{min-width:760px;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+.taskrow.taskrow-head{position:sticky;top:0;z-index:2;grid-template-columns:90px minmax(240px,1.5fr) 72px 105px minmax(150px,1fr) 88px;background:#f8fafc;color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;cursor:default}
+.taskrow.taskrow-head:hover{background:#f8fafc}
+.taskrow.taskrow-data{grid-template-columns:90px minmax(240px,1.5fr) 72px 105px minmax(150px,1fr) 88px}
+.taskrow-title{min-width:0}.taskrow-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.taskrow-title small{display:block;margin-top:2px;color:var(--muted);font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.taskrow-project{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475569}.taskrow-count{font-weight:800;color:#475569}.taskrow-progress{color:var(--muted);font-variant-numeric:tabular-nums}
+.task-list-empty{padding:26px;border:1px dashed #cbd5df;border-radius:10px;background:#fff;text-align:center;color:var(--muted);font-size:9px}
+@media(max-width:900px){#planModal>.plan-modal-card,#planModal>.plan-subview-mount{width:100vw!important}.plan-page-body{grid-template-columns:minmax(0,1fr)!important}.plan-side{display:none!important}}
 </style>
 </head>
 <body>
@@ -649,7 +667,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 <div class="modal-overlay" id="planModal">
   <div class="modal-card plan-modal-card">
     <div class="modal-head plan-modal-head">
-      <div><h2 id="planPageTitle">Tasks</h2><p id="planPageMeta">T-000 · New · 1 task</p></div>
+      <div class="plan-title-block"><div class="plan-title-row"><h2 id="planPageTitle">Tasks</h2><button class="plan-title-edit" id="planRenameList" type="button" title="Rename list">✎</button></div><p id="planPageMeta">T-000 · New · 1 task</p></div>
       <div class="plan-modal-head-actions"><button class="btn" id="planOpenWorkflow" type="button" hidden>Open Workflow</button><button class="btn" id="planAddTask" type="button">+ Add task</button><button class="btn ghost" id="planAddExisting" type="button">Move existing</button><button class="btn" id="planEditYaml" type="button">Edit YAML</button><button class="close" id="planBackToTask" type="button">×</button></div>
     </div>
     <div class="plan-page-body">
@@ -659,7 +677,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </main>
       <aside class="plan-side">
         <section class="plan-side-card"><h3 id="planInfoHeading">List info</h3><div class="plan-side-kv" id="planTaskSummary"></div></section>
-        <section class="plan-side-card"><h3>Rules</h3><p>New / Paused 可編輯；Ongoing / Closed 唯讀。</p><p>只有尚未執行的 New Task 可以 Move here。</p></section>
+        <section class="plan-side-card workspace-help-card"><h3>Quick use</h3><p><strong>Click</strong> selects a task · <strong>Double-click</strong> edits it.</p><p>Drag the grip to reorder. Right-click or <strong>⋯</strong> for Info / Workflow / Remove.</p></section>
       </aside>
     </div>
   </div>
@@ -3866,11 +3884,116 @@ renderDrawerPlan=function(t){
   const first=document.getElementById('emptyPlanAddTask');if(first)first.onclick=()=>{openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
 };
 
+
+// --- Practical interaction pass: fewer controls, inline rename, useful List view. ---
+let workspaceRenameOriginal='';
+function commitWorkspaceRename(cancel=false){
+  const title=document.getElementById('planPageTitle'),t=taskMap[currentTaskId];
+  if(!title||!t||title.contentEditable!=='true')return;
+  const next=cancel?workspaceRenameOriginal:title.textContent.trim();
+  title.contentEditable='false';title.classList.remove('editing');
+  if(cancel||!next){title.textContent=t.title;return}
+  if(next!==t.title){
+    t.title=next;pushTaskHistory(t,'Task List renamed');persistCurrentPresetFromTaskMap();renderBoardFromMap();showToast('Task List renamed');
+  }
+  title.textContent=t.title;
+}
+function beginWorkspaceRename(t=taskMap[currentTaskId]){
+  if(!t||!taskEditable(t)){showToast(t?.status==='ongoing'?'Pause before renaming':'Task List is read-only');return}
+  const title=document.getElementById('planPageTitle');if(!title)return;
+  workspaceRenameOriginal=t.title;title.contentEditable='true';title.classList.add('editing');title.focus();
+  const range=document.createRange();range.selectNodeContents(title);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+}
+document.getElementById('planRenameList').onclick=()=>beginWorkspaceRename();
+document.getElementById('planPageTitle').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();commitWorkspaceRename(false)}
+  if(e.key==='Escape'){e.preventDefault();commitWorkspaceRename(true)}
+});
+document.getElementById('planPageTitle').addEventListener('blur',()=>commitWorkspaceRename(false));
+
+document.getElementById('editTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
+  openPlanDialog(t.id);setTimeout(()=>beginWorkspaceRename(t),0);
+};
+const contextEditAction=taskContextMenu.querySelector('[data-context-action="edit"]');
+contextEditAction.onclick=()=>{
+  if(contextEditAction.disabled||!taskContextState)return;
+  const state={...taskContextState};hideTaskContextMenu();const t=taskMap[state.ownerId];if(!t)return;
+  if(state.scope==='list'){openPlanDialog(t.id);setTimeout(()=>beginWorkspaceRename(t),0);return}
+  const s=planStateFor(t,state.index,canonicalTaskItems(t).length);
+  if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index});
+};
+
+function polishTaskRows(t){
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{
+    const i=+row.dataset.planRow,grip=row.querySelector('.drag-grip');
+    if(grip)grip.title=row.draggable?'Drag to reorder':'This task cannot be reordered';
+    row.querySelectorAll('[data-plan-up],[data-plan-down]').forEach(b=>b.remove());
+    const more=row.querySelector('[data-plan-remove]');
+    if(more){
+      more.disabled=false;more.textContent='⋯';more.title='More actions';more.className='row-more';
+      more.onclick=e=>{
+        e.preventDefault();e.stopPropagation();selectTaskItem(t,i);
+        const r=more.getBoundingClientRect();
+        openItemContextMenu({preventDefault(){},stopPropagation(){},clientX:r.right-4,clientY:r.bottom+4},t,i);
+      };
+    }
+  });
+}
+const practicalRenderFullPlan=renderFullPlan;
+renderFullPlan=function(t){
+  practicalRenderFullPlan(t);polishTaskRows(t);
+  const rename=document.getElementById('planRenameList');if(rename)rename.disabled=!taskEditable(t);
+};
+
+renderTaskList=function(){
+  const host=document.getElementById('taskListView'),rows=Object.values(taskMap);
+  if(!rows.length){host.innerHTML='<div class="task-list-empty">No tasks in this board.</div>';return}
+  const body=rows.map(t=>{
+    const items=canonicalTaskItems(t),related=items.filter(x=>projectRefMatches(x.project,currentProjectKey)).length;
+    const projectSummary=items.length>1?(\`\${related}/\${items.length} in \${currentProjectKey}\`):(items[0]?basename(items[0].project):currentProjectKey);
+    return \`<div class="taskrow taskrow-data" data-taskrow="\${t.id}">
+      <span class="pill">\${escapeHtml(statusLabel(t.status))}</span>
+      <span class="taskrow-title"><strong>\${escapeHtml(t.title)}</strong><small>\${escapeHtml(t.desc||'')}</small></span>
+      <span class="taskrow-count">\${items.length}</span>
+      <span class="runtime \${runtimeClass(t.runtime)}">\${escapeHtml(runtimeLabel(t.runtime))}</span>
+      <span class="taskrow-project">\${escapeHtml(projectSummary)}</span>
+      <span class="taskrow-progress">\${t.progress?.[0]||0} / \${items.length}</span>
+    </div>\`;
+  }).join('');
+  host.innerHTML=\`<div class="task-list-table">
+    <div class="taskrow taskrow-head"><span>Status</span><span>Name</span><span>Tasks</span><span>Runtime</span><span>Project</span><span>Progress</span></div>
+    \${body}
+  </div>\`;
+  host.querySelectorAll('[data-taskrow]').forEach(r=>{
+    r.onclick=()=>openTaskById(r.dataset.taskrow);
+    r.ondblclick=()=>openPlanDialog(r.dataset.taskrow);
+    r.oncontextmenu=e=>{const t=taskMap[r.dataset.taskrow];if(t)openListContextMenu(e,t)};
+  });
+  applyTaskFilter();
+};
+
+const practicalResetWorkspaceInspector=resetWorkspaceInspector;
+resetWorkspaceInspector=function(t){
+  workspaceInfoRef=null;
+  const heading=document.getElementById('planInfoHeading'),card=heading?.closest('.plan-side-card');
+  if(heading)heading.textContent='List info';if(card)card.classList.remove('info-active');
+  const items=canonicalTaskItems(t),active=items.length?Math.min(t.progress?.[0]||0,items.length-1)+1:0;
+  document.getElementById('planTaskSummary').innerHTML=\`<span>List</span><strong>\${escapeHtml(t.title)}</strong><span>Status</span><strong>\${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>\${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>\${items.length}</strong><span>Progress</span><strong>\${t.progress?.[0]||0} / \${items.length}</strong><span>Current</span><strong>\${items.length?('Task '+active):'—'}</strong>\`;
+};
+
+positionTaskContextMenu=function(x,y){
+  taskContextMenu.hidden=false;const w=205,h=220;
+  taskContextMenu.style.left=\`\${Math.min(window.innerWidth-w-8,Math.max(8,x))}px\`;
+  taskContextMenu.style.top=\`\${Math.min(window.innerHeight-h-8,Math.max(8,y))}px\`;
+};
+
 renderTaskKindUi=function(){};
 renderNewTaskSources();
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
+
 </script>
 </body>
 </html>
