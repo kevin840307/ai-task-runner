@@ -746,10 +746,6 @@ function mockTaskDraftTitle(text){
   const cleaned=String(text||'').replace(/^(?:請|麻煩)?\s*(?:幫我)?\s*/i,'').trim();
   return (cleaned.split(/\n/).find(Boolean)||'AI generated Task').slice(0,72);
 }
-function mockTaskDraftWantsList(text){
-  const bullets=String(text||'').split(/\n/).filter(x=>/^\s*(?:[-*]|\d+[.)、])\s+/.test(x));
-  return bullets.length>=2||/(?:task\s*list|任務清單|多任務|多步驟|拆成|分成|依序.+(?:task|任務)|multiple\s+tasks)/i.test(String(text||''));
-}
 function mockTaskDraftItems(text,wantsList){
   const source=String(text||'').trim(),bullets=source.split(/\n/).map(x=>x.trim()).filter(x=>/^(?:[-*]|\d+[.)、])\s+/.test(x)).map(x=>x.replace(/^(?:[-*]|\d+[.)、])\s+/,'').trim()).filter(Boolean);
   if(wantsList&&bullets.length>=2)return bullets.map(x=>({title:x.slice(0,56),prompt:x}));
