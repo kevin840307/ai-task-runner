@@ -295,6 +295,18 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .create-type-menu[hidden]{display:none}.create-type-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;color:var(--text);cursor:pointer}
 .create-type-menu button:hover{background:#f4f8f7}.create-type-menu button+button{margin-top:2px}.create-type-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#eef6f5;color:var(--accent);font-size:14px;font-weight:900}
 .create-type-menu strong{display:block;font-size:9px}.create-type-menu small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.35}
+
+.plan-subview-mount{position:relative;width:min(1040px,96vw);max-height:92vh}
+.plan-subview-mount[hidden]{display:none}
+.plan-subview-mount>.modal-card{width:100%!important;max-height:92vh;margin:0}
+#planModal.subview-open>.plan-modal-card{display:none}
+#planModal.subview-open{align-items:center;justify-content:center}
+#planModal.subview-open .task-create-modal,#planModal.subview-open .yaml-plan-modal{box-shadow:none}
+.task-context-menu{position:fixed;z-index:320;width:205px;padding:5px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 14px 36px rgba(15,23,42,.18)}
+.task-context-menu[hidden]{display:none}.task-context-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:8.5px;text-align:left;cursor:pointer}
+.task-context-menu button:hover:not(:disabled){background:#f3f7f6}.task-context-menu button:disabled{opacity:.38;cursor:not-allowed}.task-context-menu .danger-item{color:#b42318}.task-context-menu kbd{font:700 7px/1 Inter,Segoe UI,sans-serif;color:#94a3b8}.context-separator{height:1px;margin:4px 3px;background:#edf0f3}
+.task-info-modal{width:min(540px,94vw)}.task-info-grid{display:grid;grid-template-columns:112px minmax(0,1fr);gap:7px 12px;align-items:start}.task-info-grid span{color:var(--muted);font-size:8px}.task-info-grid strong{font-size:8.5px;overflow-wrap:anywhere}
+.plan-row-compact,.drawer-plan-row{user-select:none}
 </style>
 </head>
 <body>
@@ -598,6 +610,25 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
         <section class="plan-side-card"><h3>Rules</h3><p>New / Paused 可編輯；Ongoing / Closed 唯讀。</p><p>只有尚未執行的 New Task 可以 Move here。</p></section>
       </aside>
     </div>
+  </div>
+  <div class="plan-subview-mount" id="planSubviewMount" hidden></div>
+</div>
+
+<div class="task-context-menu" id="taskContextMenu" hidden>
+  <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
+  <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+  <button type="button" data-context-action="info"><span>Info</span><kbd>i</kbd></button>
+  <div class="context-separator"></div>
+  <button type="button" data-context-action="up"><span>Move up</span><kbd>↑</kbd></button>
+  <button type="button" data-context-action="down"><span>Move down</span><kbd>↓</kbd></button>
+  <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
+</div>
+
+<div class="modal-overlay" id="taskInfoModal">
+  <div class="modal-card task-info-modal">
+    <div class="modal-head"><div><h2 id="taskInfoTitle">Task info</h2><p id="taskInfoMeta">Read-only details</p></div><button class="close" data-close-modal="taskInfoModal">×</button></div>
+    <div class="modal-body"><div class="task-info-grid" id="taskInfoBody"></div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskInfoModal">Close</button></div>
   </div>
 </div>
 
