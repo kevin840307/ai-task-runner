@@ -954,12 +954,6 @@ document.getElementById('newTask').addEventListener('click',()=>{
   newTaskWorkspaceMode='auto';
   document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderNewTaskWorkspace();
 });
-document.getElementById('chatToTask').onclick=()=>{
-  const input=document.getElementById('chatInput').value.trim();
-  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
-  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
-  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();openModal('newTaskModal');
-};
 document.getElementById('createTaskConfirm').onclick=()=>{
   captureNewTaskSources();
   let title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
