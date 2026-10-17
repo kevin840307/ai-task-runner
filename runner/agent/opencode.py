@@ -85,20 +85,20 @@ class OpenCodeBackend(BaseBackend):
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
-        values = _configured_opencode_models(root)
-        if values:
-            return sorted(values)
+        # OpenCode owns provider/model resolution. Its models command returns the
+        # effective catalog for the current project, so prefer it over duplicating
+        # that resolution here. Config parsing is only a bounded fallback.
         try:
             result = run_process([cls.default_command, "models"], root, 5)
         except Exception:
-            return sorted(values)
-        if not result.return_code and not result.timed_out:
-            values.update(
+            result = None
+        if result is not None and not result.return_code and not result.timed_out:
+            return sorted({
                 line.strip()
                 for line in result.output.splitlines()
                 if line.strip() and not line.lstrip().startswith(("#", "["))
-            )
-        return sorted(values)
+            })
+        return sorted(_configured_opencode_models(root))
 
     @classmethod
     def configure_args(
