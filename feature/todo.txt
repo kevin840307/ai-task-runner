@@ -39,7 +39,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] TaskDraft Edit 共用既有 Task Editor / Task List，不在 Chat 裡複製一套完整表單。
 [x] Chat Queue Mock 有新增、編輯、刪除；Queue 區塊位於 Composer 上方。
 [x] 不設獨立 Queue 按鈕；Mock Agent turn 執行中再次按傳送會自動排隊，可連續排多筆。
-[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。\n[x] Ask 以互動卡片嵌入 Chat 訊息流；長選項清單可獨立捲動，並用大量選項測試。
+[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
+[x] Ask 以互動卡片嵌入 Chat 訊息流；長選項清單可獨立捲動，並用大量選項測試。
 [x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
 [x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
@@ -82,7 +83,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
 [ ] @task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
 [x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
-[ ] 顯示 Ask Mock 的明確入口，方便測試多問題流程。
+[x] Chat Composer 提供 Ask mock 明確入口，方便測試多問題流程。
 
 
 4. Agent / Model / Mode Picker
@@ -157,7 +158,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
 [ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
 [ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
-[x] Ask 卡片嵌入 Chat 訊息流，不覆蓋 Composer；選項清單獨立捲動，避免長選項被 viewport 遮住。
+[ ] 正式版 Ask 卡片嵌入 Chat 訊息流，選項清單有獨立捲動區，不使用遮住訊息的浮層。
 [ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
 [ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
 [ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
