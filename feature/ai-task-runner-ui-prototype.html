@@ -281,6 +281,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 /* Prompt source is a small fixed choice: tags are faster than dropdowns here. */
 .simple-source-head .source-tabs{flex:0 0 auto}
 .simple-source-head .source-tabs button{min-width:46px}
+
+.new-work-modal{width:min(590px,94vw)}.new-work-modal .modal-body{display:grid;gap:8px}
+.create-choice{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left;color:var(--text);cursor:pointer}
+.create-choice:hover{border-color:#9fbab6;background:#f8fcfb}.create-choice-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:#eef6f5;color:var(--accent);font-size:17px;font-weight:900}.create-choice strong{display:block;font-size:10px}.create-choice small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.create-choice b{color:var(--accent);font-size:8px}
+.empty-list-explain{margin-top:10px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#f8fafc;color:var(--muted);font-size:8px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -345,7 +350,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
         <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered tasks</p></div>
-        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
+        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New</button></div>
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
@@ -453,6 +458,35 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   </aside>
 </div>
 
+
+<div class="modal-overlay" id="newWorkModal">
+  <div class="modal-card new-work-modal">
+    <div class="modal-head"><div><h2>Create</h2><p>Everything becomes the same ordered task container. Start with one task, or create an empty list.</p></div><button class="close" data-close-modal="newWorkModal">×</button></div>
+    <div class="modal-body">
+      <button class="create-choice" id="createWithTask" type="button">
+        <span class="create-choice-icon">＋</span>
+        <span><strong>New task</strong><small>Create the container and its first task using the standard Task Editor.</small></span>
+        <b>Recommended</b>
+      </button>
+      <button class="create-choice" id="createEmptyList" type="button">
+        <span class="create-choice-icon">≡</span>
+        <span><strong>Empty task list</strong><small>Create only the container. Project, Workflow, Prompt and Workspace are chosen later per task.</small></span>
+        <b>0 tasks</b>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="emptyListModal">
+  <div class="modal-card" style="width:min(480px,94vw)">
+    <div class="modal-head"><div><h2>New empty task list</h2><p>No execution settings yet. Add tasks after creating it.</p></div><button class="close" data-close-modal="emptyListModal">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>List name</label><input id="emptyListTitle" placeholder="e.g. Finish feature/ui"></div>
+      <div class="empty-list-explain">Creates <strong>items=[]</strong>. No Project, Workflow, Prompt, Validator or Workspace is selected until a task is added.</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="emptyListModal">Cancel</button><button class="btn primary" id="confirmEmptyList">Create empty list</button></div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
