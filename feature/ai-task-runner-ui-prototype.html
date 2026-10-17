@@ -171,6 +171,16 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
 .project-list-item{position:relative;display:grid;grid-template-columns:9px minmax(0,1fr);gap:8px;align-items:center;width:100%;min-height:42px;margin:1px 0;padding:5px 8px;border:1px solid transparent;border-radius:8px;background:transparent;text-align:left;color:var(--text)}
 .project-list-item:hover{background:#f3f6f8}.project-list-item.active{background:#eef7f5;border-color:rgba(15,118,110,.16)}.project-list-item.active:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:999px;background:var(--accent)}
 .project-list-item .project-copy strong{font-size:11px}.project-list-item .project-copy small{font-size:8px}
+.project-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:2px}
+.project-row .project-list-item{min-width:0}
+.project-more{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:#94a3b8;font-size:15px;line-height:1;cursor:pointer;opacity:.28}
+.project-row:hover .project-more,.project-row:has(.project-list-item.active) .project-more,.project-more[aria-expanded="true"]{opacity:1}
+.project-more:hover,.project-more[aria-expanded="true"]{background:#e9f2f0;color:var(--accent-dark)}
+.project-action-menu{position:fixed;z-index:360;width:172px;padding:5px;border:1px solid #d8dee8;border-radius:9px;background:#fff;box-shadow:0 14px 34px rgba(15,23,42,.17)}
+.project-action-menu[hidden]{display:none}
+.project-action-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;height:31px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:9px;text-align:left;cursor:pointer}
+.project-action-menu button:hover{background:#f3f7f6}.project-action-menu .danger-item{color:#b42318}.project-action-menu .menu-sep{height:1px;margin:4px 3px;background:#edf0f3}
+.project-manage-modal{width:min(450px,94vw)}.project-delete-note{padding:10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed;color:#7a5500;font-size:9px;line-height:1.5}
 .project-current-path{flex:0 0 auto;margin-top:5px;padding:7px 8px;border-top:1px solid rgba(216,222,232,.72);color:#8a95a5;font:8px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .workspace-selector-wrap{margin-top:10px;padding:10px;border:1px solid #e1e7ee;border-radius:11px;background:#f9fbfc}.workspace-selector-title{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:8px}.workspace-selector-title strong{display:block;font-size:10px}.workspace-selector-title small{display:block;margin-top:2px;color:var(--muted);font-size:8px}.workspace-recommended{padding:3px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dark);font-size:8px;font-weight:900}
 .workspace-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.workspace-option{position:relative;display:block;min-height:72px;padding:9px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer}.workspace-option:hover{border-color:rgba(15,118,110,.36)}.workspace-option.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(15,118,110,.08)}.workspace-option.disabled{opacity:.5;cursor:not-allowed;background:#f8fafc}
@@ -739,6 +749,23 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     </div>
   </div>
   <div class="plan-subview-mount" id="planSubviewMount" hidden></div>
+</div>
+
+<div class="project-action-menu" id="projectActionMenu" hidden>
+  <button type="button" data-project-action="rename"><span>Rename</span><span>✎</span></button>
+  <div class="menu-sep"></div>
+  <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
+</div>
+
+<div class="modal-overlay" id="projectManageModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="projectManageTitle">Rename Project</h2><p id="projectManageMeta"></p></div><button class="close" data-close-modal="projectManageModal">×</button></div>
+    <div class="modal-body">
+      <div class="field" id="projectRenameField"><label>Project name</label><input id="projectRenameInput" autocomplete="off"></div>
+      <div class="project-delete-note" id="projectDeleteNote" hidden></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="projectManageModal">Cancel</button><button class="btn primary" id="projectManageConfirm">Rename</button></div>
+  </div>
 </div>
 
 <div class="task-context-menu" id="taskContextMenu" hidden>
@@ -4061,6 +4088,107 @@ positionTaskContextMenu=function(x,y){
   taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;
   taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
 };
+
+// --- Project sidebar management: click Project to open; ellipsis owns Rename / Delete. ---
+const projectActionMenu=document.getElementById('projectActionMenu');
+const projectManageModal=document.getElementById('projectManageModal');
+const projectRenameField=document.getElementById('projectRenameField');
+const projectRenameInput=document.getElementById('projectRenameInput');
+const projectDeleteNote=document.getElementById('projectDeleteNote');
+const projectManageConfirm=document.getElementById('projectManageConfirm');
+let projectManageState=null;
+
+function syncProjectRowMenus(){
+  document.querySelectorAll('#projectScroll .project[data-project]').forEach(btn=>{
+    if(btn.closest('.project-row'))return;
+    const row=document.createElement('div');row.className='project-row';row.dataset.projectRow=btn.dataset.project;
+    btn.parentNode.insertBefore(row,btn);row.appendChild(btn);
+    const more=document.createElement('button');more.type='button';more.className='project-more';more.dataset.projectMenu=btn.dataset.project;more.title='Project actions';more.setAttribute('aria-label',`${btn.dataset.project} actions`);more.setAttribute('aria-expanded','false');more.textContent='⋯';row.appendChild(more);
+  });
+}
+function hideProjectActionMenu(){
+  projectActionMenu.hidden=true;
+  document.querySelectorAll('.project-more[aria-expanded="true"]').forEach(b=>b.setAttribute('aria-expanded','false'));
+}
+function openProjectActionMenu(btn){
+  hideProjectActionMenu();const key=btn.dataset.projectMenu;if(!projectMeta[key])return;
+  btn.setAttribute('aria-expanded','true');projectManageState={key,mode:null};
+  projectActionMenu.hidden=false;
+  const r=btn.getBoundingClientRect(),w=172,h=78;
+  projectActionMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,r.right-w))}px`;
+  projectActionMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,r.bottom+4))}px`;
+}
+function refreshProjectRowKey(oldKey,newKey){
+  const btn=document.querySelector(`#projectScroll .project[data-project="${CSS.escape(oldKey)}"]`);if(!btn)return;
+  btn.dataset.project=newKey;btn.querySelector('.project-copy strong').textContent=newKey;
+  const row=btn.closest('.project-row');if(row)row.dataset.projectRow=newKey;
+  const more=row?.querySelector('.project-more');if(more){more.dataset.projectMenu=newKey;more.setAttribute('aria-label',`${newKey} actions`)}
+}
+function updateProjectRefs(oldKey,nextValue){
+  Object.values(taskMap||{}).forEach(t=>{
+    if(t.project===oldKey)t.project=nextValue;
+    if(t.projectContext===oldKey)t.projectContext=nextValue;
+    [t.items,t.listItems].forEach(items=>items?.forEach(x=>{if(x.project===oldKey)x.project=nextValue}));
+  });
+  batchDraft?.forEach(x=>{if(x.project===oldKey)x.project=nextValue});
+  const input=document.getElementById('newTaskProject');if(input?.value===oldKey)input.value=nextValue;
+}
+function openProjectManage(mode){
+  const key=projectManageState?.key,meta=projectMeta[key];if(!meta)return;
+  projectManageState={key,mode};hideProjectActionMenu();
+  document.getElementById('projectManageTitle').textContent=mode==='rename'?'Rename Project':'Delete Project';
+  document.getElementById('projectManageMeta').textContent=meta.path;
+  projectRenameField.hidden=mode!=='rename';projectDeleteNote.hidden=mode!=='delete';
+  if(mode==='rename'){projectRenameInput.value=key;projectManageConfirm.textContent='Rename';projectManageConfirm.className='btn primary';setTimeout(()=>{projectRenameInput.focus();projectRenameInput.select()},0)}
+  else{projectDeleteNote.innerHTML=`Remove <strong>${escapeHtml(key)}</strong> from Projects?<br>The local folder and existing Tasks are not deleted.`;projectManageConfirm.textContent='Delete Project';projectManageConfirm.className='btn danger'}
+  openModal('projectManageModal');
+}
+function renameProject(oldKey,newKey){
+  newKey=String(newKey||'').trim();if(!newKey){showToast('Project name cannot be empty');return false}
+  if(newKey===oldKey){closeModal('projectManageModal');return true}
+  if(projectMeta[newKey]){showToast('A Project with this name already exists');return false}
+  const meta=projectMeta[oldKey];if(!meta)return false;
+  projectMeta[newKey]=meta;delete projectMeta[oldKey];updateProjectRefs(oldKey,newKey);refreshProjectRowKey(oldKey,newKey);
+  if(currentProjectKey===oldKey)currentProjectKey=newKey;
+  renderProjectOptions(currentProjectKey);renderBoardFromMap();selectProject(currentProjectKey);
+  closeModal('projectManageModal');showToast(`Project renamed · ${newKey}`);return true;
+}
+function deleteProject(key){
+  const meta=projectMeta[key];if(!meta)return;
+  const stablePath=meta.path||key;updateProjectRefs(key,stablePath);
+  delete projectMeta[key];
+  document.querySelector(`#projectScroll .project[data-project="${CSS.escape(key)}"]`)?.closest('.project-row')?.remove();
+  const remaining=projectRegistryEntries().map(([k])=>k).filter(k=>projectMeta[k]);
+  if(currentProjectKey===key){
+    currentProjectKey=remaining[0]||'';
+    if(currentProjectKey){selectProject(currentProjectKey);showView('chat')}
+    else{
+      document.getElementById('projectSwitcherPath').textContent='No Project';
+      document.getElementById('chatProjectTitle').textContent='No Project';
+      document.getElementById('chatProjectLine').textContent='Add a Project to continue.';
+      document.getElementById('tasksProjectLine').textContent='No Project selected';
+    }
+  }
+  renderProjectOptions(currentProjectKey);renderBoardFromMap();closeModal('projectManageModal');showToast(`Project removed · ${key}`);
+}
+document.getElementById('projectScroll').addEventListener('click',e=>{
+  const more=e.target.closest('.project-more');if(!more)return;
+  e.preventDefault();e.stopPropagation();openProjectActionMenu(more);
+});
+projectActionMenu.querySelector('[data-project-action="rename"]').onclick=()=>openProjectManage('rename');
+projectActionMenu.querySelector('[data-project-action="delete"]').onclick=()=>openProjectManage('delete');
+projectManageConfirm.onclick=()=>{
+  if(!projectManageState)return;
+  if(projectManageState.mode==='rename')renameProject(projectManageState.key,projectRenameInput.value);
+  else if(projectManageState.mode==='delete')deleteProject(projectManageState.key);
+};
+projectRenameInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();projectManageConfirm.click()}});
+document.addEventListener('click',e=>{if(!projectActionMenu.hidden&&!e.target.closest('#projectActionMenu')&&!e.target.closest('.project-more'))hideProjectActionMenu()});
+window.addEventListener('resize',hideProjectActionMenu);window.addEventListener('scroll',hideProjectActionMenu,true);
+
+const ensureProjectFromInputBeforeMenu=ensureProjectFromInput;
+ensureProjectFromInput=function(raw){const key=ensureProjectFromInputBeforeMenu(raw);syncProjectRowMenus();return key};
+syncProjectRowMenus();
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
