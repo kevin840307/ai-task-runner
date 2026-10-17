@@ -278,7 +278,7 @@ def _qwen_model_protocol(
     provider_protocol: dict[str, Any],
 ) -> str:
     protocol = provider_protocol.get(provider_id, provider_id)
-    if protocol not in _QWEN_AUTH_TYPES:
+    if not isinstance(protocol, str) or protocol not in _QWEN_AUTH_TYPES:
         return ""
     wire_api = model.get("wireApi")
     if wire_api is None:
