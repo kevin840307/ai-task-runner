@@ -38,8 +38,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Chat 顯示精簡 TaskDraft 預覽，提供 Edit / Create Task / Dismiss。
 [x] TaskDraft Edit 共用既有 Task Editor / Task List，不在 Chat 裡複製一套完整表單。
 [x] Chat Queue Mock 有新增、編輯、刪除；Queue 區塊位於 Composer 上方。
-[x] 有 Ctrl+Q 與 @queue <message> 的 Queue Mock 入口。
-[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
+[x] 不設獨立 Queue 按鈕；Mock Agent turn 執行中再次按傳送會自動排隊，可連續排多筆。
+[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。\n[x] Ask 以互動卡片嵌入 Chat 訊息流；長選項清單可獨立捲動，並用大量選項測試。
 [x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
 [x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
@@ -132,13 +132,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Queue 與 Runner Task List 是完全不同的概念；Chat Queue 只保存尚待送給目前 Chat Agent 的 Prompt。
 [ ] Queue 以 Chat session 為單位儲存，切換 Project / Chat 不可串錯。
 [ ] 有 Agent turn 執行中時，使用者送出的後續 Prompt 應依 Agent 原生能力加入 Queue；若 Agent 沒有原生 Queue，Backend 提供相同產品契約。
-[ ] Queue 項目直接顯示在 Composer 上方；沒有項目時整塊隱藏。
+[x] Queue 項目直接顯示在 Composer 上方；沒有項目時整塊隱藏，busy 時另顯示自動排隊提示。
 [ ] 每個項目顯示順序、可閱讀的摘要與 Edit / Delete。
 [ ] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
 [ ] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
 [ ] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
 [ ] 以 Qwen Code 原生 queued-next-turn 行為為參考（例如 Ctrl+Q）；由 adapter 決定是否支援原生快捷鍵。
-[ ] Prototype 提供可見的 Queue 按鈕、@queue <message> 與 Ctrl+Q，方便不用等待 Agent turn 就能測試。
+[x] Prototype 不提供 Queue 按鈕；Mock 模擬 Agent busy，連續按傳送會自動排隊，並可編輯／刪除多筆 Queue。Ctrl+Q 只保留為 busy 時的可選快捷鍵。
 [ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
 [ ] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
 [ ] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
@@ -157,7 +157,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
 [ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
 [ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
-[ ] Ask 面板顯示在 Composer 上方，與 Queue 區塊視覺上區分；打開時不能遮住最後一則訊息或把 Chat 撐壞。
+[x] Ask 卡片嵌入 Chat 訊息流，不覆蓋 Composer；選項清單獨立捲動，避免長選項被 viewport 遮住。
 [ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
 [ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
 [ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
