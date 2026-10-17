@@ -3854,6 +3854,18 @@ renderFullPlan=function(t){
 const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
 document.getElementById('planBackToTask').onclick=()=>{workspaceInfoRef=null;workspaceClosePlan()};
 
+// --- Empty-list CTAs use the same embedded Task Editor too. ---
+const directEmptyRenderFull=renderFullPlan;
+renderFullPlan=function(t){
+  directEmptyRenderFull(t);
+  const first=document.getElementById('planEmptyAddTask');if(first)first.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+};
+const directEmptyRenderDrawer=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  directEmptyRenderDrawer(t);
+  const first=document.getElementById('emptyPlanAddTask');if(first)first.onclick=()=>{openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
+};
+
 renderTaskKindUi=function(){};
 renderNewTaskSources();
 renderChatSession();
