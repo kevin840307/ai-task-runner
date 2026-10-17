@@ -356,6 +356,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal .plan-side-card h3{display:flex;align-items:center;justify-content:space-between}
 #planModal .plan-side-card.info-active{border-color:rgba(15,118,110,.28);background:#fbfefd}
 #planModal .plan-side-card.info-active h3{color:var(--accent-dark)}
+
+#addPlanTaskModal [data-add-task-mode="create"],#addTaskCreatePanel{display:none!important}
+#addPlanTaskModal .add-task-tabs{display:none!important}
 </style>
 </head>
 <body>
@@ -3833,6 +3836,23 @@ openFullPlanPage=openPlanDialog;
 
 // Closing the workspace also clears item selection / transient inspector state.
 document.getElementById('planBackToTask').onclick=()=>{if(planSubviewType){leavePlanSubview();return}clearTaskSelection();closeModal('planModal')};
+
+// --- Workspace inspector state + secondary-action guards. ---
+let workspaceInfoRef=null;
+const workspaceInfoShow=showWorkspaceItemInfo;
+showWorkspaceItemInfo=function(owner,index){workspaceInfoRef={ownerId:owner.id,index};workspaceInfoShow(owner,index)};
+const workspaceInfoReset=resetWorkspaceInspector;
+resetWorkspaceInspector=function(t){workspaceInfoRef=null;workspaceInfoReset(t)};
+
+const workspaceGuardRender=renderFullPlan;
+renderFullPlan=function(t){
+  workspaceGuardRender(t);
+  const editable=taskEditable(t);document.getElementById('planAddExisting').disabled=!editable;
+  if(workspaceInfoRef?.ownerId===t.id&&canonicalTaskItems(t)[workspaceInfoRef.index])workspaceInfoShow(t,workspaceInfoRef.index);
+};
+
+const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
+document.getElementById('planBackToTask').onclick=()=>{workspaceInfoRef=null;workspaceClosePlan()};
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
