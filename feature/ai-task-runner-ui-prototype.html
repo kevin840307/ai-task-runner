@@ -303,8 +303,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal.subview-open{align-items:center;justify-content:center}
 #planModal.subview-open .task-create-modal,#planModal.subview-open .yaml-plan-modal{box-shadow:none}
 .task-context-menu{position:fixed;z-index:320;width:205px;padding:5px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 14px 36px rgba(15,23,42,.18)}
-.task-context-menu[hidden]{display:none}.task-context-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:8.5px;text-align:left;cursor:pointer}
+.task-context-menu-wide{display:grid;grid-template-columns:172px 270px;width:454px;padding:0;overflow:hidden}
+.task-context-menu[hidden]{display:none}.task-context-actions{padding:5px}.task-context-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:8.5px;text-align:left;cursor:pointer}
 .task-context-menu button:hover:not(:disabled){background:#f3f7f6}.task-context-menu button:disabled{opacity:.38;cursor:not-allowed}.task-context-menu .danger-item{color:#b42318}.task-context-menu kbd{font:700 7px/1 Inter,Segoe UI,sans-serif;color:#94a3b8}.context-separator{height:1px;margin:4px 3px;background:#edf0f3}
+.task-context-info{min-width:0;padding:9px 10px;border-left:1px solid #e5eaf0;background:#fafbfc}.task-context-info-head{padding-bottom:7px;margin-bottom:7px;border-bottom:1px solid #e8edf2}.task-context-info-head strong{display:block;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-context-info-head span{display:block;margin-top:2px;color:var(--muted);font-size:7.5px}.task-context-info-grid{display:grid;grid-template-columns:78px minmax(0,1fr);gap:5px 8px;align-items:start}.task-context-info-grid span{color:var(--muted);font-size:7.5px}.task-context-info-grid strong{font-size:8px;font-weight:750;overflow-wrap:anywhere}
 .task-info-modal{width:min(540px,94vw)}.task-info-grid{display:grid;grid-template-columns:112px minmax(0,1fr);gap:7px 12px;align-items:start}.task-info-grid span{color:var(--muted);font-size:8px}.task-info-grid strong{font-size:8.5px;overflow-wrap:anywhere}
 .plan-row-compact,.drawer-plan-row{user-select:none}
 #taskInfoModal{z-index:340}\n</style>
@@ -614,14 +616,22 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="plan-subview-mount" id="planSubviewMount" hidden></div>
 </div>
 
-<div class="task-context-menu" id="taskContextMenu" hidden>
-  <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
-  <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
-  <button type="button" data-context-action="info"><span>Info</span><kbd>i</kbd></button>
-  <div class="context-separator"></div>
-  <button type="button" data-context-action="up"><span>Move up</span><kbd>↑</kbd></button>
-  <button type="button" data-context-action="down"><span>Move down</span><kbd>↓</kbd></button>
-  <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
+<div class="task-context-menu task-context-menu-wide" id="taskContextMenu" hidden>
+  <div class="task-context-actions">
+    <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
+    <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+    <div class="context-separator"></div>
+    <button type="button" data-context-action="up"><span>Move up</span><kbd>↑</kbd></button>
+    <button type="button" data-context-action="down"><span>Move down</span><kbd>↓</kbd></button>
+    <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
+  </div>
+  <aside class="task-context-info">
+    <div class="task-context-info-head">
+      <strong id="contextInfoTitle">Info</strong>
+      <span id="contextInfoMeta">Read-only</span>
+    </div>
+    <div class="task-context-info-grid" id="contextInfoBody"></div>
+  </aside>
 </div>
 
 <div class="modal-overlay" id="taskInfoModal">
@@ -3443,28 +3453,42 @@ const taskContextMenu=document.getElementById('taskContextMenu');
 let taskContextState=null;
 function hideTaskContextMenu(){taskContextMenu.hidden=true;taskContextState=null}
 function positionTaskContextMenu(x,y){
-  taskContextMenu.hidden=false;const w=205,h=246;
+  taskContextMenu.hidden=false;const w=454,h=260;
   taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
 }
 function setContextAction(name,{visible=true,enabled=true,label=null}={}){
   const b=taskContextMenu.querySelector(`[data-context-action="${name}"]`);if(!b)return;
   b.hidden=!visible;b.disabled=!enabled;if(label)b.querySelector('span').textContent=label;
 }
+function renderContextSideInfo(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  const title=document.getElementById('contextInfoTitle'),meta=document.getElementById('contextInfoMeta'),body=document.getElementById('contextInfoBody');
+  if(state.scope==='list'){
+    const items=canonicalTaskItems(t);
+    title.textContent=t.title;meta.textContent=`${t.id} · Task List`;
+    body.innerHTML=`<span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Elapsed</span><strong>${escapeHtml(t.elapsed||'—')}</strong>`;
+    return;
+  }
+  const items=canonicalTaskItems(t),x=items[state.index];if(!x)return;
+  const s=planStateFor(t,state.index,items.length),ai=x.aiMode==='default'?'Workflow default':x.aiMode;
+  title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
+  body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt</span><strong>${escapeHtml(x.goalMode||'inline')}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
+}
 function openItemContextMenu(e,owner,index){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
   const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
   const canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
   taskContextState={scope:'item',ownerId:owner.id,index};
-  setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
   setContextAction('up',{visible:true,enabled:canRestructure&&index>0&&(owner.status!=='paused'||index-1>batchState.index),label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
-  positionTaskContextMenu(e.clientX,e.clientY);
+  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
 }
 function openListContextMenu(e,t){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
   taskContextState={scope:'list',ownerId:t.id,index:null};
-  setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
   setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
-  positionTaskContextMenu(e.clientX,e.clientY);
+  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
 }
 function showContextInfo(state){
   const t=taskMap[state.ownerId];if(!t)return;
@@ -3493,7 +3517,6 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   const t=taskMap[state.ownerId];if(!t)return;
   if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
   if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog('rename',t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
-  if(action==='info'){showContextInfo(state);return}
   if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
   if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
 });
