@@ -231,6 +231,14 @@ function openTaskFromBoard(t){
   if(t.status==='new'){openPlanDialog(t.id);return}
   openTaskById(t.id);
 }
+const deleteGuardOpenTask=openTaskById;
+openTaskById=function(id){
+  deleteGuardOpenTask(id);
+  const t=taskMap[id],del=document.getElementById('deleteTaskDemo');if(!t||!del)return;
+  del.disabled=!taskCanDelete(t);
+  del.title=del.disabled?'Pause / Stop this Task before deleting it':'Delete Task';
+};
+
 const lifecycleBindTaskCards=bindTaskCards;
 bindTaskCards=function(){
   lifecycleBindTaskCards();
