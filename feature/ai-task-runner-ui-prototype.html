@@ -157,14 +157,8 @@
           <button id="runBatch" hidden type="button"></button><button id="stopBatch" hidden type="button"></button><button id="resumeBatch" hidden type="button"></button><button id="resetBatch" hidden type="button"></button><button id="backToTasks" hidden type="button"></button><span id="taskListEditorTitle" hidden></span>
         </section>
         <section class="section workspace-result-section" id="workspaceResultSection">
-          <div class="workspace-result-head"><div><h3>Workspace result</h3><p id="workspaceResultHint">Main workspace · no isolated cleanup required</p></div><span class="pill" id="workspaceResultState">Main</span></div>
-          <div class="workspace-result-grid" id="workspaceResultGrid"></div>
-          <div class="workspace-result-actions">
-            <button class="btn" id="reviewChangesDemo" type="button">Review changes</button>
-            <button class="btn" id="mergeChatDemo" type="button">Merge with Chat</button>
-            <button class="btn primary" id="mergeTaskDemo" type="button">Merge</button>
-            <button class="btn danger" id="cleanupWorktreeDemo" type="button">Cleanup</button>
-          </div>
+          <div class="workspace-result-head"><div><h3>Workspace results</h3><p id="workspaceResultHint">Worktrees are grouped by Project. Merge only when preflight is safe.</p></div><span class="pill" id="workspaceResultState">No worktrees</span></div>
+          <div class="workspace-result-list" id="workspaceResultList"></div>
         </section>
       </div>
       <div class="drawer-pane" id="drawer-items"></div>
