@@ -706,7 +706,7 @@ function mockAskQuestions(context=''){
       {label:'Live integration',description:'接真實 Agent / backend 驗證'},
       {label:'長時間可靠性',description:'補 retry、resume、timeout 與 soak 測試'}
     ]},
-    {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[]}
+    {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[],required:false}
   ];
   return Math.random()<.5?[base[0],base[2]]:base;
 }
@@ -722,8 +722,9 @@ function renderAskFlow(session=activeChat()){
   box.querySelector('#composerAsk')?.remove();
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const panel=document.createElement('section');panel.id='composerAsk';panel.className='composer-ask chat-ask-card';
-  panel.innerHTML=`<div class='composer-ask-head'><div><span class='ask-badge'>ASK · MOCK</span><strong id='composerAskTitle'></strong></div><span id='composerAskProgress'></span></div><div class='composer-ask-question' id='composerAskQuestion'></div><div class='composer-ask-options' id='composerAskOptions'></div><textarea class='composer-ask-text' id='composerAskText' rows='2'></textarea><div class='composer-ask-foot'><button class='btn' type='button' id='composerAskCancel'>Cancel</button><button class='btn primary' type='button' id='composerAskNext'>Next</button></div>`;
+  panel.innerHTML=`<div class='composer-ask-head'><div><span class='ask-badge'>ASK · MOCK</span><strong id='composerAskTitle'></strong><span class='ask-optional' id='composerAskOptional' hidden>選填</span></div><span id='composerAskProgress'></span></div><div class='composer-ask-question' id='composerAskQuestion'></div><div class='composer-ask-options' id='composerAskOptions'></div><textarea class='composer-ask-text' id='composerAskText' rows='2'></textarea><div class='composer-ask-foot'><button class='btn' type='button' id='composerAskCancel'>Cancel</button><button class='btn primary' type='button' id='composerAskNext'>Next</button></div>`;
   panel.querySelector('#composerAskTitle').textContent=q.header||'Clarification';
+  panel.querySelector('#composerAskOptional').hidden=q.required!==false;
   panel.querySelector('#composerAskProgress').textContent=`Question ${flow.index+1} of ${flow.questions.length}`;
   panel.querySelector('#composerAskQuestion').textContent=q.question||'';
   const options=panel.querySelector('#composerAskOptions'),textInput=panel.querySelector('#composerAskText'),next=panel.querySelector('#composerAskNext');
@@ -733,7 +734,7 @@ function renderAskFlow(session=activeChat()){
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
     options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
     textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
-  }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder='輸入你的回答…'}
+  }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder=q.required===false?'選填，可直接 Next':'輸入你的回答…'}
   textInput.oninput=()=>{flow.answers[key]=textInput.value};
   next.textContent=flow.index===flow.questions.length-1?'Submit':'Next';
   panel.querySelector('#composerAskNext').onclick=()=>advanceAskFlow(session);
@@ -744,7 +745,7 @@ function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
   if(q.type==='choice'&&!selected){showToast('請先選擇一個選項');return}
-  if((q.type==='text'||selected==='__other__')&&!answer){showToast('請填寫回答');return}
+  if((q.type==='text'||selected==='__other__')&&!answer&&q.required!==false){showToast('請填寫回答');return}
   if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
   if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
   const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
@@ -1195,12 +1196,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   showToast(markDirty?'Saved · current task will restart':'Task saved');
 };
 
-// No separate Queue button: Send automatically enqueues while a turn is busy.
-document.getElementById('chatToTask').onclick=()=>{
-  const input=document.getElementById('chatInput'),raw=input.value;
-  if(!/^\s*@task\b/i.test(raw))input.value=raw.trim()?'@task '+raw:'@task ';
-  input.focus();input.setSelectionRange(input.value.length,input.value.length);resizeChatComposer();
-};
+// No dedicated @task button: use the @ command suggestions; Send queues automatically while busy.
 const chatInputForSuggestions=document.getElementById('chatInput');
 chatInputForSuggestions.addEventListener('input',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('click',renderComposerSuggestions);
