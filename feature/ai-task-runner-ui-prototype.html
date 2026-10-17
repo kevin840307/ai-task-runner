@@ -3592,7 +3592,7 @@ function leavePlanSubview(){
   const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
   if(returnTarget==='info'&&owner){
     closeModal('planModal');openTaskById(ownerId);
-    if(index!=null)setTimeout(()=>document.querySelector(`#formList [data-drawer-item="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
+    if(index!=null)setTimeout(()=>{selectTaskItem(owner,index);document.querySelector(`#formList [data-drawer-item="${index}"]`)?.scrollIntoView({block:'nearest'})},0);
     return;
   }
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
