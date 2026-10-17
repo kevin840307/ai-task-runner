@@ -589,7 +589,6 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 
 // Any create entry resets the shared form back to create mode.
 document.getElementById('newTask').addEventListener('click',setTaskFormCreateMode,true);
-document.getElementById('chatToTask').addEventListener('click',setTaskFormCreateMode,true);
 document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',setTaskFormCreateMode,true));
 
 const editAwareOpenTaskById=openTaskById;
