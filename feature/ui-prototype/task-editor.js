@@ -956,6 +956,29 @@ document.getElementById('chatToTask').onclick=()=>{
   if(!/^\s*@task\b/i.test(raw))input.value=raw.trim()?'@task '+raw:'@task ';
   input.focus();input.setSelectionRange(input.value.length,input.value.length);resizeChatComposer();
 };
+const chatInputForSuggestions=document.getElementById('chatInput');
+chatInputForSuggestions.addEventListener('input',renderComposerSuggestions);
+chatInputForSuggestions.addEventListener('click',renderComposerSuggestions);
+chatInputForSuggestions.addEventListener('keydown',e=>{
+  const pop=document.getElementById('composerSuggest');
+  if(pop?.hidden||!composerSuggestionItems.length)return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();e.stopImmediatePropagation();
+    const delta=e.key==='ArrowDown'?1:-1;
+    composerSuggestionIndex=(composerSuggestionIndex+delta+composerSuggestionItems.length)%composerSuggestionItems.length;
+    renderComposerSuggestions();return;
+  }
+  if(e.key==='Enter'||e.key==='Tab'){
+    e.preventDefault();e.stopImmediatePropagation();acceptComposerSuggestion();return;
+  }
+  if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();hideComposerSuggestions()}
+},true);
+document.getElementById('chatAgent').onchange=e=>{
+  const session=activeChat();if(session)session.agent=e.target.value;
+  renderComposerSuggestions();showToast(`Mock Agent · ${chatAgentLabel(e.target.value)}`);
+};
+document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hideComposerSuggestions()});
+
 
 function workspaceLabelForItem(x){return itemUsesWorktree(x)?'WORKTREE':x.workspaceKind==='main'||x.workspacePolicy==='main'?'Main':'Auto'}
 renderFullPlan=function(t){
