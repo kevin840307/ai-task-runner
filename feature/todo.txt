@@ -40,6 +40,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Chat Queue Mock 有新增、編輯、刪除；Queue 區塊位於 Composer 上方。
 [x] 不設獨立 Queue 按鈕；Mock Agent turn 執行中再次按傳送會自動排隊，可連續排多筆。
 [x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
+[x] Ask 的 Extra context 為選填；空白可以直接 Next / Submit，不阻擋流程。
+[x] 移除專用 @task 按鈕；透過 @ 自動提示發現與插入 @task / @task-single / @task-list。
 [x] Ask 以互動卡片嵌入 Chat 訊息流；長選項清單可獨立捲動，並用大量選項測試。
 [x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
@@ -52,7 +54,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
 [x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
 [ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
-[ ] 將 Mock 功能入口做得容易發現；不要要求使用者只能靠猜特殊指令才能測試。
+[x] Mock 功能入口可透過 @ 自動提示與 Ask mock 入口發現，不必猜特殊指令。
 
 
 2. Project 與 Chat 導覽
