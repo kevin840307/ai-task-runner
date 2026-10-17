@@ -518,7 +518,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
-        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；執行中不可直接 Closed</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
+        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；Paused → New 會從頭重置並先確認</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
       </div>
       <div class="board" id="board">
         <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
@@ -763,6 +763,19 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
 </div>
 
+<div class="modal-overlay" id="taskResetToNewModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2>Move Task back to New?</h2><p id="taskResetToNewMeta"></p></div><button class="close" data-close-modal="taskResetToNewModal">×</button></div>
+    <div class="modal-body">
+      <div class="project-delete-note">
+        <strong>This restarts the Task from the beginning.</strong><br>
+        Current execution progress and resumable runtime state will be reset. Task configuration stays intact, and the previous run remains visible in History.
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskResetToNewModal">Cancel</button><button class="btn danger" id="confirmTaskResetToNew">Move to New & Reset</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="projectManageModal">
   <div class="modal-card project-manage-modal">
     <div class="modal-head"><div><h2 id="projectManageTitle">Rename Project</h2><p id="projectManageMeta"></p></div><button class="close" data-close-modal="projectManageModal">×</button></div>
@@ -978,7 +991,7 @@ function renderBoard(preset=currentPreset){
 const BOARD_TRANSITIONS={
   new:new Set(['ongoing','closed']),
   ongoing:new Set(['paused','closed']),
-  paused:new Set(['ongoing','closed']),
+  paused:new Set(['new','ongoing','closed']),
   closed:new Set(['ongoing'])
 };
 function boardMoveAllowed(t,target){
@@ -4297,16 +4310,18 @@ deleteProject=function(key){selectedTaskProjectKeys.delete(key);deleteProjectBef
 
 renderTasksProjectFilter();
 
-// --- Final Paused edit policy: completed/current are frozen; only future tasks can change. ---
+// --- Final Paused edit policy: completed frozen; current editable with restart; future freely editable. ---
 function taskItemCanEdit(owner,index){
   if(!owner||!taskEditable(owner))return false;
   const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length);
   if(s.done)return false;
-  if(owner.status==='paused'&&index<=batchState.index)return false;
+  if(owner.status==='paused'&&index<batchState.index)return false;
   return true;
 }
 function taskItemCanRestructure(owner,index){
-  return taskItemCanEdit(owner,index);
+  if(!taskItemCanEdit(owner,index))return false;
+  if(owner.status==='paused'&&index<=batchState.index)return false;
+  return true;
 }
 
 const pausedPolicyLoadTaskEditor=loadTaskEditor;
@@ -4314,7 +4329,7 @@ loadTaskEditor=function(mode,args={}){
   if(mode==='edit-item'){
     const owner=taskMap[args.ownerId||currentTaskId],index=Number(args.index);
     if(!taskItemCanEdit(owner,index)){
-      showToast(owner?.status==='paused'?'Paused · completed/current task is locked':'Task is read-only');
+      showToast(owner?.status==='paused'?'Paused · completed task is locked':'Task is read-only');
       return;
     }
   }
@@ -4326,9 +4341,9 @@ renderFullPlan=function(t){
   pausedPolicyRenderFullPlan(t);
   const items=canonicalTaskItems(t);
   if(t.status==='paused'){
-    document.getElementById('planStatePill').textContent='Future tasks editable';
+    document.getElementById('planStatePill').textContent=t.configDirty?'Current changed · restart required':'Current + future editable';
     document.getElementById('planEditYaml').disabled=true;
-    document.getElementById('planEditYaml').title='Paused keeps completed/current tasks frozen. Edit future tasks individually.';
+    document.getElementById('planEditYaml').title='Paused keeps completed history frozen. Edit current/future tasks individually; changing current requires restart.';
   }else{
     document.getElementById('planEditYaml').title='';
   }
@@ -4360,6 +4375,43 @@ openItemContextMenu=function(e,owner,index){
   setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
   setContextAction('remove',{visible:true,enabled:taskItemCanRestructure(owner,index),label:'Remove'});
 };
+
+let pendingResetToNewTaskId=null;
+function resetPausedTaskToNew(t){
+  if(!t||t.status!=='paused')return;
+  const items=canonicalTaskItems(t),previousProgress=t.progress?.[0]||0;
+  pushTaskHistory(t,`Paused → New · execution reset from start after ${previousProgress}/${items.length} completed`);
+  t.status='new';t.runtime='idle';t.progress=[0,items.length];t.stage='Ready';t.session='—';t.elapsed='—';t.configDirty=false;
+  t.desc=items.length===1?'Ready to run from the beginning':`${items.length} ordered tasks · reset to run from the beginning`;
+  if(batchParentTaskId===t.id){
+    clearInterval(batchRunTimer);batchRunTimer=null;
+    batchDraft=cloneBatch(items);batchState={status:'idle',index:0,recovered:false,currentDirty:false};setBatchControls();
+  }
+  persistCurrentPresetFromTaskMap();renderBoardFromMap();
+}
+function requestPausedTaskResetToNew(t){
+  if(!t||t.status!=='paused')return;
+  pendingResetToNewTaskId=t.id;
+  const items=canonicalTaskItems(t),done=Math.min(t.progress?.[0]||0,items.length);
+  document.getElementById('taskResetToNewMeta').textContent=`${t.id} · ${t.title} · progress ${done}/${items.length}`;
+  openModal('taskResetToNewModal');
+}
+document.getElementById('confirmTaskResetToNew').onclick=()=>{
+  const t=taskMap[pendingResetToNewTaskId];pendingResetToNewTaskId=null;
+  closeModal('taskResetToNewModal');
+  if(!t||t.status!=='paused')return;
+  resetPausedTaskToNew(t);showToast('Task moved to New · execution reset from start');
+};
+
+// Intercept Paused → New before the generic Board drop handler mutates status.
+const newDropzone=document.querySelector('.col[data-status="new"] .dropzone');
+newDropzone.addEventListener('drop',e=>{
+  if(!dragged)return;
+  const t=taskMap[dragged.dataset.id];
+  if(t?.status!=='paused')return;
+  e.preventDefault();e.stopImmediatePropagation();newDropzone.classList.remove('over');
+  requestPausedTaskResetToNew(t);
+},true);
 
 function openTaskFromBoard(t){
   if(!t)return;
