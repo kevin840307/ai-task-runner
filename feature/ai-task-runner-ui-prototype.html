@@ -508,6 +508,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
       <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
+      <div id="newTaskListSetup" hidden></div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
       <div class="workspace-selector-wrap">
@@ -3075,7 +3076,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 };
 
 // Suppress legacy New Task listeners and route root creation into the canonical editor.
-document.getElementById('newTask').addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();loadTaskEditor('root-create');},true);
+// obsolete create-entry capture handler removed; final dropdown owns this entry.
 document.getElementById('chatToTask').onclick=()=>{const textValue=document.getElementById('chatInput').value.trim();loadTaskEditor('root-create',{fromChat:textValue});document.getElementById('newTaskTitle').value=textValue?textValue.slice(0,72):''};
 
 function workspaceLabelForItem(x){return x.workspacePolicy==='worktree'?'Worktree':x.workspacePolicy==='main'?'Main':'Auto'}
@@ -3225,7 +3226,7 @@ function openListNameDialog(mode='create',t=null){
   document.getElementById('confirmEmptyList').textContent=mode==='create'?'Create Task List':'Save name';
   openModal('emptyListModal');setTimeout(()=>document.getElementById('emptyListTitle').focus(),0);
 }
-document.getElementById('newTask').addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();openListNameDialog('create');},true);
+// obsolete create-entry capture handler removed; final dropdown owns this entry.
 document.querySelectorAll('.coladd').forEach(b=>b.onclick=()=>document.getElementById('newTask').click());
 document.getElementById('confirmEmptyList').onclick=()=>{
   const title=document.getElementById('emptyListTitle').value.trim();if(!title){showToast('List name is required');return}
