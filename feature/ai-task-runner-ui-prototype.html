@@ -290,6 +290,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .empty-plan-cta{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px dashed #b9c7d4;border-radius:10px;background:#fbfcfd;color:var(--text);text-align:left;cursor:pointer}.empty-plan-cta:hover{border-color:var(--accent);background:#f7fcfb}.empty-plan-cta strong{font-size:9px}.empty-plan-cta span{color:var(--accent);font-size:8px;font-weight:850}.empty-plan-cta.large{min-height:86px;justify-content:center;flex-direction:column}
 .drawer-task-actions{display:flex;align-items:center;gap:5px}
 .drawer-plan-row{cursor:default}.drawer-plan-row[data-drawer-item]:hover{border-color:#cbd6df}
+
+.create-type-menu{position:fixed;z-index:260;width:250px;padding:5px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 14px 36px rgba(15,23,42,.16)}
+.create-type-menu[hidden]{display:none}.create-type-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;color:var(--text);cursor:pointer}
+.create-type-menu button:hover{background:#f4f8f7}.create-type-menu button+button{margin-top:2px}.create-type-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#eef6f5;color:var(--accent);font-size:14px;font-weight:900}
+.create-type-menu strong{display:block;font-size:9px}.create-type-menu small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.35}
 </style>
 </head>
 <body>
@@ -354,7 +359,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
         <div class="title"><h1>Tasks</h1><p id="tasksProjectLine">C:\Users\kevin\ai-task-runner · 每張卡片都使用同一個 ordered tasks</p></div>
-        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task List</button></div>
+        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New Task</button></div>
       </header>
       <div class="boardtools">
         <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
@@ -593,6 +598,17 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </aside>
     </div>
   </div>
+</div>
+
+<div class="create-type-menu" id="createTypeMenu" hidden>
+  <button type="button" data-create-type="task">
+    <span class="create-type-icon">＋</span>
+    <span><strong>Task</strong><small>Create one task with the standard Task Editor.</small></span>
+  </button>
+  <button type="button" data-create-type="list">
+    <span class="create-type-icon">≡</span>
+    <span><strong>Task List</strong><small>Create an empty list, then add tasks inside it.</small></span>
+  </button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -3282,6 +3298,35 @@ loadTaskEditor=function(mode,args={}){
 
 // Remove List-oriented wording from the canonical Task Editor itself.
 document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are saved on this task only. Workflow capabilities determine which validation fields are shown.';
+
+// --- Unified + New / column + dropdown: Task or Task List ---
+const createTypeMenu=document.getElementById('createTypeMenu');
+let createMenuAnchor=null;
+function hideCreateTypeMenu(){createTypeMenu.hidden=true;createMenuAnchor=null}
+function showCreateTypeMenu(anchor){
+  createMenuAnchor=anchor;createTypeMenu.hidden=false;
+  const r=anchor.getBoundingClientRect(),w=250,gap=6;
+  let left=Math.min(window.innerWidth-w-10,Math.max(10,r.right-w));
+  let top=r.bottom+gap;
+  if(top+112>window.innerHeight)top=Math.max(10,r.top-112-gap);
+  createTypeMenu.style.left=`${left}px`;createTypeMenu.style.top=`${top}px`;
+}
+function createEmptyTaskListAndOpen(){
+  const id='T-'+(++taskSequence);
+  const t={id,kind:'task_list',status:'new',title:'New Task List',runtime:'idle',desc:'Empty task list',tags:['0 tasks'],workflow:'—',projectContext:currentProjectKey,project:currentProjectKey,progress:[0,0],elapsed:'—',stage:'Draft',session:'—',goal:'',items:[],listItems:[],workspacePolicy:'none',workspaceKind:'none',branch:'—',executionRoot:'—'};
+  taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();openPlanDialog(id);showToast('Task List created · add tasks when ready');
+}
+function handleCreateEntryClick(e){
+  e.preventDefault();e.stopImmediatePropagation();
+  if(!createTypeMenu.hidden&&createMenuAnchor===e.currentTarget){hideCreateTypeMenu();return}
+  showCreateTypeMenu(e.currentTarget);
+}
+document.getElementById('newTask').addEventListener('click',handleCreateEntryClick,true);
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',handleCreateEntryClick,true));
+createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{hideCreateTypeMenu();loadTaskEditor('root-create')};
+createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{hideCreateTypeMenu();createEmptyTaskListAndOpen()};
+document.addEventListener('click',e=>{if(!createTypeMenu.hidden&&!createTypeMenu.contains(e.target)&&e.target!==createMenuAnchor)hideCreateTypeMenu()});
+window.addEventListener('resize',hideCreateTypeMenu);window.addEventListener('scroll',hideCreateTypeMenu,true);
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
