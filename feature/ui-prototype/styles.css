@@ -304,6 +304,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .ai-override-actions .simple-source-select{min-width:100px}
 
 #newTaskModal{z-index:210}
+#newTaskModal.chat-draft-editor-overlay{place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
+#newTaskModal.chat-draft-editor-overlay>.task-create-modal{width:min(720px,94vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18)}
+#planModal.chat-draft-plan-overlay{place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
+#planModal.chat-draft-plan-overlay>.plan-modal-card{width:min(1040px,96vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18)}
+
 .task-editor-handoff{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left;color:var(--text);cursor:pointer}
 .task-editor-handoff:hover{border-color:#9fbab6;background:#f8fcfb}.task-editor-handoff-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e9f6f4;color:var(--accent);font-size:18px;font-weight:800}
 .task-editor-handoff strong{display:block;font-size:10px}.task-editor-handoff small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.task-editor-handoff b{color:var(--accent);font-size:8px}
