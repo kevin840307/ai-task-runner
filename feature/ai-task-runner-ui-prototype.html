@@ -316,6 +316,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .plan-row-compact.selected,.drawer-plan-row.selected{border-color:#75aaa4!important;background:#f3fbf9!important;box-shadow:0 0 0 1px rgba(15,118,110,.08)}
 .plan-row-num .drag-grip{margin-right:5px;color:#94a3b8;font-weight:900}
 .project-combobox-new{font-weight:800}
+
+/* Context menu is actions only; Info opens the normal right-side Drawer. */
+#taskContextMenu{width:205px!important;display:block!important;padding:5px!important}
+#taskContextMenu[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -623,21 +627,15 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="plan-subview-mount" id="planSubviewMount" hidden></div>
 </div>
 
-<div class="task-context-menu task-context-menu-wide" id="taskContextMenu" hidden>
+<div class="task-context-menu" id="taskContextMenu" hidden>
   <div class="task-context-actions">
     <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
     <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+    <button type="button" data-context-action="info"><span>Info</span><kbd>i</kbd></button>
     <button type="button" data-context-action="workflow" hidden><span>Open Workflow</span><kbd>↗</kbd></button>
     <div class="context-separator"></div>
     <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
   </div>
-  <aside class="task-context-info">
-    <div class="task-context-info-head">
-      <strong id="contextInfoTitle">Info</strong>
-      <span id="contextInfoMeta">Read-only</span>
-    </div>
-    <div class="task-context-info-grid" id="contextInfoBody"></div>
-  </aside>
 </div>
 
 <div class="modal-overlay" id="taskInfoModal">
@@ -3651,6 +3649,44 @@ openItemContextMenu=function(e,owner,index){selectTaskItem(owner,index);contextI
 const contextListBeforeWorkflow=openListContextMenu;
 openListContextMenu=function(e,t){contextListBeforeWorkflow(e,t);setContextAction('workflow',{visible:false})};
 const contextWorkflowButton=taskContextMenu.querySelector('[data-context-action="workflow"]');if(contextWorkflowButton)contextWorkflowButton.onclick=()=>{if(contextWorkflowButton.disabled||!taskContextState)return;const state={...taskContextState};hideTaskContextMenu();if(state.scope==='item'){selectTaskItem(taskMap[state.ownerId],state.index);openSelectedWorkflow()}};
+
+// --- Final context-menu semantics: Info = the normal right-side detail Drawer. ---
+function openContextInfoDrawer(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  hideTaskContextMenu();
+  if(planSubviewType)leavePlanSubview();
+  closeModal('planModal');closeModal('addPlanTaskModal');
+  openTaskById(t.id);
+  if(state.scope==='item'){
+    setTimeout(()=>{selectTaskItem(t,state.index);document.querySelector(`#formList [data-drawer-item="${state.index}"]`)?.scrollIntoView({block:'nearest'})},0);
+  }
+}
+openItemContextMenu=function(e,owner,index){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();selectTaskItem(owner,index);
+  const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
+  const canEdit=editable&&!s.done,canRemove=canEdit&&!currentLocked;
+  taskContextState={scope:'item',ownerId:owner.id,index};
+  setContextAction('open',{visible:false});
+  setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
+  setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('workflow',{visible:true,enabled:!!items[index]?.workflow&&items[index]?.workflow!=='—'&&items[index]?.workflow!=='Tasks',label:'Open Workflow'});
+  setContextAction('up',{visible:false});setContextAction('down',{visible:false});
+  setContextAction('remove',{visible:true,enabled:canRemove,label:'Remove'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+};
+openListContextMenu=function(e,t){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
+  const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
+  taskContextState={scope:'list',ownerId:t.id,index:null};
+  setContextAction('open',{visible:true,enabled:true,label:'Open list'});
+  setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
+  setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('workflow',{visible:false});setContextAction('up',{visible:false});setContextAction('down',{visible:false});
+  setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+};
+const contextInfoButton=taskContextMenu.querySelector('[data-context-action="info"]');
+contextInfoButton.onclick=()=>{if(contextInfoButton.disabled||!taskContextState)return;openContextInfoDrawer({...taskContextState})};
 
 renderTaskKindUi=function(){};
 renderNewTaskSources();
