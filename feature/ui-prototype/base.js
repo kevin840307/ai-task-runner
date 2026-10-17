@@ -1,0 +1,3410 @@
+const views=[...document.querySelectorAll('.view')];
+const nav=[...document.querySelectorAll('.navbtn[data-view]')];
+function showView(name){
+  views.forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
+  nav.forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+}
+nav.forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+
+const toast=document.getElementById('toast');
+let toastTimer;
+function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1900)}
+document.getElementById('themeBtn').addEventListener('click',()=>showToast('Mock demo 保持目前 Teal light theme，不另外改設計語言'));
+
+const projectMeta={
+  'ai-task-runner':{path:'C:\\Users\\kevin\\ai-task-runner',branch:'feature/ui'},
+  'game-client':{path:'D:\\dev\\game-client',branch:'main'},
+  'lab-tools':{path:'D:\\lab\\tools',branch:'dev'},
+  'demo-api':{path:'D:\\dev\\demo-api',branch:'main'},
+  'web-console':{path:'D:\\dev\\web-console',branch:'feature/dashboard'},
+  'sandbox-lab':{path:'D:\\lab\\sandbox-lab',branch:'main'}
+};
+// Project list behavior is bound after currentProjectKey is initialized.
+
+const chatPresets={
+  design:[
+    ['assistant','這裡是一般 Chat。你可以討論設計、程式或目前 Project；只有明確建立 Task 才交給 Workflow Runner。'],
+    ['user','Task board 要怎樣才不會跟 runtime state 混在一起？'],
+    ['assistant','把 Board status 當工作管理狀態；Running / Recovering / Stopped / Completed 則只讀 Runner projection。拖卡片不直接改 process。']
+  ],
+  debug:[
+    ['user','Stage test 偶爾 502，先幫我分析可能是哪一層。'],
+    ['assistant','我會先看 backend adapter、StageExecutor technical retry 與 server endpoint；這是互動式除錯，不會自動建立長時間 Task。'],
+    ['user','如果確認是 API transient error 呢？'],
+    ['assistant','就應沿用 StageExecutor 的 same-session retry / fresh rotation 與 seconds-based backoff，不在 Chat UI 另造 recovery。']
+  ],
+  review:[
+    ['user','幫我 review 這次 UI 修改，先只指出問題。'],
+    ['assistant','可以。我會把問題分成 UX、runtime ownership、state consistency 與維護性；若要實際修改，再由你建立 Task 或明確要求執行。']
+  ],
+  long:[
+    ['assistant','這個情境用來測試長對話。'],
+    ['user','我希望 Task、Task List、Workflow、Prompt 都能一起用，但不要讓 UI 變得很複雜。'],
+    ['assistant','建議把互動責任分清楚：Chat 負責討論；Task 負責工作管理與 runtime projection；Task Lists 負責 batch RunRequest；Workflows / Prompts 維持原本資產管理。'],
+    ['user','那從 Chat 轉成 Task 呢？'],
+    ['assistant','可以提供「建立 Task」明確動作，把目前輸入帶入 New Task 表單，但不應自動執行。這樣操作快速，也不會讓一般聊天誤觸 Runner。'],
+    ['user','如果 Task 正在 Recovering，能直接拖 Closed 嗎？'],
+    ['assistant','不建議。Running / Recovering 代表 Runner 還在處理，應先 Stop，再允許 Board 移到 Paused / Closed，避免工作管理狀態和真實 runtime 打架。']
+  ],
+  empty:[]
+};
+function renderChat(key){
+  const box=document.getElementById('chatMessages');box.innerHTML='';
+  (chatPresets[key]||[]).forEach(([who,body])=>{
+    const el=document.createElement('div');el.className='msg '+who;
+    el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);
+    box.appendChild(el);
+  });
+}
+// Chat session change handler is installed by the refined multi-session block.
+document.getElementById('newChat').onclick=()=>{document.getElementById('chatMessages').innerHTML='<div class="msg assistant"><div class="msgmeta"><span class="avatar">AI</span>Assistant</div>新的 mock Chat 已建立。這仍然不會建立 Runner Task。</div>';showToast('New Chat')};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput');const text=input.value.trim();if(!text)return;
+  const box=document.getElementById('chatMessages');
+  const u=document.createElement('div');u.className='msg user';u.innerHTML='<div class="msgmeta">You</div>'+escapeHtml(text);box.appendChild(u);
+  const a=document.createElement('div');a.className='msg assistant';
+  const reply=/task|執行|run/i.test(text)?'這是一般 Chat。若你真的要執行，我會建議把內容送到 New Task，而不是在 Chat 裡偷偷啟動 Runner。':'收到。這個 mock 回覆用來測試一般 Chat 的閱讀密度、輸入體驗與長訊息排列。';
+  a.innerHTML='<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>'+reply;box.appendChild(a);
+  input.value='';box.scrollTop=box.scrollHeight;
+};
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('chatSend').click()}});
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();
+  document.getElementById('newTaskGoal').value=input||'Convert the current Chat discussion into a tracked Runner Task.';
+  document.getElementById('newTaskTitle').value=input ? input.slice(0,72) : 'Task from Chat';
+  document.getElementById('newTaskModal').classList.add('open');
+};
+
+
+const taskPresets={
+  today:[
+    {id:'T-104',status:'new',title:'新增 Task List UI',runtime:'idle',desc:'讓 YAML List 能用 Form / YAML 兩種方式編排與執行。',tags:['ralphy_ai_validate','UI'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[0,5],elapsed:'—',stage:'Idle',session:'—',goal:'新增 YAML List 的 UI builder，維持同一套 RunRequest / Runner contract。'},
+    {id:'T-105',status:'new',title:'重整 README Workflow 說明',runtime:'idle',desc:'文件同步目前 Stage / PASS / FAIL contract。',tags:['docs'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal:'更新文件但不引入 legacy contract。'},
+    {id:'T-103',status:'ongoing',title:'完成 feature/ui 新 Task 介面',runtime:'running',desc:'Stage 正在執行 UI implementation；Runtime 不跟 Board 欄位綁死。',tags:['feature/ui','review'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,5],elapsed:'12m',stage:'review',session:'same',goal:'保持目前 UI 風格，加入 Chat、Task Lists 與 Azure-style Task board。'},
+    {id:'T-102',status:'ongoing',title:'修正 Studio stage test',runtime:'recover',desc:'API 暫時錯誤，StageExecutor 正在 same-session retry。',tags:['studio','API'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[2,5],elapsed:'4m',stage:'execute',session:'same retry',goal:'修正 Stage Test API 502 並保持正式 runtime contract。'},
+    {id:'T-099',status:'paused',title:'24H reliability review',runtime:'stopped',desc:'User stop；可從 Task 詳細頁 Resume / Reset。',tags:['reliability','live'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[2,6],elapsed:'3h 18m',stage:'execute',session:'role',goal:'跑完整 reliability review；使用者手動停止後保留可 Resume 狀態。'},
+    {id:'T-091',status:'closed',title:'移除舊 Discussion 模式',runtime:'done',desc:'舊契約與 UI 已清理，測試通過；worktree result 尚待 merge。',tags:['cleanup'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[5,5],elapsed:'28m',stage:'Completed',session:'fresh final',goal:'移除 Discussion / legacy runtime paths。',workspaceKind:'worktree',workspacePolicy:'worktree',branch:'task/T-091-discussion',executionRoot:'C:\\Users\\kevin\\ai-task-runner-worktrees\\T-091'}
+  ],
+  recovery:[
+    {id:'T-212',status:'ongoing',title:'Qwen HTTP 503 recovery probe',runtime:'recover',desc:'第 2 次 same-session attempt；下一次將 rotate fresh session。',tags:['Qwen','503'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[1,4],elapsed:'7m',stage:'execute',session:'same retry',goal:'確認 transient API failure 不會中斷 24H unattended run。'},
+    {id:'T-213',status:'ongoing',title:'Runtime heartbeat stale',runtime:'attention',desc:'UI projection 顯示 Needs Attention；等待使用者選 Resume / Reset。',tags:['runtime','attention'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[2,5],elapsed:'16m',stage:'review',session:'role',goal:'驗證 stale heartbeat 時 UI action guard 與 runtime projection 一致。'},
+    {id:'T-214',status:'paused',title:'Deterministic config failure',runtime:'failed',desc:'Workflow schema 不合法，fail closed，不做無限 retry。',tags:['schema','fail-closed'],workflow:'invalid-demo.yaml',project:'ai-task-runner',progress:[0,3],elapsed:'1m',stage:'load',session:'—',goal:'確認 deterministic configuration error 不進 technical retry。'},
+    {id:'T-208',status:'closed',title:'API disconnect probe',runtime:'done',desc:'Same-session recovery PASS，fresh rotation 未觸發。',tags:['live','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[4,4],elapsed:'9m',stage:'Completed',session:'same',goal:'模擬 API disconnect 並驗證 bounded-session recovery。'}
+  ],
+  history:[
+    {id:'T-301',status:'closed',title:'Workflow Studio CRUD browser test',runtime:'done',desc:'Create / rename / duplicate / delete 全部通過。',tags:['UI','PASS'],workflow:'mixed.yaml',project:'ai-task-runner',progress:[5,5],elapsed:'11m',stage:'Completed',session:'fresh final',goal:'Browser CRUD coverage。'},
+    {id:'T-302',status:'closed',title:'Dynamic Handoff regression',runtime:'done',desc:'Role session reuse 與 Final Review PASS。',tags:['handoff','PASS'],workflow:'dynamic_handoff.yaml',project:'ai-task-runner',progress:[7,7],elapsed:'34m',stage:'Completed',session:'role + fresh',goal:'驗證 Dynamic Handoff 不建立第二個 orchestrator。'},
+    {id:'T-303',status:'closed',title:'YAML list endurance 8 items',runtime:'done',desc:'8 個 child RunRequests 依序完成。',tags:['YAML','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[8,8],elapsed:'2h 6m',stage:'Completed',session:'mixed',goal:'驗證 YAML List sequential execution 與 durable resume。'},
+    {id:'T-304',status:'closed',title:'Final AI quorum 3/2',runtime:'done',desc:'3 fresh votes，2 PASS，quorum satisfied。',tags:['validator','PASS'],workflow:'ralphy_ai_validate.yaml',project:'ai-task-runner',progress:[3,3],elapsed:'8m',stage:'Completed',session:'fresh votes',goal:'驗證 Final AI 每票獨立 Fresh Session。'}
+  ],
+  empty:[]
+};
+let currentPreset='today';
+let taskMap={};
+let runningOnly=false;
+let dragged=null;
+let listMode=false;
+
+function runtimeLabel(rt){return {running:'Running',recover:'Recovering',stopped:'Stopped',done:'Completed',idle:'Idle',failed:'Failed',attention:'Needs Attention'}[rt]||rt}
+function statusLabel(st){return {new:'New',ongoing:'Ongoing',paused:'Paused',closed:'Closed'}[st]||st}
+function runtimeClass(rt){return ['running','recover','stopped','done','failed','attention'].includes(rt)?rt:''}
+function progressPct(t){return t.progress[1]?Math.round(t.progress[0]/t.progress[1]*100):0}
+function workspaceName(t){
+  if(t.workspaceKind==='worktree')return `Worktree · ${t.branch||('task/'+t.id)}`;
+  if(t.workspaceKind==='batch')return 'Multi-step';
+  return 'Main workspace';
+}
+function worktreeRootFor(project,id){
+  const root=projectMeta[project]?.path||project||'C:\\project';
+  const parts=root.split('\\'),name=parts.pop()||'project';
+  return [...parts,name+'-worktrees',id].join('\\');
+}
+function hydrateTaskWorkspace(t,mainOwners){
+  if(!t.workspacePolicy)t.workspacePolicy='auto';
+  if(t.workspaceKind)return t;
+  const active=['running','recover'].includes(t.runtime);
+  if(active&&mainOwners.has(t.project)){
+    t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id);
+  }else{
+    t.workspaceKind='main';t.branch=projectMeta[t.project]?.branch||'main';t.executionRoot=projectMeta[t.project]?.path||t.project;
+    if(active)mainOwners.add(t.project);
+  }
+  return t;
+}
+function taskProjectKeys(t){
+  const refs=[];
+  if(t?.project)refs.push(t.project);
+  if(t?.projectContext)refs.push(t.projectContext);
+  const items=Array.isArray(t?.items)&&t.items.length?t.items:(Array.isArray(t?.listItems)?t.listItems:[]);
+  items.forEach(x=>{if(x?.project)refs.push(x.project)});
+  const keys=[];
+  refs.forEach(ref=>{
+    const key=projectMeta[ref]?ref:Object.keys(projectMeta).find(k=>projectRefMatches(ref,k));
+    const value=key||String(ref||'').trim();
+    if(value&&!keys.includes(value))keys.push(value);
+  });
+  return keys;
+}
+function taskCardHtml(t){
+  const progress=t.progress[1]?`<span class="progress"><span class="bar"><i style="width:${progressPct(t)}%"></i></span>${t.progress[0]} / ${t.progress[1]}</span>`:`<span>#${t.id}</span>`;
+  const workspaceClass=t.workspaceKind==='batch'?'batch-tag':'workspace-tag';
+  const projectKeys=taskProjectKeys(t),projectTag=projectKeys.length>1?`<span class="tag multi-project-tag" title="${escapeAttr(projectKeys.join(' · '))}">${projectKeys.length} Projects</span>`:'';
+  return `<article class="taskcard ${t.runtime==='attention'?'attention':''} ${t.runtime==='failed'?'failed':''}" draggable="true" data-id="${t.id}" data-title="${escapeHtml(t.title)}" data-runtime="${t.runtime}">
+    <div class="cardtop"><span class="handle">⠿</span><div class="tasktitle">${escapeHtml(t.title)}</div><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span></div>
+    <div class="carddesc" title="${escapeAttr(t.desc||'')}">${escapeHtml(t.desc)}</div><div class="cardmeta"><span class="tag ${workspaceClass}">${escapeHtml(workspaceName(t))}</span>${projectTag}${t.tags.map(x=>`<span class="tag">${escapeHtml(x)}</span>`).join('')}</div>
+    <div class="cardfoot">${progress}<span>${escapeHtml(t.elapsed)}</span></div></article>`;
+}
+function renderBoard(preset=currentPreset){
+  currentPreset=preset;taskMap={};
+  document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
+  const mainOwners=new Set();
+  (taskPresets[preset]||[]).forEach(source=>{
+    const t=hydrateTaskWorkspace({...source,tags:[...(source.tags||[])]},mainOwners);
+    taskMap[t.id]=t;
+    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+    if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
+  });
+  bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
+}
+const BOARD_TRANSITIONS={
+  new:new Set(['ongoing','closed']),
+  ongoing:new Set(['paused','closed']),
+  paused:new Set(['new','ongoing','closed']),
+  closed:new Set(['new'])
+};
+function boardMoveAllowed(t,target){
+  if(!t||!target)return {ok:false,reason:'Unknown target'};
+  if(t.status===target)return {ok:true,reason:'Same status'};
+  if(!BOARD_TRANSITIONS[t.status]?.has(target)){
+    return {ok:false,reason:`${statusLabel(t.status)} 不允許直接移到 ${statusLabel(target)}`};
+  }
+  if(target==='closed'&&['running','recover'].includes(t.runtime)){
+    return {ok:false,reason:'執行中的 Task 不直接 Closed；先移到 Paused（會 Stop）或從詳細頁 Stop'};
+  }
+  return {ok:true,reason:''};
+}
+function syncRuntimeForBoardMove(t,oldStatus,newStatus){
+  if(t.workspaceKind==='batch'&&t.id===batchParentTaskId){
+    if(newStatus==='paused'&&batchState.status==='running'){
+      clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
+      const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);if(item)item.querySelector('.orderchip').textContent='Stopped';
+      t.runtime='stopped';pushTaskHistory(t,'Board pause · Task List stopped · child state preserved');return;
+    }
+    if(oldStatus==='paused'&&newStatus==='ongoing'&&batchState.status==='stopped'){
+      batchState.status='running';setBatchControls();batchRunTimer=setInterval(batchTick,900);
+      t.runtime='running';pushTaskHistory(t,'Board resume · Task List continued');return;
+    }
+  }
+  if(newStatus==='paused'&&['running','recover'].includes(t.runtime)){
+    t.runtime='stopped';
+    t.desc='由 Board 移到 Paused；mock Stop 已送出，durable state 保留。';
+    pushTaskHistory(t,'Board Ongoing → Paused · Stop accepted · resumable');
+  }else if(oldStatus==='paused'&&newStatus==='ongoing'&&['stopped','attention'].includes(t.runtime)){
+    t.runtime='running';
+    t.desc='由 Board Paused → Ongoing；mock Resume 從 durable state 繼續。';
+    pushTaskHistory(t,'Board Paused → Ongoing · Resume accepted');
+  }else{
+    pushTaskHistory(t,`Board ${statusLabel(oldStatus)} → ${statusLabel(newStatus)}`);
+  }
+}
+function clearDropHints(){
+  document.querySelectorAll('.dropzone').forEach(z=>z.classList.remove('over','allowed','blocked'));
+}
+function paintDropHints(t){
+  document.querySelectorAll('.dropzone').forEach(zone=>{
+    const target=zone.closest('.col')?.dataset.status;
+    const rule=boardMoveAllowed(t,target);
+    zone.classList.toggle('allowed',rule.ok&&target!==t.status);
+    zone.classList.toggle('blocked',!rule.ok);
+  });
+}
+function bindTaskCards(){
+  document.querySelectorAll('.taskcard').forEach(card=>{
+    card.onclick=()=>{if(!card.classList.contains('dragging'))openTask(card)};
+    card.addEventListener('dragstart',e=>{
+      dragged=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move';
+      paintDropHints(taskMap[card.dataset.id]);
+    });
+    card.addEventListener('dragend',()=>{
+      card.classList.remove('dragging');dragged=null;clearDropHints();updateCounts();renderTaskList();
+    });
+  });
+}
+document.querySelectorAll('.dropzone').forEach(zone=>{
+  zone.addEventListener('dragover',e=>{
+    if(!dragged)return;
+    const t=taskMap[dragged.dataset.id],target=zone.closest('.col')?.dataset.status,rule=boardMoveAllowed(t,target);
+    if(rule.ok){e.preventDefault();zone.classList.add('over');e.dataTransfer.dropEffect='move'}
+    else{e.dataTransfer.dropEffect='none'}
+  });
+  zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
+  zone.addEventListener('drop',e=>{
+    e.preventDefault();zone.classList.remove('over');
+    if(!dragged)return;
+    const id=dragged.dataset.id,t=taskMap[id],old=t?.status,now=zone.closest('.col')?.dataset.status;
+    const rule=boardMoveAllowed(t,now);
+    if(!rule.ok){showToast(`不可移動：${rule.reason}`);return}
+    if(old===now){showToast(`Task 已在 ${statusLabel(now)}`);return}
+    syncRuntimeForBoardMove(t,old,now);t.status=now;
+    renderBoardFromMap();
+    showToast(`Task: ${statusLabel(old)} → ${statusLabel(now)} · Runtime ${runtimeLabel(t.runtime)}`);
+  });
+});
+function updateCounts(){
+  document.querySelectorAll('.col').forEach(c=>c.querySelector('.count').textContent=c.querySelectorAll('.taskcard:not([hidden])').length);
+  document.getElementById('taskNavCount').textContent=Object.keys(taskMap).length;
+  const n=Object.values(taskMap).filter(t=>['running','recover'].includes(t.runtime)).length;
+  document.getElementById('runningCount').textContent=`${n} Running`;
+}
+function applyTaskFilter(){
+  const q=document.getElementById('taskSearch').value.trim().toLowerCase();
+  document.querySelectorAll('.taskcard').forEach(c=>{
+    const t=taskMap[c.dataset.id];c.hidden=!!((q&&!c.textContent.toLowerCase().includes(q))||(runningOnly&&!['running','recover'].includes(t?.runtime)));
+  });updateCounts();
+}
+document.getElementById('taskSearch').addEventListener('input',applyTaskFilter);
+document.getElementById('filterBtn').addEventListener('click',e=>{runningOnly=!runningOnly;e.currentTarget.textContent=runningOnly?'顯示全部':'只看執行中';applyTaskFilter()});
+document.getElementById('boardPreset').addEventListener('change',e=>{runningOnly=false;document.getElementById('filterBtn').textContent='只看執行中';document.getElementById('taskSearch').value='';renderBoard(e.target.value);showToast(`載入 mock board：${e.target.options[e.target.selectedIndex].text}`)});
+document.querySelectorAll('.coladd').forEach(b=>b.onclick=()=>document.getElementById('newTask').click());
+let taskSequence=420;
+function openModal(id){document.getElementById(id)?.classList.add('open')}
+function closeModal(id){document.getElementById(id)?.classList.remove('open')}
+document.querySelectorAll('[data-close-modal]').forEach(b=>b.onclick=()=>closeModal(b.dataset.closeModal));
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
+document.getElementById('newTask').addEventListener('click',()=>{
+  document.getElementById('newTaskTitle').value='New Task';
+  document.getElementById('newTaskGoal').value='Implement the requested change and run focused verification.';
+  openModal('newTaskModal');
+});
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const title=document.getElementById('newTaskTitle').value.trim(),goal=document.getElementById('newTaskGoal').value.trim();
+  if(!title||!goal){showToast('Task title / Goal 不可空白');return}
+  const id='T-'+(++taskSequence);
+  const project=document.getElementById('newTaskProject').value,workflow=document.getElementById('newTaskWorkflow').value;
+  const t={id,status:'new',title,runtime:'idle',desc:'尚未開始；Board 狀態與 Runner runtime 分開。',tags:['workflow'],workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal};
+  taskMap[id]=t;
+  document.querySelector('.col[data-status="new"] .dropzone').insertAdjacentHTML('afterbegin',taskCardHtml(t));
+  bindTaskCards();renderTaskList();updateCounts();closeModal('newTaskModal');showToast('已建立 mock Task · 尚未執行');
+  openTaskById(id);
+};
+function renderTaskList(){
+  const host=document.getElementById('taskListView');
+  host.innerHTML=Object.values(taskMap).map(t=>`<div class="taskrow" data-taskrow="${t.id}"><span class="pill">${statusLabel(t.status)}</span><strong>${escapeHtml(t.title)}</strong><span class="runtime ${runtimeClass(t.runtime)}">${runtimeLabel(t.runtime)}</span><span>${escapeHtml(t.workflow)}</span><span>${t.progress[0]} / ${t.progress[1]}</span></div>`).join('');
+  host.querySelectorAll('[data-taskrow]').forEach(r=>r.onclick=()=>openTaskById(r.dataset.taskrow));
+}
+document.getElementById('listMode').onclick=e=>{
+  listMode=!listMode;document.getElementById('board').classList.toggle('hiddenboard',listMode);document.getElementById('taskListView').classList.toggle('active',listMode);
+  e.currentTarget.classList.toggle('active',listMode);e.currentTarget.previousElementSibling.classList.toggle('active',!listMode);
+};
+
+function renderBoardFromMap(){
+  document.querySelectorAll('.dropzone').forEach(z=>z.innerHTML='');
+  Object.values(taskMap).forEach(t=>{    const z=document.querySelector(`.col[data-status="${t.status}"] .dropzone`);
+    if(z)z.insertAdjacentHTML('beforeend',taskCardHtml(t));
+  });
+  bindTaskCards();renderTaskList();applyTaskFilter();updateCounts();
+}
+function pushTaskHistory(t,message){
+  if(!t.history)t.history=[['20:01','Task created'],['20:02','Workflow snapshot frozen']];
+  const now=new Date(),hh=String(now.getHours()).padStart(2,'0'),mm=String(now.getMinutes()).padStart(2,'0');
+  t.history.push([`${hh}:${mm}`,message]);
+}
+let currentTaskId='';
+function renderDrawerActions(t){
+  const primary=document.getElementById('taskPrimaryDemo');
+  const reset=document.getElementById('taskResetDemo');
+  const rerun=document.getElementById('taskSecondaryDemo');
+  primary.hidden=false;reset.hidden=true;rerun.hidden=true;
+  primary.className='btn primary';
+  if(t.runtime==='idle'){primary.textContent='Run'}
+  else if(['running','recover'].includes(t.runtime)){primary.textContent='Stop';primary.className='btn danger'}
+  else if(['stopped','attention'].includes(t.runtime)){primary.textContent='Resume';reset.hidden=false}
+  else{primary.hidden=true}
+  if(['failed','done'].includes(t.runtime)){rerun.hidden=false;rerun.textContent='Rerun'}
+  if(t.runtime==='failed')reset.hidden=false;
+}
+function taskDetails(t){
+  const generic=(t.history&&t.history.length?t.history:[
+    ['20:01','Task created'],['20:02','Workflow snapshot frozen'],['20:07',`${t.stage} · ${runtimeLabel(t.runtime)}`]
+  ]);
+  const timeline=t.runtime==='done'
+    ?[['planning','PASS · 20:01','done'],['execute','PASS · 20:07','done'],['review','PASS · 20:12','done'],['final_validate','PASS · 20:15','done']]
+    :t.runtime==='failed'
+    ?[['load','FAIL CLOSED · schema error','now'],['execute','Not started','']]
+    :t.runtime==='attention'
+    ?[['planning','PASS · 20:01','done'],['execute','PASS · 20:06','done'],['review','Heartbeat stale · Needs Attention','now'],['final_validate','Waiting','']]
+    :t.runtime==='recover'
+    ?[['planning','PASS · 20:01','done'],['execute','HTTP 503 · retrying same session','now'],['review','Waiting',''],['final_validate','Waiting','']]
+    :t.runtime==='stopped'
+    ?[['planning','PASS · 18:01','done'],['execute','Stopped by user · resumable','now'],['review','Waiting','']]
+    :[['planning','PASS · 20:01','done'],['execute','PASS · 20:07','done'],[t.stage||'review',`${runtimeLabel(t.runtime)} · ${t.session}`,'now'],['final_validate','Waiting','']];
+  const output=t.runtime==='recover'
+    ?'[20:07:11] backend: HTTP 503 service unavailable\n[20:07:16] StageExecutor: retry delay 5s\n[20:07:21] same-session attempt 2/2\n[20:07:22] next failure will rotate only this Stage session'
+    :t.runtime==='failed'
+    ?'[20:07:11] workflow loader: invalid target "repair"\n[20:07:11] deterministic configuration error\n[20:07:11] fail closed · technical retry disabled for this error'
+    :t.runtime==='attention'
+    ?'[20:07:11] runtime projection: heartbeat stale\n[20:07:11] allowed actions: Resume / Reset\n[20:07:11] UI must not infer Running from stale browser flags'
+    :t.runtime==='done'
+    ?'[20:15:03] final_validate vote 1 PASS\n[20:15:08] final_validate vote 2 PASS\n[20:15:08] quorum satisfied\n[20:15:09] run completed'
+    :'[20:07:11] stage: inspecting modified files\n[20:07:12] checking runtime ownership\n[20:07:15] validating UI interactions\n[20:07:19] bounded live output continues...';
+  return {timeline,output,history:generic};
+}
+function renderTaskLiveOutput(t){
+  const dot=document.getElementById('drawerLiveDot'),indicator=document.getElementById('drawerLiveIndicator');
+  const cls=t.runtime==='running'?'running':t.runtime==='recover'?'recover':t.runtime==='done'?'done':t.runtime==='failed'?'failed':'';
+  dot.className='task-live-dot '+cls;
+  indicator.textContent=runtimeLabel(t.runtime);
+  indicator.className='task-live-indicator '+(t.runtime==='stopped'?'stopped':t.runtime==='done'?'done':t.runtime==='recover'?'recover':'');
+  document.getElementById('drawerLiveProgress').textContent=`${t.progress[0]} / ${t.progress[1]} TODO · ${t.stage}`;
+  document.getElementById('drawerLiveUpdated').textContent='Last update now';
+  document.getElementById('drawerLiveElapsed').textContent=t.elapsed==='—'?'00:00:00':t.elapsed;
+  const activity=t.runtime==='recover'
+    ?['HTTP 503 service unavailable','StageExecutor same-session retry','Next failure rotates only this Stage session']
+    :t.runtime==='running'
+    ?['Inspecting modified files',`Stage ${t.stage} is active`,'Waiting for structured StageResult']
+    :t.runtime==='stopped'
+    ?['Stopped by user','Durable state preserved','Resume continues saved Workflow snapshot']
+    :t.runtime==='done'
+    ?['Final AI validation passed','Workflow completed','State committed']
+    :t.runtime==='failed'
+    ?['Deterministic error','Fail closed','Technical retry not entered']
+    :['Runtime is not active'];
+  document.getElementById('drawerLiveActivityList').innerHTML=activity.map(x=>`<div>${escapeHtml(x)}</div>`).join('');
+}
+function openTask(card){openTaskById(card.dataset.id)}
+function openTaskById(id){
+  const t=taskMap[id];if(!t)return;
+  currentTaskId=id;
+  const d=taskDetails(t);
+  document.getElementById('drawerTaskId').textContent=t.id;
+  document.getElementById('drawerProjectName').textContent=t.project;
+  document.getElementById('drawerTitle').textContent=t.title;
+  document.getElementById('drawerBoardStatus').textContent=statusLabel(t.status);
+  document.getElementById('drawerStatusValue').textContent=statusLabel(t.status);
+  document.getElementById('drawerWorkflow').textContent=t.workflow;
+  document.getElementById('drawerProject').textContent=projectMeta[t.project]?.path||t.project;
+  document.getElementById('drawerWorkspace').textContent=workspaceName(t);
+  document.getElementById('drawerBranch').textContent=t.branch||'—';
+  document.getElementById('drawerExecutionRoot').textContent=t.executionRoot||projectMeta[t.project]?.path||t.project;
+  document.getElementById('drawerBackend').textContent=t.runtime==='recover'?'Qwen · qwen3-coder-plus':'Default backend';
+  document.getElementById('drawerGoal').textContent=t.goal;
+  document.getElementById('metricProgress').textContent=`${t.progress[0]} / ${t.progress[1]}`;
+  document.getElementById('metricElapsed').textContent=t.elapsed;
+  document.getElementById('metricSession').textContent=t.session;
+  document.getElementById('drawerStage').textContent='Stage: '+t.stage;
+  document.getElementById('drawerProgressText').textContent=`${t.progress[0]} / ${t.progress[1]}`;
+  document.getElementById('drawerStageProgress').style.width=progressPct(t)+'%';
+  const badge=document.getElementById('drawerRuntime'),inline=document.getElementById('drawerRuntimeInline');
+  [badge,inline].forEach(x=>{x.textContent=runtimeLabel(t.runtime);x.className=(x===badge?'pill ':'runtime ')+(t.runtime==='done'?'pass':t.runtime==='stopped'||t.runtime==='failed'?'fail':t.runtime==='idle'?'':t.runtime==='attention'||t.runtime==='recover'||t.runtime==='running'?'run':'')});
+  document.getElementById('drawerTimeline').innerHTML=d.timeline.map(([n,m,c])=>`<div class="event ${c}"><strong>${escapeHtml(n)}</strong><small>${escapeHtml(m)}</small></div>`).join('');
+  document.getElementById('drawerConsole').textContent=d.output;
+  renderTaskLiveOutput(t);
+  document.getElementById('drawerHistory').innerHTML=d.history.map(([time,msg])=>`<div class="history-row"><time>${time}</time><span>${escapeHtml(msg)}</span></div>`).join('');
+  renderDrawerActions(t);
+  document.querySelectorAll('.drawertab').forEach((b,i)=>b.classList.toggle('active',i===0));document.querySelectorAll('.drawer-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
+  document.getElementById('taskOverlay').classList.add('open');
+}
+document.querySelectorAll('[data-drawertab]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-drawertab]').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-'+b.dataset.drawertab));
+});
+const taskDrawer=document.querySelector('#taskOverlay .drawer');
+const drawerExpand=document.getElementById('drawerExpand');
+function syncDrawerExpand(){
+  const expanded=taskDrawer.classList.contains('expanded');
+  drawerExpand.setAttribute('aria-pressed',String(expanded));
+  drawerExpand.setAttribute('aria-label',expanded?'Collapse task workspace':'Expand task workspace');
+  drawerExpand.title=expanded?'Collapse task workspace':'Expand task workspace';
+  drawerExpand.textContent=expanded?'⤡':'⤢';
+}
+drawerExpand.onclick=()=>{taskDrawer.classList.toggle('expanded');syncDrawerExpand()};
+syncDrawerExpand();
+document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
+document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(t.kind==='list'||t.workspaceKind==='batch'){
+    if(t.runtime==='idle'){openTaskListEditor(t.id);showToast('Open Task List Editor');return}
+    if(['running','recover'].includes(t.runtime)){
+      if(t.id!==batchParentTaskId)openTaskListEditor(t.id);
+      document.getElementById('stopBatch').click();openTaskById(t.id);return;
+    }
+    if(['stopped','attention','failed'].includes(t.runtime)){
+      if(t.id!==batchParentTaskId)openTaskListEditor(t.id);
+      document.getElementById('resumeBatch').click();openTaskById(t.id);return;
+    }
+  }
+  if(t.runtime==='idle'){
+    if(t.workspaceKind==='main'){
+      const busy=mainBusyTask(t.project);
+      if(busy&&busy.id!==t.id){
+        if(t.workspacePolicy==='auto'){
+          t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id);
+          pushTaskHistory(t,`Main busy by ${busy.id} · Auto switched to isolated worktree`);
+        }else{showToast(`Main workspace 正被 ${busy.id} 使用；請改用 Worktree`);return}
+      }
+    }
+    t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';t.desc='Runner 已啟動；Board 與 runtime 仍由不同狀態來源顯示。';
+    if(t.status==='new')t.status='ongoing';
+    pushTaskHistory(t,'Run started · server-side action guard accepted');
+    showToast('Mock Run started');
+  }else if(['running','recover'].includes(t.runtime)){
+    t.runtime='stopped';t.desc='User stop；durable state 保留，可 Resume / Reset。';
+    pushTaskHistory(t,'Stopped by user · resumable');
+    showToast('Mock Stop · 現在可拖到 Paused / Closed');
+  }else if(['stopped','attention'].includes(t.runtime)){
+    t.runtime='running';t.desc='Resume from durable state；沿用既有 Workflow snapshot。';
+    if(t.status==='paused')t.status='ongoing';
+    pushTaskHistory(t,'Resume accepted · continuing saved state');
+    showToast('Mock Resume');
+  }
+  renderBoardFromMap();openTaskById(t.id);
+};
+document.getElementById('taskResetDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(t.workspaceKind==='batch'&&t.id===batchParentTaskId&&batchState.status==='stopped'){document.getElementById('resetBatch').click();openTaskById(t.id);return}
+  t.runtime='idle';t.stage='Idle';t.session='—';t.progress=[0,t.progress[1]||4];t.elapsed='—';t.desc='Runtime 已 Reset；Board 狀態不自動改寫。';
+  pushTaskHistory(t,'Runtime reset · board status preserved');
+  renderBoardFromMap();openTaskById(t.id);showToast('Mock Reset');
+};
+document.getElementById('taskSecondaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.progress=[0,t.progress[1]||4];t.elapsed='0m';t.desc='Rerun started from a new run; previous history remains visible.';
+  pushTaskHistory(t,'Rerun started · new run identity');
+  renderBoardFromMap();openTaskById(t.id);showToast('Mock Rerun');
+};
+document.getElementById('deleteTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Stop');return}
+  delete taskMap[currentTaskId];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast('Mock Task deleted');
+};
+document.getElementById('openWorkflowDemo').onclick=()=>showToast('正式版會開啟目前既有 Workflow Editor，不新增第二套編輯器');
+
+const PROMPT_ASSETS=[
+  'common/ai_validator.md',
+  'common/review.md',
+  'ralphy/ralphy.md',
+  'workflow/generate.md'
+];
+const batchPresets={
+  ui:[
+    {
+      prompt:'Fix feature/ui Task board',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'file',validator:'C:\\Users\\kevin\\ai-task-runner\\ai_task_runner_validator.py',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Review UI/UX and tests',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'inline',aiPrompt:'嚴格檢查 UI/UX、runtime ownership、錯誤狀態與 focused tests；只回傳驗證判斷。',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
+  ],
+  reliability:[
+    {
+      prompt:'Run API disconnect probe',goalMode:'file',goalFile:'C:\\Users\\kevin\\ai-task-runner\\tool\\prompts\\api-disconnect.md',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'mixed.yaml',
+      validatorMode:'file',validator:'C:\\Users\\kevin\\ai-task-runner\\ai_task_runner_validator.py',
+      aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Run HTTP 503 recovery probe',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'ai',validator:'',
+      aiMode:'file',aiPrompt:'',aiFile:'C:\\Users\\kevin\\ai-task-runner\\runner\\assets\\prompts\\common\\ai_validator.md',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Run final AI quorum validation',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
+  ],
+  multi:[
+    {
+      prompt:'Update runner core docs',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',
+      aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Refactor packet parser',goalMode:'file',goalFile:'D:\\dev\\game-client\\tasks\\packet-parser.md',goalAsset:'common/review.md',
+      project:'D:\\dev\\game-client',workflow:'mixed.yaml',
+      validatorMode:'file',validator:'D:\\dev\\game-client\\validation.py',
+      aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    },
+    {
+      prompt:'Review automation scripts',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',
+      project:'D:\\lab\\tools',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'file',validator:'D:\\lab\\tools\\validator.py',
+      aiMode:'inline',aiPrompt:'確認自動化腳本符合驗收條件，禁止修改檔案。',aiFile:'',aiAsset:'common/ai_validator.md'
+    }
+  ],
+  empty:[]
+};
+let batchDraft=[];
+let batchRunTimer=null;
+let batchState={status:'idle',index:0,recovered:false};
+let batchParentTaskId=null;
+let pickerTarget=null;
+
+function cloneBatch(items){return JSON.parse(JSON.stringify(items||[]))}
+function basename(path){return String(path||'').split(/[\\/]/).filter(Boolean).pop()||path||'Untitled'}
+function managedDraftPath(item,index,kind){
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const suffix=kind==='ai'?`${String(index+1).padStart(3,'0')}-ai-validator.md`:`${String(index+1).padStart(3,'0')}-goal.md`;
+  return `${root}\\.ai-task-runner\\drafts\\yaml-tasks\\ui-prototype\\${suffix}`;
+}
+function promptAssetPath(item,asset){
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  return `${root}\\.ai-task-runner\\assets\\prompts\\${String(asset||'common/review.md').replaceAll('/','\\')}`;
+}
+function effectiveGoalFile(item,index){
+  if(item.goalMode==='inline')return managedDraftPath(item,index,'goal');
+  if(item.goalMode==='asset')return promptAssetPath(item,item.goalAsset);
+  return item.goalFile||'';
+}
+function effectiveAiPromptFile(item,index){
+  if(item.aiMode==='inline')return managedDraftPath(item,index,'ai');
+  if(item.aiMode==='asset')return promptAssetPath(item,item.aiAsset);
+  if(item.aiMode==='file')return item.aiFile||'';
+  return '';
+}
+function itemTitle(item,index){
+  if(item.goalMode==='inline')return item.prompt||`RunRequest ${index+1}`;
+  if(item.goalMode==='asset')return `Prompt asset · ${item.goalAsset||'Select asset'}`;
+  return `Prompt file · ${basename(item.goalFile)}`;
+}
+function yamlScalar(value){
+  const s=String(value??'');
+  if(!s)return '""';
+  if(/[\n#]/.test(s))return JSON.stringify(s);
+  return s;
+}
+function batchToYaml(items){
+  return items.map((x,i)=>{
+    const lines=[`- goal_file: ${yamlScalar(effectiveGoalFile(x,i))}`,`  project_root: ${yamlScalar(x.project)}`,`  workflow_file: ${yamlScalar(x.workflow)}`];
+    if(x.validatorMode==='file'&&x.validator)lines.push(`  validator: ${yamlScalar(x.validator)}`);
+    else if(x.validatorMode==='ai')lines.push('  validator: ai');
+    const aiFile=effectiveAiPromptFile(x,i);
+    if(aiFile)lines.push(`  ai_validator_prompt_file: ${yamlScalar(aiFile)}`);
+    lines.push('  stage_retries: -1');
+    return lines.join('\n');
+  }).join('\n\n');
+}
+function modeOptions(value,options){
+  return options.map(([v,label])=>`<option value="${v}" ${value===v?'selected':''}>${label}</option>`).join('');
+}
+function assetOptions(value){
+  return PROMPT_ASSETS.map(x=>`<option value="${escapeAttr(x)}" ${value===x?'selected':''}>${escapeHtml(x)}</option>`).join('');
+}
+function goalSourceBody(x,i){
+  if(x.goalMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="goalFile" data-pick-kind="goal">Choose</button></div><div class="source-note">Runner contract：使用 <strong>goal_file</strong>。可直接貼絕對/相對路徑，正式版由後端驗證檔案是否存在。</div>`;
+  if(x.goalMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="goalAsset">${assetOptions(x.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選擇既有 Prompt asset；執行時解析成檔案路徑，再走 <strong>goal_file</strong>。</div>`;
+  return `<textarea data-item="${i}" data-field="prompt" placeholder="輸入本次 Task Prompt">${escapeHtml(x.prompt||'')}</textarea><div class="source-note">Inline 會先存成受管檔案：<strong>${escapeHtml(managedDraftPath(x,i,'goal'))}</strong><br>Runner 最後仍讀 <strong>goal_file</strong>，不另外發明 inline runtime path。</div>`;
+}
+function validatorSourceBody(x,i){
+  if(x.validatorMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div><div class="source-note">File Validator 使用既有 <strong>validator</strong> 欄位。</div>`;
+  if(x.validatorMode==='ai')return `<div class="source-note">使用 <strong>validator: ai</strong>；AI 驗證 Stage 仍由選定 Workflow 決定。</div>`;
+  return `<div class="source-note">不額外指定 run-level validator；因為已有明確 <strong>workflow_file</strong>，是否有 File / AI Validator 由 Workflow 本身決定。</div>`;
+}
+function aiSourceBody(x,i){
+  if(x.aiMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="aiFile" data-pick-kind="ai">Choose</button></div><div class="source-note">Runner contract：<strong>ai_validator_prompt_file</strong>。</div>`;
+  if(x.aiMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="aiAsset">${assetOptions(x.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選現有 Prompt asset，解析成 <strong>ai_validator_prompt_file</strong>。</div>`;
+  if(x.aiMode==='inline')return `<textarea data-item="${i}" data-field="aiPrompt" placeholder="AI Validator instructions">${escapeHtml(x.aiPrompt||'')}</textarea><div class="source-note">Inline 先存成：<strong>${escapeHtml(managedDraftPath(x,i,'ai'))}</strong>，再用 <strong>ai_validator_prompt_file</strong>。</div>`;
+  return `<div class="source-note">Default：不覆寫 AI Validator Prompt，沿用 Workflow / Runner 既有預設。</div>`;
+}
+function renderBatchDraft(){
+  clearInterval(batchRunTimer);batchState={status:'idle',index:0,recovered:false};setBatchControls();
+  const form=document.getElementById('formList');
+  if(!batchDraft.length){
+    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 Task List。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }else{
+    form.innerHTML=batchDraft.map((x,i)=>`<div class="request" data-req="${i}">
+      <div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div>
+      <div class="row2"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div>
+      <div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small> prompt / goal_file</small></div><select class="source-mode" data-item="${i}" data-field="goalMode">${modeOptions(x.goalMode,[['inline','Inline · managed file'],['file','File path'],['asset','Prompt asset']])}</select></div><div class="source-body">${goalSourceBody(x,i)}</div></div>
+      <div class="validation-grid">
+        <div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small> validator</small></div><select class="source-mode" data-item="${i}" data-field="validatorMode">${modeOptions(x.validatorMode,[['none','None / Workflow owns'],['file','File path'],['ai','AI']])}</select></div><div class="source-body">${validatorSourceBody(x,i)}</div></div>
+        <div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small> ai_validator_prompt_file</small></div><select class="source-mode" data-item="${i}" data-field="aiMode">${modeOptions(x.aiMode,[['default','Default'],['inline','Inline · managed file'],['file','File path'],['asset','Prompt asset']])}</select></div><div class="source-body">${aiSourceBody(x,i)}</div></div>
+      </div>
+    </div>`).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }
+  bindBatchForm();
+  syncBatchViews();
+}
+function renderBatch(key){
+  batchDraft=cloneBatch(batchPresets[key]||[]);
+  renderBatchDraft();
+  document.getElementById('batchLog').textContent=batchDraft.length?'Mock batch is idle. Edit sources, Validate, then Run Batch.':'Empty batch · add a RunRequest to begin.';
+}
+function previewSummary(x,i){
+  const goal=x.goalMode==='inline'?'Inline → managed goal_file':x.goalMode==='asset'?`Prompt asset: ${x.goalAsset}`:`goal_file: ${basename(x.goalFile)}`;
+  const validator=x.validatorMode==='file'?`file validator: ${basename(x.validator)}`:x.validatorMode==='ai'?'validator: ai':'validator: workflow';
+  const ai=x.aiMode==='default'?'AI prompt: default':x.aiMode==='asset'?`AI prompt asset: ${x.aiAsset}`:x.aiMode==='file'?`AI prompt file: ${basename(x.aiFile)}`:'AI prompt: inline → managed file';
+  return `${goal} · ${validator} · ${ai}`;
+}
+function syncBatchViews(){
+  document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const preview=document.getElementById('batchPreview');
+  if(!batchDraft.length){preview.innerHTML='<div class="empty-panel">No child RunRequests</div>';return}
+  preview.innerHTML=batchDraft.map((x,i)=>`<div class="previewitem" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}<br>${escapeHtml(previewSummary(x,i))}</small></div><span class="orderchip">Waiting</span></div>`).join('');
+}
+function bindBatchForm(){
+  document.querySelectorAll('[data-item][data-field]').forEach(el=>{
+    const handler=()=>{
+      const i=+el.dataset.item,field=el.dataset.field;
+      batchDraft[i][field]=el.value;
+      if(['goalMode','validatorMode','aiMode'].includes(field))renderBatchDraft();
+      else syncBatchViews();
+    };
+    el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
+  });
+  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind));
+  document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
+  const add=document.getElementById('addRequest');
+  if(add)add.onclick=()=>{
+    batchDraft.push({
+      prompt:'New child RunRequest',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',
+      project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',
+      validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+    });
+    renderBatchDraft();showToast('新增 mock child RunRequest');
+  };
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{batchDraft.splice(+b.dataset.remove,1);renderBatchDraft()});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];renderBatchDraft()});
+  document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];renderBatchDraft()});
+}
+function openPathPicker(index,field,kind){
+  pickerTarget={index,field};
+  const item=batchDraft[index]||{};
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const options=kind==='validator'
+    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    :kind==='ai'
+      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai-validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
+      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
+  document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
+  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以關閉後直接在輸入框貼路徑。';
+  document.getElementById('pathPickerOptions').innerHTML=options.map((path,i)=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
+  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
+    if(pickerTarget&&batchDraft[pickerTarget.index])batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
+    closeModal('pathPickerModal');renderBatchDraft();showToast('已選擇 mock 路徑');
+  });
+  openModal('pathPickerModal');
+}
+function parseSimpleYamlList(source){
+  const lines=String(source||'').split(/\r?\n/),items=[];let current=null;
+  for(const raw of lines){
+    if(!raw.trim()||raw.trimStart().startsWith('#'))continue;
+    let m=raw.match(/^\s*-\s+([A-Za-z_][\w]*):\s*(.*)$/);
+    if(m){current={};items.push(current);current[m[1]]=m[2].trim().replace(/^["']|["']$/g,'');continue}
+    m=raw.match(/^\s+([A-Za-z_][\w]*):\s*(.*)$/);
+    if(m&&current)current[m[1]]=m[2].trim().replace(/^["']|["']$/g,'');
+  }
+  return items.map((raw,i)=>{
+    const goalFile=raw.goal_file||'',prompt=raw.prompt||raw.goal||'';
+    const aiFile=raw.ai_validator_prompt_file||'';
+    return {
+      prompt:prompt||`Loaded from ${basename(goalFile)}`,
+      goalMode:prompt?'inline':'file',goalFile,goalAsset:'common/review.md',
+      project:raw.project_root||'C:\\Users\\kevin\\ai-task-runner',
+      workflow:raw.workflow_file||'ralphy_ai_validate.yaml',
+      validatorMode:raw.validator?raw.validator==='ai'?'ai':'file':'none',
+      validator:raw.validator&&raw.validator!=='ai'?raw.validator:'',
+      aiMode:aiFile?'file':'default',aiPrompt:'',aiFile,aiAsset:'common/ai_validator.md'
+    };
+  });
+}
+function batchValidationErrors(items){
+  const errors=[];
+  items.forEach((x,i)=>{
+    if(!x.project?.trim())errors.push(`item ${i+1}: project_root is required`);
+    if(!x.workflow?.trim())errors.push(`item ${i+1}: workflow_file is required`);
+    if(x.goalMode==='inline'&&!x.prompt?.trim())errors.push(`item ${i+1}: inline Task Prompt is empty`);
+    if(x.goalMode==='file'&&!x.goalFile?.trim())errors.push(`item ${i+1}: goal_file is empty`);
+    if(x.validatorMode==='file'&&!x.validator?.trim())errors.push(`item ${i+1}: validator path is empty`);
+    if(x.aiMode==='inline'&&!x.aiPrompt?.trim())errors.push(`item ${i+1}: inline AI Validator Prompt is empty`);
+    if(x.aiMode==='file'&&!x.aiFile?.trim())errors.push(`item ${i+1}: ai_validator_prompt_file is empty`);
+  });
+  return errors;
+}
+function setBatchControls(){
+  const locked=['running','stopped'].includes(batchState.status);
+  document.getElementById('stopBatch').hidden=batchState.status!=='running';
+  document.getElementById('resumeBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('resetBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('runBatch').disabled=locked;
+  document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=locked);
+  document.getElementById('yamlEditor').disabled=locked;
+  document.querySelectorAll('[data-yamltab]').forEach(el=>el.disabled=locked);
+}
+function resetBatchRuntime(){
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState={status:'idle',index:0,recovered:false};setBatchControls();
+}
+// YAML is edited only through yamlPlanModal; no Visual/YAML mode switch remains.
+document.getElementById('batchPreset').onchange=e=>{renderBatch(e.target.value);showToast(`載入 ${e.target.options[e.target.selectedIndex].text}`)};
+document.getElementById('yamlEditor').addEventListener('input',()=>{
+  if(batchState.status==='running')return;
+  if(batchState.status==='stopped')batchState.currentDirty=true;
+  document.getElementById('batchLog').textContent=batchState.status==='stopped'
+    ?'YAML edited while Paused. Validate before Resume; current item will fresh restart.'
+    :'YAML edited manually. Press Validate to parse known RunRequest fields back into Form.';
+});
+document.getElementById('validateYaml').onclick=()=>{
+  const current=document.getElementById('yamlEditor').value.trim(),generated=batchToYaml(batchDraft).trim();
+  let items=batchDraft;
+  if(current!==generated){
+    items=parseSimpleYamlList(current);
+    if(items.length)batchDraft=items;
+  }
+  const errors=batchValidationErrors(items);
+  if(!items.length)errors.push('batch must contain at least one child RunRequest');
+  if(errors.length){
+    showToast(`YAML invalid · ${errors.length} issue(s)`);
+    document.getElementById('batchLog').textContent='[validate] FAIL\n- '+errors.join('\n- ');
+    return;
+  }
+  if(current!==generated)renderBatchDraft();
+  showToast(`YAML List valid · ${items.length} child RunRequests`);
+  document.getElementById('batchLog').textContent=`[validate] PASS · ${items.length} child RunRequests\n[validate] goal_file / validator / ai_validator_prompt_file mapped to current RunRequest contract\n[validate] Formal implementation calls the existing backend loader/schema path.`;
+};
+function ensureBatchParentTask(){
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){
+    const id='YAML-'+(++taskSequence),preset=document.getElementById('batchPreset');
+    batchParentTaskId=id;
+    t={id,status:'ongoing',title:`Task List · ${preset.options[preset.selectedIndex]?.text||'Batch'}`,runtime:'running',desc:`Sequential YAML List · ${batchDraft.length} child RunRequests`,tags:['Task List',`${batchDraft.length} items`],workflow:'YAML List',project:currentProjectKey||'ai-task-runner',progress:[0,batchDraft.length],elapsed:'0m',stage:`Item 1 / ${batchDraft.length}`,session:'batch',goal:'Execute the current Task Lists batch through the existing YAML List / RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${batchDraft.length} child RunRequest workspaces`};
+    taskMap[id]=t;
+  }
+  return t;
+}
+function updateBatchParentTask(runtime,status,index=batchState.index){
+  const t=ensureBatchParentTask();
+  t.runtime=runtime;t.status=status;t.progress=[Math.min(index,batchDraft.length),batchDraft.length];
+  t.stage=batchDraft.length?`YAML item ${Math.min(index+1,batchDraft.length)} / ${batchDraft.length}`:'Batch';
+  t.desc=`Sequential YAML List · ${batchDraft.length} child RunRequests · ${runtimeLabel(runtime)}`;
+  t.tags=['Task List',`${batchDraft.length} items`];
+  t.executionRoot=`${batchDraft.length} child RunRequest workspaces`;
+  renderBoardFromMap();
+  return t;
+}
+function finishBatch(status,message){
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status=status;setBatchControls();
+  if(status==='completed')updateBatchParentTask('done','closed',batchDraft.length);
+  else if(status==='failed')updateBatchParentTask('failed','paused',batchState.index);
+  if(message)document.getElementById('batchLog').textContent+=`\n${message}`;
+}
+function batchTick(){
+  if(batchState.status!=='running')return;
+  const items=[...document.querySelectorAll('.previewitem')],log=document.getElementById('batchLog');
+  if(batchState.index>=items.length){finishBatch('completed','[done] batch completed');showToast('Mock batch completed');return}
+  const item=items[batchState.index],outcome=document.getElementById('batchOutcome').value;
+  items.forEach((x,n)=>{if(n!==batchState.index)x.classList.remove('active')});
+  item.classList.add('active');item.querySelector('.orderchip').textContent='Running';
+  if(outcome==='recover'&&batchState.index===0&&!batchState.recovered){
+    batchState.recovered=true;item.querySelector('.orderchip').textContent='Recovering';
+    updateBatchParentTask('recover','ongoing',batchState.index);
+    log.textContent+='\n[00:05] item 1 · HTTP 503\n[00:10] StageExecutor same-session retry';return;
+  }
+  if(outcome==='fail'&&batchState.index===1){
+    item.classList.remove('active');item.querySelector('.orderchip').textContent='Failed';
+    finishBatch('failed','[00:12] item 2 · deterministic validation FAIL\n[00:12] batch stopped');
+    showToast('Mock batch failed at item 2');return;
+  }
+  item.classList.remove('active');item.classList.add('done');item.querySelector('.orderchip').textContent='PASS';
+  log.textContent+=`\n[00:${String((batchState.index+1)*6).padStart(2,'0')}] item ${batchState.index+1} PASS`;
+  batchState.index++;
+  updateBatchParentTask('running','ongoing',batchState.index);
+}
+document.getElementById('runBatch').onclick=()=>{
+  const errors=batchValidationErrors(batchDraft);
+  if(!batchDraft.length)errors.push('batch is empty');
+  if(errors.length){document.getElementById('batchLog').textContent='[run] BLOCKED\n- '+errors.join('\n- ');showToast('請先修正 Batch 設定');return}
+  clearInterval(batchRunTimer);
+  document.querySelectorAll('.previewitem').forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
+  batchState={status:'running',index:0,recovered:false};setBatchControls();
+  batchParentTaskId=null;
+  updateBatchParentTask('running','ongoing',0);
+  document.getElementById('batchLog').textContent='[00:00] batch started · sequential child RunRequests\n[00:00] one Task List parent Task created in Tasks\n[00:00] inline sources materialized into .ai-task-runner/drafts/yaml-tasks/...';
+  batchTick();batchRunTimer=setInterval(batchTick,900);
+};
+document.getElementById('stopBatch').onclick=()=>{
+  if(batchState.status!=='running')return;
+  clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
+  if(item)item.querySelector('.orderchip').textContent='Stopped';
+  updateBatchParentTask('stopped','paused',batchState.index);
+  document.getElementById('batchLog').textContent+='\n[user] batch stop requested · current child durable state preserved';
+  showToast('Mock Batch stopped · Tasks parent moved to Paused');
+};
+document.getElementById('resumeBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  batchState.status='running';setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);
+  if(item)item.querySelector('.orderchip').textContent='Running';
+  updateBatchParentTask('running','ongoing',batchState.index);
+  document.getElementById('batchLog').textContent+='\n[user] resume · continue current child RunRequest';
+  batchRunTimer=setInterval(batchTick,900);showToast('Mock Batch resumed · Tasks parent Ongoing');
+};
+
+document.getElementById('resetBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  resetBatchRuntime();
+  syncBatchViews();
+  if(batchParentTaskId&&taskMap[batchParentTaskId]){
+    const t=taskMap[batchParentTaskId];t.runtime='idle';t.status='new';t.progress=[0,batchDraft.length];t.stage='Batch draft';t.desc='Task List reset；draft unlocked for editing.';renderBoardFromMap();
+  }
+  document.getElementById('batchLog').textContent='[reset] stopped batch abandoned · draft unlocked for editing';
+  showToast('Mock Batch reset · parent Task moved to New');
+};
+
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function escapeAttr(s){return escapeHtml(s).replace(/`/g,'&#096;')}
+
+const WORKFLOW_CAPABILITIES={
+  'ralphy_ai_validate.yaml':{file:false,ai:true,label:'AI validation'},
+  'mixed.yaml':{file:true,ai:true,label:'File + AI validation'},
+  'file.yaml':{file:true,ai:false,label:'File validation'},
+  'dynamic_handoff.yaml':{file:false,ai:true,label:'AI validation'}
+};
+function workflowCaps(name){return WORKFLOW_CAPABILITIES[basename(name)]||{file:false,ai:false,label:'Workflow-owned validation'}}
+function workflowCapsHtml(name){
+  const caps=workflowCaps(name),chips=[];
+  if(caps.file)chips.push('<span class="cap-chip">File Validator</span>');
+  if(caps.ai)chips.push('<span class="cap-chip">AI Validator</span>');
+  if(!chips.length)chips.push('<span class="cap-chip neutral">No extra validation input</span>');
+  return chips.join('');
+}
+function sourceTabs(value,modes,attrs=''){
+  return '<div class="source-tabs">'+modes.map(([key,label])=>`<button type="button" class="${value===key?'active':''}" data-source-value="${key}" ${attrs}>${label}</button>`).join('')+'</div>';
+}
+
+let newTaskDraft={
+  goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',
+  validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+};
+function taskGoalBody(){
+  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose</button></div><div class="source-note">執行時使用既有 <strong>goal_file</strong>。</div>`;
+  if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div><div class="source-note">Prompt Asset 解析成檔案路徑後交給 Runner。</div>`;
+  return `<textarea id="taskPromptInline" placeholder="輸入 Task Prompt">${escapeHtml(newTaskDraft.prompt)}</textarea><div class="source-note">Write 模式會存成受管 draft，再以 <strong>goal_file</strong> 執行。</div>`;
+}
+function taskAiBody(){
+  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" id="taskPickAi">Choose</button></div>`;
+  if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
+  if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="AI Validator instructions">${escapeHtml(newTaskDraft.aiPrompt)}</textarea><div class="source-note">Write 模式同樣會先存受管 draft，再交給既有 <strong>ai_validator_prompt_file</strong>。</div>`;
+  return '<div class="source-note">Default：沿用 Workflow / Runner 的 AI Validator Prompt。</div>';
+}
+function captureNewTaskSources(){
+  if(document.getElementById('taskPromptInline'))newTaskDraft.prompt=document.getElementById('taskPromptInline').value;
+  if(document.getElementById('taskGoalFile'))newTaskDraft.goalFile=document.getElementById('taskGoalFile').value;
+  if(document.getElementById('taskGoalAsset'))newTaskDraft.goalAsset=document.getElementById('taskGoalAsset').value;
+  if(document.getElementById('taskValidatorFile'))newTaskDraft.validator=document.getElementById('taskValidatorFile').value;
+  if(document.getElementById('taskAiInline'))newTaskDraft.aiPrompt=document.getElementById('taskAiInline').value;
+  if(document.getElementById('taskAiFile'))newTaskDraft.aiFile=document.getElementById('taskAiFile').value;
+  if(document.getElementById('taskAiAsset'))newTaskDraft.aiAsset=document.getElementById('taskAiAsset').value;
+}
+let newTaskWorkspaceMode='auto';
+function mainBusyTask(project){
+  return Object.values(taskMap||{}).find(t=>t.project===project&&t.workspaceKind==='main'&&['running','recover'].includes(t.runtime));
+}
+function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
+  const busy=mainBusyTask(project);
+  const chosen=mode==='auto'?(busy?'worktree':'main'):mode;
+  if(chosen==='main'&&busy)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用`,busy};
+  if(chosen==='worktree')return {ok:true,kind:'worktree',branch:`task/${id}`,root:worktreeRootFor(project,id),busy};
+  return {ok:true,kind:'main',branch:projectMeta[project]?.branch||'main',root:projectMeta[project]?.path||project,busy};
+}
+function renderNewTaskWorkspace(){
+  const host=document.getElementById('newTaskWorkspace');if(!host)return;
+  const project=document.getElementById('newTaskProject')?.value||'ai-task-runner';
+  const busy=mainBusyTask(project),previewId='T-'+(taskSequence+1);
+  const resolved=resolveTaskWorkspace(project,previewId,newTaskWorkspaceMode);
+  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  host.innerHTML=`<div class="workspace-options">
+    ${option('auto','Auto','Main 有空就直接使用；忙碌時自動建立 isolated worktree。',busy?`Main busy → ${previewId} 將使用 Worktree`:'Main available → 使用 Main')}
+    ${option('main','Main workspace','直接使用專案目前 working tree；同一路徑只能一個 Running Task。',busy?`Busy · ${busy.id} 正在執行`:'Available',!!busy)}
+    ${option('worktree','Isolated worktree','為這個 Task 建立獨立 branch/path，可與同專案其他 Task 同時執行。',`task/${previewId}`)}
+  </div><div class="workspace-preview"><strong>Execution preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
+  host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
+}
+document.getElementById('newTaskProject').addEventListener('change',renderNewTaskWorkspace);
+function renderNewTaskSources(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`<div class="source-card task-source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode')}</div><div class="source-body">${taskGoalBody()}</div></div>`;
+  const fields=[];
+  if(caps.file)fields.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose</button></div></div></div>`);
+  if(caps.ai)fields.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode')}</div><div class="source-body">${taskAiBody()}</div></div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=fields.length?`<div class="validation-grid ${fields.length===1?'one':''}">${fields.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>';
+  document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources()});
+  document.querySelectorAll('[data-task-ai-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.aiMode=b.dataset.sourceValue;renderNewTaskSources()});
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt Asset 仍由原本 Prompts workspace 管理')});
+  renderNewTaskWorkspace();
+}
+document.getElementById('newTaskWorkflow').addEventListener('change',()=>{captureNewTaskSources();renderNewTaskSources()});
+document.getElementById('newTask').addEventListener('click',()=>{
+  newTaskDraft={goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  newTaskWorkspaceMode='auto';
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderNewTaskWorkspace();
+});
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();
+  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();openModal('newTaskModal');
+};
+document.getElementById('createTaskConfirm').onclick=()=>{
+  captureNewTaskSources();
+  let title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let goal='';
+  if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
+  else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+  if(!goal){showToast('Task Prompt 不可空白');return}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  if(!title)title=(newTaskDraft.prompt||goal).replace(/^goal_file:\s*/,'').slice(0,72)||'New Task';
+  const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
+  const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
+  if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
+  const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
+  const t={id,status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspacePolicy:newTaskWorkspaceMode,workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
+  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
+};
+
+function openPathPicker(index,field,kind,context='batch'){
+  pickerTarget=context==='task'?{context:'task',field}:context==='plan'?{context:'plan',index,field}:{context:'batch',index,field};
+  const item=context==='task'?{project:projectMeta[document.getElementById('newTaskProject').value]?.path||'C:\\project'}:(batchDraft[index]||{});
+  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
+  const options=kind==='validator'
+    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    :kind==='ai'
+      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai_validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
+      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
+  document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
+  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以直接貼絕對或相對路徑。';
+  document.getElementById('pathPickerOptions').innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
+  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
+    if(pickerTarget?.context==='task'){
+      newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources();
+    }else if(pickerTarget?.context==='plan'&&batchDraft[pickerTarget.index]){
+      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
+      const t=taskMap[currentTaskId];
+      if(t){commitPlanDraft(t,{markDirty:t.status==='paused'&&pickerTarget.index===batchState.index});renderBoardFromMap();renderExecutionPlan(t);}
+    }else if(pickerTarget&&batchDraft[pickerTarget.index]){
+      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;renderBatchDraft();
+    }
+    closeModal('pathPickerModal');showToast('已選擇 mock 路徑');
+  });
+  openModal('pathPickerModal');
+}
+
+function batchToYaml(items){
+  return items.map((x,i)=>{
+    const caps=workflowCaps(x.workflow);
+    const lines=[`- goal_file: ${yamlScalar(effectiveGoalFile(x,i))}`,`  project_root: ${yamlScalar(x.project)}`,`  workflow_file: ${yamlScalar(x.workflow)}`];
+    if(caps.file&&x.validator)lines.push(`  validator: ${yamlScalar(x.validator)}`);
+    if(caps.ai){const aiFile=effectiveAiPromptFile(x,i);if(aiFile)lines.push(`  ai_validator_prompt_file: ${yamlScalar(aiFile)}`)}
+    lines.push('  stage_retries: -1');
+    return lines.join('\n');
+  }).join('\n\n');
+}
+function yamlSourceTabs(i,field,value,modes){
+  return sourceTabs(value,modes,`data-yaml-source data-item="${i}" data-field="${field}"`);
+}
+function renderBatchDraft(){
+  const form=document.getElementById('formList');
+  if(!batchDraft.length){
+    form.innerHTML='<div class="empty-panel"><div><strong>目前沒有 RunRequest</strong><br><br>按下方按鈕新增第一個 Task List。</div></div><button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }else{
+    form.innerHTML=batchDraft.map((x,i)=>{
+      const caps=workflowCaps(x.workflow),validation=[];
+      if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div></div></div>`);
+      if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(aiSourceBody(x,i),i)}</div></div>`);
+      return `<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(goalSourceBody(x,i),i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>'}</div></div>`;
+    }).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
+  }
+  bindBatchForm();syncBatchViews();
+}
+function bindBatchForm(){
+  document.querySelectorAll('[data-item][data-field]:not([data-yaml-source])').forEach(el=>{
+    const handler=()=>{
+      const i=+el.dataset.item,field=el.dataset.field;batchDraft[i][field]=el.value;
+      if(field==='workflow')renderBatchDraft();else syncBatchViews();
+    };
+    el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
+  });
+  document.querySelectorAll('[data-yaml-source]').forEach(b=>b.onclick=()=>{const i=+b.dataset.item,field=b.dataset.field;if(batchState.status==='stopped'&&i===batchState.index)batchState.currentDirty=true;batchDraft[i][field]=b.dataset.sourceValue;renderBatchDraft()});
+  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind,'batch'));
+  document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
+  const add=document.getElementById('addRequest');
+  if(add)add.onclick=()=>{batchDraft.push({prompt:'New child RunRequest',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validatorMode:'file',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});renderBatchDraft();showToast('新增 mock child RunRequest')};
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{batchDraft.splice(+b.dataset.remove,1);renderBatchDraft()});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];renderBatchDraft()});
+  document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];renderBatchDraft()});
+}
+function batchValidationErrors(items){
+  const errors=[];
+  items.forEach((x,i)=>{
+    const caps=workflowCaps(x.workflow);
+    if(!x.project?.trim())errors.push(`item ${i+1}: project_root is required`);
+    if(!x.workflow?.trim())errors.push(`item ${i+1}: workflow_file is required`);
+    if(x.goalMode==='inline'&&!x.prompt?.trim())errors.push(`item ${i+1}: Task Prompt is empty`);
+    if(x.goalMode==='file'&&!x.goalFile?.trim())errors.push(`item ${i+1}: goal_file is empty`);
+    if(caps.file&&!x.validator?.trim())errors.push(`item ${i+1}: selected Workflow requires File Validator`);
+    if(caps.ai&&x.aiMode==='inline'&&!x.aiPrompt?.trim())errors.push(`item ${i+1}: AI Validator Prompt is empty`);
+    if(caps.ai&&x.aiMode==='file'&&!x.aiFile?.trim())errors.push(`item ${i+1}: ai_validator_prompt_file is empty`);
+  });
+  return errors;
+}
+function previewSummary(x,i){
+  const caps=workflowCaps(x.workflow);
+  const goal=x.goalMode==='inline'?'Write → managed goal_file':x.goalMode==='asset'?`Prompt asset: ${x.goalAsset}`:`goal_file: ${basename(x.goalFile)}`;
+  const validator=caps.file?`file validator: ${basename(x.validator)||'required'}`:'no file validator input';
+  const ai=caps.ai?(x.aiMode==='default'?'AI prompt: default':x.aiMode==='asset'?`AI prompt asset: ${x.aiAsset}`:x.aiMode==='file'?`AI prompt file: ${basename(x.aiFile)}`:'AI prompt: Write → managed file'):'no AI validator input';
+  return `${goal} · ${validator} · ${ai}`;
+}
+
+renderNewTaskSources();
+let currentProjectKey='ai-task-runner';
+function selectProject(key){
+  if(!projectMeta[key])return;
+  currentProjectKey=key;
+  const meta=projectMeta[key];
+  document.querySelectorAll('.project[data-project]').forEach(x=>x.classList.toggle('active',x.dataset.project===key));
+  document.getElementById('projectSwitcherPath').textContent=meta.path;
+  document.getElementById('chatProjectLine').textContent=`${meta.path} · 一般對話，不建立 Runner Task`;
+  if(document.getElementById('newTaskProject'))document.getElementById('newTaskProject').value=key;
+  if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
+}
+// Project click navigation is bound once by the final Project→Chat block.
+document.getElementById('newProjectDemo').onclick=()=>showToast('Mock: New Project 固定在 sidebar 上方；正式版沿用既有 Open/Add Project 流程');
+
+const chatSessions=[
+  {id:'design',name:'UI 設計討論',messages:chatPresets.design.slice()},
+  {id:'debug',name:'Bug investigation',messages:chatPresets.debug.slice()},
+  {id:'review',name:'Code review',messages:chatPresets.review.slice()},
+  {id:'long',name:'Long conversation',messages:chatPresets.long.slice()}
+];
+let activeChatId='design',chatSequence=4;
+function activeChat(){return chatSessions.find(x=>x.id===activeChatId)||chatSessions[0]}
+function syncChatSessionSelect(){
+  const select=document.getElementById('chatPreset');
+  select.innerHTML=chatSessions.map(x=>`<option value="${x.id}" ${x.id===activeChatId?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
+}
+function renderChatSession(){
+  syncChatSessionSelect();
+  const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
+  (session?.messages||[]).forEach(([who,body])=>{
+    const el=document.createElement('div');el.className='msg '+who;
+    el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);
+    box.appendChild(el);
+  });
+  if(!(session?.messages||[]).length){
+    box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這是一個新的獨立 mock session。輸入訊息後只會寫進這個 Chat。</div></div>';
+  }
+  box.scrollTop=box.scrollHeight;
+}
+function renderChat(key){if(chatSessions.some(x=>x.id===key))activeChatId=key;renderChatSession()}
+document.getElementById('chatPreset').onchange=e=>{activeChatId=e.target.value;renderChatSession()};
+document.getElementById('newChat').onclick=()=>{
+  const id='chat-'+(++chatSequence);
+  chatSessions.unshift({id,name:`New Chat ${chatSequence}`,messages:[]});
+  activeChatId=id;renderChatSession();document.getElementById('chatInput').focus();showToast('已建立新的 mock Chat session');
+};
+document.getElementById('renameChat').onclick=()=>{
+  document.getElementById('renameChatInput').value=activeChat()?.name||'';
+  openModal('renameChatModal');setTimeout(()=>document.getElementById('renameChatInput').select(),0);
+};
+document.getElementById('renameChatConfirm').onclick=()=>{
+  const value=document.getElementById('renameChatInput').value.trim();
+  if(!value){showToast('Chat name 不可空白');return}
+  activeChat().name=value;closeModal('renameChatModal');renderChatSession();showToast('Chat renamed');
+};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput'),text=input.value.trim();if(!text)return;
+  const session=activeChat();session.messages.push(['user',text]);
+  const reply=/task|執行|run/i.test(text)?'這是一般 Chat。若要長時間執行，可用「建立 Task」帶到 Task 表單。':'收到。這則回覆只屬於目前 Chat session；切換其他 Chat 後會保留各自歷史。';
+  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+};
+
+// Task List is the only batch-facing UI concept; YAML is an editor mode only.
+ensureBatchParentTask=function(){
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){
+    const id='T-'+(++taskSequence),items=cloneBatch(batchDraft.length?batchDraft:defaultTaskListItems(currentProjectKey));
+    batchParentTaskId=id;
+    t={id,kind:'list',status:'new',title:'New Task List',runtime:'idle',desc:`Task List · ${items.length} child RunRequests`,tags:[`${items.length} items`],workflow:'Task List',project:currentProjectKey,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using existing RunRequest runtime.',workspaceKind:'batch',branch:'—',executionRoot:`${items.length} child workspaces`,listItems:items};
+    taskMap[id]=t;
+  }
+  return t;
+};
+updateBatchParentTask=function(runtime,status,index=batchState.index){
+  const t=ensureBatchParentTask();
+  t.kind='list';t.runtime=runtime;t.status=status;t.progress=[Math.min(index,batchDraft.length),batchDraft.length];
+  t.stage=batchDraft.length?`Item ${Math.min(index+1,batchDraft.length)} / ${batchDraft.length}`:'Task List';
+  t.desc=`Task List · ${batchDraft.length} child RunRequests · ${runtimeLabel(runtime)}`;
+  t.tags=[`${batchDraft.length} items`];t.workflow='Task List';t.listItems=cloneBatch(batchDraft);t.executionRoot=`${batchDraft.length} child workspaces`;
+  renderBoardFromMap();return t;
+};
+// --- Unified Task / Task List mock behavior ---
+function defaultTaskListItems(projectKey){
+  const root=projectMeta[projectKey]?.path||projectKey||'C:\\project';
+  return [
+    {prompt:'Implement the requested change',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'},
+    {prompt:'Review and verify the result',goalMode:'asset',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'asset',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}
+  ];
+}
+
+let newTaskKind='task';
+function renderTaskKindUi(){
+  document.querySelectorAll('[data-task-kind]').forEach(b=>b.classList.toggle('active',b.dataset.taskKind===newTaskKind));
+  const isList=newTaskKind==='list';
+  document.getElementById('newTaskWorkflowField').hidden=isList;
+  document.getElementById('newTaskWorkflowCaps').hidden=isList;
+  document.querySelector('.workspace-selector-wrap').hidden=isList;
+  document.getElementById('newTaskPromptSource').hidden=isList;
+  document.getElementById('newTaskValidationSource').hidden=isList;
+  document.getElementById('newTaskListSetup').hidden=!isList;
+  document.getElementById('createTaskConfirm').textContent=isList?'Create Task List':'Create Task';
+}
+document.querySelectorAll('[data-task-kind]').forEach(b=>b.onclick=()=>{
+  newTaskKind=b.dataset.taskKind;
+  if(newTaskKind==='list'&&document.getElementById('newTaskTitle').value==='New Task')document.getElementById('newTaskTitle').value='New Task List';
+  renderTaskKindUi();
+});
+
+const originalNewTaskClick=()=>{};
+document.getElementById('newTask').addEventListener('click',()=>{newTaskKind='task';renderTaskKindUi()});
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',()=>{newTaskKind='task';renderTaskKindUi()}));
+
+function createTaskListParent(){
+  const title=document.getElementById('newTaskTitle').value.trim();
+  const project=document.getElementById('newTaskProject').value;
+  if(!title){showToast('Task List title 不可空白');return null}
+  const id='T-'+(++taskSequence),items=defaultTaskListItems(project);
+  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} child RunRequests · ready to edit`,tags:[`${items.length} items`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered Task List using the existing YAML List / RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child workspaces',listItems:cloneBatch(items)};
+  taskMap[id]=t;renderBoardFromMap();
+  return t;
+}
+
+document.getElementById('createTaskConfirm').onclick=()=>{
+  if(newTaskKind==='list'){
+    const t=createTaskListParent();if(!t)return;
+    closeModal('newTaskModal');openTaskListEditor(t.id);showToast('Task List created · New');return;
+  }
+  captureNewTaskSources();
+  let title=document.getElementById('newTaskTitle').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  let goal='';
+  if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;
+  else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+  if(!goal){showToast('Task Prompt 不可空白');return}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+  if(!title)title=(newTaskDraft.prompt||goal).replace(/^goal_file:\s*/,'').slice(0,72)||'New Task';
+  const id='T-'+(++taskSequence),project=document.getElementById('newTaskProject').value;
+  const workspace=resolveTaskWorkspace(project,id,newTaskWorkspaceMode);
+  if(!workspace.ok){taskSequence--;showToast(workspace.reason);return}
+  const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');
+  const t={id,kind:'task',status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspacePolicy:newTaskWorkspaceMode,workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
+  taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
+};
+
+document.getElementById('chatToTask').onclick=()=>{
+  const input=document.getElementById('chatInput').value.trim();newTaskKind='task';
+  newTaskDraft={goalMode:'inline',prompt:input||'Convert the current Chat discussion into a tracked Runner Task.',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+  document.getElementById('newTaskTitle').value=input?input.slice(0,72):`Task from ${activeChat()?.name||'Chat'}`;
+  document.getElementById('newTaskProject').value=currentProjectKey;renderNewTaskSources();renderTaskKindUi();openModal('newTaskModal');
+};
+
+function syncTaskListDraftToParent(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
+  t.kind='list';t.listItems=cloneBatch(batchDraft);t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];
+  t.tags=[`${batchDraft.length} items`];
+  t.executionRoot=`${batchDraft.length} child workspaces`;
+  if(t.runtime==='idle')t.desc=`Task List · ${batchDraft.length} child RunRequests · ready to edit`;
+}
+
+function openTaskListEditor(id){
+  const t=taskMap[id];if(!t||!(t.kind==='list'||t.workspaceKind==='batch'))return;
+  document.getElementById('taskOverlay').classList.remove('open');
+  batchParentTaskId=id;
+  batchDraft=cloneBatch(t.listItems?.length?t.listItems:defaultTaskListItems(t.project));
+  if(t.runtime==='running'||t.runtime==='recover'){batchState={status:'running',index:t.progress?.[0]||0,recovered:t.runtime==='recover',currentDirty:false}}
+  else if(t.runtime==='stopped'||t.runtime==='failed'||t.status==='paused'){batchState={status:'stopped',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
+  else if(t.runtime==='done'){batchState={status:'completed',index:batchDraft.length,recovered:false,currentDirty:false}}
+  else{batchState={status:'idle',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
+  document.getElementById('taskListEditorTitle').textContent=t.title;
+  document.getElementById('taskListParentHint').textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
+  renderBatchDraft();showView('yaml');
+}
+document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
+// Legacy Edit List button removed; execution plan is edited in Overview.
+
+const baseOpenTaskById=openTaskById;
+openTaskById=function(id){
+  baseOpenTaskById(id);
+  const t=taskMap[id],isList=!!t&&(t.kind==='list'||t.workspaceKind==='batch');
+  const tab=document.getElementById('drawerItemsTab');tab.hidden=!isList;
+  const host=document.getElementById('drawerListItems');
+  if(!isList){host.innerHTML='';return}
+  const items=t.listItems||[];host.className='drawer-list-items';
+  host.innerHTML=items.map((x,i)=>{
+    const state=i<(t.progress?.[0]||0)?'PASS':(i===(t.progress?.[0]||0)&&['running','recover','stopped','failed'].includes(t.runtime)?runtimeLabel(t.runtime):'Waiting');
+    return `<div class="drawer-list-item ${state==='PASS'?'done':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(state)}</span></div>`;
+  }).join('')||'<div class="empty-panel">No items</div>';
+};
+
+const baseRenderDrawerActions=renderDrawerActions;
+renderDrawerActions=function(t){
+  baseRenderDrawerActions(t);
+  if(t.kind==='list'||t.workspaceKind==='batch'){
+    const p=document.getElementById('taskPrimaryDemo');
+    if(t.runtime==='idle'){p.hidden=false;p.className='btn primary';p.textContent='Run'}
+    else if(['running','recover'].includes(t.runtime)){p.hidden=false;p.className='btn primary';p.textContent='Pause'}
+    else if(['stopped','attention','failed'].includes(t.runtime)){p.hidden=false;p.className='btn primary';p.textContent='Resume'}
+  }
+};
+
+// Task List editor: Running is locked. Paused/New can edit unfinished items.
+const baseRenderBatchDraft=renderBatchDraft;
+const baseSyncBatchViews=syncBatchViews;
+renderBatchDraft=function(){
+  const saved={...batchState},timer=batchRunTimer;
+  baseRenderBatchDraft();
+  batchState=saved;batchRunTimer=timer;setBatchControls();syncTaskListDraftToParent();
+};
+setBatchControls=function(){
+  const running=batchState.status==='running';
+  document.getElementById('stopBatch').hidden=!running;
+  document.getElementById('resumeBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('resetBatch').hidden=batchState.status!=='stopped';
+  document.getElementById('runBatch').disabled=running||batchState.status==='stopped'||batchState.status==='completed';
+  document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=running);
+  document.getElementById('yamlEditor').disabled=running||(batchState.status==='stopped'&&batchState.index>0);
+  document.querySelectorAll('[data-yamltab]').forEach(el=>el.disabled=false);
+  document.querySelectorAll('.request[data-req]').forEach(row=>{
+    const i=+row.dataset.req,completed=i<batchState.index,current=i===batchState.index;
+    row.classList.toggle('completed-lock',completed);
+    if(completed)row.querySelectorAll('input,textarea,select,button').forEach(el=>el.disabled=true);
+    if(batchState.status==='stopped'&&current)row.querySelectorAll('[data-remove],[data-moveup],[data-movedown]').forEach(el=>el.disabled=true);
+  });
+  const add=document.getElementById('addRequest');if(add)add.disabled=running;
+  const hint=document.getElementById('taskListEditHint');
+  if(hint)hint.textContent=running?'Running · list locked':batchState.status==='stopped'?(batchState.index>0?'Paused · completed prefix locked; edit current/future items':'Paused · list editable'):'New / idle · list editable';
+};
+
+syncBatchViews=function(){
+  baseSyncBatchViews();
+  syncTaskListDraftToParent();
+  document.querySelectorAll('.previewitem').forEach((row,i)=>{
+    const chip=row.querySelector('.orderchip');
+    if(i<batchState.index){row.classList.add('done');chip.textContent='PASS'}
+    else if(i===batchState.index&&batchState.status==='running'){row.classList.add('active');chip.textContent=batchState.recovered?'Recovering':'Running'}
+    else if(i===batchState.index&&batchState.status==='stopped'){chip.textContent=batchState.currentDirty?'Restart on resume':'Stopped'}
+  });
+};
+
+const baseBindBatchForm=bindBatchForm;
+bindBatchForm=function(){
+  baseBindBatchForm();
+  document.querySelectorAll('[data-item][data-field]').forEach(el=>{
+    el.addEventListener(el.tagName==='SELECT'?'change':'input',()=>{
+      const i=+el.dataset.item;
+      if(batchState.status==='stopped'&&i===batchState.index){batchState.currentDirty=true;document.getElementById('batchLog').textContent+='\n[edit] current paused item changed · Resume will fresh restart this item'}
+      syncTaskListDraftToParent();
+    });
+  });
+  setBatchControls();
+};
+
+document.getElementById('batchPreset').onchange=e=>{
+  if(batchState.status==='running'){showToast('Running 時不能替換 Task List');return}
+  batchDraft=cloneBatch(batchPresets[e.target.value]||[]);
+  if(batchState.status==='stopped'){batchState.currentDirty=true}
+  renderBatchDraft();showToast(`套用 ${e.target.options[e.target.selectedIndex].text}`);
+};
+
+document.getElementById('runBatch').onclick=()=>{
+  const errors=batchValidationErrors(batchDraft);if(!batchDraft.length)errors.push('Task List is empty');
+  if(errors.length){document.getElementById('batchLog').textContent='[run] BLOCKED\n- '+errors.join('\n- ');showToast('請先修正 Task List');return}
+  let t=batchParentTaskId?taskMap[batchParentTaskId]:null;
+  if(!t){t=createTaskListParent();if(!t)return;batchParentTaskId=t.id}
+  t.listItems=cloneBatch(batchDraft);
+  clearInterval(batchRunTimer);document.querySelectorAll('.previewitem').forEach(i=>{i.classList.remove('active','done');i.querySelector('.orderchip').textContent='Waiting'});
+  batchState={status:'running',index:0,recovered:false,currentDirty:false};setBatchControls();
+  updateBatchParentTask('running','ongoing',0);
+  document.getElementById('batchLog').textContent='[00:00] Task List started · parent Task is Ongoing\n[00:00] child RunRequests stay nested inside the Task';
+  batchTick();batchRunTimer=setInterval(batchTick,900);
+};
+
+document.getElementById('stopBatch').onclick=()=>{
+  if(batchState.status!=='running')return;clearInterval(batchRunTimer);batchRunTimer=null;batchState.status='stopped';batchState.currentDirty=false;setBatchControls();
+  const item=document.querySelector(`.previewitem[data-step="${batchState.index}"]`);if(item)item.querySelector('.orderchip').textContent='Stopped';
+  updateBatchParentTask('stopped','paused',batchState.index);syncTaskListDraftToParent();
+  document.getElementById('batchLog').textContent+='\n[user] Task List paused · completed items locked, remaining items editable';showToast('Task List Paused · 可編輯剩餘 items');
+};
+
+document.getElementById('resumeBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;
+  const restart=batchState.currentDirty;batchState.status='running';batchState.recovered=false;batchState.currentDirty=false;setBatchControls();updateBatchParentTask('running','ongoing',batchState.index);
+  document.getElementById('batchLog').textContent+=restart?'\n[user] Resume · current edited item starts with a fresh child run':'\n[user] Resume · continue current child durable state';
+  batchRunTimer=setInterval(batchTick,900);showToast(restart?'Resume · current item fresh restart':'Task List resumed');
+};
+
+document.getElementById('resetBatch').onclick=()=>{
+  if(batchState.status!=='stopped')return;batchState.currentDirty=false;batchState.recovered=false;
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(t){t.runtime='stopped';t.status='paused';t.stage=`Item ${batchState.index+1} ready to restart`;pushTaskHistory(t,'Current Task List item reset · completed prefix preserved')}
+  setBatchControls();syncBatchViews();document.getElementById('batchLog').textContent+='\n[reset] current item reset · completed prefix preserved';showToast('Current item reset');
+};
+
+document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
+
+const baseDeleteTaskAction=document.getElementById('deleteTaskDemo').onclick;
+document.getElementById('deleteTaskDemo').onclick=()=>{
+  const id=currentTaskId,t=taskMap[id];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
+  if(id===batchParentTaskId){clearInterval(batchRunTimer);batchRunTimer=null;batchParentTaskId=null;batchState={status:'idle',index:0,recovered:false,currentDirty:false}}
+  delete taskMap[id];document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast(t.kind==='list'?'Task List deleted':'Mock Task deleted');
+};
+
+// --- Sequence Composer: Task List is composed from the same Task configuration ---
+let sequenceExpandedIndex=0;
+let existingPickerContext=null;
+function taskFormToListItem(){
+  captureNewTaskSources();
+  const projectKey=document.getElementById('newTaskProject').value;
+  const project=projectMeta[projectKey]?.path||projectKey;
+  return {
+    prompt:newTaskDraft.prompt||document.getElementById('newTaskTitle').value.trim()||'Task',
+    goalMode:newTaskDraft.goalMode,goalFile:newTaskDraft.goalFile,goalAsset:newTaskDraft.goalAsset,
+    project,workflow:document.getElementById('newTaskWorkflow').value,
+    validatorMode:newTaskDraft.validator?'file':'none',validator:newTaskDraft.validator,
+    aiMode:newTaskDraft.aiMode,aiPrompt:newTaskDraft.aiPrompt,aiFile:newTaskDraft.aiFile,aiAsset:newTaskDraft.aiAsset
+  };
+}
+function taskToListItem(t){
+  const p=t.promptSource||{};
+  return {
+    prompt:p.prompt||t.goal||t.title,
+    goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
+    project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
+    validatorMode:p.validator?'file':'none',validator:p.validator||'',
+    aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'
+  };
+}
+function createTaskListFromItems(items){
+  const title=document.getElementById('newTaskTitle').value.trim()||'New Task List';
+  const project=document.getElementById('newTaskProject').value;
+  const id='T-'+(++taskSequence);
+  const t={id,kind:'list',status:'new',title,runtime:'idle',desc:`Task List · ${items.length} tasks · ready to edit`,tags:[`${items.length} tasks`],workflow:'Task List',project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'batch',goal:'Execute an ordered sequence of Tasks using the existing RunRequest contract.',workspaceKind:'batch',branch:'—',executionRoot:'Child task workspaces',listItems:cloneBatch(items)};
+  taskMap[id]=t;renderBoardFromMap();return t;
+}
+function defaultNextItem(projectKey){
+  const root=projectMeta[projectKey]?.path||projectKey||'C:\\project';
+  return {prompt:'Next task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'};
+}
+function openExistingTaskPicker(context){
+  existingPickerContext=context;
+  const host=document.getElementById('existingTaskPicker');
+  const candidates=Object.values(taskMap).filter(t=>t.kind!=='list'&&t.workspaceKind!=='batch');
+  host.innerHTML=candidates.length?candidates.map(t=>`<button type="button" class="existing-task-option" data-existing-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>${escapeHtml(runtimeLabel(t.runtime))}</span></button>`).join(''):'<div class="empty-panel">No standalone Tasks in this mock board.</div>';
+  host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
+    const source=taskMap[b.dataset.existingId],item=taskToListItem(source);if(!source)return;
+    if(existingPickerContext==='new'){
+      const first=taskFormToListItem(),t=createTaskListFromItems([first,item]);closeModal('newTaskModal');closeModal('existingTaskModal');sequenceExpandedIndex=1;openTaskListEditor(t.id);showToast('Task upgraded to Task List · existing Task copied as item 2');
+    }else{
+      batchDraft.push(item);sequenceExpandedIndex=batchDraft.length-1;closeModal('existingTaskModal');renderBatchDraft();showToast('Existing Task copied into sequence');
+    }
+  });
+  openModal('existingTaskModal');
+}
+document.getElementById('addNextTaskFromNew').onclick=()=>{
+  const first=taskFormToListItem(),next=defaultNextItem(document.getElementById('newTaskProject').value);
+  const t=createTaskListFromItems([first,next]);closeModal('newTaskModal');sequenceExpandedIndex=1;openTaskListEditor(t.id);showToast('Task upgraded to Task List · Item 1 preserved');
+};
+document.getElementById('addExistingTaskFromNew').onclick=()=>openExistingTaskPicker('new');
+
+function sequenceState(i){
+  if(i<batchState.index)return ['PASS','pass'];
+  if(i===batchState.index&&batchState.status==='running')return [batchState.recovered?'Recovering':'Running','running'];
+  if(i===batchState.index&&batchState.status==='stopped')return [batchState.currentDirty?'Restart on resume':'Stopped','stopped'];
+  if(i===batchState.index&&batchState.status==='failed')return ['Failed','stopped'];
+  return ['Waiting',''];
+}
+renderBatchDraft=function(){
+  const form=document.getElementById('formList');
+  if(!batchDraft.length){
+    form.innerHTML='<div class="empty-panel"><div><strong>No tasks in this sequence</strong><br><br>Add a new Task or copy an existing one.</div></div><div class="sequence-add-row"><button class="btn" id="addRequest">+ Add task</button><button class="btn ghost" id="addExistingSequence">Add existing</button></div>';
+  }else{
+    const rows=batchDraft.map((x,i)=>{
+      const caps=workflowCaps(x.workflow),validation=[],state=sequenceState(i),expanded=i===sequenceExpandedIndex;
+      if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose</button></div></div></div>`);
+      if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${aiSourceBody(x,i)}</div></div>`);
+      return `<div class="request sequence-item ${expanded?'expanded':''} ${i<batchState.index?'completed-lock':''} ${i===batchState.index&&batchState.status==='running'?'active-item':''}" data-req="${i}">
+        <div class="reqhead"><span class="reqnum">${i+1}</span><div class="sequence-item-title"><strong>${escapeHtml(itemTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="req-actions"><span class="sequence-state ${state[1]}">${state[0]}</span><button class="sequence-expand" type="button" data-expand="${i}">${expanded?'Collapse':'Edit'}</button><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div>
+        <div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${goalSourceBody(x,i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">This Workflow needs no extra validator input.</div>'}</div>
+      </div>`;
+    }).join('');
+    form.innerHTML=`<div class="sequence-composer">${rows}<div class="sequence-add-row"><button class="btn" id="addRequest">+ Add task</button><button class="btn ghost" id="addExistingSequence">Add existing</button></div></div>`;
+  }
+  bindBatchForm();
+  document.querySelectorAll('[data-expand]').forEach(b=>b.onclick=()=>{sequenceExpandedIndex=sequenceExpandedIndex===+b.dataset.expand?-1:+b.dataset.expand;renderBatchDraft()});
+  document.getElementById('addExistingSequence')?.addEventListener('click',()=>openExistingTaskPicker('sequence'));
+  syncBatchViews();setBatchControls();syncTaskListDraftToParent();
+};
+
+// Keep Add task compact and expand only the new item.
+const sequenceBaseBindBatchForm=bindBatchForm;
+bindBatchForm=function(){
+  sequenceBaseBindBatchForm();
+  const add=document.getElementById('addRequest');
+  if(add)add.onclick=()=>{
+    const root=batchDraft[0]?.project||projectMeta[currentProjectKey]?.path||'C:\\project';
+    batchDraft.push({prompt:'New task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+    sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft();showToast('Task added to sequence');
+  };
+  document.querySelectorAll('[data-remove]').forEach(b=>{const old=b.onclick;b.onclick=()=>{const i=+b.dataset.remove;if(i<batchState.index)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()}});
+  document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()});
+  document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;if(batchState.status==='stopped')batchState.currentDirty=true;renderBatchDraft()});
+  setBatchControls();
+};
+
+// Re-render using the sequence composer after binding override.
+// --- In-place Steps editor behavior ---
+function isSequenceTask(t){return !!t&&(t.kind==='list'||t.workspaceKind==='batch'||(t.listItems&&t.listItems.length>1))}
+function singleTaskItem(t){
+  const p=t.promptSource||{};
+  return {prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'};
+}
+function deriveStepState(t){
+  const multi=isSequenceTask(t),index=multi?(t.progress?.[0]||0):(t.runtime==='done'?1:0);
+  if(t.runtime==='running'||t.runtime==='recover')return {status:'running',index,recovered:t.runtime==='recover',currentDirty:false};
+  if(t.runtime==='stopped'||t.runtime==='attention'||t.runtime==='failed'||t.status==='paused')return {status:'stopped',index,recovered:false,currentDirty:!!t.configDirty};
+  if(t.runtime==='done')return {status:'completed',index:multi?(t.listItems?.length||1):1,recovered:false,currentDirty:false};
+  return {status:'idle',index:0,recovered:false,currentDirty:false};
+}
+function prepareStepsForTask(t){
+  if(!t)return;
+  batchParentTaskId=t.id;
+  batchDraft=cloneBatch(isSequenceTask(t)&&t.listItems?.length?t.listItems:[singleTaskItem(t)]);
+  batchState=deriveStepState(t);
+  sequenceExpandedIndex=-1;
+  document.getElementById('taskListParentHint').textContent=batchDraft.length===1?'1 step · this Task':`${batchDraft.length} steps · one Board Task`;
+  renderBatchDraft();
+}
+
+// A single step stays a normal Task. Adding step 2 upgrades the same Task in place.
+syncTaskListDraftToParent=function(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:null;if(!t)return;
+  if(batchDraft.length<=1&&!isSequenceTask(t)){
+    const x=batchDraft[0];if(x){
+      t.workflow=x.workflow;t.goal=x.prompt||t.goal;
+      t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    }
+    return;
+  }
+  t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);
+  t.progress=[Math.min(batchState.index,batchDraft.length),batchDraft.length];t.tags=[`${batchDraft.length} steps`];
+  t.executionRoot=`${batchDraft.length} child workspaces`;t.desc=`${batchDraft.length} ordered steps · ${runtimeLabel(t.runtime)}`;
+};
+
+openTaskListEditor=function(id){
+  const t=taskMap[id];if(!t)return;
+  prepareStepsForTask(t);
+  document.querySelectorAll('.drawertab').forEach(b=>b.classList.toggle('active',b.dataset.drawertab==='items'));
+  document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-items'));
+};
+
+const finalBaseOpenTaskById=openTaskById;
+openTaskById=function(id){
+  finalBaseOpenTaskById(id);
+  const t=taskMap[id];if(!t)return;
+  document.getElementById('drawerItemsTab').hidden=false;
+  prepareStepsForTask(t);
+};
+
+document.getElementById('drawerAddStep').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push({prompt:'New step',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+  sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;syncTaskListDraftToParent();renderBatchDraft();renderBoardFromMap();showToast('Step added · same Task upgraded in place');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
+};
+// YAML advanced editor is opened by the final yamlPlanModal handler.
+
+// Task footer remains the single Run / Stop / Resume control for both 1-step and multi-step Tasks.
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(isSequenceTask(t)){
+    if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+    if(t.runtime==='idle'){document.getElementById('runBatch').click();openTaskById(t.id);return}
+    if(['running','recover'].includes(t.runtime)){document.getElementById('stopBatch').click();openTaskById(t.id);return}
+    if(['stopped','attention','failed'].includes(t.runtime)){document.getElementById('resumeBatch').click();openTaskById(t.id);return}
+  }
+  if(t.runtime==='idle'){
+    if(t.workspaceKind==='main'){const busy=mainBusyTask(t.project);if(busy&&busy.id!==t.id){if(t.workspacePolicy==='auto'){t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id)}else{showToast(`Main workspace 正被 ${busy.id} 使用`);return}}}
+    t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';if(t.status==='new')t.status='ongoing';pushTaskHistory(t,'Run started');showToast('Mock Run started');
+  }else if(['running','recover'].includes(t.runtime)){t.runtime='stopped';t.status='paused';pushTaskHistory(t,'Paused by user');showToast('Mock Pause')}
+  else if(['stopped','attention','failed'].includes(t.runtime)){t.runtime='running';t.status='ongoing';pushTaskHistory(t,'Resume accepted');showToast('Mock Resume')}
+  renderBoardFromMap();openTaskById(t.id);
+};
+
+// Normal Task creation is now always one Task; composition happens later in Details > Steps.
+newTaskKind='task';renderTaskKindUi();
+
+// --- Final execution-plan UX: no mode switching; YAML is modal only ---
+let pendingYamlPlan=null;
+function isSinglePlainTask(){
+  const t=taskMap[currentTaskId];return !!t&&!isSequenceTask(t)&&batchDraft.length<=1;
+}
+const visualRenderBatchDraft=renderBatchDraft;
+renderBatchDraft=function(){
+  const t=batchParentTaskId?taskMap[batchParentTaskId]:taskMap[currentTaskId];
+  const form=document.getElementById('formList');
+  if(t&&!isSequenceTask(t)&&batchDraft.length===1){
+    const x=batchDraft[0],locked=['running','recover'].includes(t.runtime);
+    form.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>Single task</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${runtimeClass(t.runtime)}">${escapeHtml(runtimeLabel(t.runtime))}</span></div>`;
+    document.getElementById('taskListParentHint').textContent='Runs once · add another task only if this work needs a sequence';
+    document.getElementById('drawerAddStep').disabled=locked;document.getElementById('drawerAddExisting').disabled=locked;
+    document.getElementById('stepsAdvanced').disabled=locked;
+    syncBatchViews();syncTaskListDraftToParent();return;
+  }
+  visualRenderBatchDraft();
+  const count=batchDraft.length;
+  document.getElementById('taskListParentHint').textContent=`${count} tasks · executed top to bottom · one Board Task`;
+  const locked=t&&['running','recover'].includes(t.runtime);
+  document.getElementById('drawerAddStep').disabled=locked;document.getElementById('drawerAddExisting').disabled=locked;
+};
+
+function openYamlPlanModal(){
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  pendingYamlPlan=null;
+  document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const status=document.getElementById('yamlPlanStatus');status.className='yaml-plan-status';status.textContent='Editing the same ordered task list. Validate before Apply.';
+  document.getElementById('applyYamlPlan').disabled=true;
+  openModal('yamlPlanModal');
+}
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+document.getElementById('yamlEditor').oninput=()=>{
+  pendingYamlPlan=null;document.getElementById('applyYamlPlan').disabled=true;
+  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Changed · validate before Apply.';
+};
+document.getElementById('validateYaml').onclick=()=>{
+  const source=document.getElementById('yamlEditor').value.trim(),items=parseSimpleYamlList(source),errors=batchValidationErrors(items);
+  if(!items.length)errors.push('execution plan must contain at least one task');
+  const status=document.getElementById('yamlPlanStatus');
+  if(errors.length){pendingYamlPlan=null;document.getElementById('applyYamlPlan').disabled=true;status.className='yaml-plan-status bad';status.textContent='Invalid · '+errors.join(' · ');showToast(`YAML invalid · ${errors.length} issue(s)`);return}
+  pendingYamlPlan=items;document.getElementById('applyYamlPlan').disabled=false;status.className='yaml-plan-status ok';status.textContent=`Valid · ${items.length} task${items.length===1?'':'s'} ready to apply.`;showToast('YAML valid');
+};
+document.getElementById('applyYamlPlan').onclick=()=>{
+  if(!pendingYamlPlan)return;
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時不能修改 execution plan');return}
+  const previousCount=batchDraft.length;batchDraft=cloneBatch(pendingYamlPlan);
+  batchState.currentDirty=batchState.status==='stopped';sequenceExpandedIndex=-1;syncTaskListDraftToParent();
+  if(batchDraft.length>1){t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);t.tags=[`${batchDraft.length} steps`];}
+  else if(previousCount>1&&batchDraft.length===1){
+    const x=batchDraft[0];t.kind='task';t.workspaceKind='main';t.workflow=x.workflow;t.goal=x.prompt||t.goal;t.listItems=null;t.tags=['workflow'];
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+  }
+  renderBatchDraft();renderBoardFromMap();closeModal('yamlPlanModal');pendingYamlPlan=null;showToast('Task list YAML applied');
+};
+
+// New Task always creates one Task. Composition happens later from Overview.
+document.getElementById('addNextTaskFromNew').onclick=()=>{};
+document.getElementById('addExistingTaskFromNew').onclick=()=>{};
+
+// Keep the drawer on Overview; composition never navigates away.
+document.getElementById('drawerAddStep').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 execution plan 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push({prompt:'Next task',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
+  sequenceExpandedIndex=batchDraft.length-1;if(batchState.status==='stopped')batchState.currentDirty=true;syncTaskListDraftToParent();renderBatchDraft();renderBoardFromMap();showToast('Next task added');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 execution plan 鎖定；請先 Pause');return}
+  if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
+};
+
+// --- Task edit policy: New / Paused editable; Ongoing / Closed read-only ---
+let taskFormMode='create';
+let editingTaskId=null;
+function taskEditable(t){return !!t&&['new','paused'].includes(t.status)}
+function projectKeyForTask(t){return projectMeta[t.project]?t.project:(Object.keys(projectMeta).find(k=>projectMeta[k].path===t.project)||currentProjectKey||'ai-task-runner')}
+function taskRuntimeFingerprint(t){return JSON.stringify({project:t.project,workflow:t.workflow,goal:t.goal,promptSource:t.promptSource||{},workspacePolicy:t.workspacePolicy||'',workspaceKind:t.workspaceKind||'',branch:t.branch||'',executionRoot:t.executionRoot||''})}
+function setTaskFormCreateMode(){
+  taskFormMode='create';editingTaskId=null;
+  document.getElementById('taskFormTitle').textContent='New Task';
+  document.getElementById('taskFormHelp').textContent='先建立第一個 task；之後可從 Task Details 繼續加入更多 tasks。';
+  document.getElementById('createTaskConfirm').textContent='Create Task';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  document.getElementById('newTaskWorkflowField').hidden=false;
+  document.getElementById('newTaskWorkflowCaps').hidden=false;
+  document.querySelector('.workspace-selector-wrap').hidden=false;
+  document.getElementById('newTaskPromptSource').hidden=false;
+  document.getElementById('newTaskValidationSource').hidden=false;
+}
+function applyEditFormScope(t){
+  const multi=isSequenceTask(t);
+  const note=document.getElementById('editTaskScopeNote');
+  note.hidden=false;
+  if(multi){
+    note.innerHTML='<strong>Multi-step Task</strong>：這裡只編輯 Task title / owning project。每個 Step 的 Workflow、Prompt、Validator 請直接在 Execution plan 裡 Edit。';
+    document.getElementById('newTaskWorkflowField').hidden=true;
+    document.getElementById('newTaskWorkflowCaps').hidden=true;
+    document.querySelector('.workspace-selector-wrap').hidden=true;
+    document.getElementById('newTaskPromptSource').hidden=true;
+    document.getElementById('newTaskValidationSource').hidden=true;
+  }else{
+    note.innerHTML=t.status==='paused'?'<strong>Paused Task</strong>：可編輯。若變更 Project / Workflow / Prompt / Validator / Workspace，下一次會 fresh restart，不沿用舊 frozen run。':'<strong>New Task</strong>：尚未執行，可自由修改。';
+    document.getElementById('newTaskWorkflowField').hidden=false;
+    document.getElementById('newTaskWorkflowCaps').hidden=false;
+    document.querySelector('.workspace-selector-wrap').hidden=false;
+    document.getElementById('newTaskPromptSource').hidden=false;
+    document.getElementById('newTaskValidationSource').hidden=false;
+  }
+}
+function openEditTaskForm(t){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Ongoing Task 請先 Pause 再編輯':'Closed Task 為唯讀');return}
+  taskFormMode='edit';editingTaskId=t.id;
+  document.getElementById('taskFormTitle').textContent='Edit Task';
+  document.getElementById('taskFormHelp').textContent='使用與 New Task 相同的設定介面；Save 不會另外建立 Task。';
+  document.getElementById('createTaskConfirm').textContent='Save changes';
+  document.getElementById('newTaskTitle').value=t.title;
+  const key=projectKeyForTask(t);document.getElementById('newTaskProject').value=key;
+  if(!isSequenceTask(t)){
+    document.getElementById('newTaskWorkflow').value=t.workflow||'ralphy_ai_validate.yaml';
+    const p=t.promptSource||{};
+    newTaskDraft={goalMode:p.goalMode||'inline',prompt:p.prompt||t.goal||'',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md'};
+    newTaskWorkspaceMode=t.workspacePolicy||((t.workspaceKind==='worktree')?'worktree':'auto');
+    renderNewTaskSources();renderNewTaskWorkspace();
+  }
+  applyEditFormScope(t);openModal('newTaskModal');
+}
+document.getElementById('editTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(t)openEditTaskForm(t)};
+
+const createTaskAction=document.getElementById('createTaskConfirm').onclick;
+document.getElementById('createTaskConfirm').onclick=()=>{
+  if(taskFormMode!=='edit')return createTaskAction();
+  const t=taskMap[editingTaskId];if(!t||!taskEditable(t))return;
+  const before=taskRuntimeFingerprint(t);
+  const title=document.getElementById('newTaskTitle').value.trim();if(!title){showToast('Task title 不可空白');return}
+  const project=document.getElementById('newTaskProject').value;
+  t.title=title;t.project=project;
+  if(!isSequenceTask(t)){
+    captureNewTaskSources();
+    const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+    let goal='';if(newTaskDraft.goalMode==='inline')goal=newTaskDraft.prompt.trim();else if(newTaskDraft.goalMode==='file')goal=`goal_file: ${newTaskDraft.goalFile.trim()}`;else goal=`Prompt asset: ${newTaskDraft.goalAsset}`;
+    if(!goal){showToast('Task Prompt 不可空白');return}
+    if(caps.file&&!newTaskDraft.validator.trim()){showToast('這個 Workflow 需要 File Validator');return}
+    const workspace=resolveTaskWorkspace(project,t.id,newTaskWorkspaceMode);if(!workspace.ok){showToast(workspace.reason);return}
+    t.workflow=workflow;t.goal=goal;t.promptSource={...newTaskDraft};t.workspacePolicy=newTaskWorkspaceMode;
+    if(workspace.ok){t.workspaceKind=workspace.kind;t.branch=workspace.branch;t.executionRoot=workspace.root}
+    const tags=['workflow'];if(caps.file)tags.push('file validation');if(caps.ai)tags.push('AI validation');t.tags=tags;
+  }
+  const runtimeChanged=!isSequenceTask(t)&&before!==taskRuntimeFingerprint(t);
+  if(t.status==='paused'&&runtimeChanged){
+    t.configDirty=true;t.desc='Paused Task 已修改執行設定 · 下一次將 fresh restart 目前工作。';
+    pushTaskHistory(t,'Task edited while Paused · restart required');
+  }else{pushTaskHistory(t,'Task metadata updated')}
+  closeModal('newTaskModal');renderBoardFromMap();openTaskById(t.id);showToast(t.configDirty?'Saved · restart required':'Task updated');
+};
+
+// Any create entry resets the shared form back to create mode.
+document.getElementById('newTask').addEventListener('click',setTaskFormCreateMode,true);
+document.getElementById('chatToTask').addEventListener('click',setTaskFormCreateMode,true);
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',setTaskFormCreateMode,true));
+
+const editAwareOpenTaskById=openTaskById;
+openTaskById=function(id){
+  editAwareOpenTaskById(id);
+  const t=taskMap[id];if(!t)return;
+  const edit=document.getElementById('editTaskDemo'),editable=taskEditable(t);
+  edit.disabled=!editable;
+  edit.textContent=editable?'Edit Task':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  edit.title=editable?'Edit this Task':(t.status==='ongoing'?'Pause the Task before editing':'Closed Tasks are read-only');
+  const notice=document.getElementById('taskEditNotice');
+  if(t.configDirty){notice.hidden=false;notice.innerHTML='<strong>Configuration changed while Paused.</strong> Resume will fresh restart the current Task/Step using the new settings.'}
+  else{notice.hidden=true;notice.textContent=''}
+  const canEdit=editable;
+  document.getElementById('drawerAddStep').disabled=!canEdit;
+  document.getElementById('drawerAddExisting').disabled=!canEdit;
+  document.getElementById('stepsAdvanced').disabled=!canEdit;
+  if(t.status==='paused'&&t.configDirty&&document.getElementById('taskPrimaryDemo').textContent==='Resume')document.getElementById('taskPrimaryDemo').textContent='Restart';
+};
+
+// Board status, not runtime badge, owns editability for execution-plan controls.
+const finalPlanRender=renderBatchDraft;
+renderBatchDraft=function(){
+  finalPlanRender();
+  const t=taskMap[currentTaskId]||taskMap[batchParentTaskId];if(!t)return;
+  const editable=taskEditable(t);
+  if(!editable){document.querySelectorAll('#formList input,#formList textarea,#formList select,#formList button').forEach(el=>el.disabled=true)}
+  document.getElementById('drawerAddStep').disabled=!editable;
+  document.getElementById('drawerAddExisting').disabled=!editable;
+  document.getElementById('stepsAdvanced').disabled=!editable;
+};
+
+// Runtime-affecting edit on a Paused single Task becomes Restart, not fake Resume.
+const taskPrimaryBeforeEditPolicy=document.getElementById('taskPrimaryDemo').onclick;
+document.getElementById('taskPrimaryDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];
+  if(t&&t.status==='paused'&&t.configDirty&&!isSequenceTask(t)){
+    t.configDirty=false;t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.elapsed='0m';t.progress=[0,t.progress?.[1]||4];
+    t.desc='Restarted with edited configuration';pushTaskHistory(t,'Fresh restart with edited Task configuration');renderBoardFromMap();openTaskById(t.id);showToast('Fresh restart started');return;
+  }
+  taskPrimaryBeforeEditPolicy();
+};
+
+// YAML editing is also governed by Board status.
+const yamlOpenBeforeEditPolicy=openYamlPlanModal;
+openYamlPlanModal=function(){
+  const t=taskMap[currentTaskId];if(!t)return;
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
+  yamlOpenBeforeEditPolicy();
+};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+
+// --- Canonical prototype execution-plan renderer ---
+function planItemDefaults(x={},t=null,i=0){
+  const fallbackProject=projectMeta[t?.project]?.path||t?.project||projectMeta[currentProjectKey]?.path||'C:\\project';
+  return {
+    prompt:String(x.prompt||x.goal||`Task ${i+1}`),
+    goalMode:x.goalMode||'inline',goalFile:x.goalFile||'',goalAsset:x.goalAsset||'common/review.md',
+    project:x.project||fallbackProject,workflow:x.workflow||'ralphy_ai_validate.yaml',
+    validatorMode:x.validatorMode||((x.validator&&x.validator!=='ai')?'file':x.validator==='ai'?'ai':'none'),validator:x.validator&&x.validator!=='ai'?x.validator:'',
+    aiMode:x.aiMode||'default',aiPrompt:x.aiPrompt||'',aiFile:x.aiFile||'',aiAsset:x.aiAsset||'common/ai_validator.md',
+    originTaskId:x.originTaskId||x.origin_task_id||'',originTaskTitle:x.originTaskTitle||''
+  };
+}
+function planItemsForTask(t){
+  const raw=isSequenceTask(t)&&Array.isArray(t.listItems)&&t.listItems.length?t.listItems:[singleTaskItem(t)];
+  return raw.map((x,i)=>planItemDefaults(x,t,i));
+}
+function planStateFor(t,i,count){
+  const done=Math.min(t.progress?.[0]||0,count);
+  if(t.runtime==='done'||i<done)return {label:'PASS',cls:'pass',done:true,current:false};
+  const current=i===Math.min(done,count-1);
+  if(current&&t.runtime==='recover')return {label:'Recovering',cls:'running',done:false,current:true};
+  if(current&&t.runtime==='running')return {label:'Running',cls:'running',done:false,current:true};
+  if(current&&['stopped','attention'].includes(t.runtime))return {label:t.configDirty?'Restart':'Stopped',cls:'stopped',done:false,current:true};
+  if(current&&t.runtime==='failed')return {label:'Failed',cls:'stopped',done:false,current:true};
+  return {label:'Waiting',cls:'',done:false,current:false};
+}
+function planTitle(x,i){
+  const title=itemTitle(x,i);return title&&String(title).trim()?title:`Task ${i+1}`;
+}
+function setPlanDraftForTask(t){
+  batchParentTaskId=t.id;
+  batchDraft=cloneBatch(planItemsForTask(t));
+  batchState=deriveStepState(t);
+  if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
+}
+function commitPlanDraft(t,{markDirty=false}={}){
+  batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  if(batchDraft.length<=1){
+    const x=batchDraft[0]||planItemDefaults({},t,0);
+    t.kind='task';t.listItems=null;
+    if(t.workspaceKind==='batch')t.workspaceKind='main';
+    t.workflow=x.workflow;t.goal=x.prompt;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    t.tags=['workflow'];t.progress=[Math.min(t.progress?.[0]||0,1),1];
+    t.desc=t.status==='paused'&&markDirty?'Paused Task · execution plan changed · restart required.':'Single task';
+  }else{
+    t.kind='list';t.workspaceKind='batch';t.workflow='Task List';t.listItems=cloneBatch(batchDraft);
+    t.tags=[`${batchDraft.length} tasks`];t.progress=[Math.min(t.progress?.[0]||0,batchDraft.length),batchDraft.length];
+    t.executionRoot=`${batchDraft.length} child workspaces`;t.desc=`${batchDraft.length} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  }
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused Task · current task changed · restart required.';}
+}
+function planizeSourceHtml(html,i){
+  return String(html||'')
+    .replaceAll(`data-item="${i}"`,`data-plan-item="${i}"`)
+    .replaceAll('data-field=','data-plan-field=')
+    .replaceAll(`data-pick-index="${i}"`,`data-plan-pick="${i}"`)
+    .replaceAll('data-pick-field=','data-plan-pick-field=')
+    .replaceAll('data-pick-kind=','data-plan-pick-kind=')
+    .replaceAll('data-view-prompts="1"','data-plan-view-prompts="1"');
+}
+function planRowBody(x,i,editable){
+  const caps=workflowCaps(x.workflow),validation=[];
+  if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose</button></div></div></div>`);
+  if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="aiMode"`)}</div><div class="source-body">${planizeSourceHtml(aiSourceBody(x,i),i)}</div></div>`);
+  return `<div class="workflow-row"><div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="goalMode"`)}</div><div class="source-body">${planizeSourceHtml(goalSourceBody(x,i),i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">This Workflow needs no extra validator input.</div>'}`;
+}
+function renderDrawerPlan(t){
+  const host=document.getElementById('formList'),items=batchDraft.length?batchDraft:planItemsForTask(t),editable=taskEditable(t);
+  document.getElementById('taskListEditHint').textContent=items.length===1?'Single task · add another only when needed':`${items.length} tasks · top-to-bottom sequence`;
+  document.getElementById('taskListParentHint').textContent=items.length===1?'Runs once · same Board Task':`${items.length} tasks · one Board Task`;
+  document.getElementById('openFullPlan').hidden=items.length<2;
+  if(items.length===1){
+    const x=items[0],s=planStateFor(t,0,1);
+    host.innerHTML=`<div class="single-plan-strip"><div class="single-plan-icon">1</div><div class="single-plan-copy"><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(x.workflow)} · ${escapeHtml(basename(x.project))}</small></div><span class="single-plan-state ${s.cls}">${escapeHtml(s.label)}</span></div>`;
+  }else{
+    host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="state">${escapeHtml(s.label)}</span></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open list to edit</div>`:'');
+  }
+  ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
+}
+function renderFullPlan(t){
+  const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:planItemsForTask(t),editable=taskEditable(t);
+  document.getElementById('planPageTitle').textContent=t.title;
+  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
+  host.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length),expanded=i===sequenceExpandedIndex,completed=s.done;
+    const currentLocked=t.status==='paused'&&s.current;
+    const canMutate=editable&&!completed;
+    const canRestructure=canMutate&&!currentLocked;
+    return `<article class="plan-row ${expanded?'expanded':''} ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-plan-expand="${i}">${expanded?'Close':'Edit'}</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div><div class="plan-row-body">${planRowBody(x,i,editable)}</div></article>`;
+  }).join('');
+  ['planAddTask','planAddExisting','planEditYaml'].forEach(id=>document.getElementById(id).disabled=!editable);
+  bindFullPlan(t);
+}
+function bindFullPlan(t){
+  document.querySelectorAll('[data-plan-expand]').forEach(b=>b.onclick=()=>{sequenceExpandedIndex=sequenceExpandedIndex===+b.dataset.planExpand?-1:+b.dataset.planExpand;renderFullPlan(t)});
+  document.querySelectorAll('[data-plan-item][data-plan-field]').forEach(el=>{
+    el.disabled=!taskEditable(t)||(+el.dataset.planItem)<batchState.index;
+    const ev=el.tagName==='SELECT'?'change':'input';el.addEventListener(ev,()=>{
+      const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;batchDraft[i][field]=el.value;
+      commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
+    });
+  });
+  document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'plan'));
+  document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
+  document.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];sequenceExpandedIndex=i-1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];sequenceExpandedIndex=i+1;commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+}
+function renderExecutionPlan(t){
+  if(!t)return;
+  renderDrawerPlan(t);
+  const preview=document.getElementById('batchPreview'),items=batchDraft.length?batchDraft:planItemsForTask(t);
+  preview.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length);
+    return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`;
+  }).join('');
+  if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(t);
+}
+
+// Final renderer replaces all previous batch/sequence visual wrappers.
+prepareStepsForTask=function(t){if(!t)return;setPlanDraftForTask(t);renderExecutionPlan(t)};
+renderBatchDraft=function(){const t=taskMap[currentTaskId]||taskMap[batchParentTaskId];if(t)renderExecutionPlan(t)};
+syncTaskListDraftToParent=function(){const t=taskMap[batchParentTaskId]||taskMap[currentTaskId];if(t)commitPlanDraft(t,{markDirty:false})};
+
+function addPlanTask(t,{openPlan=true}={}){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
+  if(batchParentTaskId!==t.id)setPlanDraftForTask(t);
+  const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
+  batchDraft.push(planItemDefaults({prompt:'Next task',project:root},t,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(t,{markDirty:false});renderBoardFromMap();renderExecutionPlan(t);
+  if(openPlan)openFullPlanPage(t.id);
+}
+function openFullPlanPage(id=currentTaskId){
+  const t=taskMap[id];if(!t)return;
+  currentTaskId=id;setPlanDraftForTask(t);
+  document.getElementById('taskOverlay').classList.remove('open');
+  showView('plan');
+  document.querySelectorAll('.navbtn[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view==='tasks'));
+  renderFullPlan(t);
+}
+document.getElementById('openFullPlan').onclick=()=>openFullPlanPage(currentTaskId);
+document.getElementById('planBackToTask').onclick=()=>{const id=currentTaskId;showView('tasks');openTaskById(id)};
+document.getElementById('drawerAddStep').onclick=()=>{const t=taskMap[currentTaskId];if(t)addPlanTask(t,{openPlan:true})};
+document.getElementById('planAddTask').onclick=()=>{const t=taskMap[currentTaskId];if(t)addPlanTask(t,{openPlan:false});renderFullPlan(t)};
+
+openExistingTaskPicker=function(context){
+  existingPickerContext=context;const host=document.getElementById('existingTaskPicker');
+  const candidates=Object.values(taskMap).filter(t=>t.id!==currentTaskId&&t.kind!=='list'&&t.workspaceKind!=='batch');
+  host.innerHTML=candidates.length?candidates.map(t=>`<button type="button" class="existing-task-option" data-existing-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>${escapeHtml(runtimeLabel(t.runtime))}</span></button>`).join(''):'<div class="empty-panel">No standalone Tasks available.</div>';
+  host.querySelectorAll('[data-existing-id]').forEach(b=>b.onclick=()=>{
+    const owner=taskMap[currentTaskId],source=taskMap[b.dataset.existingId];if(!owner||!source||!taskEditable(owner))return;
+    if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);batchDraft.push(planItemDefaults(taskToListItem(source),owner,batchDraft.length));sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});closeModal('existingTaskModal');renderBoardFromMap();renderExecutionPlan(owner);
+    if(context==='drawer')openFullPlanPage(owner.id);else if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(owner);showToast('Existing Task copied into execution plan');
+  });openModal('existingTaskModal');
+};
+document.getElementById('drawerAddExisting').onclick=()=>{const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;openExistingTaskPicker('drawer')};
+document.getElementById('planAddExisting').onclick=()=>{const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;openExistingTaskPicker('plan')};
+
+function openPlanYamlForTask(t){
+  if(!taskEditable(t)){showToast(t.status==='ongoing'?'Pause Task before editing YAML':'Closed Task is read-only');return}
+  if(t.status==='paused'&&(t.progress?.[0]||0)>0){showToast('已有完成 tasks；請用 Full Plan 編輯 current / future tasks，避免改寫 PASS 歷史');return}
+  if(batchParentTaskId!==t.id)setPlanDraftForTask(t);pendingYamlPlan=null;document.getElementById('yamlEditor').value=batchToYaml(batchDraft);
+  const s=document.getElementById('yamlPlanStatus');s.className='yaml-plan-status';s.textContent='Editing the same ordered task list. Validate before Apply.';document.getElementById('applyYamlPlan').disabled=true;openModal('yamlPlanModal');
+}
+openYamlPlanModal=function(){const t=taskMap[currentTaskId];if(t)openPlanYamlForTask(t)};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;document.getElementById('planEditYaml').onclick=openYamlPlanModal;
+document.getElementById('applyYamlPlan').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!pendingYamlPlan||!taskEditable(t))return;batchDraft=cloneBatch(pendingYamlPlan.map((x,i)=>planItemDefaults(x,t,i)));sequenceExpandedIndex=-1;commitPlanDraft(t,{markDirty:t.status==='paused'});pendingYamlPlan=null;closeModal('yamlPlanModal');renderBoardFromMap();renderExecutionPlan(t);showToast('Task list YAML applied');
+};
+
+// Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
+const canonicalPlanOpenTask=openTaskById;
+openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t);document.getElementById('drawerItemsTab').hidden=true}};
+
+function persistCurrentPresetFromTaskMap(){
+  if(!taskPresets[currentPreset])return;
+  taskPresets[currentPreset]=Object.values(taskMap).map(t=>cloneBatch([t])[0]);
+}
+// --- Dialog-first Plan UX + move-only New Task composition ---
+let addPlanOwnerId=null;
+let addTaskMode='create';
+let selectedMoveTaskId=null;
+function eligibleMoveTasks(owner){
+  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&!isSequenceTask(t)&&t.workspaceKind!=='batch');
+}
+function setAddTaskMode(mode){
+  addTaskMode=mode;selectedMoveTaskId=null;
+  document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
+  document.getElementById('addTaskCreatePanel').hidden=mode!=='create';
+  document.getElementById('addTaskMovePanel').hidden=mode!=='move';
+  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Add task':'Move here';
+  renderMoveTaskPicker();
+}
+function renderMoveTaskPicker(){
+  const owner=taskMap[addPlanOwnerId],host=document.getElementById('moveTaskPicker');if(!owner||!host)return;
+  const items=eligibleMoveTasks(owner);
+  if(!items.length){host.innerHTML='<div class="empty-panel">No eligible New tasks. Only standalone New + Idle tasks can be moved.</div>';document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move';return}
+  host.innerHTML=items.map(t=>`<button type="button" class="existing-task-option ${selectedMoveTaskId===t.id?'selected':''}" data-move-task-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>New</span></button>`).join('');
+  host.querySelectorAll('[data-move-task-id]').forEach(b=>b.onclick=()=>{selectedMoveTaskId=b.dataset.moveTaskId;renderMoveTaskPicker()});
+  document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move'&&!selectedMoveTaskId;
+}
+function openAddTaskDialog(ownerId=currentTaskId){
+  const owner=taskMap[ownerId];if(!owner)return;
+  if(!taskEditable(owner)){showToast(owner.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
+  addPlanOwnerId=ownerId;addTaskMode='create';selectedMoveTaskId=null;
+  document.getElementById('confirmAddPlanTask').disabled=false;
+  setAddTaskMode('create');openModal('addPlanTaskModal');
+}
+document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.onclick=()=>setAddTaskMode(b.dataset.addTaskMode));
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  if(addTaskMode==='create'){return}else{
+    const source=taskMap[selectedMoveTaskId];
+    if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
+    const item=planItemDefaults(taskToListItem(source),owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
+    batchDraft.push(item);
+    delete taskMap[source.id];
+    pushTaskHistory(owner,`Moved ${source.id} into execution plan · original Board Task retired`);
+  }
+  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
+  showToast(addTaskMode==='create'?'Task added':'New Task moved into plan');
+};
+
+function openPlanDialog(id=currentTaskId){
+  const t=taskMap[id];if(!t)return;currentTaskId=id;setPlanDraftForTask(t);renderFullPlan(t);openModal('planModal');
+}
+openFullPlanPage=openPlanDialog;
+document.getElementById('openFullPlan').onclick=()=>openPlanDialog(currentTaskId);
+document.getElementById('planBackToTask').onclick=()=>closeModal('planModal');
+document.getElementById('drawerAddStep').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('planAddTask').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('drawerAddExisting').onclick=()=>openAddTaskDialog(currentTaskId);
+document.getElementById('planAddExisting').onclick=()=>openAddTaskDialog(currentTaskId);
+
+renderExecutionPlan=function(t){
+  if(!t)return;renderDrawerPlan(t);
+  const preview=document.getElementById('batchPreview'),items=batchDraft.length?batchDraft:planItemsForTask(t);
+  preview.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="previewitem ${s.done?'done':''} ${s.current?'active':''}" data-step="${i}"><span class="step">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><span class="orderchip">${escapeHtml(s.label)}</span></div>`}).join('');
+  if(document.getElementById('planModal').classList.contains('open'))renderFullPlan(t);
+};
+renderDrawerPlan=(function(base){return function(t){base(t);document.getElementById('drawerAddExisting').hidden=true;document.getElementById('openFullPlan').textContent='Open list';};})(renderDrawerPlan);
+
+// Show moved provenance in the full plan without creating a second Task identity.
+renderFullPlan=(function(base){return function(t){base(t);document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{const i=+row.dataset.planRow,x=batchDraft[i];if(x?.originTaskId){const small=row.querySelector('.plan-row-copy small');if(small)small.textContent+=` · moved ${x.originTaskId}`;}});};})(renderFullPlan);
+
+function renderWorkspaceResult(t){
+  const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
+  const isolated=t.workspaceKind==='worktree';
+  const multi=t.workspaceKind==='batch';
+  section.hidden=!isolated&&!multi;
+  if(multi){state.textContent='Task workspaces';hint.textContent='Each task may resolve its own Main / Worktree workspace.';grid.innerHTML='<span>Merge</span><strong>Handled per child result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);return}
+  if(!isolated)return;
+  const ready=['done'].includes(t.runtime)||t.status==='closed';
+  const merged=t.mergeState==='merged',cleaned=!!t.worktreeCleaned;
+  state.textContent=cleaned?'Cleaned':merged?'Merged':ready?'Ready to merge':'Worktree';
+  hint.textContent=cleaned?'Worktree removed after merge.':merged?'Merged successfully · cleanup is now safe.':ready?'Runtime completed · review before merge.':'Worktree is still in use by this Task.';
+  const target=projectMeta[t.project]?.branch||'main';
+  grid.innerHTML=`<span>Branch</span><strong>${escapeHtml(t.branch||'—')}</strong><span>Target</span><strong>${escapeHtml(target)}</strong><span>Path</span><strong>${escapeHtml(t.executionRoot||'—')}</strong><span>Result</span><strong>${cleaned?'Merged + cleaned':merged?`Merged ${t.mergedCommit||''}`:ready?'Not merged':'In progress'}</strong>`;
+  document.getElementById('reviewChangesDemo').disabled=!ready||cleaned;
+  document.getElementById('mergeChatDemo').disabled=!ready||merged||cleaned;
+  document.getElementById('mergeTaskDemo').disabled=!ready||merged||cleaned;
+  document.getElementById('cleanupWorktreeDemo').disabled=!merged||cleaned;
+}
+document.getElementById('reviewChangesDemo').onclick=()=>showToast('Mock diff review · changed files / tests / branch comparison');
+document.getElementById('mergeChatDemo').onclick=()=>showToast('Mock Chat receives branch, target, diff and test context for merge review');
+document.getElementById('mergeTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.workspaceKind!=='worktree'||!(['done'].includes(t.runtime)||t.status==='closed'))return;t.mergeState='merged';t.mergedCommit='mock-a1b2c3d';pushTaskHistory(t,'Worktree merged into target branch');renderWorkspaceResult(t);showToast('Mock merge completed · worktree preserved until Cleanup')};
+document.getElementById('cleanupWorktreeDemo').onclick=()=>{const t=taskMap[currentTaskId];if(!t||t.mergeState!=='merged')return;t.worktreeCleaned=true;pushTaskHistory(t,'Worktree cleaned after successful merge');renderWorkspaceResult(t);showToast('Mock worktree cleanup completed')};
+
+const dialogPlanOpenTask=openTaskById;
+openTaskById=function(id){dialogPlanOpenTask(id);const t=taskMap[id];if(t)renderWorkspaceResult(t)};
+
+// --- Canonical Task List model: every Board Task owns items[]; one item is the simple case. ---
+function canonicalTaskItems(t){
+  if(!t)return [];
+  let raw=Array.isArray(t.items)&&t.items.length?t.items:(Array.isArray(t.listItems)&&t.listItems.length?t.listItems:[singleTaskItem(t)]);
+  const items=raw.map((x,i)=>planItemDefaults(x,t,i));
+  t.items=items;t.listItems=t.items;t.kind='task_list';
+  const count=items.length;
+  const baseTags=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x))&&x!=='Task List');
+  t.tags=[`${count} task${count===1?'':'s'}`,...baseTags].slice(0,4);
+  return t.items;
+}
+function normalizeAllTaskLists(){Object.values(taskMap).forEach(canonicalTaskItems)}
+isSequenceTask=function(t){return canonicalTaskItems(t).length>1};
+planItemsForTask=function(t){return cloneBatch(canonicalTaskItems(t))};
+setPlanDraftForTask=function(t){
+  if(!t)return;batchParentTaskId=t.id;batchDraft=cloneBatch(canonicalTaskItems(t));batchState=deriveStepState(t);
+  if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
+};
+commitPlanDraft=function(t,{markDirty=false}={}){
+  if(!t)return;batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  t.kind='task_list';t.items=cloneBatch(batchDraft);t.listItems=t.items;
+  const count=t.items.length,x=t.items[0];
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  if(count===1){
+    t.workflow=x.workflow;t.goal=x.prompt;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    if(t.workspaceKind==='batch')t.workspaceKind='main';
+    t.executionRoot=t.executionRoot==='Child task workspaces'?(projectMeta[t.project]?.path||t.project):t.executionRoot;
+  }else{
+    t.workflow='Task List';t.workspaceKind='batch';t.executionRoot=`${count} child workspaces`;t.goal=`${count} ordered tasks`;
+  }
+  canonicalTaskItems(t);
+  t.desc=count===1?'Single task':`${count} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused Task · current task changed · restart required.'}
+};
+
+// Board / create / preset paths all normalize through the same work item adapter.
+const canonicalBoardFromMap=renderBoardFromMap;
+renderBoardFromMap=function(){normalizeAllTaskLists();canonicalBoardFromMap()};
+const canonicalBoardPreset=renderBoard;
+renderBoard=function(preset=currentPreset){canonicalBoardPreset(preset);normalizeAllTaskLists();canonicalBoardFromMap()};
+
+// A 'Move existing' source is just a one-item Task List that has never run.
+eligibleMoveTasks=function(owner){
+  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&canonicalTaskItems(t).length===1);
+};
+
+// Project click changes the shared Project context and preserves the current workspace.
+const canonicalSelectProject=selectProject;
+selectProject=function(key){
+  canonicalSelectProject(key);
+  const meta=projectMeta[key];if(!meta)return;
+  document.getElementById('chatProjectTitle').textContent=key;
+  document.getElementById('chatProjectLine').textContent=`${meta.path} · Project Chat · 不建立 Runner Task`;
+  document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered tasks`;
+};
+document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{
+  selectProject(p.dataset.project);
+}));
+
+// Drawer summary always exposes the same Plan dialog, even for a one-item list.
+renderDrawerPlan=(function(base){return function(t){
+  canonicalTaskItems(t);base(t);
+  document.getElementById('openFullPlan').hidden=false;
+  document.getElementById('openFullPlan').textContent='Open list';
+  const n=t.items.length;
+  document.getElementById('taskListEditHint').textContent=`${n} task${n===1?'':'s'} · same work item`;
+  document.getElementById('taskListParentHint').textContent=n===1?'1 task':`${n} tasks · executed top to bottom`;
+};})(renderDrawerPlan);
+
+// Moved New task contributes its single item, then its standalone Board identity is retired.
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  if(addTaskMode==='create'){return}else{
+    const source=taskMap[selectedMoveTaskId];
+    if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
+    const sourceItem=cloneBatch(canonicalTaskItems(source))[0];
+    const item=planItemDefaults(sourceItem,owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
+    batchDraft.push(item);delete taskMap[source.id];
+    pushTaskHistory(owner,`Moved ${source.id} here · standalone Board identity retired`);
+  }
+  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();
+  closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
+  showToast(addTaskMode==='create'?'Task added':'New Task moved here');
+};
+
+// Workspace result uses item count, not a separate Task/List type flag.
+renderWorkspaceResult=(function(base){return function(t){canonicalTaskItems(t);base(t);
+  if(t.items.length>1){
+    const section=document.getElementById('workspaceResultSection'),grid=document.getElementById('workspaceResultGrid'),state=document.getElementById('workspaceResultState'),hint=document.getElementById('workspaceResultHint');
+    section.hidden=false;state.textContent=`${t.items.length} tasks`;hint.textContent='Each execution item resolves its own Main / Worktree workspace at run time.';
+    grid.innerHTML='<span>Merge</span><strong>Handled per item result</strong><span>Cleanup</span><strong>Only after each worktree is merged or discarded</strong>';
+    ['reviewChangesDemo','mergeChatDemo','mergeTaskDemo','cleanupWorktreeDemo'].forEach(id=>document.getElementById(id).disabled=true);
+  }
+};})(renderWorkspaceResult);
+
+// Merge with Chat now navigates directly to the owning Project chat with merge context.
+document.getElementById('mergeChatDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t)return;
+  const target=projectMeta[t.project]?.branch||'main';
+  document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
+  selectProject(t.project);showView('chat');
+  const session=activeChat();
+  session.messages.push(['user',`Review and merge ${t.id}: ${t.branch||'task branch'} → ${target}. Worktree: ${t.executionRoot||'—'}`]);
+  session.messages.push(['assistant','已帶入 Task / branch / target / worktree context。這裡做 merge review；Runner Task 本身不會自動 merge。']);
+  renderChatSession();showToast('Opened Project Chat with merge context');
+};
+
+// Ensure every Task opened after legacy handlers is normalized to the one-list model.
+const canonicalListOpenTask=openTaskById;
+openTaskById=function(id){const t=taskMap[id];if(t)canonicalTaskItems(t);canonicalListOpenTask(id);const current=taskMap[id];if(current){setPlanDraftForTask(current);renderDrawerPlan(current);renderWorkspaceResult(current)}};
+
+// --- Project-scoped Chat sessions ---
+const projectChats={};
+const projectActiveChat={};
+function cloneMessages(messages){return (messages||[]).map(x=>[x[0],x[1]])}
+function ensureProjectChats(key=currentProjectKey){
+  if(!projectChats[key]){
+    if(key==='ai-task-runner'){
+      projectChats[key]=chatSessions.map(s=>({id:s.id,name:s.name,messages:cloneMessages(s.messages)}));
+      projectActiveChat[key]='design';
+    }else{
+      const id=`${key}-chat-1`;
+      projectChats[key]=[{id,name:'Project Chat',messages:[['assistant',`這是 ${key} 的 Project Chat。這裡的對話與其他 Project 分開保存。`]]}];
+      projectActiveChat[key]=id;
+    }
+  }
+  return projectChats[key];
+}
+activeChat=function(){
+  const sessions=ensureProjectChats(currentProjectKey),id=projectActiveChat[currentProjectKey];
+  return sessions.find(x=>x.id===id)||sessions[0];
+};
+syncChatSessionSelect=function(){
+  const sessions=ensureProjectChats(currentProjectKey),select=document.getElementById('chatPreset'),id=projectActiveChat[currentProjectKey];
+  select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
+};
+renderChatSession=function(){
+  syncChatSessionSelect();
+  const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
+  (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
+  if(!(session?.messages||[]).length)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
+  box.scrollTop=box.scrollHeight;
+};
+document.getElementById('chatPreset').onchange=e=>{projectActiveChat[currentProjectKey]=e.target.value;renderChatSession()};
+document.getElementById('newChat').onclick=()=>{
+  const sessions=ensureProjectChats(currentProjectKey),id=`${currentProjectKey}-chat-${++chatSequence}`;
+  sessions.unshift({id,name:`New Chat ${chatSequence}`,messages:[]});projectActiveChat[currentProjectKey]=id;renderChatSession();document.getElementById('chatInput').focus();showToast('New Project Chat');
+};
+document.getElementById('renameChatConfirm').onclick=()=>{
+  const value=document.getElementById('renameChatInput').value.trim();if(!value){showToast('Chat name 不可空白');return}
+  activeChat().name=value;closeModal('renameChatModal');renderChatSession();showToast('Chat renamed');
+};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
+  const session=activeChat();session.messages.push(['user',textValue]);
+  const reply=/task|執行|run/i.test(textValue)?'若要長時間執行，可用「建立 Task」把目前內容帶到 Tasks。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
+  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+};
+
+// Project-aware navigation refreshes Chat immediately.
+selectProject=(function(base){return function(key){
+  base(key);ensureProjectChats(key);
+  document.getElementById('chatProjectTitle').textContent=key;
+  document.getElementById('chatProjectLine').textContent=`${projectMeta[key].path} · Project Chat`;
+  document.getElementById('tasksProjectLine').textContent=`${projectMeta[key].path} · ordered tasks`;
+  if(document.getElementById('view-chat').classList.contains('active'))renderChatSession();
+};})(selectProject);
+
+// Parent Task has no single workspace when it owns multiple tasks.
+workspaceName=(function(base){return function(t){
+  const items=canonicalTaskItems(t);if(items.length>1)return 'Per-task workspaces';return base(t);
+};})(workspaceName);
+
+// Remove legacy type words from card/Drawer presentation.
+taskCardHtml=(function(base){return function(t){
+  canonicalTaskItems(t);return base(t).replace('Task List','Tasks').replace('Multi-step','Per-task workspaces');
+};})(taskCardHtml);
+
+// --- Simplified Task editor: one vertical flow, advanced prompt sources on demand ---
+function simpleModeOptions(value,items){return items.map(([k,l])=>`<option value="${k}" ${value===k?'selected':''}>${l}</option>`).join('')}
+function newTaskPromptBodySimple(){
+  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose file</button></div>`;
+  if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
+  return `<textarea id="taskPromptInline" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(newTaskDraft.prompt)}</textarea>`;
+}
+function newTaskAiBodySimple(){
+  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" id="taskPickAi">Choose file</button></div>`;
+  if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
+  if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(newTaskDraft.aiPrompt)}</textarea>`;
+  return `<div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div>`;
+}
+renderNewTaskSources=function(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>What should this task do?</small></div><select class="simple-source-select" id="taskGoalModeSelect">${simpleModeOptions(newTaskDraft.goalMode,[['inline','Write'],['file','Use file'],['asset','Use Prompt asset']])}</select></div>
+      <div class="source-body">${newTaskPromptBodySimple()}</div>
+    </div>`;
+  const rows=[];
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div></div></div>`);
+  if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>Use workflow default unless you really need an override</small></div><select class="simple-source-select" id="taskAiModeSelect">${simpleModeOptions(newTaskDraft.aiMode,[['default','Workflow default'],['inline','Override text'],['file','Override file'],['asset','Prompt asset']])}</select></div><div class="source-body">${newTaskAiBodySimple()}</div></div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
+  document.getElementById('taskGoalModeSelect').onchange=e=>{captureNewTaskSources();newTaskDraft.goalMode=e.target.value;renderNewTaskSources()};
+  document.getElementById('taskAiModeSelect')?.addEventListener('change',e=>{captureNewTaskSources();newTaskDraft.aiMode=e.target.value;renderNewTaskSources()});
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  renderNewTaskWorkspace();
+};
+
+function planPromptBodySimple(x,i){
+  if(x.goalMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="goalFile" data-plan-pick-kind="goal">Choose file</button></div>`;
+  if(x.goalMode==='asset')return `<div class="pathrow"><select data-plan-item="${i}" data-plan-field="goalAsset">${assetOptions(x.goalAsset)}</select><button class="mini-btn" type="button" data-plan-view-prompts="1">Open Prompts</button></div>`;
+  return `<textarea data-plan-item="${i}" data-plan-field="prompt" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(x.prompt||'')}</textarea>`;
+}
+function planAiBodySimple(x,i){
+  if(x.aiMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="aiFile" data-plan-pick-kind="ai">Choose file</button></div>`;
+  if(x.aiMode==='asset')return `<div class="pathrow"><select data-plan-item="${i}" data-plan-field="aiAsset">${assetOptions(x.aiAsset)}</select><button class="mini-btn" type="button" data-plan-view-prompts="1">Open Prompts</button></div>`;
+  if(x.aiMode==='inline')return `<textarea data-plan-item="${i}" data-plan-field="aiPrompt" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(x.aiPrompt||'')}</textarea>`;
+  return `<div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div>`;
+}
+planRowBody=function(x,i,editable){
+  const caps=workflowCaps(x.workflow),rows=[];
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose file</button></div></div></div>`);
+  if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>Use workflow default unless an override is needed</small></div><select class="simple-source-select" data-plan-item="${i}" data-plan-field="aiMode">${simpleModeOptions(x.aiMode,[['default','Workflow default'],['inline','Override text'],['file','Override file'],['asset','Prompt asset']])}</select></div><div class="source-body">${planAiBodySimple(x,i)}</div></div>`);
+  return `
+    <div class="plan-basic-stack">
+      <div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div>
+      <div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div>
+    </div>
+    <div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div>
+    <div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>Primary task instruction</small></div><select class="simple-source-select" data-plan-item="${i}" data-plan-field="goalMode">${simpleModeOptions(x.goalMode,[['inline','Write'],['file','Use file'],['asset','Prompt asset']])}</select></div><div class="source-body">${planPromptBodySimple(x,i)}</div></div>
+    ${rows.length?`<div class="validation-stack">${rows.join('')}</div>`:''}`;
+};
+
+// Source-mode changes need to redraw only the selected item's editor body.
+const simplifiedBindFullPlan=bindFullPlan;
+bindFullPlan=function(t){
+  simplifiedBindFullPlan(t);
+  document.querySelectorAll('#planFormList select[data-plan-field="goalMode"],#planFormList select[data-plan-field="aiMode"]').forEach(el=>{
+    el.onchange=()=>{const i=+el.dataset.planItem;if(!batchDraft[i])return;batchDraft[i][el.dataset.planField]=el.value;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()};
+  });
+};
+
+// --- Progressive disclosure for AI validation overrides ---
+function aiOverrideHeadNew(){
+  if(newTaskDraft.aiMode==='default')return '<button type="button" class="mini-btn" id="taskAiOverride">Override</button>';
+  return `<div class="ai-override-actions"><select class="simple-source-select" id="taskAiModeSelect">${simpleModeOptions(newTaskDraft.aiMode,[['inline','Text'],['file','File'],['asset','Prompt asset']])}</select><button type="button" class="mini-btn" id="taskAiReset">Use default</button></div>`;
+}
+function aiOverrideHeadPlan(x,i){
+  if(x.aiMode==='default')return `<button type="button" class="mini-btn" data-plan-ai-override="${i}">Override</button>`;
+  return `<div class="ai-override-actions"><select class="simple-source-select" data-plan-item="${i}" data-plan-field="aiMode">${simpleModeOptions(x.aiMode,[['inline','Text'],['file','File'],['asset','Prompt asset']])}</select><button type="button" class="mini-btn" data-plan-ai-reset="${i}">Use default</button></div>`;
+}
+renderNewTaskSources=(function(){return function(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>What should this task do?</small></div><select class="simple-source-select" id="taskGoalModeSelect">${simpleModeOptions(newTaskDraft.goalMode,[['inline','Write'],['file','Use file'],['asset','Prompt asset']])}</select></div><div class="source-body">${newTaskPromptBodySimple()}</div></div>`;
+  const rows=[];
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div></div></div>`);
+  if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>${newTaskDraft.aiMode==='default'?'Workflow default':'Custom override'}</small></div>${aiOverrideHeadNew()}</div><div class="source-body">${newTaskAiBodySimple()}</div></div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
+  document.getElementById('taskGoalModeSelect').onchange=e=>{captureNewTaskSources();newTaskDraft.goalMode=e.target.value;renderNewTaskSources()};
+  document.getElementById('taskAiOverride')?.addEventListener('click',()=>{captureNewTaskSources();newTaskDraft.aiMode='inline';renderNewTaskSources()});
+  document.getElementById('taskAiModeSelect')?.addEventListener('change',e=>{captureNewTaskSources();newTaskDraft.aiMode=e.target.value;renderNewTaskSources()});
+  document.getElementById('taskAiReset')?.addEventListener('click',()=>{captureNewTaskSources();newTaskDraft.aiMode='default';newTaskDraft.aiPrompt='';newTaskDraft.aiFile='';renderNewTaskSources()});
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  renderNewTaskWorkspace();
+};})();
+
+planRowBody=(function(){return function(x,i,editable){
+  const caps=workflowCaps(x.workflow),rows=[];
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose file</button></div></div></div>`);
+  if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>${x.aiMode==='default'?'Workflow default':'Custom override'}</small></div>${aiOverrideHeadPlan(x,i)}</div><div class="source-body">${planAiBodySimple(x,i)}</div></div>`);
+  return `<div class="plan-basic-stack"><div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>Primary task instruction</small></div><select class="simple-source-select" data-plan-item="${i}" data-plan-field="goalMode">${simpleModeOptions(x.goalMode,[['inline','Write'],['file','Use file'],['asset','Prompt asset']])}</select></div><div class="source-body">${planPromptBodySimple(x,i)}</div></div>${rows.length?`<div class="validation-stack">${rows.join('')}</div>`:''}`;
+};})();
+
+bindFullPlan=(function(base){return function(t){
+  base(t);
+  document.querySelectorAll('[data-plan-ai-override]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planAiOverride;if(!batchDraft[i])return;batchDraft[i].aiMode='inline';commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.querySelectorAll('[data-plan-ai-reset]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planAiReset;if(!batchDraft[i])return;batchDraft[i].aiMode='default';batchDraft[i].aiPrompt='';batchDraft[i].aiFile='';commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+};})(bindFullPlan);
+
+// --- One canonical Task Editor for root task, list task creation, and list task editing ---
+let taskItemSequence=1000;
+let taskEditorContext={mode:'root-create',ownerId:null,index:null};
+const baseUnifiedPlanItemDefaults=planItemDefaults;
+planItemDefaults=function(x={},t=null,i=0){
+  const y=baseUnifiedPlanItemDefaults(x,t,i);
+  return {...y,
+    itemId:x.itemId||x.item_id||`${t?.id||'draft'}-I${i+1}-${++taskItemSequence}`,
+    title:x.title||x.itemTitle||'',
+    workspacePolicy:x.workspacePolicy||x.workspace_policy||'auto',
+    workspaceKind:x.workspaceKind||x.workspace_kind||'main',
+    branch:x.branch||'',executionRoot:x.executionRoot||x.execution_root||'',
+  };
+};
+itemTitle=(function(base){return function(item,index){return item?.title?.trim()||base(item,index)}})(itemTitle);
+singleTaskItem=function(t){
+  const p=t.promptSource||{};
+  return planItemDefaults({
+    title:(Array.isArray(t.items)&&t.items[0]?.title)||'',
+    prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
+    project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
+    validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md',
+    workspacePolicy:t.workspacePolicy||'auto',workspaceKind:t.workspaceKind||'main',branch:t.branch||'',executionRoot:t.executionRoot||''
+  },t,0);
+};
+
+commitPlanDraft=function(t,{markDirty=false}={}){
+  if(!t)return;
+  batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  t.kind='task_list';t.items=cloneBatch(batchDraft);t.listItems=t.items;
+  const count=t.items.length,x=t.items[0];
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  if(count===1){
+    t.workflow=x.workflow;t.goal=x.prompt;t.project=Object.keys(projectMeta).find(k=>projectMeta[k].path===x.project)||t.project;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    t.workspacePolicy=x.workspacePolicy;t.workspaceKind=x.workspaceKind;t.branch=x.branch;t.executionRoot=x.executionRoot;
+  }else{
+    t.workflow='Tasks';t.workspaceKind='per_item';t.workspacePolicy='per_item';t.branch='—';t.executionRoot='Per-task workspaces';t.goal=`${count} ordered tasks`;
+  }
+  const baseTags=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x))&&!['workflow','file validation','AI validation'].includes(x));
+  t.tags=[`${count} task${count===1?'':'s'}`,...baseTags].slice(0,4);
+  t.desc=count===1?'1 task':`${count} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused · current task changed · restart required.'}
+};
+
+function projectKeyFromPath(path, fallback=currentProjectKey){const found=Object.keys(projectMeta).find(k=>projectMeta[k].path===path);return found||(projectMeta[path]?path:fallback)}
+function editorOwner(){return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
+function editorItemRef(){
+  const owner=editorOwner();
+  if(taskEditorContext.mode==='root-create')return `T-${taskSequence+1}`;
+  return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
+}
+function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
+function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
+  taskEditorContext={mode,ownerId,index};
+  const owner=ownerId?taskMap[ownerId]:null;
+  let item=null;
+  if(owner&&index!=null){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
+  if(mode==='edit-item'&&!item)return;
+  newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
+  if(fromChat)newTaskDraft.prompt=fromChat;
+  newTaskWorkspaceMode=item?.workspacePolicy||'auto';
+  const projectKey=item?projectKeyFromPath(item.project,owner?.project||currentProjectKey):(owner?.project||currentProjectKey);
+  document.getElementById('newTaskProject').value=projectMeta[projectKey]?projectKey:currentProjectKey;
+  document.getElementById('newTaskWorkflow').value=item?.workflow||'ralphy_ai_validate.yaml';
+  document.getElementById('newTaskTitle').value=item?.title||'';
+  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='create-item'?'New task':'Edit task';
+  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
+  document.getElementById('createTaskConfirm').textContent=mode==='edit-item'?'Save changes':'Create task';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  document.getElementById('newTaskWorkflowField').hidden=false;document.getElementById('newTaskWorkflowCaps').hidden=false;
+  document.querySelector('.workspace-selector-wrap').hidden=false;document.getElementById('newTaskPromptSource').hidden=false;document.getElementById('newTaskValidationSource').hidden=false;
+  renderNewTaskSources();renderNewTaskWorkspace();openModal('newTaskModal');
+}
+
+renderNewTaskWorkspace=function(){
+  const host=document.getElementById('newTaskWorkspace');if(!host)return;
+  const project=document.getElementById('newTaskProject')?.value||currentProjectKey;
+  const ref=editorItemRef(),busy=mainBusyTask(project),resolved=resolveTaskWorkspace(project,ref,newTaskWorkspaceMode);
+  const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
+  host.innerHTML=`<div class="workspace-options">
+    ${option('auto','Auto','Use Main when available; create a Worktree when Main is busy.',busy?`Main busy → Worktree`:'Main available')}
+    ${option('main','Main workspace','Use the project working tree directly.',busy?`Busy · ${busy.id}`:'Available',!!busy)}
+    ${option('worktree','Isolated worktree','Create an isolated branch/path for this task.',`task/${ref}`)}
+  </div><div class="workspace-preview"><strong>Preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
+  host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
+};
+
+function buildEditorItem(owner,index){
+  captureNewTaskSources();
+  const rawProject=document.getElementById('newTaskProject').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  const title=document.getElementById('newTaskTitle').value.trim();
+  let promptValue='';
+  if(newTaskDraft.goalMode==='inline')promptValue=newTaskDraft.prompt.trim();
+  else if(newTaskDraft.goalMode==='file')promptValue=`Prompt file · ${basename(newTaskDraft.goalFile)}`;
+  else promptValue=`Prompt asset · ${newTaskDraft.goalAsset}`;
+  if(newTaskDraft.goalMode==='inline'&&!newTaskDraft.prompt.trim()){showToast('Task Prompt 不可空白');return null}
+  if(newTaskDraft.goalMode==='file'&&!newTaskDraft.goalFile.trim()){showToast('Prompt file is required');return null}
+  if(caps.file&&!newTaskDraft.validator.trim()){showToast('This Workflow requires File Validator');return null}
+  if(!rawProject){showToast('Project is required');return null}
+  const projectKey=ensureProjectFromInput(rawProject);
+  const resolved=resolveTaskWorkspace(projectKey,editorItemRef(),newTaskWorkspaceMode);if(!resolved.ok){showToast(resolved.reason);return null}
+  return planItemDefaults({title,prompt:newTaskDraft.prompt||promptValue,goalMode:newTaskDraft.goalMode,goalFile:newTaskDraft.goalFile,goalAsset:newTaskDraft.goalAsset,
+    project:projectMeta[projectKey]?.path||projectKey,workflow,validatorMode:caps.file?'file':'none',validator:newTaskDraft.validator,
+    aiMode:newTaskDraft.aiMode,aiPrompt:newTaskDraft.aiPrompt,aiFile:newTaskDraft.aiFile,aiAsset:newTaskDraft.aiAsset,
+    workspacePolicy:newTaskWorkspaceMode,workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root
+  },owner,index||0);
+}
+
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const ctx=taskEditorContext;
+  if(ctx.mode==='root-create'){
+    const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
+    const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
+    const boardTitle=document.getElementById('newTaskTitle').value.trim()||planTitle(item,0).slice(0,72)||'New Task';
+    const projectKey=projectKeyFromPath(item.project,currentProjectKey);
+    const t={id,kind:'task_list',status:'new',title:boardTitle,runtime:'idle',desc:'1 task',tags:['1 task'],workflow:item.workflow,project:projectKey,progress:[0,1],elapsed:'—',stage:'Idle',session:'—',goal:item.prompt,
+      items:[item],listItems:[item],promptSource:{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset},
+      workspacePolicy:item.workspacePolicy,workspaceKind:item.workspaceKind,branch:item.branch,executionRoot:item.executionRoot};
+    taskMap[id]=t;closeModal('newTaskModal');persistCurrentPresetFromTaskMap();renderBoardFromMap();showToast(`Task created · ${item.workspacePolicy==='worktree'?'Worktree':item.workspacePolicy}`);openTaskById(id);return;
+  }
+  const owner=taskMap[ctx.ownerId];if(!owner||!taskEditable(owner))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  const targetIndex=ctx.mode==='create-item'?batchDraft.length:ctx.index;
+  const item=buildEditorItem(owner,targetIndex);if(!item)return;
+  const markDirty=ctx.mode==='edit-item'&&owner.status==='paused'&&targetIndex===batchState.index;
+  if(ctx.mode==='create-item'){batchDraft.push(item);sequenceExpandedIndex=-1;pushTaskHistory(owner,'Task added');}
+  else{batchDraft[targetIndex]={...batchDraft[targetIndex],...item,itemId:batchDraft[targetIndex].itemId};pushTaskHistory(owner,`Task ${targetIndex+1} edited`)}
+  commitPlanDraft(owner,{markDirty});
+  if(owner.items.length===1&&item.title)owner.title=item.title;
+  persistCurrentPresetFromTaskMap();closeModal('newTaskModal');renderBoardFromMap();renderExecutionPlan(owner);renderWorkspaceResult(owner);
+  if(!document.getElementById('planModal').classList.contains('open'))openPlanDialog(owner.id);else renderFullPlan(owner);
+  showToast(markDirty?'Saved · current task will restart':'Task saved');
+};
+
+// Suppress legacy New Task listeners and route root creation into the canonical editor.
+// obsolete create-entry capture handler removed; final dropdown owns this entry.
+document.getElementById('chatToTask').onclick=()=>{const textValue=document.getElementById('chatInput').value.trim();loadTaskEditor('root-create',{fromChat:textValue});document.getElementById('newTaskTitle').value=textValue?textValue.slice(0,72):''};
+
+function workspaceLabelForItem(x){return x.workspacePolicy==='worktree'?'Worktree':x.workspacePolicy==='main'?'Main':'Auto'}
+renderFullPlan=function(t){
+  const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:canonicalTaskItems(t),editable=taskEditable(t);
+  document.getElementById('planPageTitle').textContent=t.title;
+  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
+  host.innerHTML=items.map((x,i)=>{
+    const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
+    return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<=Math.max(0,batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure||items.length<=1?'disabled':''}>×</button></div></div></div></article>`;
+  }).join('');
+  document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
+  host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=()=>loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit}));
+  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);commitPlanDraft(t,{markDirty:false});persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+};
+
+setAddTaskMode=function(mode){
+  addTaskMode=mode;selectedMoveTaskId=null;
+  document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
+  document.getElementById('addTaskCreatePanel').hidden=mode!=='create';document.getElementById('addTaskMovePanel').hidden=mode!=='move';
+  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Open editor':'Move here';
+  document.getElementById('confirmAddPlanTask').disabled=false;renderMoveTaskPicker();
+};
+openAddTaskDialog=function(ownerId=currentTaskId){
+  const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
+  addPlanOwnerId=ownerId;setAddTaskMode('create');openModal('addPlanTaskModal');
+};
+function openCreateItemFromAdd(){const owner=taskMap[addPlanOwnerId];if(!owner)return;closeModal('addPlanTaskModal');loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length})}
+document.getElementById('openUnifiedTaskEditor').onclick=openCreateItemFromAdd;
+document.getElementById('confirmAddPlanTask').onclick=()=>{
+  if(addTaskMode==='create'){openCreateItemFromAdd();return}
+  const owner=taskMap[addPlanOwnerId],source=taskMap[selectedMoveTaskId];if(!owner||!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id))return;
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  const sourceItem=cloneBatch(canonicalTaskItems(source))[0];sourceItem.originTaskId=source.id;sourceItem.originTaskTitle=source.title;
+  batchDraft.push(planItemDefaults(sourceItem,owner,batchDraft.length));delete taskMap[source.id];commitPlanDraft(owner,{markDirty:false});pushTaskHistory(owner,`Moved ${source.id} here`);
+  persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);showToast('New Task moved here');
+};
+document.getElementById('drawerAddStep').onclick=()=>openAddTaskDialog(currentTaskId);document.getElementById('planAddTask').onclick=()=>openAddTaskDialog(currentTaskId);
+
+document.getElementById('editTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
+  const items=canonicalTaskItems(t);if(items.length===1)loadTaskEditor('edit-item',{ownerId:t.id,index:0});else openPlanDialog(t.id);
+};
+const oneEditorOpenTask=openTaskById;
+openTaskById=function(id){
+  oneEditorOpenTask(id);const t=taskMap[id];if(!t)return;const edit=document.getElementById('editTaskDemo'),items=canonicalTaskItems(t),editable=taskEditable(t);
+  edit.disabled=!editable;edit.textContent=editable?(items.length===1?'Edit task':'Edit tasks'):(t.status==='ongoing'?'Pause to edit':'Read-only');
+};
+
+// --- Restore tag-based Prompt source switching in the one canonical Task Editor ---
+renderNewTaskSources=function(){
+  const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
+  document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
+  document.getElementById('newTaskPromptSource').innerHTML=`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head">
+        <div><strong>Task Prompt</strong><small>Choose how this task gets its prompt</small></div>
+        ${sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode')}
+      </div>
+      <div class="source-body">${newTaskPromptBodySimple()}</div>
+    </div>`;
+  const rows=[];
+  if(caps.file)rows.push(`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div>
+      <div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div></div>
+    </div>`);
+  if(caps.ai)rows.push(`
+    <div class="source-card simple-source-card">
+      <div class="source-head simple-source-head">
+        <div><strong>AI Validation</strong><small>${newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source'}</small></div>
+        ${sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode')}
+      </div>
+      <div class="source-body">${newTaskAiBodySimple()}</div>
+    </div>`);
+  document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
+
+  document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{
+    captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources();
+  });
+  document.querySelectorAll('[data-task-ai-mode]').forEach(b=>b.onclick=()=>{
+    captureNewTaskSources();newTaskDraft.aiMode=b.dataset.sourceValue;
+    if(newTaskDraft.aiMode==='default'){newTaskDraft.aiPrompt='';newTaskDraft.aiFile=''}
+    renderNewTaskSources();
+  });
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  renderNewTaskWorkspace();
+};
+
+// --- Final unified model: every Board card is one Task List with items[0..N]. ---
+let listNameMode='create';
+let listNameTargetId=null;
+canonicalTaskItems=function(t){
+  if(!t)return [];
+  let raw;
+  if(Array.isArray(t.items))raw=t.items;
+  else if(Array.isArray(t.listItems))raw=t.listItems;
+  else raw=[singleTaskItem(t)];
+  t.items=raw.map((x,i)=>planItemDefaults(x,t,i));
+  t.listItems=t.items;t.kind='task_list';
+  const count=t.items.length;
+  const base=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x))&&x!=='Task List');
+  t.tags=[`${count} task${count===1?'':'s'}`,...base].slice(0,4);
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  return t.items;
+};
+planItemsForTask=function(t){return cloneBatch(canonicalTaskItems(t))};
+setPlanDraftForTask=function(t){
+  if(!t)return;batchParentTaskId=t.id;batchDraft=cloneBatch(canonicalTaskItems(t));batchState=deriveStepState(t);
+  if(sequenceExpandedIndex>=batchDraft.length)sequenceExpandedIndex=-1;
+};
+isSequenceTask=function(t){return canonicalTaskItems(t).length>1};
+
+commitPlanDraft=function(t,{markDirty=false}={}){
+  if(!t)return;
+  batchDraft=batchDraft.map((x,i)=>planItemDefaults(x,t,i));
+  t.kind='task_list';t.items=cloneBatch(batchDraft);t.listItems=t.items;
+  const count=t.items.length,x=t.items[0];
+  t.progress=[Math.min(t.progress?.[0]||0,count),count];
+  if(count===0){
+    t.workflow='—';t.goal='';t.workspacePolicy='none';t.workspaceKind='none';t.branch='—';t.executionRoot='—';
+    t.desc='Empty task list';t.stage='Draft';t.session='—';
+  }else if(count===1){
+    t.workflow=x.workflow;t.goal=x.prompt;
+    t.promptSource={goalMode:x.goalMode,prompt:x.prompt,goalFile:x.goalFile,goalAsset:x.goalAsset,validator:x.validator,aiMode:x.aiMode,aiPrompt:x.aiPrompt,aiFile:x.aiFile,aiAsset:x.aiAsset};
+    t.workspacePolicy=x.workspacePolicy;t.workspaceKind=x.workspaceKind;t.branch=x.branch;t.executionRoot=x.executionRoot;
+    t.desc='1 task';
+  }else{
+    t.workflow='Tasks';t.workspacePolicy='per_item';t.workspaceKind='per_item';t.branch='—';t.executionRoot='Per-task workspaces';t.goal=`${count} ordered tasks`;t.desc=`${count} ordered tasks · ${runtimeLabel(t.runtime)}`;
+  }
+  const keep=(t.tags||[]).filter(x=>!/^\d+\s+tasks?$/.test(String(x)));t.tags=[`${count} task${count===1?'':'s'}`,...keep].slice(0,4);
+  if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused · current task changed · restart required.'}
+};
+
+function openListNameDialog(mode='create',t=null){
+  listNameMode=mode;listNameTargetId=t?.id||null;
+  document.getElementById('listNameModalTitle').textContent=mode==='create'?'New Task List':'Rename Task List';
+  document.getElementById('listNameModalHelp').textContent=mode==='create'?'Create the list first. Project, Workflow, Prompt and Workspace belong to each task.':'Only the Board/List name changes. Task execution settings stay untouched.';
+  document.getElementById('emptyListTitle').value=mode==='create'?'':(t?.title||'');
+  document.getElementById('confirmEmptyList').textContent=mode==='create'?'Create Task List':'Save name';
+  openModal('emptyListModal');setTimeout(()=>document.getElementById('emptyListTitle').focus(),0);
+}
+// obsolete create-entry capture handler removed; final dropdown owns this entry.
+document.querySelectorAll('.coladd').forEach(b=>b.onclick=()=>document.getElementById('newTask').click());
+document.getElementById('confirmEmptyList').onclick=()=>{
+  const title=document.getElementById('emptyListTitle').value.trim();if(!title){showToast('List name is required');return}
+  if(listNameMode==='rename'){
+    const t=taskMap[listNameTargetId];if(!t||!taskEditable(t))return;t.title=title;pushTaskHistory(t,'Task List renamed');closeModal('emptyListModal');persistCurrentPresetFromTaskMap();renderBoardFromMap();openTaskById(t.id);showToast('Task List renamed');return;
+  }
+  const id='T-'+(++taskSequence);
+  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:'Empty task list',tags:['0 tasks'],workflow:'—',projectContext:currentProjectKey,project:currentProjectKey,progress:[0,0],elapsed:'—',stage:'Draft',session:'—',goal:'',items:[],listItems:[],workspacePolicy:'none',workspaceKind:'none',branch:'—',executionRoot:'—'};
+  taskMap[id]=t;closeModal('emptyListModal');persistCurrentPresetFromTaskMap();renderBoardFromMap();openPlanDialog(id);showToast('Empty Task List created');
+};
+
+renderDrawerPlan=function(t){
+  const host=document.getElementById('formList'),items=canonicalTaskItems(t),editable=taskEditable(t);
+  document.getElementById('taskListEditHint').textContent=`${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('taskListParentHint').textContent=items.length===0?'No tasks yet':items.length===1?'1 task':`${items.length} tasks · executed top to bottom`;
+  document.getElementById('openFullPlan').hidden=false;document.getElementById('openFullPlan').textContent='Open list';
+  if(items.length===0){host.innerHTML='<button class="empty-plan-cta" id="emptyPlanAddTask" type="button"><strong>No tasks yet</strong><span>Add the first task using the standard Task Editor →</span></button>';document.getElementById('emptyPlanAddTask').onclick=()=>openAddTaskDialog(t.id)}
+  else if(items.length===1){const x=items[0],s=planStateFor(t,0,1);host.innerHTML=`<div class="drawer-plan-row ${s.current?'current':''}" data-drawer-item="0"><span class="n">1</span><div><strong>${escapeHtml(planTitle(x,0))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)} · ${workspaceLabelForItem(x)}</small></div><div class="drawer-task-actions"><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="0">Edit</button></div></div>`}
+  else host.innerHTML=items.slice(0,4).map((x,i)=>{const s=planStateFor(t,i,items.length);return `<div class="drawer-plan-row ${s.done?'done':''} ${s.current?'current':''}" data-drawer-item="${i}"><span class="n">${i+1}</span><div><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)} · ${workspaceLabelForItem(x)}</small></div><div class="drawer-task-actions"><span class="state">${escapeHtml(s.label)}</span><button class="mini-btn" type="button" data-drawer-edit="${i}" ${editable&&!s.done?'':'disabled'}>Edit</button></div></div>`}).join('')+(items.length>4?`<div class="steps-summary">+ ${items.length-4} more · Open list</div>`:'');
+  host.querySelectorAll('[data-drawer-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.drawerEdit})});
+  host.querySelectorAll('[data-drawer-item]').forEach(r=>r.ondblclick=()=>{const i=+r.dataset.drawerItem,s=planStateFor(t,i,items.length);if(editable&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})});
+  ['drawerAddStep','drawerAddExisting','stepsAdvanced'].forEach(id=>document.getElementById(id).disabled=!editable);
+};
+
+renderFullPlan=function(t){
+  const host=document.getElementById('planFormList'),items=canonicalTaskItems(t),editable=taskEditable(t);
+  document.getElementById('planPageTitle').textContent=t.title;
+  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
+  document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
+  if(items.length===0){host.innerHTML='<button class="empty-plan-cta large" id="planEmptyAddTask" type="button"><strong>No tasks yet</strong><span>+ Add first task</span></button>';document.getElementById('planEmptyAddTask').onclick=()=>openAddTaskDialog(t.id)}
+  else host.innerHTML=items.map((x,i)=>{const s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current,canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;return `<article class="plan-row-compact ${s.done?'done':''} ${s.current?'current':''}" data-plan-row="${i}"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}${x.originTaskId?` · moved ${escapeHtml(x.originTaskId)}`:''}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip">${workspaceLabelForItem(x)}</span><span class="plan-row-state ${s.cls}">${escapeHtml(s.label)}</span><div class="plan-row-controls"><button type="button" data-task-item-edit="${i}" ${canEdit?'':'disabled'}>Edit</button><button type="button" data-plan-up="${i}" ${!canRestructure||i<1||(t.status==='paused'&&i-1<=batchState.index)?'disabled':''}>↑</button><button type="button" data-plan-down="${i}" ${!canRestructure||i>=items.length-1?'disabled':''}>↓</button><button type="button" data-plan-remove="${i}" ${!canRestructure?'disabled':''}>×</button></div></div></div></article>`}).join('');
+  host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit})});
+  host.querySelectorAll('[data-plan-row]').forEach(r=>r.ondblclick=()=>{const i=+r.dataset.planRow,s=planStateFor(t,i,items.length);if(editable&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})});
+  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planUp;if(i<1||(t.status==='paused'&&i-1<=batchState.index))return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planDown;if((t.status==='paused'&&i<=batchState.index)||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  host.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.planRemove;if(i<batchState.index)return;batchDraft.splice(i,1);commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
+  document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
+};
+
+// Add first/next task always uses the exact same Task Editor.
+function openCreateItemFromAdd(){const owner=taskMap[addPlanOwnerId];if(!owner)return;closeModal('addPlanTaskModal');loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length})}
+
+// Parent edit only renames the list; task editing lives on each task row.
+document.getElementById('editTaskDemo').onclick=()=>{const t=taskMap[currentTaskId];if(t&&taskEditable(t))openListNameDialog('rename',t)};
+const unifiedListOpenTask=openTaskById;
+openTaskById=function(id){
+  unifiedListOpenTask(id);const t=taskMap[id];if(!t)return;const items=canonicalTaskItems(t),editable=taskEditable(t),edit=document.getElementById('editTaskDemo');
+  edit.disabled=!editable;edit.textContent=editable?'Rename list':(t.status==='ongoing'?'Pause to rename':'Read-only');
+  const primary=document.getElementById('taskPrimaryDemo');
+  if(items.length===0){primary.disabled=true;primary.textContent='Run';primary.title='Add at least one task before running'}else{primary.disabled=false;primary.title=''}
+  setPlanDraftForTask(t);renderDrawerPlan(t);
+};
+
+// --- Isolated Task Editor: editing a task never shows Task List context. ---
+const isolatedTaskEditorLoad=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  if(mode==='create-item'||mode==='edit-item'){
+    closeModal('addPlanTaskModal');
+    closeModal('planModal');
+    document.getElementById('taskOverlay').classList.remove('open');
+  }
+  isolatedTaskEditorLoad(mode,args);
+  document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='edit-item'
+    ?'Edit this task only. Project, Workflow, Prompt, Validation and Workspace belong to this task.'
+    :'Configure this task. Project, Workflow, Prompt, Validation and Workspace belong to this task.';
+  document.getElementById('editTaskScopeNote').hidden=true;
+};
+
+// Remove List-oriented wording from the canonical Task Editor itself.
+document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are saved on this task only. Workflow capabilities determine which validation fields are shown.';
+
+// --- Unified + New / column + dropdown: Task or Task List ---
+const createTypeMenu=document.getElementById('createTypeMenu');
+let createMenuAnchor=null;
+function hideCreateTypeMenu(){createTypeMenu.hidden=true;createMenuAnchor=null}
+function showCreateTypeMenu(anchor){
+  if(typeof hideTaskContextMenu==='function')hideTaskContextMenu();createMenuAnchor=anchor;createTypeMenu.hidden=false;
+  const r=anchor.getBoundingClientRect(),w=250,gap=6;
+  let left=Math.min(window.innerWidth-w-10,Math.max(10,r.right-w));
+  let top=r.bottom+gap;
+  if(top+112>window.innerHeight)top=Math.max(10,r.top-112-gap);
+  createTypeMenu.style.left=`${left}px`;createTypeMenu.style.top=`${top}px`;
+}
+function createEmptyTaskListAndOpen(){
+  const id='T-'+(++taskSequence);
+  const t={id,kind:'task_list',status:'new',title:'New Task List',runtime:'idle',desc:'Empty task list',tags:['0 tasks'],workflow:'—',projectContext:currentProjectKey,project:currentProjectKey,progress:[0,0],elapsed:'—',stage:'Draft',session:'—',goal:'',items:[],listItems:[],workspacePolicy:'none',workspaceKind:'none',branch:'—',executionRoot:'—'};
+  taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();openPlanDialog(id);showToast('Task List created · add tasks when ready');
+}
+function handleCreateEntryClick(e){
+  e.preventDefault();e.stopImmediatePropagation();
+  if(!createTypeMenu.hidden&&createMenuAnchor===e.currentTarget){hideCreateTypeMenu();return}
+  showCreateTypeMenu(e.currentTarget);
+}
+document.getElementById('newTask').addEventListener('click',handleCreateEntryClick,true);
+document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',handleCreateEntryClick,true));
+createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{hideCreateTypeMenu();loadTaskEditor('root-create')};
+createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{hideCreateTypeMenu();createEmptyTaskListAndOpen()};
+document.addEventListener('click',e=>{if(!createTypeMenu.hidden&&!createTypeMenu.contains(e.target)&&e.target!==createMenuAnchor)hideCreateTypeMenu()});
+window.addEventListener('resize',hideCreateTypeMenu);window.addEventListener('scroll',hideCreateTypeMenu,true);
+
+// --- Reusable editor surfaces inside the Task List dialog (no modal-on-modal for long editing). ---
+const planModalEl=document.getElementById('planModal');
+const planListSurface=planModalEl.querySelector(':scope > .plan-modal-card');
+const planSubviewMount=document.getElementById('planSubviewMount');
+const taskEditorHome=document.getElementById('newTaskModal');
+const taskEditorSurface=taskEditorHome.querySelector('.task-create-modal');
+const yamlEditorHome=document.getElementById('yamlPlanModal');
+const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
+let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
+
+function setSurfaceBackBehavior(surface,type,returnTarget='list'){
+  const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
+  const label=returnTarget==='info'?'Back to Info':'Back to Task List';
+  if(close){close.textContent='←';close.title=label;close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+  if(cancel){cancel.textContent=label;cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+}
+function restoreSurfaceCloseBehavior(surface,overlayId){
+  const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
+  if(close){close.textContent='×';close.title='';close.onclick=()=>closeModal(overlayId)}
+  if(cancel){cancel.textContent=overlayId==='newTaskModal'?'Cancel':'Cancel';cancel.onclick=()=>closeModal(overlayId)}
+}
+function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null,returnTarget='list'){
+  const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
+  planReturnScroll=scrollHost.scrollTop||0;planSubviewType=type;planSubviewOwnerId=ownerId;planSubviewIndex=index;planSubviewReturnTarget=returnTarget;
+  closeModal(sourceOverlay.id);planSubviewMount.appendChild(surface);planSubviewMount.hidden=false;planModalEl.classList.add('subview-open');openModal('planModal');
+  setSurfaceBackBehavior(surface,type,returnTarget);
+}
+function leavePlanSubview(){
+  if(!planSubviewType)return;
+  const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex,returnTarget=planSubviewReturnTarget;
+  if(type==='task'){taskEditorHome.appendChild(taskEditorSurface);restoreSurfaceCloseBehavior(taskEditorSurface,'newTaskModal')}
+  if(type==='yaml'){yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal')}
+  planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewReturnTarget='list';planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
+  const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  if(returnTarget==='info'&&owner){
+    closeModal('planModal');openTaskById(ownerId);
+    if(index!=null)setTimeout(()=>{selectTaskItem(owner,index);document.querySelector(`#formList [data-drawer-item="${index}"]`)?.scrollIntoView({block:'nearest'})},0);
+    return;
+  }
+  const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
+  if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
+}
+planModalEl.addEventListener('click',e=>{if(e.target===planModalEl&&planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview()}},true);
+
+// Reuse the exact same Task Editor DOM inside the list dialog.
+const taskEditorLoadBeforeSubview=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  if(mode!=='create-item'&&mode!=='edit-item'){
+    if(planSubviewType)leavePlanSubview();
+    return taskEditorLoadBeforeSubview(mode,args);
+  }
+  const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
+  const returnTarget=document.getElementById('taskOverlay').classList.contains('open')&&!planModalEl.classList.contains('open')?'info':'list';
+  if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
+  closeModal('addPlanTaskModal');
+  isolatedTaskEditorLoad(mode,args);
+  document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='edit-item'?'Edit this task only.':'Configure this task only.';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  enterPlanSubview('task',taskEditorSurface,taskEditorHome,ownerId,args.index??canonicalTaskItems(owner).length,returnTarget);
+};
+
+const taskEditorSaveBeforeSubview=document.getElementById('createTaskConfirm').onclick;
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const embedded=planSubviewType==='task';
+  taskEditorSaveBeforeSubview();
+  if(embedded&&['Task saved','Saved · current task will restart'].includes(toast.textContent))leavePlanSubview();
+};
+
+// YAML is also a long-form editor, so it uses the same Plan subview instead of another large modal.
+const yamlOpenBeforeSubview=openYamlPlanModal;
+openYamlPlanModal=function(){
+  const ownerId=currentTaskId;if(!ownerId)return;
+  if(!planModalEl.classList.contains('open'))openPlanDialog(ownerId);
+  yamlOpenBeforeSubview();
+  if(yamlEditorHome.classList.contains('open'))enterPlanSubview('yaml',yamlEditorSurface,yamlEditorHome,ownerId,null);
+};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+document.getElementById('planEditYaml').onclick=openYamlPlanModal;
+const yamlApplyBeforeSubview=document.getElementById('applyYamlPlan').onclick;
+document.getElementById('applyYamlPlan').onclick=()=>{
+  const embedded=planSubviewType==='yaml';yamlApplyBeforeSubview();
+  if(embedded&&toast.textContent==='Task list YAML applied')leavePlanSubview();
+};
+
+// --- Shared right-click context menu for list rows and Board cards. ---
+const taskContextMenu=document.getElementById('taskContextMenu');
+let taskContextState=null;
+function hideTaskContextMenu(){taskContextMenu.hidden=true;taskContextState=null}
+function positionTaskContextMenu(x,y){
+  taskContextMenu.hidden=false;const w=454,h=260;
+  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
+}
+function setContextAction(name,{visible=true,enabled=true,label=null}={}){
+  const b=taskContextMenu.querySelector(`[data-context-action="${name}"]`);if(!b)return;
+  b.hidden=!visible;b.disabled=!enabled;if(label)b.querySelector('span').textContent=label;
+}
+function renderContextSideInfo(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  const title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta'),body=document.getElementById('taskInfoBody');
+  if(state.scope==='list'){
+    const items=canonicalTaskItems(t);
+    title.textContent=t.title;meta.textContent=`${t.id} · Task List`;
+    body.innerHTML=`<span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Elapsed</span><strong>${escapeHtml(t.elapsed||'—')}</strong>`;
+    return;
+  }
+  const items=canonicalTaskItems(t),x=items[state.index];if(!x)return;
+  const s=planStateFor(t,state.index,items.length),ai=x.aiMode==='default'?'Workflow default':x.aiMode;
+  title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
+  body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt</span><strong>${escapeHtml(x.goalMode||'inline')}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
+}
+function openItemContextMenu(e,owner,index){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
+  const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
+  const canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
+  taskContextState={scope:'item',ownerId:owner.id,index};
+  setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
+  setContextAction('up',{visible:true,enabled:canRestructure&&index>0&&(owner.status!=='paused'||index-1>batchState.index),label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
+  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
+}
+function openListContextMenu(e,t){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
+  taskContextState={scope:'list',ownerId:t.id,index:null};
+  setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
+  setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
+  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
+}
+function showContextInfo(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  const body=document.getElementById('taskInfoBody'),title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta');
+  if(state.scope==='list'){
+    const items=canonicalTaskItems(t);title.textContent=t.title;meta.textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
+    body.innerHTML=`<span>Type</span><strong>Task List</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Status</span><strong>${statusLabel(t.status)}</strong><span>Runtime</span><strong>${runtimeLabel(t.runtime)}</strong>`;
+  }else{
+    const x=canonicalTaskItems(t)[state.index],s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(!x)return;
+    title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
+    const ai=x.aiMode==='default'?'Workflow default':x.aiMode;
+    body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt source</span><strong>${escapeHtml(x.goalMode)}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
+  }
+  openModal('taskInfoModal');
+}
+function mutateContextItem(action,state){
+  const t=taskMap[state.ownerId];if(!t)return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const i=state.index,items=canonicalTaskItems(t),s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current;
+  const canEdit=taskEditable(t)&&!s.done,canRestructure=canEdit&&!currentLocked;if(!canRestructure)return;
+  if(action==='up'&&i>0){[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]]}
+  if(action==='down'&&i<batchDraft.length-1){[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]]}
+  if(action==='remove'){batchDraft.splice(i,1)}
+  commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderBoardFromMap();renderFullPlan(t);renderDrawerPlan(t);
+}
+taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=()=>{
+  if(b.disabled||!taskContextState)return;const state={...taskContextState},action=b.dataset.contextAction;hideTaskContextMenu();
+  const t=taskMap[state.ownerId];if(!t)return;
+  if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
+  if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog('rename',t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
+  if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
+  if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
+});
+document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','emptyListModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
+window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
+
+const renderFullPlanBeforeContext=renderFullPlan;
+renderFullPlan=function(t){
+  renderFullPlanBeforeContext(t);
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(r=>r.oncontextmenu=e=>openItemContextMenu(e,t,+r.dataset.planRow));
+};
+const renderDrawerPlanBeforeContext=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  renderDrawerPlanBeforeContext(t);
+  document.querySelectorAll('#formList [data-drawer-item]').forEach(r=>r.oncontextmenu=e=>openItemContextMenu(e,t,+r.dataset.drawerItem));
+};
+const bindTaskCardsBeforeContext=bindTaskCards;
+bindTaskCards=function(){
+  bindTaskCardsBeforeContext();
+  document.querySelectorAll('.taskcard').forEach(card=>card.oncontextmenu=e=>{const t=taskMap[card.dataset.id];if(t)openListContextMenu(e,t)});
+};
+
+// --- Task selection, drag ordering, Project scope and editable Project combobox ---
+let selectedTaskRef=null;
+function projectPathFor(key){return projectMeta[key]?.path||key||''}
+function normalizeProjectRef(v){return String(v||'').replace(/[\\/]+$/,'').toLowerCase()}
+function projectRefMatches(ref,key){const a=normalizeProjectRef(ref),b=normalizeProjectRef(key),p=normalizeProjectRef(projectMeta[key]?.path);return !!a&&(a===b||a===p)}
+function taskRelatedToProject(t,key=currentProjectKey){
+  if(!t)return false;
+  if(t.projectContext===key||projectRefMatches(t.project,key))return true;
+  return canonicalTaskItems(t).some(x=>projectRefMatches(x.project,key));
+}
+function visibleProjectTasks(){return Object.values(taskMap).filter(t=>taskRelatedToProject(t,currentProjectKey))}
+
+function renderProjectOptions(){
+  const dl=document.getElementById('projectOptions');if(!dl)return;
+  dl.innerHTML=Object.entries(projectMeta).flatMap(([k,m])=>[`<option value="${escapeAttr(k)}" label="${escapeAttr(m.path)}"></option>`,`<option value="${escapeAttr(m.path)}" label="${escapeAttr(k)}"></option>`]).join('');
+}
+function uniqueProjectKey(base,path){
+  let clean=String(base||'project').trim().replace(/[^A-Za-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'project',key=clean,n=2;
+  while(projectMeta[key]&&normalizeProjectRef(projectMeta[key].path)!==normalizeProjectRef(path))key=`${clean}-${n++}`;
+  return key;
+}
+function bindDynamicProjectButton(btn){btn.onclick=()=>selectProject(btn.dataset.project)}
+function ensureProjectFromInput(raw){
+  raw=String(raw||'').trim();if(projectMeta[raw])return raw;
+  const found=Object.keys(projectMeta).find(k=>normalizeProjectRef(projectMeta[k].path)===normalizeProjectRef(raw));if(found)return found;
+  const key=uniqueProjectKey(basename(raw),raw);projectMeta[key]={path:raw,branch:'main'};
+  const host=document.getElementById('projectScroll'),btn=document.createElement('button');btn.className='project project-list-item project-combobox-new';btn.type='button';btn.dataset.project=key;btn.innerHTML=`<span class="dot"></span><span class="project-copy"><strong>${escapeHtml(key)}</strong><small>main · Added from Task</small></span>`;host.appendChild(btn);bindDynamicProjectButton(btn);
+  renderProjectOptions();showToast(`Project added · ${key}`);return key;
+}
+renderProjectOptions();
+document.getElementById('newTaskProject').addEventListener('input',()=>renderNewTaskWorkspace());
+
+function setTaskViewMode(mode){
+  listMode=mode==='list';document.getElementById('board').classList.toggle('hiddenboard',listMode);document.getElementById('taskListView').classList.toggle('active',listMode);
+  document.getElementById('boardMode').classList.toggle('active',!listMode);document.getElementById('listMode').classList.toggle('active',listMode);
+}
+document.getElementById('boardMode').onclick=()=>setTaskViewMode('board');document.getElementById('listMode').onclick=()=>setTaskViewMode('list');
+
+applyTaskFilter=function(){
+  const q=document.getElementById('taskSearch').value.trim().toLowerCase();
+  document.querySelectorAll('.taskcard').forEach(card=>{const t=taskMap[card.dataset.id],projectOk=taskRelatedToProject(t,currentProjectKey),queryOk=!q||card.textContent.toLowerCase().includes(q),runOk=!runningOnly||['running','recover'].includes(t?.runtime);card.hidden=!(projectOk&&queryOk&&runOk)});
+  document.querySelectorAll('#taskListView [data-taskrow]').forEach(row=>{const t=taskMap[row.dataset.taskrow],projectOk=taskRelatedToProject(t,currentProjectKey),queryOk=!q||row.textContent.toLowerCase().includes(q),runOk=!runningOnly||['running','recover'].includes(t?.runtime);row.hidden=!(projectOk&&queryOk&&runOk)});
+  updateCounts();
+};
+const projectScopedRenderTaskList=renderTaskList;
+renderTaskList=function(){projectScopedRenderTaskList();applyTaskFilter()};
+const projectScopedUpdateCounts=updateCounts;
+updateCounts=function(){
+  projectScopedUpdateCounts();const visible=visibleProjectTasks();document.getElementById('taskNavCount').textContent=visible.length;document.getElementById('runningCount').textContent=`${visible.filter(t=>['running','recover'].includes(t.runtime)).length} Running`;
+};
+const projectScopedSelect=selectProject;
+selectProject=function(key){projectScopedSelect(key);if(typeof renderBoardFromMap==='function')renderBoardFromMap()};
+
+function selectedItem(){if(!selectedTaskRef)return null;const owner=taskMap[selectedTaskRef.ownerId],item=owner?canonicalTaskItems(owner)[selectedTaskRef.index]:null;return owner&&item?{owner,item,index:selectedTaskRef.index}:null}
+function syncWorkflowActions(){
+  const s=selectedItem(),ok=!!(s?.item?.workflow&&s.item.workflow!=='—'&&s.item.workflow!=='Tasks');
+  const planBtn=document.getElementById('planOpenWorkflow'),drawerBtn=document.getElementById('openWorkflowDemo');
+  planBtn.hidden=!(ok&&document.getElementById('planModal').classList.contains('open'));
+  drawerBtn.hidden=!(ok&&document.getElementById('taskOverlay').classList.contains('open')&&s.owner.id===currentTaskId);
+}
+function selectTaskItem(owner,index){
+  if(!owner||!canonicalTaskItems(owner)[index])return;selectedTaskRef={ownerId:owner.id,index};
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(r=>r.classList.toggle('selected',owner.id===selectedTaskRef.ownerId&&+r.dataset.planRow===index));
+  document.querySelectorAll('#formList [data-drawer-item]').forEach(r=>r.classList.toggle('selected',owner.id===selectedTaskRef.ownerId&&+r.dataset.drawerItem===index));
+  syncWorkflowActions();
+}
+function clearTaskSelection(){selectedTaskRef=null;syncWorkflowActions()}
+function openSelectedWorkflow(){const s=selectedItem();if(!s)return;closeModal('planModal');document.getElementById('taskOverlay').classList.remove('open');showView('workflows');showToast(`Open Workflow · ${s.item.workflow}`)}
+document.getElementById('planOpenWorkflow').onclick=openSelectedWorkflow;document.getElementById('openWorkflowDemo').onclick=openSelectedWorkflow;
+
+function canDragTaskItem(t,index){const items=canonicalTaskItems(t),s=planStateFor(t,index,items.length);if(!taskEditable(t)||s.done)return false;if(t.status==='paused'&&index<=batchState.index)return false;return true}
+let planDragIndex=null;
+function bindPlanSelectionAndDrag(t){
+  const host=document.getElementById('planFormList');
+  host.querySelectorAll('[data-plan-row]').forEach(row=>{
+    const i=+row.dataset.planRow,canDrag=canDragTaskItem(t,i);row.draggable=canDrag;
+    const num=row.querySelector('.plan-row-num');if(num){num.querySelectorAll('.drag-grip').forEach(x=>x.remove());if(!row.querySelector('.plan-row-head > .drag-grip'))num.insertAdjacentHTML('beforebegin','<span class="drag-grip" aria-hidden="true">⠿</span>')}
+    row.onclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i)};
+    row.ondblclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i);const s=planStateFor(t,i,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})};
+    row.ondragstart=e=>{if(!canDrag){e.preventDefault();return}planDragIndex=i;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
+    row.ondragover=e=>{if(planDragIndex==null||!canDragTaskItem(t,i))return;e.preventDefault();row.classList.add('drag-over')};
+    row.ondragleave=()=>row.classList.remove('drag-over');
+    row.ondrop=e=>{e.preventDefault();row.classList.remove('drag-over');if(planDragIndex==null||planDragIndex===i||!canDragTaskItem(t,i))return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const moved=batchDraft.splice(planDragIndex,1)[0];let target=i;if(planDragIndex<i)target--;batchDraft.splice(target,0,moved);commitPlanDraft(t);persistCurrentPresetFromTaskMap();selectedTaskRef={ownerId:t.id,index:target};planDragIndex=null;renderBoardFromMap();renderFullPlan(t);renderDrawerPlan(t);showToast('Task order updated')};
+    row.ondragend=()=>{planDragIndex=null;row.classList.remove('dragging');host.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'))};
+  });
+}
+
+const taskSelectRenderFullPlan=renderFullPlan;
+renderFullPlan=function(t){taskSelectRenderFullPlan(t);bindPlanSelectionAndDrag(t);if(selectedTaskRef?.ownerId===t.id&&canonicalTaskItems(t)[selectedTaskRef.index])selectTaskItem(t,selectedTaskRef.index);else syncWorkflowActions()};
+const taskSelectRenderDrawerPlan=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  taskSelectRenderDrawerPlan(t);document.querySelectorAll('#formList [data-drawer-item]').forEach(row=>{const i=+row.dataset.drawerItem;row.onclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i)};row.ondblclick=e=>{if(e.target.closest('button'))return;selectTaskItem(t,i);const s=planStateFor(t,i,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:i})}});
+  if(selectedTaskRef?.ownerId===t.id&&canonicalTaskItems(t)[selectedTaskRef.index])selectTaskItem(t,selectedTaskRef.index);else syncWorkflowActions();
+};
+const taskSelectOpenTask=openTaskById;
+openTaskById=function(id){clearTaskSelection();taskSelectOpenTask(id);syncWorkflowActions()};
+
+// Right-click selects the Task, keeps Info on the right, and offers only useful actions.
+const contextItemBeforeSelection=openItemContextMenu;
+openItemContextMenu=function(e,owner,index){selectTaskItem(owner,index);contextItemBeforeSelection(e,owner,index);setContextAction('workflow',{visible:true,enabled:!!canonicalTaskItems(owner)[index]?.workflow,label:'Open Workflow'});setContextAction('up',{visible:false});setContextAction('down',{visible:false})};
+const contextListBeforeWorkflow=openListContextMenu;
+openListContextMenu=function(e,t){contextListBeforeWorkflow(e,t);setContextAction('workflow',{visible:false})};
+const contextWorkflowButton=taskContextMenu.querySelector('[data-context-action="workflow"]');if(contextWorkflowButton)contextWorkflowButton.onclick=()=>{if(contextWorkflowButton.disabled||!taskContextState)return;const state={...taskContextState};hideTaskContextMenu();if(state.scope==='item'){selectTaskItem(taskMap[state.ownerId],state.index);openSelectedWorkflow()}};
+
+// --- Final context-menu semantics: Info = the normal right-side detail Drawer. ---
+function openContextInfoDrawer(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  hideTaskContextMenu();
+  if(planSubviewType)leavePlanSubview();
+  closeModal('planModal');closeModal('addPlanTaskModal');
+  openTaskById(t.id);
+  if(state.scope==='item'){
+    setTimeout(()=>{selectTaskItem(t,state.index);document.querySelector(`#formList [data-drawer-item="${state.index}"]`)?.scrollIntoView({block:'nearest'})},0);
+  }
+}
+openItemContextMenu=function(e,owner,index){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();selectTaskItem(owner,index);
+  const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
+  const canEdit=editable&&!s.done,canRemove=canEdit&&!currentLocked;
+  taskContextState={scope:'item',ownerId:owner.id,index};
+  setContextAction('open',{visible:false});
+  setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
+  setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('workflow',{visible:true,enabled:!!items[index]?.workflow&&items[index]?.workflow!=='—'&&items[index]?.workflow!=='Tasks',label:'Open Workflow'});
+  setContextAction('up',{visible:false});setContextAction('down',{visible:false});
+  setContextAction('remove',{visible:true,enabled:canRemove,label:'Remove'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+};
+openListContextMenu=function(e,t){
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
+  const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
+  taskContextState={scope:'list',ownerId:t.id,index:null};
+  setContextAction('open',{visible:true,enabled:true,label:'Open list'});
+  setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
+  setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('workflow',{visible:false});setContextAction('up',{visible:false});setContextAction('down',{visible:false});
+  setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+};
+const contextInfoButton=taskContextMenu.querySelector('[data-context-action="info"]');
+contextInfoButton.onclick=()=>{if(contextInfoButton.disabled||!taskContextState)return;openContextInfoDrawer({...taskContextState})};
+
+// --- Project combobox polish: all Projects, current first, current as create default. ---
+renderProjectOptions=function(priorityKey=currentProjectKey){
+  const dl=document.getElementById('projectOptions');if(!dl)return;
+  const entries=Object.entries(projectMeta).sort(([a],[b])=>{if(a===priorityKey)return -1;if(b===priorityKey)return 1;return a.localeCompare(b)});
+  dl.innerHTML=entries.map(([k,m])=>`<option value="${escapeAttr(k)}" label="${escapeAttr(m.path)}${k===priorityKey?' · current':''}"></option>`).join('');
+  const help=document.getElementById('projectFieldHelp'),meta=projectMeta[priorityKey];
+  if(help)help.textContent=meta?`Current: ${priorityKey} · ${meta.path} · or type a new local path.`:'Select a Project or type a new local path.';
+};
+const projectPriorityLoadTaskEditor=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  renderProjectOptions(currentProjectKey);
+  projectPriorityLoadTaskEditor(mode,args);
+  const input=document.getElementById('newTaskProject');
+  if(mode!=='edit-item'){input.value=currentProjectKey}else{
+    const owner=taskMap[args.ownerId],item=owner?canonicalTaskItems(owner)[args.index]:null;
+    if(item){const key=Object.keys(projectMeta).find(k=>projectRefMatches(item.project,k));input.value=key||item.project}
+  }
+  renderNewTaskWorkspace();
+};
+const projectOptionSelect=selectProject;
+selectProject=function(key){projectOptionSelect(key);renderProjectOptions(key)};
+renderProjectOptions(currentProjectKey);
+
+// --- Explicit Project combobox: always show every added Project. ---
+const projectDropdown=document.getElementById('projectDropdown');
+const projectDropdownToggle=document.getElementById('projectDropdownToggle');
+const projectComboInput=document.getElementById('newTaskProject');
+function projectRegistryEntries(){
+  const out=[],seen=new Set();
+  document.querySelectorAll('.project[data-project]').forEach(btn=>{const key=btn.dataset.project;if(projectMeta[key]&&!seen.has(key)){seen.add(key);out.push([key,projectMeta[key]])}});
+  Object.entries(projectMeta).forEach(([key,meta])=>{if(!seen.has(key)){seen.add(key);out.push([key,meta])}});
+  return out;
+}
+function renderProjectDropdown(filter=''){
+  const q=String(filter||'').trim().toLowerCase();
+  const entries=projectRegistryEntries().filter(([key,meta])=>!q||key.toLowerCase().includes(q)||String(meta.path||'').toLowerCase().includes(q));
+  projectDropdown.innerHTML=entries.length?entries.map(([key,meta])=>`<button type="button" class="project-dropdown-option ${projectRefMatches(projectComboInput.value,key)?'selected':''}" data-project-choice="${escapeAttr(key)}"><strong>${escapeHtml(key)}${key===currentProjectKey?' · current':''}</strong><small>${escapeHtml(meta.path||'')}</small></button>`).join(''):'<div class="project-dropdown-empty">No matching Project. Type a local path to add it when saving.</div>';
+  projectDropdown.querySelectorAll('[data-project-choice]').forEach(b=>b.onclick=()=>{projectComboInput.value=b.dataset.projectChoice;projectDropdown.hidden=true;renderNewTaskWorkspace()});
+}
+function openProjectDropdown(showAll=true){renderProjectDropdown(showAll?'':projectComboInput.value);projectDropdown.hidden=false}
+projectDropdownToggle.onclick=e=>{e.preventDefault();e.stopPropagation();if(projectDropdown.hidden)openProjectDropdown(true);else projectDropdown.hidden=true};
+projectComboInput.addEventListener('focus',()=>openProjectDropdown(true));
+projectComboInput.addEventListener('input',()=>{renderProjectDropdown(projectComboInput.value);projectDropdown.hidden=false;renderNewTaskWorkspace()});
+projectComboInput.addEventListener('keydown',e=>{if(e.key==='Escape')projectDropdown.hidden=true});
+document.addEventListener('click',e=>{if(!e.target.closest('.project-combobox'))projectDropdown.hidden=true});
+
+// Keep legacy datalist population harmless, but drive visible choices from the custom menu.
+const visibleProjectOptions=renderProjectOptions;
+renderProjectOptions=function(priorityKey=currentProjectKey){
+  visibleProjectOptions(priorityKey);
+  renderProjectDropdown('');
+};
+
+// --- Task Workspace final polish: direct add, inline inspector, no Russian-doll workflow. ---
+function resetWorkspaceInspector(t){
+  const heading=document.getElementById('planInfoHeading'),card=heading?.closest('.plan-side-card');
+  if(heading)heading.textContent='List info';if(card)card.classList.remove('info-active');
+  document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${canonicalTaskItems(t).length}</strong>`;
+}
+function showWorkspaceItemInfo(owner,index){
+  const item=canonicalTaskItems(owner)[index];if(!item)return;
+  selectTaskItem(owner,index);
+  const s=planStateFor(owner,index,canonicalTaskItems(owner).length),caps=workflowCaps(item.workflow);
+  const goal=item.goalMode==='file'?`File · ${item.goalFile||'—'}`:item.goalMode==='asset'?`Asset · ${item.goalAsset||'—'}`:'Write';
+  const ai=!caps.ai?'—':item.aiMode==='default'?'Workflow default':item.aiMode==='file'?`File · ${item.aiFile||'—'}`:item.aiMode==='asset'?`Asset · ${item.aiAsset||'—'}`:'Custom text';
+  const heading=document.getElementById('planInfoHeading'),card=heading?.closest('.plan-side-card');
+  if(heading)heading.textContent='Task info';if(card)card.classList.add('info-active');
+  document.getElementById('planTaskSummary').innerHTML=`<span>Task</span><strong>${escapeHtml(planTitle(item,index))}</strong><span>Status</span><strong>${escapeHtml(s.label)}</strong><span>Project</span><strong>${escapeHtml(item.project||'—')}</strong><span>Workflow</span><strong>${escapeHtml(item.workflow||'—')}</strong><span>Prompt</span><strong>${escapeHtml(goal)}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(item))}</strong><span>Branch</span><strong>${escapeHtml(item.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(item.executionRoot||'—')}</strong>`;
+}
+
+// Primary Add task goes straight to the same embedded Task Editor.
+function createTaskDirectlyInWorkspace(ownerId=currentTaskId){
+  const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
+  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
+  loadTaskEditor('create-item',{ownerId:owner.id,index:canonicalTaskItems(owner).length});
+}
+document.getElementById('planAddTask').onclick=()=>createTaskDirectlyInWorkspace(currentTaskId);
+document.getElementById('drawerAddStep').onclick=()=>{const t=taskMap[currentTaskId];if(!t)return;openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
+
+// Move existing remains a secondary operation; only it uses the small chooser.
+document.getElementById('planAddExisting').onclick=()=>{
+  const owner=taskMap[currentTaskId];if(!owner||!taskEditable(owner))return;
+  addPlanOwnerId=owner.id;setAddTaskMode('move');openModal('addPlanTaskModal');
+};
+
+// Keep Task Workspace open when Info is requested from an item context menu.
+const workspaceInfoButton=taskContextMenu.querySelector('[data-context-action="info"]');
+workspaceInfoButton.onclick=()=>{
+  if(workspaceInfoButton.disabled||!taskContextState)return;
+  const state={...taskContextState};hideTaskContextMenu();const owner=taskMap[state.ownerId];if(!owner)return;
+  if(state.scope==='item'&&document.getElementById('planModal').classList.contains('open')){showWorkspaceItemInfo(owner,state.index);return}
+  openContextInfoDrawer(state);
+};
+
+// Selecting a row only selects it; Info is opt-in from right click.
+const workspaceRenderFull=renderFullPlan;
+renderFullPlan=function(t){workspaceRenderFull(t);if(!selectedTaskRef||selectedTaskRef.ownerId!==t.id)resetWorkspaceInspector(t)};
+
+// Opening a workspace always starts on the List view, preserving the Board in the background.
+const workspaceOpenPlan=openPlanDialog;
+openPlanDialog=function(id=currentTaskId){
+  if(planSubviewType)leavePlanSubview();
+  workspaceOpenPlan(id);
+  const t=taskMap[id];if(t)resetWorkspaceInspector(t);
+};
+openFullPlanPage=openPlanDialog;
+
+// Closing the workspace also clears item selection / transient inspector state.
+document.getElementById('planBackToTask').onclick=()=>{if(planSubviewType){leavePlanSubview();return}clearTaskSelection();closeModal('planModal')};
+
+// --- Workspace inspector state + secondary-action guards. ---
+let workspaceInfoRef=null;
+const workspaceInfoShow=showWorkspaceItemInfo;
+showWorkspaceItemInfo=function(owner,index){workspaceInfoRef={ownerId:owner.id,index};workspaceInfoShow(owner,index)};
+const workspaceInfoReset=resetWorkspaceInspector;
+resetWorkspaceInspector=function(t){workspaceInfoRef=null;workspaceInfoReset(t)};
+
+const workspaceGuardRender=renderFullPlan;
+renderFullPlan=function(t){
+  workspaceGuardRender(t);
+  const editable=taskEditable(t);document.getElementById('planAddExisting').disabled=!editable;
+  if(workspaceInfoRef?.ownerId===t.id&&canonicalTaskItems(t)[workspaceInfoRef.index])workspaceInfoShow(t,workspaceInfoRef.index);
+};
+
+const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
+document.getElementById('planBackToTask').onclick=()=>{workspaceInfoRef=null;workspaceClosePlan()};
+
+// --- Empty-list CTAs use the same embedded Task Editor too. ---
+const directEmptyRenderFull=renderFullPlan;
+renderFullPlan=function(t){
+  directEmptyRenderFull(t);
+  const first=document.getElementById('planEmptyAddTask');if(first)first.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+};
+const directEmptyRenderDrawer=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  directEmptyRenderDrawer(t);
+  const first=document.getElementById('emptyPlanAddTask');if(first)first.onclick=()=>{openPlanDialog(t.id);createTaskDirectlyInWorkspace(t.id)};
+};
+
+
+// --- Practical interaction pass: fewer controls, inline rename, useful List view. ---
+let workspaceRenameOriginal='';
+function commitWorkspaceRename(cancel=false){
+  const title=document.getElementById('planPageTitle'),t=taskMap[currentTaskId];
+  if(!title||!t||title.contentEditable!=='true')return;
+  const next=cancel?workspaceRenameOriginal:title.textContent.trim();
+  title.contentEditable='false';title.classList.remove('editing');
+  if(cancel||!next){title.textContent=t.title;return}
+  if(next!==t.title){
+    t.title=next;pushTaskHistory(t,'Task List renamed');persistCurrentPresetFromTaskMap();renderBoardFromMap();showToast('Task List renamed');
+  }
+  title.textContent=t.title;
+}
+function beginWorkspaceRename(t=taskMap[currentTaskId]){
+  if(!t||!taskEditable(t)){showToast(t?.status==='ongoing'?'Pause before renaming':'Task List is read-only');return}
+  const title=document.getElementById('planPageTitle');if(!title)return;
+  workspaceRenameOriginal=t.title;title.contentEditable='true';title.classList.add('editing');title.focus();
+  const range=document.createRange();range.selectNodeContents(title);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+}
+document.getElementById('planRenameList').onclick=()=>beginWorkspaceRename();
+document.getElementById('planPageTitle').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();commitWorkspaceRename(false)}
+  if(e.key==='Escape'){e.preventDefault();commitWorkspaceRename(true)}
+});
+document.getElementById('planPageTitle').addEventListener('blur',()=>commitWorkspaceRename(false));
+
+document.getElementById('editTaskDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
+  openPlanDialog(t.id);setTimeout(()=>beginWorkspaceRename(t),0);
+};
+const contextEditAction=taskContextMenu.querySelector('[data-context-action="edit"]');
+contextEditAction.onclick=()=>{
+  if(contextEditAction.disabled||!taskContextState)return;
+  const state={...taskContextState};hideTaskContextMenu();const t=taskMap[state.ownerId];if(!t)return;
+  if(state.scope==='list'){openPlanDialog(t.id);setTimeout(()=>beginWorkspaceRename(t),0);return}
+  const s=planStateFor(t,state.index,canonicalTaskItems(t).length);
+  if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index});
+};
+
+function polishTaskRows(t){
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{
+    const i=+row.dataset.planRow,grip=row.querySelector('.drag-grip');
+    if(grip)grip.title=row.draggable?'Drag to reorder':'This task cannot be reordered';
+    row.querySelectorAll('[data-plan-up],[data-plan-down]').forEach(b=>b.remove());
+    const more=row.querySelector('[data-plan-remove]');
+    if(more){
+      more.disabled=false;more.textContent='⋯';more.title='More actions';more.className='row-more';
+      more.onclick=e=>{
+        e.preventDefault();e.stopPropagation();selectTaskItem(t,i);
+        const r=more.getBoundingClientRect();
+        openItemContextMenu({preventDefault(){},stopPropagation(){},clientX:r.right-4,clientY:r.bottom+4},t,i);
+      };
+    }
+  });
+}
+const practicalRenderFullPlan=renderFullPlan;
+renderFullPlan=function(t){
+  practicalRenderFullPlan(t);polishTaskRows(t);
+  const rename=document.getElementById('planRenameList');if(rename)rename.disabled=!taskEditable(t);
+
+  const host=document.getElementById('planFormList');
+  host.querySelectorAll('#planEmptyAddTask,.empty-plan-cta,.plan-add-task-footer').forEach(x=>x.remove());
+
+  const add=document.createElement('button');
+  add.type='button';
+  add.className='plan-add-task-footer';
+  add.innerHTML='<span class="plan-add-task-plus">＋</span><strong>Add task</strong>';
+  add.disabled=!taskEditable(t);
+  add.title=add.disabled?(t.status==='ongoing'?'Pause before adding tasks':'Task List is read-only'):'Add task';
+  add.onclick=()=>createTaskDirectlyInWorkspace(t.id);
+  host.appendChild(add);
+};
+
+renderTaskList=function(){
+  const host=document.getElementById('taskListView'),rows=Object.values(taskMap);
+  if(!rows.length){host.innerHTML='<div class="task-list-empty">No tasks in this board.</div>';return}
+  const body=rows.map(t=>{
+    const items=canonicalTaskItems(t),related=items.filter(x=>projectRefMatches(x.project,currentProjectKey)).length;
+    const projectSummary=items.length>1?(`${related}/${items.length} in ${currentProjectKey}`):(items[0]?basename(items[0].project):currentProjectKey);
+    return `<div class="taskrow taskrow-data" data-taskrow="${t.id}">
+      <span class="pill">${escapeHtml(statusLabel(t.status))}</span>
+      <span class="taskrow-title"><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.desc||'')}</small></span>
+      <span class="taskrow-count">${items.length}</span>
+      <span class="runtime ${runtimeClass(t.runtime)}">${escapeHtml(runtimeLabel(t.runtime))}</span>
+      <span class="taskrow-project">${escapeHtml(projectSummary)}</span>
+      <span class="taskrow-progress">${t.progress?.[0]||0} / ${items.length}</span>
+    </div>`;
+  }).join('');
+  host.innerHTML=`<div class="task-list-table">
+    <div class="taskrow taskrow-head"><span>Status</span><span>Name</span><span>Tasks</span><span>Runtime</span><span>Project</span><span>Progress</span></div>
+    ${body}
+  </div>`;
+  host.querySelectorAll('[data-taskrow]').forEach(r=>{
+    r.onclick=()=>openTaskById(r.dataset.taskrow);
+    r.ondblclick=()=>openPlanDialog(r.dataset.taskrow);
+    r.oncontextmenu=e=>{const t=taskMap[r.dataset.taskrow];if(t)openListContextMenu(e,t)};
+  });
+  applyTaskFilter();
+};
+
+const practicalResetWorkspaceInspector=resetWorkspaceInspector;
+resetWorkspaceInspector=function(t){
+  workspaceInfoRef=null;
+  const heading=document.getElementById('planInfoHeading'),card=heading?.closest('.plan-side-card');
+  if(heading)heading.textContent='List info';if(card)card.classList.remove('info-active');
+  const items=canonicalTaskItems(t),active=items.length?Math.min(t.progress?.[0]||0,items.length-1)+1:0;
+  document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Current</span><strong>${items.length?('Task '+active):'—'}</strong>`;
+};
+
+positionTaskContextMenu=function(x,y){
+  taskContextMenu.hidden=false;const w=205,h=220;
+  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;
+  taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
+};
+
+// --- Project sidebar management: click Project to open; ellipsis owns Rename / Delete. ---
+const projectActionMenu=document.getElementById('projectActionMenu');
+const projectManageModal=document.getElementById('projectManageModal');
+const projectRenameField=document.getElementById('projectRenameField');
+const projectRenameInput=document.getElementById('projectRenameInput');
+const projectDeleteNote=document.getElementById('projectDeleteNote');
+const projectManageConfirm=document.getElementById('projectManageConfirm');
+let projectManageState=null;
+
+function syncProjectRowMenus(){
+  document.querySelectorAll('#projectScroll .project[data-project]').forEach(btn=>{
+    if(btn.closest('.project-row'))return;
+    const row=document.createElement('div');row.className='project-row';row.dataset.projectRow=btn.dataset.project;
+    btn.parentNode.insertBefore(row,btn);row.appendChild(btn);
+    const more=document.createElement('button');more.type='button';more.className='project-more';more.dataset.projectMenu=btn.dataset.project;more.title='Project actions';more.setAttribute('aria-label',`${btn.dataset.project} actions`);more.setAttribute('aria-expanded','false');more.textContent='⋯';row.appendChild(more);
+  });
+}
+function hideProjectActionMenu(){
+  projectActionMenu.hidden=true;
+  document.querySelectorAll('.project-more[aria-expanded="true"]').forEach(b=>b.setAttribute('aria-expanded','false'));
+}
+function openProjectActionMenu(btn){
+  hideProjectActionMenu();const key=btn.dataset.projectMenu;if(!projectMeta[key])return;
+  btn.setAttribute('aria-expanded','true');projectManageState={key,mode:null};
+  projectActionMenu.hidden=false;
+  const r=btn.getBoundingClientRect(),w=172,h=78;
+  projectActionMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,r.right-w))}px`;
+  projectActionMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,r.bottom+4))}px`;
+}
+function refreshProjectRowKey(oldKey,newKey){
+  const btn=document.querySelector(`#projectScroll .project[data-project="${CSS.escape(oldKey)}"]`);if(!btn)return;
+  btn.dataset.project=newKey;btn.querySelector('.project-copy strong').textContent=newKey;
+  const row=btn.closest('.project-row');if(row)row.dataset.projectRow=newKey;
+  const more=row?.querySelector('.project-more');if(more){more.dataset.projectMenu=newKey;more.setAttribute('aria-label',`${newKey} actions`)}
+}
+function updateProjectRefs(oldKey,nextValue){
+  Object.values(taskMap||{}).forEach(t=>{
+    if(t.project===oldKey)t.project=nextValue;
+    if(t.projectContext===oldKey)t.projectContext=nextValue;
+    [t.items,t.listItems].forEach(items=>items?.forEach(x=>{if(x.project===oldKey)x.project=nextValue}));
+  });
+  batchDraft?.forEach(x=>{if(x.project===oldKey)x.project=nextValue});
+  const input=document.getElementById('newTaskProject');if(input?.value===oldKey)input.value=nextValue;
+}
+function openProjectManage(mode){
+  const key=projectManageState?.key,meta=projectMeta[key];if(!meta)return;
+  projectManageState={key,mode};hideProjectActionMenu();
+  document.getElementById('projectManageTitle').textContent=mode==='rename'?'Rename Project':'Delete Project';
+  document.getElementById('projectManageMeta').textContent=meta.path;
+  projectRenameField.hidden=mode!=='rename';projectDeleteNote.hidden=mode!=='delete';
+  if(mode==='rename'){projectRenameInput.value=key;projectManageConfirm.textContent='Rename';projectManageConfirm.className='btn primary';setTimeout(()=>{projectRenameInput.focus();projectRenameInput.select()},0)}
+  else{projectDeleteNote.innerHTML=`Remove <strong>${escapeHtml(key)}</strong> from Projects?<br>The local folder and existing Tasks are not deleted.`;projectManageConfirm.textContent='Delete Project';projectManageConfirm.className='btn danger'}
+  openModal('projectManageModal');
+}
+function renameProject(oldKey,newKey){
+  newKey=String(newKey||'').trim();if(!newKey){showToast('Project name cannot be empty');return false}
+  if(newKey===oldKey){closeModal('projectManageModal');return true}
+  if(projectMeta[newKey]){showToast('A Project with this name already exists');return false}
+  const meta=projectMeta[oldKey];if(!meta)return false;
+  projectMeta[newKey]=meta;delete projectMeta[oldKey];updateProjectRefs(oldKey,newKey);refreshProjectRowKey(oldKey,newKey);
+  if(currentProjectKey===oldKey)currentProjectKey=newKey;
+  renderProjectOptions(currentProjectKey);renderBoardFromMap();selectProject(currentProjectKey);
+  closeModal('projectManageModal');showToast(`Project renamed · ${newKey}`);return true;
+}
+function deleteProject(key){
+  const meta=projectMeta[key];if(!meta)return;
+  const stablePath=meta.path||key;updateProjectRefs(key,stablePath);
+  delete projectMeta[key];
+  document.querySelector(`#projectScroll .project[data-project="${CSS.escape(key)}"]`)?.closest('.project-row')?.remove();
+  const remaining=projectRegistryEntries().map(([k])=>k).filter(k=>projectMeta[k]);
+  if(currentProjectKey===key){
+    currentProjectKey=remaining[0]||'';
+    if(currentProjectKey){selectProject(currentProjectKey)}
+    else{
+      document.getElementById('projectSwitcherPath').textContent='No Project';
+      document.getElementById('chatProjectTitle').textContent='No Project';
+      document.getElementById('chatProjectLine').textContent='Add a Project to continue.';
+      document.getElementById('tasksProjectLine').textContent='No Project selected';
+    }
+  }
+  renderProjectOptions(currentProjectKey);renderBoardFromMap();closeModal('projectManageModal');showToast(`Project removed · ${key}`);
+}
+document.getElementById('projectScroll').addEventListener('click',e=>{
+  const more=e.target.closest('.project-more');if(!more)return;
+  e.preventDefault();e.stopPropagation();openProjectActionMenu(more);
+});
+projectActionMenu.querySelector('[data-project-action="rename"]').onclick=()=>openProjectManage('rename');
+projectActionMenu.querySelector('[data-project-action="delete"]').onclick=()=>openProjectManage('delete');
+projectManageConfirm.onclick=()=>{
+  if(!projectManageState)return;
+  if(projectManageState.mode==='rename')renameProject(projectManageState.key,projectRenameInput.value);
+  else if(projectManageState.mode==='delete')deleteProject(projectManageState.key);
+};
+projectRenameInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();projectManageConfirm.click()}});
+document.addEventListener('click',e=>{if(!projectActionMenu.hidden&&!e.target.closest('#projectActionMenu')&&!e.target.closest('.project-more'))hideProjectActionMenu()});
+window.addEventListener('resize',hideProjectActionMenu);window.addEventListener('scroll',hideProjectActionMenu,true);
+
+const ensureProjectFromInputBeforeMenu=ensureProjectFromInput;
+ensureProjectFromInput=function(raw){const key=ensureProjectFromInputBeforeMenu(raw);syncProjectRowMenus();return key};
+syncProjectRowMenus();
