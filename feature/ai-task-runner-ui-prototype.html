@@ -3951,20 +3951,20 @@ renderTaskList=function(){
   if(!rows.length){host.innerHTML='<div class="task-list-empty">No tasks in this board.</div>';return}
   const body=rows.map(t=>{
     const items=canonicalTaskItems(t),related=items.filter(x=>projectRefMatches(x.project,currentProjectKey)).length;
-    const projectSummary=items.length>1?(\`\${related}/\${items.length} in \${currentProjectKey}\`):(items[0]?basename(items[0].project):currentProjectKey);
-    return \`<div class="taskrow taskrow-data" data-taskrow="\${t.id}">
-      <span class="pill">\${escapeHtml(statusLabel(t.status))}</span>
-      <span class="taskrow-title"><strong>\${escapeHtml(t.title)}</strong><small>\${escapeHtml(t.desc||'')}</small></span>
-      <span class="taskrow-count">\${items.length}</span>
-      <span class="runtime \${runtimeClass(t.runtime)}">\${escapeHtml(runtimeLabel(t.runtime))}</span>
-      <span class="taskrow-project">\${escapeHtml(projectSummary)}</span>
-      <span class="taskrow-progress">\${t.progress?.[0]||0} / \${items.length}</span>
-    </div>\`;
+    const projectSummary=items.length>1?(`${related}/${items.length} in ${currentProjectKey}`):(items[0]?basename(items[0].project):currentProjectKey);
+    return `<div class="taskrow taskrow-data" data-taskrow="${t.id}">
+      <span class="pill">${escapeHtml(statusLabel(t.status))}</span>
+      <span class="taskrow-title"><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.desc||'')}</small></span>
+      <span class="taskrow-count">${items.length}</span>
+      <span class="runtime ${runtimeClass(t.runtime)}">${escapeHtml(runtimeLabel(t.runtime))}</span>
+      <span class="taskrow-project">${escapeHtml(projectSummary)}</span>
+      <span class="taskrow-progress">${t.progress?.[0]||0} / ${items.length}</span>
+    </div>`;
   }).join('');
-  host.innerHTML=\`<div class="task-list-table">
+  host.innerHTML=`<div class="task-list-table">
     <div class="taskrow taskrow-head"><span>Status</span><span>Name</span><span>Tasks</span><span>Runtime</span><span>Project</span><span>Progress</span></div>
-    \${body}
-  </div>\`;
+    ${body}
+  </div>`;
   host.querySelectorAll('[data-taskrow]').forEach(r=>{
     r.onclick=()=>openTaskById(r.dataset.taskrow);
     r.ondblclick=()=>openPlanDialog(r.dataset.taskrow);
@@ -3979,13 +3979,13 @@ resetWorkspaceInspector=function(t){
   const heading=document.getElementById('planInfoHeading'),card=heading?.closest('.plan-side-card');
   if(heading)heading.textContent='List info';if(card)card.classList.remove('info-active');
   const items=canonicalTaskItems(t),active=items.length?Math.min(t.progress?.[0]||0,items.length-1)+1:0;
-  document.getElementById('planTaskSummary').innerHTML=\`<span>List</span><strong>\${escapeHtml(t.title)}</strong><span>Status</span><strong>\${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>\${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>\${items.length}</strong><span>Progress</span><strong>\${t.progress?.[0]||0} / \${items.length}</strong><span>Current</span><strong>\${items.length?('Task '+active):'—'}</strong>\`;
+  document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Current</span><strong>${items.length?('Task '+active):'—'}</strong>`;
 };
 
 positionTaskContextMenu=function(x,y){
   taskContextMenu.hidden=false;const w=205,h=220;
-  taskContextMenu.style.left=\`\${Math.min(window.innerWidth-w-8,Math.max(8,x))}px\`;
-  taskContextMenu.style.top=\`\${Math.min(window.innerHeight-h-8,Math.max(8,y))}px\`;
+  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;
+  taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
 };
 
 renderTaskKindUi=function(){};
