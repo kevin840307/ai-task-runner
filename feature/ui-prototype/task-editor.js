@@ -478,7 +478,6 @@ const mockSystemPrompts=[
   {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
   {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
   {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'},
-  {token:'@queue',title:'Mock queued prompt',description:'Add a prompt to the Queue so Edit/Delete UI can be tested.',source:'Mock'},
   {token:'@ask-demo',title:'Mock AI clarification',description:'Force a multi-question AI clarification flow.',source:'Mock'}
 ];
 const mockAgentProfiles={
@@ -616,9 +615,9 @@ function chatSystemCommand(text){
   return match?{matched:true,token:'@'+match[1].toLowerCase(),args:String(match[2]||'').trim()}:{matched:false,token:'',args:''};
 }
 function mockInvokeAgentCommand(session,command){
-  const item=agentCapabilityItems().find(x=>x.token.toLowerCase()===command.token.toLowerCase());
-  if(!item){session.messages.push(['assistant',`Mock ${chatAgentLabel(chatAgentKey())}: unknown Agent command ${command.token}.`]);return}
-  session.messages.push(['assistant',`MOCK ${chatAgentLabel(chatAgentKey())} · ${item.token} selected${command.args?` · args: ${command.args}`:''}. Formal implementation will invoke the selected Agent's resolved command/skill capability, not a frontend copy of SKILL.md.`]);
+  const key=chatAgentKey(session),item=(mockAgentCapabilities[key]||[]).find(x=>x.token.toLowerCase()===command.token.toLowerCase());
+  if(!item){session.messages.push(['assistant',`Mock ${chatAgentLabel(key)}: unknown Agent command ${command.token}.`]);return}
+  session.messages.push(['assistant',`MOCK ${chatAgentLabel(key)} · ${item.token} selected${command.args?` · args: ${command.args}`:''}. Formal implementation will invoke the selected Agent's resolved command/skill capability, not a frontend copy of SKILL.md.`]);
 }
 
 let chatQueueSequence=0;
@@ -749,10 +748,9 @@ function advanceAskFlow(session=activeChat()){
   if(activeChat()===session)renderChatSession();drainChatQueue(session);
 }
 
-function mockInvokeSystemPrompt(session,command){
+function mockInvokeSystemPrompt(session,command,projectKey=session?.projectKey||currentProjectKey){
   if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
-  if(command.token==='@project'){const meta=projectMeta[currentProjectKey]||{};session.messages.push(['assistant',`Project · ${currentProjectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
-  if(command.token==='@queue'){if(!command.args){showToast('Usage: @queue <message>');return}enqueueChatMessage(session,command.args);session.messages.push(['assistant','Mock Queue item added. Use the Queue panel above the composer to Edit/Delete it.']);return}
+  if(command.token==='@project'){const meta=projectMeta[projectKey]||{};session.messages.push(['assistant',`Project · ${projectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
   if(command.token==='@ask-demo'){startMockAskFlow(session,command.args||'Mock clarification');return}
   session.messages.push(['assistant',`Unknown Runner command ${command.token}. Type @ to see available system prompts.`]);
 }
@@ -875,23 +873,28 @@ function renderChatTaskDraft(session,box){
   card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
 }
-function generateChatTaskDraft(spec,mode='auto'){
-  const session=activeChat();if(!session)return;
+function generateChatTaskDraft(spec,mode='auto',targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
+  const session=targetSession;if(!session)return;
   const source=String(spec||'').trim(),usage=mode==='single'?'@task-single <spec>':mode==='list'?'@task-list <spec>':'@task <spec>';if(!source){session.messages.push(['assistant',`Usage: ${usage}`]);showToast(`Usage: ${usage}`);renderChatSession();return}
   if(/^mock:error\b/i.test(source)){session.messages.push(['assistant','Mock generate-task backend error · Task Draft was not created.']);showToast('Mock backend error');renderChatSession();return}
   if(/^mock:invalid\b/i.test(source)){session.messages.push(['assistant','Mock AI returned an invalid TaskDraft · validation failed closed.']);showToast('Invalid TaskDraft');renderChatSession();return}
   if(session.taskDraft&&!session.taskDraft.createdTaskId)discardChatTaskDraft(session,{render:false});
   const modeLabel=mode==='single'?'single Task':mode==='list'?'Task List':'AI/Mock auto';
   session.messages.push(['assistant',`Mock generate-task completed · ${modeLabel}. Review the Task Draft before creating it.`]);
-  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey,mode);renderChatSession();
+  session.projectKey=projectKey;session.taskDraft=mockBuildChatTaskDraft(source,projectKey,mode);if(activeChat()===session)renderChatSession();
 }
 
 renderChatSession=function(){
   syncChatSessionSelect();syncChatAgentControl();
   const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
   (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
-  renderChatTaskDraft(session,box);renderChatQueue(session);renderAskFlow(session);
-  if(!(session?.messages||[]).length&&!session?.taskDraft)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
+  renderChatTaskDraft(session,box);
+  if(chatTurnState(session)==='running'){
+    const pending=document.createElement('div');pending.className='msg assistant mock-pending-turn';
+    pending.innerHTML='<div class="msgmeta"><span class="avatar">AI</span>Assistant</div><div class="mock-typing"><i></i><i></i><i></i><span>Mock Agent 正在處理…</span></div>';box.appendChild(pending);
+  }
+  renderAskFlow(session);renderChatQueue(session);renderChatTurnStatus(session);
+  if(!(session?.messages||[]).length&&!session?.taskDraft&&!session?.askFlow)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
   box.scrollTop=box.scrollHeight;
 };
 document.getElementById('chatPreset').onchange=e=>{projectActiveChat[currentProjectKey]=e.target.value;renderChatSession()};
@@ -905,14 +908,8 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 };
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
-  const session=activeChat(),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
-  hideComposerSuggestions();
-  session.messages.push(['user',textValue]);
-  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode);
-  else if(agentCommand.matched){mockInvokeAgentCommand(session,agentCommand);renderChatSession()}
-  else if(systemCommand.matched){mockInvokeSystemPrompt(session,systemCommand);renderChatSession()}
-  else if(Math.random()<.45){startMockAskFlow(session,textValue);renderChatSession()}
-  else{session.messages.push(['assistant','MOCK Agent 回覆完成。這次沒有觸發 clarification；重複輸入或按 Ask mock 可測試 AI 反問。']);renderChatSession()}
+  const session=activeChat();hideComposerSuggestions();
+  startMockChatTurn(session,textValue);
   input.value='';resizeChatComposer();
 };
 
@@ -1192,13 +1189,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   showToast(markDirty?'Saved · current task will restart':'Task saved');
 };
 
-// Suppress legacy New Task listeners and route root creation into the canonical editor.
-// obsolete create-entry capture handler removed; final dropdown owns this entry.
-document.getElementById('chatQueueAdd').onclick=()=>{
-  const input=document.getElementById('chatInput'),value=input.value.trim();
-  if(!value){showToast('先輸入要排入 Queue 的內容');input.focus();return}
-  if(enqueueChatMessage(activeChat(),value)){input.value='';hideComposerSuggestions();resizeChatComposer()}
-};
+// No separate Queue button: Send automatically enqueues while a turn is busy.
 document.getElementById('chatToTask').onclick=()=>{
   const input=document.getElementById('chatInput'),raw=input.value;
   if(!/^\s*@task\b/i.test(raw))input.value=raw.trim()?'@task '+raw:'@task ';
@@ -1209,7 +1200,10 @@ chatInputForSuggestions.addEventListener('input',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('click',renderComposerSuggestions);
 chatInputForSuggestions.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='q'){
-    const value=chatInputForSuggestions.value.trim();if(value){e.preventDefault();e.stopImmediatePropagation();enqueueChatMessage(activeChat(),value);chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}return;
+    const value=chatInputForSuggestions.value.trim(),session=activeChat();
+    if(value&&chatTurnState(session)!=='idle'){e.preventDefault();e.stopImmediatePropagation();enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
+    else if(value)showToast('Agent 目前沒有執行中的 turn，請直接傳送');
+    return;
   }
   const pop=document.getElementById('composerSuggest');
   if(pop?.hidden||!composerSuggestionItems.length)return;
@@ -1241,13 +1235,12 @@ document.getElementById('chatMode').onchange=e=>{
   showToast(`Mock Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
 };
 document.getElementById('chatAsk').onclick=()=>{
-  const input=document.getElementById('chatInput'),profile=chatAgentProfile(),session=activeChat();
+  const input=document.getElementById('chatInput'),session=activeChat(),profile=chatAgentProfile(chatAgentKey(session));
   if(!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
+  if(chatTurnState(session)!=='idle'){showToast('請先完成目前的 Agent turn / Ask，再啟動另一個 Ask Mock');return}
   const context=input.value.trim()||[...(session?.messages||[])].reverse().find(x=>x[0]==='user')?.[1]||'Mock clarification';
   startMockAskFlow(session,context);
 };
-document.getElementById('composerAskNext').onclick=()=>advanceAskFlow(activeChat());
-document.getElementById('composerAskCancel').onclick=()=>{const session=activeChat();if(session)session.askFlow=null;renderAskFlow(session);showToast('Ask cancelled')};
 document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hideComposerSuggestions()});
 
 
