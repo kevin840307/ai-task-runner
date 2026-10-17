@@ -638,8 +638,8 @@ function renderChatQueue(session=activeChat()){
     const item=queue.find(x=>String(x.id)===row.dataset.queueId);if(!item)return;
     row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>x.editing=false);item.editing=true;renderChatQueue(session);setTimeout(()=>document.querySelector(`#composerQueueList [data-queue-id="${item.id}"] [data-queue-edit-input]`)?.focus(),0)});
     row.querySelector('[data-queue-delete]')?.addEventListener('click',()=>{const i=queue.indexOf(item);if(i>=0)queue.splice(i,1);renderChatQueue(session);resizeChatComposer()});
-    row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;renderChatQueue(session)});
-    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=row.querySelector('[data-queue-edit-input]')?.value.trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;renderChatQueue(session);showToast('Queue updated')});
+    row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;renderChatQueue(session);if(chatTurnState(session)==='idle')drainChatQueue(session)});
+    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=row.querySelector('[data-queue-edit-input]')?.value.trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;renderChatQueue(session);showToast('Queue updated');if(chatTurnState(session)==='idle')drainChatQueue(session)});
   });
   resizeChatComposer();
 }
@@ -651,7 +651,7 @@ function enqueueChatMessage(session,text,{notify=true}={}){
 }
 function drainChatQueue(session=activeChat()){
   if(!session||chatTurnState(session)!=='idle'||session.askFlow)return;
-  const queue=ensureChatQueue(session);if(!queue.length)return;
+  const queue=ensureChatQueue(session);if(!queue.length||queue.some(item=>item.editing))return;
   const next=queue.shift();if(activeChat()===session)renderChatQueue(session);
   startMockChatTurn(session,next.text,{fromQueue:true});
 }
