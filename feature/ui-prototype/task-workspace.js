@@ -449,7 +449,9 @@ resetWorkspaceInspector=function(t){workspaceInfoRef=null;workspaceInfoReset(t)}
 const workspaceGuardRender=renderFullPlan;
 renderFullPlan=function(t){
   workspaceGuardRender(t);
-  const editable=taskEditable(t);document.getElementById('planAddExisting').disabled=!editable;
+  const editable=taskEditable(t),addExisting=document.getElementById('planAddExisting');
+  addExisting.disabled=!editable||!!t._chatDraft;
+  addExisting.title=t._chatDraft?'Create the Task before moving an existing Board Task into it.':'';
   if(workspaceInfoRef?.ownerId===t.id&&canonicalTaskItems(t)[workspaceInfoRef.index])workspaceInfoShow(t,workspaceInfoRef.index);
 };
 
