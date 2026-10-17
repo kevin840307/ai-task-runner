@@ -7,12 +7,21 @@ const taskEditorSurface=taskEditorHome.querySelector('.task-create-modal');
 const yamlEditorHome=document.getElementById('yamlPlanModal');
 const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
 let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
+let chatDraftEditorContext=null;
+function leaveChatDraftEditor(){
+  if(!chatDraftEditorContext)return;
+  chatDraftEditorContext=null;
+  taskEditorHome.classList.remove('chat-draft-editor-overlay');
+  restoreSurfaceCloseBehavior(taskEditorSurface,'newTaskModal');
+  closeModal('newTaskModal');showView('chat');renderChatSession();
+}
 
 function setSurfaceBackBehavior(surface,type,returnTarget='list'){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
   const label=returnTarget==='info'?'Back to Info':returnTarget==='chat'?'Back to Chat Draft':'Back to Task List';
-  if(close){close.textContent='←';close.title=label;close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
-  if(cancel){cancel.textContent=label;cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+  const leave=returnTarget==='chat'?leaveChatDraftEditor:leavePlanSubview;
+  if(close){close.textContent='←';close.title=label;close.onclick=e=>{e.preventDefault();leave()}}
+  if(cancel){cancel.textContent=label;cancel.onclick=e=>{e.preventDefault();leave()}}
 }
 function restoreSurfaceCloseBehavior(surface,overlayId){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
@@ -51,7 +60,7 @@ function leavePlanSubview(){
 planModalEl.addEventListener('click',e=>{
   if(e.target!==planModalEl)return;
   if(planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview();return}
-  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();closeModal('planModal');showView('chat');renderChatSession()}
+  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();planModalEl.classList.remove('chat-draft-plan-overlay');closeModal('planModal');showView('chat');renderChatSession()}
 },true);
 
 // Reuse the exact same Task Editor DOM inside the list dialog.
@@ -63,8 +72,19 @@ loadTaskEditor=function(mode,args={}){
   }
   const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
   const returnTarget=args.returnTarget||detectTaskEditorReturnTarget();
-  if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
   closeModal('addPlanTaskModal');
+  if(returnTarget==='chat'){
+    if(planSubviewType)leavePlanSubview();
+    isolatedTaskEditorLoad(mode,args);
+    chatDraftEditorContext={ownerId,index:args.index??canonicalTaskItems(owner).length};
+    taskEditorHome.classList.add('chat-draft-editor-overlay');
+    document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
+    document.getElementById('taskFormHelp').textContent=mode==='edit-item'?'Edit this Task Draft item. Chat remains behind this overlay.':'Configure this Task Draft item. Chat remains behind this overlay.';
+    document.getElementById('editTaskScopeNote').hidden=true;
+    setSurfaceBackBehavior(taskEditorSurface,'task','chat');
+    return;
+  }
+  if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
   isolatedTaskEditorLoad(mode,args);
   document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
   document.getElementById('taskFormHelp').textContent=mode==='edit-item'?'Edit this task only.':'Configure this task only.';
@@ -74,10 +94,16 @@ loadTaskEditor=function(mode,args={}){
 
 const taskEditorSaveBeforeSubview=document.getElementById('createTaskConfirm').onclick;
 document.getElementById('createTaskConfirm').onclick=()=>{
-  const embedded=planSubviewType==='task';
+  const embedded=planSubviewType==='task',chatDraftEdit=!!chatDraftEditorContext;
   taskEditorSaveBeforeSubview();
-  if(embedded&&['Task saved','Saved · current task will restart'].includes(toast.textContent))leavePlanSubview();
+  const saved=['Task saved','Saved · current task will restart'].includes(toast.textContent);
+  if(chatDraftEdit&&saved){leaveChatDraftEditor();return}
+  if(embedded&&saved)leavePlanSubview();
 };
+
+taskEditorHome.addEventListener('click',e=>{
+  if(e.target===taskEditorHome&&chatDraftEditorContext){e.preventDefault();e.stopImmediatePropagation();leaveChatDraftEditor()}
+},true);
 
 // YAML is also a long-form editor, so it uses the same Plan subview instead of another large modal.
 const yamlOpenBeforeSubview=openYamlPlanModal;
@@ -463,7 +489,7 @@ const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
 document.getElementById('planBackToTask').onclick=()=>{
   workspaceInfoRef=null;
   const t=taskMap[currentTaskId];
-  if(t?._chatDraft){clearTaskSelection();closeModal('planModal');showView('chat');renderChatSession();return}
+  if(t?._chatDraft){clearTaskSelection();planModalEl.classList.remove('chat-draft-plan-overlay');closeModal('planModal');showView('chat');renderChatSession();return}
   workspaceClosePlan();
 };
 
