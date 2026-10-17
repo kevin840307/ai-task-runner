@@ -632,14 +632,15 @@ function renderChatQueue(session=activeChat()){
   const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
   const queue=ensureChatQueue(session);panel.hidden=!queue.length;if(count)count.textContent=queue.length;
   host.innerHTML=queue.map((item,index)=>item.editing
-    ?`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><div class="composer-queue-edit"><textarea data-queue-edit-input>${escapeHtml(item.text)}</textarea><button type="button" data-queue-save>Save</button><button type="button" data-queue-cancel>Cancel</button></div></div>`
+    ?`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><div class="composer-queue-edit"><textarea data-queue-edit-input>${escapeHtml(item.editValue??item.text)}</textarea><button type="button" data-queue-save>Save</button><button type="button" data-queue-cancel>Cancel</button></div></div>`
     :`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><span class="composer-queue-copy" title="${escapeAttr(item.text)}">${escapeHtml(item.text)}</span><span class="composer-queue-actions"><button type="button" data-queue-edit>Edit</button><button class="danger" type="button" data-queue-delete>Delete</button></span></div>`).join('');
   host.querySelectorAll('[data-queue-id]').forEach(row=>{
     const item=queue.find(x=>String(x.id)===row.dataset.queueId);if(!item)return;
-    row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>x.editing=false);item.editing=true;renderChatQueue(session);setTimeout(()=>document.querySelector(`#composerQueueList [data-queue-id="${item.id}"] [data-queue-edit-input]`)?.focus(),0)});
+    row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>{if(x!==item){x.editing=false;delete x.editValue}});item.editValue=item.text;item.editing=true;renderChatQueue(session);setTimeout(()=>document.querySelector(`#composerQueueList [data-queue-id="${item.id}"] [data-queue-edit-input]`)?.focus(),0)});
+    row.querySelector('[data-queue-edit-input]')?.addEventListener('input',e=>{item.editValue=e.target.value});
     row.querySelector('[data-queue-delete]')?.addEventListener('click',()=>{const i=queue.indexOf(item);if(i>=0)queue.splice(i,1);renderChatQueue(session);resizeChatComposer()});
-    row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;renderChatQueue(session);if(chatTurnState(session)==='idle')drainChatQueue(session)});
-    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=row.querySelector('[data-queue-edit-input]')?.value.trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;renderChatQueue(session);showToast('Queue updated');if(chatTurnState(session)==='idle')drainChatQueue(session)});
+    row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;delete item.editValue;renderChatQueue(session);if(chatTurnState(session)==='idle')drainChatQueue(session)});
+    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=String(row.querySelector('[data-queue-edit-input]')?.value??item.editValue??'').trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;delete item.editValue;renderChatQueue(session);showToast('Queue updated');if(chatTurnState(session)==='idle')drainChatQueue(session)});
   });
   resizeChatComposer();
 }
