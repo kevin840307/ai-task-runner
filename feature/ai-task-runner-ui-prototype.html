@@ -4162,7 +4162,7 @@ function deleteProject(key){
   const remaining=projectRegistryEntries().map(([k])=>k).filter(k=>projectMeta[k]);
   if(currentProjectKey===key){
     currentProjectKey=remaining[0]||'';
-    if(currentProjectKey){selectProject(currentProjectKey);showView('chat')}
+    if(currentProjectKey){selectProject(currentProjectKey)}
     else{
       document.getElementById('projectSwitcherPath').textContent='No Project';
       document.getElementById('chatProjectTitle').textContent='No Project';
