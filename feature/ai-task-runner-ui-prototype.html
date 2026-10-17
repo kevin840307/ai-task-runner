@@ -496,7 +496,6 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
   <div class="modal-card task-create-modal">
     <div class="modal-head"><div><h2 id="taskFormTitle">New task</h2><p id="taskFormHelp">Configure this task only.</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
-      <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
         <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
         <div class="field"><label>Project</label><select id="newTaskProject"><option value="ai-task-runner">ai-task-runner</option><option value="game-client">game-client</option><option value="lab-tools">lab-tools</option><option value="demo-api">demo-api</option><option value="web-console">web-console</option><option value="sandbox-lab">sandbox-lab</option></select></div>
@@ -504,7 +503,6 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
       <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
-      <div id="newTaskListSetup" class="task-list-setup" hidden></div>
       <div id="newTaskPromptSource"></div>
       <div id="newTaskValidationSource"></div>
       <div class="workspace-selector-wrap">
@@ -3285,6 +3283,7 @@ loadTaskEditor=function(mode,args={}){
 // Remove List-oriented wording from the canonical Task Editor itself.
 document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are saved on this task only. Workflow capabilities determine which validation fields are shown.';
 
+renderTaskKindUi=function(){};
 renderNewTaskSources();
 renderChatSession();
 renderBoard('today');
