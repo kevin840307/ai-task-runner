@@ -4238,12 +4238,8 @@ function refreshTaskProjectFilter(){
 function toggleTaskProject(key){
   if(!projectMeta[key])return;
   if(selectedTaskProjectKeys.has(key))selectedTaskProjectKeys.delete(key);else selectedTaskProjectKeys.add(key);
-  currentProjectKey=key;
+  taskMultiSelectBefore(key);
   refreshTaskProjectFilter();
-}
-function setTaskProjectOnly(key){
-  if(!projectMeta[key])return;
-  selectedTaskProjectKeys=new Set([key]);currentProjectKey=key;refreshTaskProjectFilter();
 }
 function setAllTaskProjects(){
   selectedTaskProjectKeys=new Set(availableTaskProjectKeys());refreshTaskProjectFilter();
@@ -4270,7 +4266,6 @@ document.getElementById('projectScroll').addEventListener('click',e=>{
   toggleTaskProject(row.dataset.projectRow);
 },true);
 
-const taskMultiFilterApplyBefore=applyTaskFilter;
 applyTaskFilter=function(){
   const q=document.getElementById('taskSearch').value.trim().toLowerCase();
   document.querySelectorAll('.taskcard').forEach(card=>{const t=taskMap[card.dataset.id],projectOk=taskMatchesSelectedProjects(t),queryOk=!q||card.textContent.toLowerCase().includes(q),runOk=!runningOnly||['running','recover'].includes(t?.runtime);card.hidden=!(projectOk&&queryOk&&runOk)});
@@ -4279,7 +4274,6 @@ applyTaskFilter=function(){
 };
 visibleProjectTasks=function(){return selectedTaskProjects()};
 
-const taskMultiFilterUpdateBefore=updateCounts;
 updateCounts=function(){
   projectScopedUpdateCounts();
   const visible=selectedTaskProjects(),q=document.getElementById('taskSearch').value.trim().toLowerCase();
