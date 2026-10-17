@@ -881,9 +881,9 @@ function renderChatTaskDraft(session,box){
 }
 function generateChatTaskDraft(spec,mode='auto',targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
   const session=targetSession;if(!session)return;
-  const source=String(spec||'').trim(),usage=mode==='single'?'@task-single <spec>':mode==='list'?'@task-list <spec>':'@task <spec>';if(!source){session.messages.push(['assistant',`Usage: ${usage}`]);showToast(`Usage: ${usage}`);renderChatSession();return}
-  if(/^mock:error\b/i.test(source)){session.messages.push(['assistant','Mock generate-task backend error · Task Draft was not created.']);showToast('Mock backend error');renderChatSession();return}
-  if(/^mock:invalid\b/i.test(source)){session.messages.push(['assistant','Mock AI returned an invalid TaskDraft · validation failed closed.']);showToast('Invalid TaskDraft');renderChatSession();return}
+  const source=String(spec||'').trim(),usage=mode==='single'?'@task-single <spec>':mode==='list'?'@task-list <spec>':'@task <spec>';if(!source){session.messages.push(['assistant',`Usage: ${usage}`]);showToast(`Usage: ${usage}`);if(activeChat()===session)renderChatSession();return}
+  if(/^mock:error\b/i.test(source)){session.messages.push(['assistant','Mock generate-task backend error · Task Draft was not created.']);showToast('Mock backend error');if(activeChat()===session)renderChatSession();return}
+  if(/^mock:invalid\b/i.test(source)){session.messages.push(['assistant','Mock AI returned an invalid TaskDraft · validation failed closed.']);showToast('Invalid TaskDraft');if(activeChat()===session)renderChatSession();return}
   if(session.taskDraft&&!session.taskDraft.createdTaskId)discardChatTaskDraft(session,{render:false});
   const modeLabel=mode==='single'?'single Task':mode==='list'?'Task List':'AI/Mock auto';
   session.messages.push(['assistant',`Mock generate-task completed · ${modeLabel}. Review the Task Draft before creating it.`]);
