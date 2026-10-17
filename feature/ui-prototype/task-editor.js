@@ -320,7 +320,7 @@ function openWorktreeMergeChat(t,index){
   const sessions=ensureProjectChats(projectKey),id=`${projectKey}-chat-${++chatSequence}`;
   sessions.unshift({id,name:`Merge ${t.id} · Task ${index+1}`,messages:[]});projectActiveChat[projectKey]=id;
   renderChatSession();
-  const input=document.getElementById('chatInput');input.value=mergeChatPrompt(t,item,index,projectKey,preflight);input.focus();input.setSelectionRange(input.value.length,input.value.length);
+  const input=document.getElementById('chatInput');input.value=mergeChatPrompt(t,item,index,projectKey,preflight);resizeChatComposer();input.focus();input.setSelectionRange(input.value.length,input.value.length);
   showToast('Merge prompt prepared · not sent');
 }
 function renderWorkspaceResult(t){
@@ -494,7 +494,7 @@ document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
   const session=activeChat();session.messages.push(['user',textValue]);
   const reply=/task|執行|run/i.test(textValue)?'若要長時間執行，可用「建立 Task」把目前內容帶到 Tasks。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
-  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+  session.messages.push(['assistant',reply]);input.value='';resizeChatComposer();renderChatSession();
 };
 
 // Project-aware navigation refreshes Chat immediately.
