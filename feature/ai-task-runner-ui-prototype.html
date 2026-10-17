@@ -494,7 +494,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
-    <div class="modal-head"><div><h2 id="taskFormTitle">New Task</h2><p id="taskFormHelp">先建立第一個 task；之後可從 Task Details 繼續加入更多 tasks。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-head"><div><h2 id="taskFormTitle">New task</h2><p id="taskFormHelp">Configure this task only.</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
@@ -3265,6 +3265,25 @@ openTaskById=function(id){
   if(items.length===0){primary.disabled=true;primary.textContent='Run';primary.title='Add at least one task before running'}else{primary.disabled=false;primary.title=''}
   setPlanDraftForTask(t);renderDrawerPlan(t);
 };
+
+// --- Isolated Task Editor: editing a task never shows Task List context. ---
+const isolatedTaskEditorLoad=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  if(mode==='create-item'||mode==='edit-item'){
+    closeModal('addPlanTaskModal');
+    closeModal('planModal');
+    document.getElementById('taskOverlay').classList.remove('open');
+  }
+  isolatedTaskEditorLoad(mode,args);
+  document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='edit-item'
+    ?'Edit this task only. Project, Workflow, Prompt, Validation and Workspace belong to this task.'
+    :'Configure this task. Project, Workflow, Prompt, Validation and Workspace belong to this task.';
+  document.getElementById('editTaskScopeNote').hidden=true;
+};
+
+// Remove List-oriented wording from the canonical Task Editor itself.
+document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are saved on this task only. Workflow capabilities determine which validation fields are shown.';
 
 renderNewTaskSources();
 renderChatSession();
