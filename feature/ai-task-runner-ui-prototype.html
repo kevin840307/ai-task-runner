@@ -2705,6 +2705,73 @@ document.getElementById('mergeChatDemo').onclick=()=>{
 const canonicalListOpenTask=openTaskById;
 openTaskById=function(id){const t=taskMap[id];if(t)canonicalTaskItems(t);canonicalListOpenTask(id);const current=taskMap[id];if(current){setPlanDraftForTask(current);renderDrawerPlan(current);renderWorkspaceResult(current)}};
 
+// --- Project-scoped Chat sessions ---
+const projectChats={};
+const projectActiveChat={};
+function cloneMessages(messages){return (messages||[]).map(x=>[x[0],x[1]])}
+function ensureProjectChats(key=currentProjectKey){
+  if(!projectChats[key]){
+    if(key==='ai-task-runner'){
+      projectChats[key]=chatSessions.map(s=>({id:s.id,name:s.name,messages:cloneMessages(s.messages)}));
+      projectActiveChat[key]='design';
+    }else{
+      const id=`${key}-chat-1`;
+      projectChats[key]=[{id,name:'Project Chat',messages:[['assistant',`這是 ${key} 的 Project Chat。這裡的對話與其他 Project 分開保存。`]]}];
+      projectActiveChat[key]=id;
+    }
+  }
+  return projectChats[key];
+}
+activeChat=function(){
+  const sessions=ensureProjectChats(currentProjectKey),id=projectActiveChat[currentProjectKey];
+  return sessions.find(x=>x.id===id)||sessions[0];
+};
+syncChatSessionSelect=function(){
+  const sessions=ensureProjectChats(currentProjectKey),select=document.getElementById('chatPreset'),id=projectActiveChat[currentProjectKey];
+  select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
+};
+renderChatSession=function(){
+  syncChatSessionSelect();
+  const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
+  (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
+  if(!(session?.messages||[]).length)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
+  box.scrollTop=box.scrollHeight;
+};
+document.getElementById('chatPreset').onchange=e=>{projectActiveChat[currentProjectKey]=e.target.value;renderChatSession()};
+document.getElementById('newChat').onclick=()=>{
+  const sessions=ensureProjectChats(currentProjectKey),id=`${currentProjectKey}-chat-${++chatSequence}`;
+  sessions.unshift({id,name:`New Chat ${chatSequence}`,messages:[]});projectActiveChat[currentProjectKey]=id;renderChatSession();document.getElementById('chatInput').focus();showToast('New Project Chat');
+};
+document.getElementById('renameChatConfirm').onclick=()=>{
+  const value=document.getElementById('renameChatInput').value.trim();if(!value){showToast('Chat name 不可空白');return}
+  activeChat().name=value;closeModal('renameChatModal');renderChatSession();showToast('Chat renamed');
+};
+document.getElementById('chatSend').onclick=()=>{
+  const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
+  const session=activeChat();session.messages.push(['user',textValue]);
+  const reply=/task|執行|run/i.test(textValue)?'若要長時間執行，可用「建立 Task」把目前內容帶到 Tasks。':'收到。這則訊息只保存在目前 Project 的 Chat session。';
+  session.messages.push(['assistant',reply]);input.value='';renderChatSession();
+};
+
+// Project-aware navigation refreshes Chat immediately.
+selectProject=(function(base){return function(key){
+  base(key);ensureProjectChats(key);
+  document.getElementById('chatProjectTitle').textContent=key;
+  document.getElementById('chatProjectLine').textContent=`${projectMeta[key].path} · Project Chat`;
+  document.getElementById('tasksProjectLine').textContent=`${projectMeta[key].path} · ordered tasks`;
+  if(document.getElementById('view-chat').classList.contains('active'))renderChatSession();
+};})(selectProject);
+
+// Parent Task has no single workspace when it owns multiple tasks.
+workspaceName=(function(base){return function(t){
+  const items=canonicalTaskItems(t);if(items.length>1)return 'Per-task workspaces';return base(t);
+};})(workspaceName);
+
+// Remove legacy type words from card/Drawer presentation.
+taskCardHtml=(function(base){return function(t){
+  canonicalTaskItems(t);return base(t).replace('Task List','Tasks').replace('Multi-step','Per-task workspaces');
+};})(taskCardHtml);
+
 renderChatSession();
 renderBoard('today');
 renderTaskKindUi();
