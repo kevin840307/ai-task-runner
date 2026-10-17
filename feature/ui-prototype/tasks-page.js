@@ -155,14 +155,14 @@ let pendingResetToNewTaskId=null;
 function resetTaskToNew(t){
   if(!t||!['paused','closed'].includes(t.status))return;
   const items=canonicalTaskItems(t),previousStatus=t.status,previousProgress=t.progress?.[0]||0,previousElapsed=t.elapsed||'—';
+  const previousRun=t.runNumber||1;
   if(previousStatus==='closed'){
-    const completedRun=t.runNumber||1;
-    pushTaskHistory(t,`Run #${completedRun} preserved · Completed · ${previousProgress}/${items.length} · ${previousElapsed}`);
-    t.runNumber=completedRun+1;
-    pushTaskHistory(t,`Run #${t.runNumber} prepared · Closed → New`);
+    pushTaskHistory(t,`Run #${previousRun} preserved · Completed · ${previousProgress}/${items.length} · ${previousElapsed}`);
   }else{
-    pushTaskHistory(t,`Paused → New · resumable execution abandoned after ${previousProgress}/${items.length} completed`);
+    pushTaskHistory(t,`Run #${previousRun} abandoned · Paused → New after ${previousProgress}/${items.length} completed`);
   }
+  t.runNumber=previousRun+1;
+  pushTaskHistory(t,`Run #${t.runNumber} prepared · ${statusLabel(previousStatus)} → New`);
   t.status='new';t.runtime='idle';t.progress=[0,items.length];t.stage='Ready';t.session='—';t.elapsed='—';t.configDirty=false;
   t.desc=items.length===1?'Ready to run from the beginning':`${items.length} ordered tasks · ready to run from the beginning`;
   if(batchParentTaskId===t.id){
