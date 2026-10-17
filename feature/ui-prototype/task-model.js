@@ -212,15 +212,16 @@ document.getElementById('resetBatch').onclick=()=>{
 document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
 
 let pendingTaskDeleteId=null;
+function taskCanDelete(t){return !!t&&t.status!=='ongoing'&&!['running','recover'].includes(t.runtime)}
 function deleteTaskConfirmed(id){
   const t=taskMap[id];if(!t)return;
-  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
+  if(!taskCanDelete(t)){showToast('Ongoing Task 不能直接刪除，請先 Pause / Stop');return}
   if(id===batchParentTaskId){clearInterval(batchRunTimer);batchRunTimer=null;batchParentTaskId=null;batchState={status:'idle',index:0,recovered:false,currentDirty:false}}
   delete taskMap[id];persistCurrentPresetFromTaskMap();document.getElementById('taskOverlay').classList.remove('open');renderBoardFromMap();showToast('Task deleted');
 }
 function requestTaskDelete(id=currentTaskId){
   const t=taskMap[id];if(!t)return;
-  if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Pause / Stop');return}
+  if(!taskCanDelete(t)){showToast('Ongoing Task 不能直接刪除，請先 Pause / Stop');return}
   pendingTaskDeleteId=id;
   const items=canonicalTaskItems(t),worktrees=items.filter(itemUsesWorktree).length;
   document.getElementById('taskDeleteMeta').textContent=`${t.id} · ${t.title}`;
