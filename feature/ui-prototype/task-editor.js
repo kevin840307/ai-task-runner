@@ -1059,8 +1059,29 @@ chatInputForSuggestions.addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();hideComposerSuggestions()}
 },true);
 document.getElementById('chatAgent').onchange=e=>{
-  const session=activeChat();if(session)session.agent=e.target.value;
-  renderComposerSuggestions();showToast(`Mock Agent · ${chatAgentLabel(e.target.value)}`);
+  const session=activeChat();if(!session)return;
+  session.agent=e.target.value;session.model='';session.mode='';
+  syncChatAgentControl();renderComposerSuggestions();
+  showToast(`Mock Agent · ${chatAgentLabel(e.target.value)}`);
+};
+document.getElementById('chatModel').onchange=e=>{
+  const session=activeChat();if(!session)return;
+  session.model=e.target.value;showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+};
+document.getElementById('chatMode').onchange=e=>{
+  const session=activeChat();if(!session)return;
+  session.mode=e.target.value;syncChatAgentControl();
+  const native=chatAgentProfile().modes.find(x=>x.id===session.mode)?.native||session.mode;
+  showToast(`Mock Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
+};
+document.getElementById('chatAsk').onclick=()=>{
+  const input=document.getElementById('chatInput'),profile=chatAgentProfile();
+  if(!profile.sideQuestion){showToast('Selected Agent does not support side questions');return}
+  if(!/^\s*(?:\/|\?)btw\b/i.test(input.value))input.value=input.value.trim()?'/btw '+input.value:'/btw ';
+  input.focus();input.setSelectionRange(input.value.length,input.value.length);resizeChatComposer();renderComposerSuggestions();
+};
+document.getElementById('dismissSideQuestion').onclick=()=>{
+  const session=activeChat();if(session)session.sideQuestion=null;renderSideQuestion(session);
 };
 document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hideComposerSuggestions()});
 
