@@ -479,14 +479,53 @@ const mockSystemPrompts=[
   {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
   {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'}
 ];
+const mockAgentProfiles={
+  qwen:{
+    label:'Qwen Code',
+    models:[
+      {id:'qwen3-coder-plus',label:'Qwen3 Coder Plus'},
+      {id:'qwen3-coder-flash',label:'Qwen3 Coder Flash'}
+    ],
+    defaultModel:'qwen3-coder-plus',
+    modes:[
+      {id:'read',label:'Read',native:'plan',description:'Qwen Plan mode · read-only analysis'},
+      {id:'auto',label:'Auto',native:'auto',description:'Qwen Auto · classifier evaluates risky actions'},
+      {id:'yolo',label:'YOLO',native:'yolo',description:'Qwen YOLO · auto-approve all tool calls'}
+    ],
+    defaultMode:'auto',
+    sideQuestion:true
+  },
+  opencode:{
+    label:'OpenCode',
+    models:[
+      {id:'openai/gpt-5.2',label:'GPT 5.2'},
+      {id:'anthropic/claude-sonnet-4.5',label:'Claude Sonnet 4.5'},
+      {id:'google/gemini-3-pro',label:'Gemini 3 Pro'}
+    ],
+    defaultModel:'openai/gpt-5.2',
+    modes:[
+      {id:'read',label:'Read',native:'permission profile',description:'OpenCode profile · deny edit/bash/task writes'},
+      {id:'auto',label:'Auto',native:'permission profile',description:'OpenCode profile · allow safe work and surface asks'},
+      {id:'yolo',label:'YOLO',native:'allow-all',description:'OpenCode profile · allow all supported tools'}
+    ],
+    defaultMode:'auto',
+    sideQuestion:true
+  }
+};
 const mockAgentCapabilities={
   qwen:[
+    {token:'/btw',title:'Side question',description:'Ask without adding the answer to main Chat history.',source:'Built-in'},
+    {token:'/model',title:'Switch model',description:'Open the Qwen Code model picker / switch model.',source:'Built-in'},
+    {token:'/approval-mode',title:'Approval mode',description:'Plan / Ask / Auto-Edit / Auto / YOLO in native Qwen Code.',source:'Built-in'},
     {token:'/skills',title:'Browse Skills',description:'Qwen Code skill registry / panel entry.',source:'Built-in'},
     {token:'/review',title:'Code review',description:'Mock project skill discovered by Qwen SkillManager.',source:'Mock skill'},
     {token:'/frontend-design',title:'Frontend design',description:'Mock project skill for UI/UX implementation.',source:'Mock skill'},
     {token:'/test',title:'Focused tests',description:'Mock project skill for focused verification.',source:'Mock skill'}
   ],
   opencode:[
+    {token:'/btw',title:'Side question',description:'Ask without adding the answer to main Chat history.',source:'Built-in'},
+    {token:'/models',title:'Choose model',description:'OpenCode model picker.',source:'Built-in'},
+    {token:'/agents',title:'Choose Agent',description:'OpenCode Agent picker.',source:'Built-in'},
     {token:'/git-release',title:'Git release',description:'Mock slash-enabled OpenCode SKILL.md capability.',source:'Mock skill'},
     {token:'/code-review',title:'Code review',description:'Mock OpenCode skill resolved for this agent.',source:'Mock skill'},
     {token:'/plan',title:'Plan',description:'Mock OpenCode custom/built-in command.',source:'Command'},
@@ -494,10 +533,19 @@ const mockAgentCapabilities={
   ]
 };
 function chatAgentKey(session=activeChat()){return session?.agent||'qwen'}
-function chatAgentLabel(key){return key==='opencode'?'OpenCode':'Qwen Code'}
+function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||mockAgentProfiles.qwen}
+function chatAgentLabel(key){return chatAgentProfile(key).label}
 function syncChatAgentControl(){
-  const select=document.getElementById('chatAgent'),session=activeChat();if(!select||!session)return;
-  select.value=chatAgentKey(session);
+  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),modeControl=document.getElementById('chatModeControl'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode)return;
+  const key=chatAgentKey(session),profile=chatAgentProfile(key);session.agent=key;
+  if(!profile.models.some(x=>x.id===session.model))session.model=profile.defaultModel;
+  if(!profile.modes.some(x=>x.id===session.mode))session.mode=profile.defaultMode;
+  agent.value=key;
+  model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
+  mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
+  model.value=session.model;mode.value=session.mode;
+  if(modeControl){modeControl.dataset.mode=session.mode;modeControl.title=profile.modes.find(x=>x.id===session.mode)?.description||''}
+  if(ask){ask.disabled=!profile.sideQuestion;ask.title=profile.sideQuestion?'Ask a side question without changing main Chat history':'Selected Agent does not expose side questions'}
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
 function chatAgentCommand(text){
