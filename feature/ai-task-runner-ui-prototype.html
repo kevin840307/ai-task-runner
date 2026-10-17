@@ -4209,6 +4209,8 @@ tasksProjectSelect.onchange=()=>{if(projectMeta[tasksProjectSelect.value])select
 
 const ensureProjectBeforeTaskSwitcher=ensureProjectFromInput;
 ensureProjectFromInput=function(raw){const key=ensureProjectBeforeTaskSwitcher(raw);renderTasksProjectSelect();return key};
+const deleteProjectBeforeTaskSwitcher=deleteProject;
+deleteProject=function(key){deleteProjectBeforeTaskSwitcher(key);renderTasksProjectSelect()};
 
 function openTaskFromBoard(t){
   if(!t)return;
