@@ -473,6 +473,7 @@ syncChatSessionSelect=function(){
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
 const mockSystemPrompts=[
+  {token:'@run',title:'Run now',description:'Create one Task and start immediately with the Workflow selected in Chat settings.',source:'Runner'},
   {token:'@task',title:'AI decides Task or Task List',description:'Create one Task or multiple ordered Tasks; Mock randomly chooses for testing.',source:'Runner'},
   {token:'@task-single',title:'Create one Task',description:'Force the generated TaskDraft to contain exactly one Task.',source:'Runner'},
   {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
@@ -536,79 +537,41 @@ const mockAgentCapabilities={
 function chatAgentKey(session=activeChat()){return session?.agent||'qwen'}
 function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||mockAgentProfiles.qwen}
 function chatAgentLabel(key){return chatAgentProfile(key).label}
+function chatWorkflowKey(session=activeChat()){return session?.workflow||'ralphy_ai_validate.yaml'}
 function syncChatAgentControl(){
-  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),modeControl=document.getElementById('chatModeControl'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode)return;
+  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),workflow=document.getElementById('chatWorkflow'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode||!workflow)return;
   const key=chatAgentKey(session),profile=chatAgentProfile(key);session.agent=key;
   if(!profile.models.some(x=>x.id===session.model))session.model=profile.defaultModel;
   if(!profile.modes.some(x=>x.id===session.mode))session.mode=profile.defaultMode;
+  if(!session.workflow)session.workflow='ralphy_ai_validate.yaml';
   agent.value=key;
   model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
   mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
-  model.value=session.model;mode.value=session.mode;
-  if(modeControl){modeControl.dataset.mode=session.mode;modeControl.title=profile.modes.find(x=>x.id===session.mode)?.description||''}
+  model.value=session.model;mode.value=session.mode;workflow.value=session.workflow;
   if(ask){ask.disabled=!profile.askQuestions;ask.title=profile.askQuestions?'Force a mock AI clarification flow':'Selected Agent does not expose interactive questions'}
-  syncComposerPickerLabels();
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
-let composerPickerKind='',composerPickerAnchor=null;
-function composerPickerEntries(kind){
-  const profile=chatAgentProfile();
-  if(kind==='agent')return Object.entries(mockAgentProfiles).map(([id,p])=>({id,label:p.label,description:`${p.models.length} models · ${p.modes.length} modes · Ask ${p.askQuestions?'supported':'off'}`,meta:id==='qwen'?'Qwen CLI':'OpenCode CLI',icon:id==='qwen'?'Q':'O'}));
-  if(kind==='model')return profile.models.map(x=>({id:x.id,label:x.label,description:x.id,meta:'Model',icon:'M'}));
-  return profile.modes.map(x=>({id:x.id,label:x.label,description:x.description,meta:x.native,icon:x.id==='read'?'R':x.id==='yolo'?'Y':'A'}));
+function closeComposerSettings(){
+  const pop=document.getElementById('composerSettingsPopover'),trigger=document.getElementById('chatSettings');if(pop)pop.hidden=true;if(trigger)trigger.setAttribute('aria-expanded','false');
 }
-function composerPickerSelected(kind){
-  const session=activeChat();if(!session)return '';
-  return kind==='agent'?chatAgentKey(session):kind==='model'?session.model:session.mode;
-}
-function syncComposerPickerLabels(){
-  const session=activeChat();if(!session)return;
-  const profile=chatAgentProfile(),model=profile.models.find(x=>x.id===session.model),mode=profile.modes.find(x=>x.id===session.mode);
-  const agentValue=document.getElementById('chatAgentValue'),modelValue=document.getElementById('chatModelValue'),modeValue=document.getElementById('chatModeValue'),agentMark=document.getElementById('chatAgentMark'),modeMark=document.getElementById('chatModeMark');
-  if(agentValue)agentValue.textContent=profile.label;
-  if(modelValue)modelValue.textContent=model?.label||session.model||'—';
-  if(modeValue)modeValue.textContent=mode?.label||session.mode||'—';
-  if(agentMark)agentMark.textContent=chatAgentKey(session)==='qwen'?'Q':'O';
-  if(modeMark)modeMark.textContent=session.mode==='read'?'R':session.mode==='yolo'?'Y':'A';
-  const agentTrigger=document.getElementById('chatAgentTrigger'),modelTrigger=document.getElementById('chatModelTrigger'),modeTrigger=document.getElementById('chatModeTrigger');
-  if(agentTrigger)agentTrigger.title=`Agent · ${profile.label}`;
-  if(modelTrigger)modelTrigger.title=`Model · ${model?.label||session.model||'—'}`;
-  if(modeTrigger)modeTrigger.title=`Mode · ${mode?.label||session.mode||'—'}`;
-}
-function closeComposerPicker(){
-  const pop=document.getElementById('composerPickerPopover');if(pop)pop.hidden=true;
-  ['chatAgentTrigger','chatModelTrigger','chatModeTrigger'].forEach(id=>document.getElementById(id)?.setAttribute('aria-expanded','false'));
-  composerPickerKind='';composerPickerAnchor=null;
-}
-function positionComposerPicker(anchor){
-  const pop=document.getElementById('composerPickerPopover');if(!pop||!anchor)return;
+function positionComposerSettings(anchor){
+  const pop=document.getElementById('composerSettingsPopover');if(!pop||!anchor)return;
   pop.style.visibility='hidden';pop.hidden=false;
   const r=anchor.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight,gap=7;
   const left=Math.max(10,Math.min(window.innerWidth-w-10,r.left));
   const top=r.top-h-gap>=10?r.top-h-gap:Math.min(window.innerHeight-h-10,r.bottom+gap);
   pop.style.left=`${left}px`;pop.style.top=`${Math.max(10,top)}px`;pop.style.visibility='';
 }
-function openComposerPicker(kind,anchor){
-  hideComposerSuggestions();
-  if(composerPickerKind===kind&&!document.getElementById('composerPickerPopover').hidden){closeComposerPicker();return}
-  closeComposerPicker();composerPickerKind=kind;composerPickerAnchor=anchor;
-  const pop=document.getElementById('composerPickerPopover'),title=document.getElementById('composerPickerTitle'),eyebrow=document.getElementById('composerPickerEyebrow'),host=document.getElementById('composerPickerOptions');
-  const labels={agent:'Agent',model:'Model',mode:'Permission mode'},selected=composerPickerSelected(kind),entries=composerPickerEntries(kind);
-  title.textContent=labels[kind];eyebrow.textContent=kind==='agent'?'CHAT AGENT':kind==='model'?chatAgentLabel(chatAgentKey()):'SAFETY / TOOLS';
-  host.innerHTML=entries.map(x=>`<button class="composer-picker-option ${x.id===selected?'active':''}" type="button" role="option" aria-selected="${x.id===selected?'true':'false'}" data-picker-value="${escapeAttr(x.id)}"><span class="composer-picker-option-icon">${escapeHtml(x.icon)}</span><span class="composer-picker-option-copy"><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description)}</small></span><span class="composer-picker-option-meta"><span class="composer-picker-option-chip">${escapeHtml(x.meta||'')}</span><span class="composer-picker-option-check">✓</span></span></button>`).join('');
-  host.querySelectorAll('[data-picker-value]').forEach(btn=>btn.onclick=()=>{
-    const select=document.getElementById(kind==='agent'?'chatAgent':kind==='model'?'chatModel':'chatMode');
-    select.value=btn.dataset.pickerValue;select.dispatchEvent(new Event('change',{bubbles:true}));closeComposerPicker();
-  });
-  anchor.setAttribute('aria-expanded','true');positionComposerPicker(anchor);
+function openComposerSettings(anchor){
+  hideComposerSuggestions();const pop=document.getElementById('composerSettingsPopover');if(!pop||!anchor)return;
+  if(!pop.hidden){closeComposerSettings();return}
+  syncChatAgentControl();anchor.setAttribute('aria-expanded','true');positionComposerSettings(anchor);
 }
-document.getElementById('chatAgentTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('agent',e.currentTarget)};
-document.getElementById('chatModelTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('model',e.currentTarget)};
-document.getElementById('chatModeTrigger').onclick=e=>{e.stopPropagation();openComposerPicker('mode',e.currentTarget)};
-document.getElementById('composerPickerClose').onclick=closeComposerPicker;
-document.addEventListener('click',e=>{if(!e.target.closest('#composerPickerPopover')&&!e.target.closest('.composer-picker-trigger'))closeComposerPicker()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&composerPickerKind)closeComposerPicker()});
-window.addEventListener('resize',closeComposerPicker);window.addEventListener('scroll',closeComposerPicker,true);
+document.getElementById('chatSettings').onclick=e=>{e.stopPropagation();openComposerSettings(e.currentTarget)};
+document.getElementById('composerSettingsClose').onclick=closeComposerSettings;
+document.addEventListener('click',e=>{if(!e.target.closest('#composerSettingsPopover')&&!e.target.closest('#chatSettings'))closeComposerSettings()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('composerSettingsPopover')?.hidden)closeComposerSettings()});
+window.addEventListener('resize',closeComposerSettings);window.addEventListener('scroll',closeComposerSettings,true);
 
 function chatAgentCommand(text){
   const match=String(text||'').match(/^\s*\/([^\s]+)(?:\s+([\s\S]*))?\s*$/);
@@ -845,7 +808,7 @@ function openChatTaskDraftEditor(session){
   const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId)return;
   taskMap[model.id]=model;
   if(typeof hideComposerSuggestions==='function')hideComposerSuggestions();
-  if(typeof closeComposerPicker==='function')closeComposerPicker();
+  closeComposerSettings();
   showView('chat');
   const items=canonicalTaskItems(model);
   if(items.length===1){loadTaskEditor('edit-item',{ownerId:model.id,index:0,returnTarget:'chat'});return}
