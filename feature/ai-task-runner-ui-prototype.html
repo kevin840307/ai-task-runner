@@ -370,7 +370,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
           <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
         </aside>
         <main class="existing-main">
-          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>Task Lists 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 Task Lists 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
+          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>Task item 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 Tasks 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
         </main>
       </div>
     </section>
@@ -434,7 +434,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 
 <div class="modal-overlay" id="newTaskModal">
   <div class="modal-card task-create-modal">
-    <div class="modal-head"><div><h2 id="taskFormTitle">New Task</h2><p id="taskFormHelp">先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
+    <div class="modal-head"><div><h2 id="taskFormTitle">New Task</h2><p id="taskFormHelp">先建立第一個 task；之後可從 Task Details 繼續加入更多 tasks。</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="task-kind-switch" hidden><button type="button" class="active" data-task-kind="task"><strong>Task</strong><small>單一 RunRequest</small></button><button type="button" data-task-kind="list"><strong>Task List</strong><small>ordered RunRequests · Form / YAML</small></button></div>
       <div class="modal-grid task-basics">
@@ -1599,7 +1599,7 @@ function selectProject(key){
   if(document.getElementById('newTaskProject'))document.getElementById('newTaskProject').value=key;
   if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
 }
-document.querySelectorAll('.project[data-project]').forEach(p=>p.addEventListener('click',()=>{selectProject(p.dataset.project);showToast(`切換 mock project：${p.dataset.project}`)}));
+// Project click navigation is bound once by the final Project→Chat block.
 document.getElementById('newProjectDemo').onclick=()=>showToast('Mock: New Project 固定在 sidebar 上方；正式版沿用既有 Open/Add Project 流程');
 
 const chatSessions=[
@@ -2174,7 +2174,7 @@ function taskRuntimeFingerprint(t){return JSON.stringify({project:t.project,work
 function setTaskFormCreateMode(){
   taskFormMode='create';editingTaskId=null;
   document.getElementById('taskFormTitle').textContent='New Task';
-  document.getElementById('taskFormHelp').textContent='先建立一個 Task；需要多步驟時，再從 Task Details 直接加入 Step。';
+  document.getElementById('taskFormHelp').textContent='先建立第一個 task；之後可從 Task Details 繼續加入更多 tasks。';
   document.getElementById('createTaskConfirm').textContent='Create Task';
   document.getElementById('editTaskScopeNote').hidden=true;
   document.getElementById('newTaskWorkflowField').hidden=false;
