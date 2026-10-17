@@ -113,13 +113,19 @@ loadTaskEditor=function(mode,args={}){
 const pausedPolicyRenderFullPlan=renderFullPlan;
 renderFullPlan=function(t){
   pausedPolicyRenderFullPlan(t);
-  const items=canonicalTaskItems(t);
+  const items=canonicalTaskItems(t),editable=taskEditable(t);
+  const lockedReason=t.status==='ongoing'?'Pause before editing this Task':t.status==='closed'?'Closed Task is read-only':'';
+  ['planAddTask','planAddExisting','planRenameList'].forEach(id=>{
+    const b=document.getElementById(id);if(!b)return;b.disabled=!editable;b.title=b.disabled?lockedReason:'';
+  });
+  const yaml=document.getElementById('planEditYaml');
   if(t.status==='paused'){
     document.getElementById('planStatePill').textContent=t.configDirty?'Current changed · restart required':'Current + future editable';
-    document.getElementById('planEditYaml').disabled=true;
-    document.getElementById('planEditYaml').title='Paused keeps completed history frozen. Edit current/future tasks individually; changing current requires restart.';
+    yaml.disabled=true;
+    yaml.title='Paused keeps completed history frozen. Edit current/future tasks individually; changing current requires restart.';
   }else{
-    document.getElementById('planEditYaml').title='';
+    yaml.disabled=!editable;
+    yaml.title=yaml.disabled?lockedReason:'';
   }
   document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{
     const i=+row.dataset.planRow,canEdit=taskItemCanEdit(t,i),canMove=taskItemCanRestructure(t,i);
@@ -134,8 +140,19 @@ renderFullPlan=function(t){
 const pausedPolicyRenderDrawerPlan=renderDrawerPlan;
 renderDrawerPlan=function(t){
   pausedPolicyRenderDrawerPlan(t);
-  const items=canonicalTaskItems(t);
+  const items=canonicalTaskItems(t),editable=taskEditable(t);
+  const lockedReason=t.status==='ongoing'?'Pause before editing this Task':t.status==='closed'?'Closed Task is read-only':'';
   const openList=document.getElementById('openFullPlan');if(openList)openList.textContent=t.status==='paused'?'Edit Task List':'Open list';
+  ['drawerAddStep','drawerAddExisting','editTaskDemo'].forEach(id=>{
+    const b=document.getElementById(id);if(!b)return;b.disabled=!editable;b.title=b.disabled?lockedReason:'';
+  });
+  const yaml=document.getElementById('stepsAdvanced');
+  if(yaml){
+    yaml.disabled=!editable||t.status==='paused';
+    yaml.title=t.status==='paused'
+      ?'Paused keeps completed history frozen. Edit current/future tasks individually.'
+      :(yaml.disabled?lockedReason:'');
+  }
   document.querySelectorAll('#formList [data-drawer-item]').forEach(row=>{
     const i=+row.dataset.drawerItem,canEdit=taskItemCanEdit(t,i);
     const edit=row.querySelector('[data-drawer-edit]');if(edit)edit.disabled=!canEdit;
