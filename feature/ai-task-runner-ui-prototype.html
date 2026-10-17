@@ -4297,6 +4297,70 @@ deleteProject=function(key){selectedTaskProjectKeys.delete(key);deleteProjectBef
 
 renderTasksProjectFilter();
 
+// --- Final Paused edit policy: completed/current are frozen; only future tasks can change. ---
+function taskItemCanEdit(owner,index){
+  if(!owner||!taskEditable(owner))return false;
+  const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length);
+  if(s.done)return false;
+  if(owner.status==='paused'&&index<=batchState.index)return false;
+  return true;
+}
+function taskItemCanRestructure(owner,index){
+  return taskItemCanEdit(owner,index);
+}
+
+const pausedPolicyLoadTaskEditor=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  if(mode==='edit-item'){
+    const owner=taskMap[args.ownerId||currentTaskId],index=Number(args.index);
+    if(!taskItemCanEdit(owner,index)){
+      showToast(owner?.status==='paused'?'Paused · completed/current task is locked':'Task is read-only');
+      return;
+    }
+  }
+  pausedPolicyLoadTaskEditor(mode,args);
+};
+
+const pausedPolicyRenderFullPlan=renderFullPlan;
+renderFullPlan=function(t){
+  pausedPolicyRenderFullPlan(t);
+  const items=canonicalTaskItems(t);
+  if(t.status==='paused'){
+    document.getElementById('planStatePill').textContent='Future tasks editable';
+    document.getElementById('planEditYaml').disabled=true;
+    document.getElementById('planEditYaml').title='Paused keeps completed/current tasks frozen. Edit future tasks individually.';
+  }else{
+    document.getElementById('planEditYaml').title='';
+  }
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(row=>{
+    const i=+row.dataset.planRow,canEdit=taskItemCanEdit(t,i),canMove=taskItemCanRestructure(t,i);
+    const edit=row.querySelector('[data-task-item-edit]');if(edit)edit.disabled=!canEdit;
+    const up=row.querySelector('[data-plan-up]');if(up)up.disabled=!canMove||i<1||(t.status==='paused'&&i-1<=batchState.index);
+    const down=row.querySelector('[data-plan-down]');if(down)down.disabled=!canMove||i>=items.length-1;
+    const remove=row.querySelector('[data-plan-remove]');if(remove)remove.disabled=!canMove;
+    row.ondblclick=e=>{if(e.target.closest('button'))return;if(taskItemCanEdit(t,i))loadTaskEditor('edit-item',{ownerId:t.id,index:i})};
+  });
+};
+
+const pausedPolicyRenderDrawerPlan=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  pausedPolicyRenderDrawerPlan(t);
+  const items=canonicalTaskItems(t);
+  document.querySelectorAll('#formList [data-drawer-item]').forEach(row=>{
+    const i=+row.dataset.drawerItem,canEdit=taskItemCanEdit(t,i);
+    const edit=row.querySelector('[data-drawer-edit]');if(edit)edit.disabled=!canEdit;
+    row.ondblclick=e=>{if(e.target.closest('button'))return;if(taskItemCanEdit(t,i))loadTaskEditor('edit-item',{ownerId:t.id,index:i})};
+  });
+};
+
+const pausedPolicyOpenItemContextMenu=openItemContextMenu;
+openItemContextMenu=function(e,owner,index){
+  pausedPolicyOpenItemContextMenu(e,owner,index);
+  const canEdit=taskItemCanEdit(owner,index);
+  setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
+  setContextAction('remove',{visible:true,enabled:taskItemCanRestructure(owner,index),label:'Remove'});
+};
+
 function openTaskFromBoard(t){
   if(!t)return;
   if(t.status==='ongoing'||t.status==='closed'){openTaskById(t.id);return}
