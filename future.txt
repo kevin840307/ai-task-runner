@@ -78,6 +78,39 @@ CORE PRINCIPLES
 - Message layout must reserve enough bottom space so a tall composer never covers the last message.
 - Programmatic prefill (for example Merge Chat) must resize the composer immediately.
 
+2.3 Composer command discovery
+------------------------------
+- Typing `@` at the beginning of the Composer opens AI Task Runner system-prompt / system-command suggestions.
+- `@task <spec>` is one Runner-owned command in this namespace.
+- Typing `/` at the beginning opens commands/skills exposed by the currently selected Agent.
+- `@` and `/` must remain visually distinct:
+    @ = AI Task Runner capability,
+    / = selected Agent capability.
+- Suggestions should support keyboard navigation, filtering, Enter/Tab accept and Escape close.
+- Selecting a suggestion only inserts the token/command; it must not auto-send.
+- The current Agent must be visible/selectable in Chat so users understand why the `/` list changes.
+
+Agent capability discovery:
+- Do NOT hardcode installed Agent skills in production frontend code.
+- Ask the selected Agent/backend adapter for its resolved command/skill capabilities.
+- Preserve each Agent's native discovery/permission semantics instead of scanning arbitrary directories in the browser.
+- OpenCode direction:
+    use its resolved skill/command registry/API (for example the same capability source used by its UI/TUI),
+    respect project/global discovery and per-agent skill permissions.
+- Qwen Code direction:
+    use its SkillManager / slash-command registry (or the live Agent process capability projection),
+    including extension/project skills and disabled-skill filtering.
+- Cache only as a UI projection; refresh when Agent capabilities/config change.
+- Different Agents may return different names, descriptions, source badges and availability.
+- Mock mode may provide deterministic per-Agent lists, but must keep the same capability schema as production.
+
+Suggested capability shape:
+    name/token,
+    description,
+    kind (skill / command / builtin),
+    source,
+    user_invocable,
+    enabled.
 
 3. CHAT COMMAND: @task <spec>
 ============================
