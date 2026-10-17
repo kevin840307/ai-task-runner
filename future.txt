@@ -13,6 +13,9 @@ This file records intended future direction only. It must not become a second ru
 When an item is implemented, keep AGENTS.md / DevFollow.txt / current runtime contracts authoritative
 and update real tests/docs in the same implementation change.
 
+Chinese implementation checklist: `feature/todo.txt` (UI、Chat API、Agent Adapter、Runner、Worktree、Merge、測試與驗收)。
+Use that file to track implementation progress; this roadmap remains the product-direction reference.
+
 
 CORE PRINCIPLES
 ---------------
