@@ -235,7 +235,33 @@ def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     assert "--auto" in captured["command"]
 
 
-def test_opencode_models_include_project_config_without_cli_discovery(tmp_path, monkeypatch):
+def test_opencode_models_prefer_cli_catalog(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+
+    (tmp_path / "opencode.json").write_text(
+        json.dumps({"model": "config/only"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "runner.agent.opencode.run_process",
+        lambda *args, **kwargs: ProcessResult(
+            "provider/model-b\nprovider/model-a\nprovider/model-b\n",
+            0,
+        ),
+    )
+
+    assert available_models("opencode", tmp_path) == [
+        "provider/model-a",
+        "provider/model-b",
+    ]
+
+
+def test_opencode_models_fall_back_to_config_when_cli_discovery_fails(
+    tmp_path,
+    monkeypatch,
+):
+    from runner.runtime.process_runner import ProcessResult
+
     (tmp_path / "opencode.json").write_text(
         json.dumps({
             "model": "lmstudio/default-model",
@@ -250,16 +276,16 @@ def test_opencode_models_include_project_config_without_cli_discovery(tmp_path, 
         }),
         encoding="utf-8",
     )
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("configured OpenCode models must not wait for CLI discovery")
+    monkeypatch.setattr(
+        "runner.agent.opencode.run_process",
+        lambda *args, **kwargs: ProcessResult("discovery failed", 1),
+    )
 
-    monkeypatch.setattr("runner.agent.opencode.run_process", fail_if_called)
-
-    models = available_models("opencode", tmp_path)
-
-    assert "lmstudio/default-model" in models
-    assert "lmstudio/qwen3.5-9b" in models
-    assert "lmstudio/qwen3.5-4b" in models
+    assert available_models("opencode", tmp_path) == [
+        "lmstudio/default-model",
+        "lmstudio/qwen3.5-4b",
+        "lmstudio/qwen3.5-9b",
+    ]
 
 
 def test_opencode_json_parser_uses_text_events_and_error_message(tmp_path):
@@ -881,6 +907,44 @@ def test_backend_catalog_discovers_plugin_backends_before_listing_models(tmp_pat
     }
 
 
+def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatch):
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    (qwen_home / "settings.json").write_text(
+        json.dumps({
+            "security": {"auth": {"selectedType": "openai"}},
+            "providerProtocol": {"lmstudio": "openai"},
+            "modelProviders": {
+                "openai": [
+                    {"id": "main"},
+                    {"id": "fast", "fastOnly": True},
+                    {"id": "voice", "voiceOnly": True},
+                    {"id": "image", "imageOnly": True},
+                    {"id": "vision", "visionOnly": True},
+                    {"id": "responses", "wireApi": "responses"},
+                ],
+                "lmstudio": [{"id": "local-main"}],
+                "anthropic": [{"id": "claude"}],
+                "unknown-provider": [{"id": "unknown"}],
+            },
+        }),
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    monkeypatch.setenv(
+        "QWEN_CODE_SYSTEM_DEFAULTS_PATH",
+        str(tmp_path / "system-defaults.json"),
+    )
+    monkeypatch.setenv(
+        "QWEN_CODE_SYSTEM_SETTINGS_PATH",
+        str(tmp_path / "system-settings.json"),
+    )
+
+    assert available_models("qwen", project) == ["local-main", "main"]
+
+
 def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
     import runner.agent.opencode as opencode_module
@@ -890,6 +954,7 @@ def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypa
     (qwen_home / "settings.json").write_text(
         """{
   // user selectable models
+  "security": {"auth": {"selectedType": "openai"}},
   "model": {"name": "qwen-user"},
   "modelProviders": {
     "openai": [
@@ -913,9 +978,9 @@ def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypa
     monkeypatch.setenv("QWEN_CODE_SYSTEM_SETTINGS_PATH", str(system_settings))
     monkeypatch.setenv("QWEN_MODEL", "qwen-env")
 
-    # Project modelProviders replaces the lower-precedence user catalog.
+    # Project modelProviders replaces the lower-precedence user catalog. A
+    # settings-selected model also outranks the environment model.
     assert available_models("qwen", project) == [
-        "qwen-env",
         "qwen-project",
         "qwen-user",
     ]
@@ -926,7 +991,6 @@ def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypa
         encoding="utf-8",
     )
     assert available_models("qwen", project) == [
-        "qwen-env",
         "qwen-system",
         "qwen-system-current",
     ]
