@@ -244,6 +244,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .move-task-note{display:grid;gap:3px;margin-bottom:9px;padding:9px 10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed}.move-task-note strong{font-size:9px;color:#7a4800}.move-task-note span{font-size:8px;color:#8a5500}
 .existing-task-option.selected{border-color:var(--accent);background:#f5fbfa;box-shadow:0 0 0 2px rgba(15,118,110,.07)}
 .plan-modal-card{width:min(1120px,96vw);height:min(780px,92vh);max-height:92vh;display:flex;flex-direction:column}.plan-modal-head{flex:0 0 auto}.plan-modal-head-actions{display:flex;align-items:center;gap:6px}.plan-modal-card .plan-page-body{flex:1 1 auto;min-height:0;border-radius:0 0 12px 12px}.plan-modal-card .plan-main,.plan-modal-card .plan-side-card{box-shadow:none}
+
+.workspace-result-section{margin-top:2px}.workspace-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.workspace-result-head h3{margin:0!important}.workspace-result-head p{margin:3px 0 0;color:var(--muted);font-size:8px}.workspace-result-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:6px 9px;margin-top:9px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#fbfcfd;font-size:8px}.workspace-result-grid span{color:var(--muted)}.workspace-result-grid strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-result-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.workspace-result-actions .btn:disabled{opacity:.45;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -389,6 +391,16 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
           <select id="batchPreset" hidden><option value="ui">UI list</option><option value="reliability">Reliability list</option><option value="multi">Multi-project list</option><option value="empty">Empty</option></select>
           <select id="batchOutcome" hidden><option value="success">Success</option><option value="recover">Recover once</option><option value="fail">Fail item 2</option></select>
           <button id="runBatch" hidden type="button"></button><button id="stopBatch" hidden type="button"></button><button id="resumeBatch" hidden type="button"></button><button id="resetBatch" hidden type="button"></button><button id="backToTasks" hidden type="button"></button><span id="taskListEditorTitle" hidden></span>
+        </section>
+        <section class="section workspace-result-section" id="workspaceResultSection">
+          <div class="workspace-result-head"><div><h3>Workspace result</h3><p id="workspaceResultHint">Main workspace · no isolated cleanup required</p></div><span class="pill" id="workspaceResultState">Main</span></div>
+          <div class="workspace-result-grid" id="workspaceResultGrid"></div>
+          <div class="workspace-result-actions">
+            <button class="btn" id="reviewChangesDemo" type="button">Review changes</button>
+            <button class="btn" id="mergeChatDemo" type="button">Merge with Chat</button>
+            <button class="btn primary" id="mergeTaskDemo" type="button">Merge</button>
+            <button class="btn danger" id="cleanupWorktreeDemo" type="button">Cleanup</button>
+          </div>
         </section>
       </div>
       <div class="drawer-pane" id="drawer-items"></div>
