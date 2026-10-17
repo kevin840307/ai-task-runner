@@ -318,6 +318,16 @@
   <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
 </div>
 
+<div class="modal-overlay" id="taskDeleteModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2>Delete Task?</h2><p id="taskDeleteMeta"></p></div><button class="close" data-close-modal="taskDeleteModal">×</button></div>
+    <div class="modal-body">
+      <div class="project-delete-note" id="taskDeleteNote"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskDeleteModal">Cancel</button><button class="btn danger" id="confirmTaskDelete">Delete Task</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="taskResetToNewModal">
   <div class="modal-card project-manage-modal">
     <div class="modal-head"><div><h2 id="taskResetToNewTitle">Move Task back to New?</h2><p id="taskResetToNewMeta"></p></div><button class="close" data-close-modal="taskResetToNewModal">×</button></div>
