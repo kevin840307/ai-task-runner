@@ -3336,7 +3336,7 @@ const createTypeMenu=document.getElementById('createTypeMenu');
 let createMenuAnchor=null;
 function hideCreateTypeMenu(){createTypeMenu.hidden=true;createMenuAnchor=null}
 function showCreateTypeMenu(anchor){
-  createMenuAnchor=anchor;createTypeMenu.hidden=false;
+  if(typeof hideTaskContextMenu==='function')hideTaskContextMenu();createMenuAnchor=anchor;createTypeMenu.hidden=false;
   const r=anchor.getBoundingClientRect(),w=250,gap=6;
   let left=Math.min(window.innerWidth-w-10,Math.max(10,r.right-w));
   let top=r.bottom+gap;
@@ -3451,7 +3451,7 @@ function setContextAction(name,{visible=true,enabled=true,label=null}={}){
   b.hidden=!visible;b.disabled=!enabled;if(label)b.querySelector('span').textContent=label;
 }
 function openItemContextMenu(e,owner,index){
-  e.preventDefault();e.stopPropagation();
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
   const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
   const canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
   taskContextState={scope:'item',ownerId:owner.id,index};
@@ -3460,7 +3460,7 @@ function openItemContextMenu(e,owner,index){
   positionTaskContextMenu(e.clientX,e.clientY);
 }
 function openListContextMenu(e,t){
-  e.preventDefault();e.stopPropagation();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
+  e.preventDefault();e.stopPropagation();hideCreateTypeMenu();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
   taskContextState={scope:'list',ownerId:t.id,index:null};
   setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
   setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
@@ -3481,7 +3481,8 @@ function showContextInfo(state){
   openModal('taskInfoModal');
 }
 function mutateContextItem(action,state){
-  const t=taskMap[state.ownerId];if(!t)return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const i=state.index;
+  const t=taskMap[state.ownerId];if(!t)return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const i=state.index,items=canonicalTaskItems(t),s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current;
+  const canEdit=taskEditable(t)&&!s.done,canRestructure=canEdit&&!currentLocked;if(!canRestructure)return;
   if(action==='up'&&i>0){[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]]}
   if(action==='down'&&i<batchDraft.length-1){[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]]}
   if(action==='remove'){batchDraft.splice(i,1)}
@@ -3491,7 +3492,7 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(b.disabled||!taskContextState)return;const state={...taskContextState},action=b.dataset.contextAction;hideTaskContextMenu();
   const t=taskMap[state.ownerId];if(!t)return;
   if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
-  if(action==='edit'){if(state.scope==='list')openListNameDialog('rename',t);else loadTaskEditor('edit-item',{ownerId:t.id,index:state.index});return}
+  if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog('rename',t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
   if(action==='info'){showContextInfo(state);return}
   if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
   if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
