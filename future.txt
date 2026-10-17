@@ -166,6 +166,7 @@ Product-level Mode UI:
 - Ask means the Agent asks the USER for clarification during the CURRENT turn.
 - Ask is NOT Qwen `/btw` side question. `/btw` may still exist independently in the Agent slash palette.
 - One Ask request can contain multiple questions.
+- The `Extra context` free-text question is optional; blank is a valid answer and must not block Next / Submit.
 - Supported question kinds:
     option question,
     free-text question.
@@ -208,7 +209,7 @@ Command semantics:
 - Only these explicit Runner commands trigger Task-generation.
 - Ordinary conversation containing words such as `task`, `run`, `建立任務`, etc. must NOT be guessed
   as Task creation intent.
-- The optional UI button may insert/focus `@task `, but it must not own a separate creation path.
+- Do not add a dedicated `@task` button. Users discover and insert `@task`, `@task-single`, and `@task-list` through the `@` autocomplete.
 - All three commands MUST use the same backend generate-task endpoint, fixed backend prompt, TaskDraft schema,
   canonical Task/Task List editor and Create flow. The command only supplies a generation mode constraint.
 
