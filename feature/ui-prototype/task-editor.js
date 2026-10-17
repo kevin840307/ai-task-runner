@@ -473,7 +473,9 @@ syncChatSessionSelect=function(){
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
 const mockSystemPrompts=[
-  {token:'@task',title:'Create Task Draft',description:'Use the Runner generate-task prompt for this spec.',source:'Runner'},
+  {token:'@task',title:'AI decides Task or Task List',description:'Create one Task or multiple ordered Tasks; Mock randomly chooses for testing.',source:'Runner'},
+  {token:'@task-single',title:'Create one Task',description:'Force the generated TaskDraft to contain exactly one Task.',source:'Runner'},
+  {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
   {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
   {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'}
 ];
@@ -549,8 +551,10 @@ function renderComposerSuggestions(){
 }
 
 function chatTaskCommand(text){
-  const match=String(text||'').match(/^\s*@task(?:\s+([\s\S]*?))?\s*$/i);
-  return match?{matched:true,spec:String(match[1]||'').trim()}:{matched:false,spec:''};
+  const match=String(text||'').match(/^\s*@(task|task-single|task-list)(?:\s+([\s\S]*?))?\s*$/i);
+  if(!match)return {matched:false,mode:'',spec:''};
+  const token=match[1].toLowerCase(),mode=token==='task-single'?'single':token==='task-list'?'list':'auto';
+  return {matched:true,mode,spec:String(match[2]||'').trim()};
 }
 function mockTaskDraftTitle(text){
   const cleaned=String(text||'').replace(/^(?:請|麻煩)?\s*(?:幫我)?\s*/i,'').trim();
@@ -570,8 +574,8 @@ function mockTaskDraftItems(text,wantsList){
   return [{title:mockTaskDraftTitle(source),prompt:source}];
 }
 let chatDraftSequence=0;
-function mockBuildChatTaskDraft(spec,projectKey=currentProjectKey){
-  const source=String(spec||'').trim(),wantsList=mockTaskDraftWantsList(source);
+function mockBuildChatTaskDraft(spec,projectKey=currentProjectKey,mode='auto'){
+  const source=String(spec||'').trim(),wantsList=mode==='list'?true:mode==='single'?false:(Math.random()<.5);
   const workspacePolicy=/worktree/i.test(source)?'worktree':/(?:main workspace|主工作區|直接用 main)/i.test(source)?'main':'auto';
   const workflow=/dynamic\s*handoff/i.test(source)?'dynamic_handoff.yaml':/\bmixed\b/i.test(source)?'mixed.yaml':'ralphy_ai_validate.yaml';
   const id=`DRAFT-${++chatDraftSequence}`,placeholder={id,project:projectKey},raw=mockTaskDraftItems(source,wantsList);
@@ -634,14 +638,15 @@ function renderChatTaskDraft(session,box){
   card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
 }
-function generateChatTaskDraft(spec){
+function generateChatTaskDraft(spec,mode='auto'){
   const session=activeChat();if(!session)return;
-  const source=String(spec||'').trim();if(!source){session.messages.push(['assistant','Usage: @task <spec>']);showToast('Usage: @task <spec>');renderChatSession();return}
+  const source=String(spec||'').trim(),usage=mode==='single'?'@task-single <spec>':mode==='list'?'@task-list <spec>':'@task <spec>';if(!source){session.messages.push(['assistant',`Usage: ${usage}`]);showToast(`Usage: ${usage}`);renderChatSession();return}
   if(/^mock:error\b/i.test(source)){session.messages.push(['assistant','Mock generate-task backend error · Task Draft was not created.']);showToast('Mock backend error');renderChatSession();return}
   if(/^mock:invalid\b/i.test(source)){session.messages.push(['assistant','Mock AI returned an invalid TaskDraft · validation failed closed.']);showToast('Invalid TaskDraft');renderChatSession();return}
   if(session.taskDraft&&!session.taskDraft.createdTaskId)discardChatTaskDraft(session,{render:false});
-  session.messages.push(['assistant','Mock generate-task completed. Review the Task Draft before creating it.']);
-  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey);renderChatSession();
+  const modeLabel=mode==='single'?'single Task':mode==='list'?'Task List':'AI/Mock auto';
+  session.messages.push(['assistant',`Mock generate-task completed · ${modeLabel}. Review the Task Draft before creating it.`]);
+  session.taskDraft=mockBuildChatTaskDraft(source,currentProjectKey,mode);renderChatSession();
 }
 
 renderChatSession=function(){
@@ -665,7 +670,7 @@ document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
   const session=activeChat(),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
   session.messages.push(['user',textValue]);hideComposerSuggestions();
-  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec);
+  if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode);
   else if(agentCommand.matched){mockInvokeAgentCommand(session,agentCommand);renderChatSession()}
   else if(systemCommand.matched){mockInvokeSystemPrompt(session,systemCommand);renderChatSession()}
   else{session.messages.push(['assistant','收到。一般 Chat 不會建立 Task。使用 @ 查看 Runner prompts；使用 / 查看目前 Agent 的 Skills / Commands。']);renderChatSession()}
