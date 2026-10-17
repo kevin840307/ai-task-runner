@@ -4245,7 +4245,6 @@ function refreshTaskProjectFilter(){
 function toggleTaskProject(key){
   if(!projectMeta[key])return;
   if(selectedTaskProjectKeys.has(key))selectedTaskProjectKeys.delete(key);else selectedTaskProjectKeys.add(key);
-  taskMultiSelectBefore(key);
   refreshTaskProjectFilter();
 }
 function setAllTaskProjects(){
