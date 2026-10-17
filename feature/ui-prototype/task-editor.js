@@ -674,7 +674,7 @@ function renderAskFlow(session=activeChat()){
   if(q.type==='choice'){
     const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class="composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}" type="button" data-ask-option="${i}"><span class="composer-ask-radio"></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
-    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],key=String(flow.index);flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(flow.answers[key]===flow.selected[key])flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
+    options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const item=rows[i],key=String(flow.index),wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session);if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus(),0)});
     textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';
     textInput.placeholder='Type a custom answer…';
   }else{
@@ -1143,6 +1143,11 @@ document.getElementById('createTaskConfirm').onclick=()=>{
 
 // Suppress legacy New Task listeners and route root creation into the canonical editor.
 // obsolete create-entry capture handler removed; final dropdown owns this entry.
+document.getElementById('chatQueueAdd').onclick=()=>{
+  const input=document.getElementById('chatInput'),value=input.value.trim();
+  if(!value){showToast('先輸入要排入 Queue 的內容');input.focus();return}
+  if(enqueueChatMessage(activeChat(),value)){input.value='';hideComposerSuggestions();resizeChatComposer()}
+};
 document.getElementById('chatToTask').onclick=()=>{
   const input=document.getElementById('chatInput'),raw=input.value;
   if(!/^\s*@task\b/i.test(raw))input.value=raw.trim()?'@task '+raw:'@task ';
