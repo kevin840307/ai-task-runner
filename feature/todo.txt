@@ -81,7 +81,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
 [ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
 [ ] @task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
-[ ] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
+[x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
 [ ] 顯示 Ask Mock 的明確入口，方便測試多問題流程。
 
 
