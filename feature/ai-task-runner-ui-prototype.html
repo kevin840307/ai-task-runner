@@ -66,6 +66,14 @@
             <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> pending</strong></div><small>Agent 忙碌時，送出會自動排隊</small></div>
             <div class="composer-queue-list" id="composerQueueList"></div>
           </div>
+          <div class="composer-run-config" id="composerRunConfig" hidden>
+            <div class="composer-run-copy"><span class="run-badge">RUN NOW</span><span>Create + start immediately</span></div>
+            <div class="composer-picker run-workflow-control">
+              <button class="composer-picker-trigger" id="chatRunWorkflowTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="composer-picker-mark">W</span><span class="composer-picker-copy"><small>Workflow</small><strong id="chatRunWorkflowValue">ralphy_ai_validate</strong></span><span class="composer-picker-chevron" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
           <div class="composer">
             <textarea id="chatInput" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
             <div class="composerfoot">
