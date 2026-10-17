@@ -700,6 +700,8 @@ function advanceAskFlow(session=activeChat()){
 function mockInvokeSystemPrompt(session,command){
   if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
   if(command.token==='@project'){const meta=projectMeta[currentProjectKey]||{};session.messages.push(['assistant',`Project · ${currentProjectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
+  if(command.token==='@queue'){if(!command.args){showToast('Usage: @queue <message>');return}enqueueChatMessage(session,command.args);session.messages.push(['assistant','Mock Queue item added. Use the Queue panel above the composer to Edit/Delete it.']);return}
+  if(command.token==='@ask-demo'){startMockAskFlow(session,command.args||'Mock clarification');return}
   session.messages.push(['assistant',`Unknown Runner command ${command.token}. Type @ to see available system prompts.`]);
 }
 let composerSuggestionItems=[],composerSuggestionIndex=0;
@@ -837,7 +839,7 @@ renderChatSession=function(){
   syncChatSessionSelect();syncChatAgentControl();
   const session=activeChat(),box=document.getElementById('chatMessages');box.innerHTML='';
   (session?.messages||[]).forEach(([who,body])=>{const el=document.createElement('div');el.className='msg '+who;el.innerHTML=(who==='assistant'?'<div class="msgmeta"><span class="avatar">AI</span>Assistant</div>':'<div class="msgmeta">You</div>')+escapeHtml(body);box.appendChild(el)});
-  renderChatTaskDraft(session,box);renderSideQuestion(session);
+  renderChatTaskDraft(session,box);renderChatQueue(session);renderAskFlow(session);
   if(!(session?.messages||[]).length&&!session?.taskDraft)box.innerHTML='<div class="empty-panel"><div><strong>New Chat</strong><br><br>這個 session 只屬於目前 Project。</div></div>';
   box.scrollTop=box.scrollHeight;
 };
@@ -852,17 +854,14 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 };
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
-  const session=activeChat(),sideQuestion=chatSideQuestionCommand(textValue),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
+  const session=activeChat(),taskCommand=chatTaskCommand(textValue),agentCommand=chatAgentCommand(textValue),systemCommand=chatSystemCommand(textValue);
   hideComposerSuggestions();
-  if(sideQuestion.matched){
-    mockAskSideQuestion(session,sideQuestion.question);
-    input.value='';resizeChatComposer();return;
-  }
   session.messages.push(['user',textValue]);
   if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode);
   else if(agentCommand.matched){mockInvokeAgentCommand(session,agentCommand);renderChatSession()}
   else if(systemCommand.matched){mockInvokeSystemPrompt(session,systemCommand);renderChatSession()}
-  else{session.messages.push(['assistant','收到。一般 Chat 不會建立 Task。使用 @ 查看 Runner prompts；使用 / 查看目前 Agent 的 Skills / Commands。']);renderChatSession()}
+  else if(Math.random()<.45){startMockAskFlow(session,textValue);renderChatSession()}
+  else{session.messages.push(['assistant','MOCK Agent 回覆完成。這次沒有觸發 clarification；重複輸入或按 Ask mock 可測試 AI 反問。']);renderChatSession()}
   input.value='';resizeChatComposer();
 };
 
