@@ -177,14 +177,14 @@ openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){se
 
 function persistCurrentPresetFromTaskMap(){
   if(!taskPresets[currentPreset])return;
-  taskPresets[currentPreset]=Object.values(taskMap).map(t=>cloneBatch([t])[0]);
+  taskPresets[currentPreset]=productTaskRecords().map(t=>cloneBatch([t])[0]);
 }
 // --- Dialog-first Plan UX + move-only New Task composition ---
 let addPlanOwnerId=null;
 let addTaskMode='create';
 let selectedMoveTaskId=null;
 function eligibleMoveTasks(owner){
-  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&!isSequenceTask(t)&&t.workspaceKind!=='batch');
+  return productTaskRecords().filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&!isSequenceTask(t)&&t.workspaceKind!=='batch');
 }
 function setAddTaskMode(mode){
   addTaskMode=mode;selectedMoveTaskId=null;
@@ -404,7 +404,7 @@ renderBoard=function(preset=currentPreset){canonicalBoardPreset(preset);normaliz
 
 // A 'Move existing' source is just a one-item Task List that has never run.
 eligibleMoveTasks=function(owner){
-  return Object.values(taskMap).filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&canonicalTaskItems(t).length===1);
+  return productTaskRecords().filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&canonicalTaskItems(t).length===1);
 };
 
 // Project click changes the shared Project context and preserves the current workspace.
