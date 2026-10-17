@@ -2529,9 +2529,6 @@ function openAddTaskDialog(ownerId=currentTaskId){
   const owner=taskMap[ownerId];if(!owner)return;
   if(!taskEditable(owner)){showToast(owner.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
   addPlanOwnerId=ownerId;addTaskMode='create';selectedMoveTaskId=null;
-  document.getElementById('addPlanPrompt').value='';
-  document.getElementById('addPlanProject').value=projectKeyForTask(owner);
-  document.getElementById('addPlanWorkflow').value='ralphy_ai_validate.yaml';
   document.getElementById('confirmAddPlanTask').disabled=false;
   setAddTaskMode('create');openModal('addPlanTaskModal');
 }
@@ -2539,12 +2536,7 @@ document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.onclick=()=>setAd
 document.getElementById('confirmAddPlanTask').onclick=()=>{
   const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
-  if(addTaskMode==='create'){
-    const prompt=document.getElementById('addPlanPrompt').value.trim();if(!prompt){showToast('Task prompt is required');return}
-    const projectKey=document.getElementById('addPlanProject').value,workflow=document.getElementById('addPlanWorkflow').value;
-    batchDraft.push(planItemDefaults({prompt,project:projectMeta[projectKey]?.path||projectKey,workflow},owner,batchDraft.length));
-    pushTaskHistory(owner,'New task added to execution plan');
-  }else{
+  if(addTaskMode==='create'){return}else{
     const source=taskMap[selectedMoveTaskId];
     if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
     const item=planItemDefaults(taskToListItem(source),owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
@@ -2678,12 +2670,7 @@ renderDrawerPlan=(function(base){return function(t){
 document.getElementById('confirmAddPlanTask').onclick=()=>{
   const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
-  if(addTaskMode==='create'){
-    const prompt=document.getElementById('addPlanPrompt').value.trim();if(!prompt){showToast('Task prompt is required');return}
-    const projectKey=document.getElementById('addPlanProject').value,workflow=document.getElementById('addPlanWorkflow').value;
-    batchDraft.push(planItemDefaults({prompt,project:projectMeta[projectKey]?.path||projectKey,workflow},owner,batchDraft.length));
-    pushTaskHistory(owner,'New task added to Task List');
-  }else{
+  if(addTaskMode==='create'){return}else{
     const source=taskMap[selectedMoveTaskId];
     if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
     const sourceItem=cloneBatch(canonicalTaskItems(source))[0];
@@ -2916,7 +2903,7 @@ itemTitle=(function(base){return function(item,index){return item?.title?.trim()
 singleTaskItem=function(t){
   const p=t.promptSource||{};
   return planItemDefaults({
-    title:canonicalTaskItems===undefined?'':(Array.isArray(t.items)&&t.items[0]?.title)||'',
+    title:(Array.isArray(t.items)&&t.items[0]?.title)||'',
     prompt:p.prompt||t.goal||t.title,goalMode:p.goalMode||'inline',goalFile:p.goalFile||'',goalAsset:p.goalAsset||'common/review.md',
     project:projectMeta[t.project]?.path||t.project,workflow:t.workflow&&t.workflow!=='Task List'?t.workflow:'ralphy_ai_validate.yaml',
     validatorMode:p.validator?'file':'none',validator:p.validator||'',aiMode:p.aiMode||'default',aiPrompt:p.aiPrompt||'',aiFile:p.aiFile||'',aiAsset:p.aiAsset||'common/ai_validator.md',
@@ -2943,7 +2930,7 @@ commitPlanDraft=function(t,{markDirty=false}={}){
   if(markDirty&&t.status==='paused'){t.configDirty=true;batchState.currentDirty=true;t.desc='Paused · current task changed · restart required.'}
 };
 
-function projectKeyFromPath(path, fallback=currentProjectKey){return Object.keys(projectMeta).find(k=>projectMeta[k].path===path)||projectMeta[path]?path:fallback}
+function projectKeyFromPath(path, fallback=currentProjectKey){const found=Object.keys(projectMeta).find(k=>projectMeta[k].path===path);return found||(projectMeta[path]?path:fallback)}
 function editorOwner(){return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
 function editorItemRef(){
   const owner=editorOwner();
