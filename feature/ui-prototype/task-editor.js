@@ -893,8 +893,6 @@ renderFullPlan=function(t){
   }).join('');
   document.getElementById('planAddTask').disabled=!editable;document.getElementById('planEditYaml').disabled=!editable;
   host.querySelectorAll('[data-task-item-edit]').forEach(b=>b.onclick=()=>loadTaskEditor('edit-item',{ownerId:t.id,index:+b.dataset.taskItemEdit}));
-  host.querySelectorAll('[data-plan-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planUp;if(i<=batchState.index||i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  host.querySelectorAll('[data-plan-down]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planDown;if(i<batchState.index||i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   host.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);commitPlanDraft(t,{markDirty:false});persistCurrentPresetFromTaskMap();renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 };
 
