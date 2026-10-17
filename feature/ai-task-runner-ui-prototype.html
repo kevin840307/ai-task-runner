@@ -3360,6 +3360,162 @@ createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{hideCreat
 document.addEventListener('click',e=>{if(!createTypeMenu.hidden&&!createTypeMenu.contains(e.target)&&e.target!==createMenuAnchor)hideCreateTypeMenu()});
 window.addEventListener('resize',hideCreateTypeMenu);window.addEventListener('scroll',hideCreateTypeMenu,true);
 
+// --- Reusable editor surfaces inside the Task List dialog (no modal-on-modal for long editing). ---
+const planModalEl=document.getElementById('planModal');
+const planListSurface=planModalEl.querySelector(':scope > .plan-modal-card');
+const planSubviewMount=document.getElementById('planSubviewMount');
+const taskEditorHome=document.getElementById('newTaskModal');
+const taskEditorSurface=taskEditorHome.querySelector('.task-create-modal');
+const yamlEditorHome=document.getElementById('yamlPlanModal');
+const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
+let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0;
+
+function setSurfaceBackBehavior(surface,type){
+  const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
+  if(close){close.textContent='←';close.title='Back';close.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+  if(cancel){cancel.textContent='Back';cancel.onclick=e=>{e.preventDefault();leavePlanSubview()}}
+}
+function restoreSurfaceCloseBehavior(surface,overlayId){
+  const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
+  if(close){close.textContent='×';close.title='';close.onclick=()=>closeModal(overlayId)}
+  if(cancel){cancel.textContent=overlayId==='newTaskModal'?'Cancel':'Cancel';cancel.onclick=()=>closeModal(overlayId)}
+}
+function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null){
+  const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
+  planReturnScroll=scrollHost.scrollTop||0;planSubviewType=type;planSubviewOwnerId=ownerId;planSubviewIndex=index;
+  closeModal(sourceOverlay.id);planSubviewMount.appendChild(surface);planSubviewMount.hidden=false;planModalEl.classList.add('subview-open');openModal('planModal');
+  setSurfaceBackBehavior(surface,type);
+}
+function leavePlanSubview(){
+  if(!planSubviewType)return;
+  const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex;
+  if(type==='task'){taskEditorHome.appendChild(taskEditorSurface);restoreSurfaceCloseBehavior(taskEditorSurface,'newTaskModal')}
+  if(type==='yaml'){yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal')}
+  planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
+  const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
+  if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
+}
+planModalEl.addEventListener('click',e=>{if(e.target===planModalEl&&planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview()}},true);
+
+// Reuse the exact same Task Editor DOM inside the list dialog.
+const taskEditorLoadBeforeSubview=loadTaskEditor;
+loadTaskEditor=function(mode,args={}){
+  if(mode!=='create-item'&&mode!=='edit-item'){
+    if(planSubviewType)leavePlanSubview();
+    return taskEditorLoadBeforeSubview(mode,args);
+  }
+  const ownerId=args.ownerId||currentTaskId,owner=taskMap[ownerId];if(!owner)return;
+  if(!planModalEl.classList.contains('open')){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(ownerId)}
+  closeModal('addPlanTaskModal');
+  isolatedTaskEditorLoad(mode,args);
+  document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='edit-item'?'Edit this task only.':'Configure this task only.';
+  document.getElementById('editTaskScopeNote').hidden=true;
+  enterPlanSubview('task',taskEditorSurface,taskEditorHome,ownerId,args.index??canonicalTaskItems(owner).length);
+};
+
+const taskEditorSaveBeforeSubview=document.getElementById('createTaskConfirm').onclick;
+document.getElementById('createTaskConfirm').onclick=()=>{
+  const embedded=planSubviewType==='task';
+  taskEditorSaveBeforeSubview();
+  if(embedded&&['Task saved','Saved · current task will restart'].includes(toast.textContent))leavePlanSubview();
+};
+
+// YAML is also a long-form editor, so it uses the same Plan subview instead of another large modal.
+const yamlOpenBeforeSubview=openYamlPlanModal;
+openYamlPlanModal=function(){
+  const ownerId=currentTaskId;if(!ownerId)return;
+  if(!planModalEl.classList.contains('open'))openPlanDialog(ownerId);
+  yamlOpenBeforeSubview();
+  if(yamlEditorHome.classList.contains('open'))enterPlanSubview('yaml',yamlEditorSurface,yamlEditorHome,ownerId,null);
+};
+document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
+document.getElementById('planEditYaml').onclick=openYamlPlanModal;
+const yamlApplyBeforeSubview=document.getElementById('applyYamlPlan').onclick;
+document.getElementById('applyYamlPlan').onclick=()=>{
+  const embedded=planSubviewType==='yaml';yamlApplyBeforeSubview();
+  if(embedded&&toast.textContent==='Task list YAML applied')leavePlanSubview();
+};
+
+// --- Shared right-click context menu for list rows and Board cards. ---
+const taskContextMenu=document.getElementById('taskContextMenu');
+let taskContextState=null;
+function hideTaskContextMenu(){taskContextMenu.hidden=true;taskContextState=null}
+function positionTaskContextMenu(x,y){
+  taskContextMenu.hidden=false;const w=205,h=246;
+  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
+}
+function setContextAction(name,{visible=true,enabled=true,label=null}={}){
+  const b=taskContextMenu.querySelector(`[data-context-action="${name}"]`);if(!b)return;
+  b.hidden=!visible;b.disabled=!enabled;if(label)b.querySelector('span').textContent=label;
+}
+function openItemContextMenu(e,owner,index){
+  e.preventDefault();e.stopPropagation();
+  const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
+  const canEdit=editable&&!s.done,canRestructure=canEdit&&!currentLocked;
+  taskContextState={scope:'item',ownerId:owner.id,index};
+  setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('up',{visible:true,enabled:canRestructure&&index>0,label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+}
+function openListContextMenu(e,t){
+  e.preventDefault();e.stopPropagation();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
+  taskContextState={scope:'list',ownerId:t.id,index:null};
+  setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});setContextAction('info',{visible:true,enabled:true,label:'Info'});
+  setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
+  positionTaskContextMenu(e.clientX,e.clientY);
+}
+function showContextInfo(state){
+  const t=taskMap[state.ownerId];if(!t)return;
+  const body=document.getElementById('taskInfoBody'),title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta');
+  if(state.scope==='list'){
+    const items=canonicalTaskItems(t);title.textContent=t.title;meta.textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
+    body.innerHTML=`<span>Type</span><strong>Task List</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Status</span><strong>${statusLabel(t.status)}</strong><span>Runtime</span><strong>${runtimeLabel(t.runtime)}</strong>`;
+  }else{
+    const x=canonicalTaskItems(t)[state.index],s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(!x)return;
+    title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
+    const ai=x.aiMode==='default'?'Workflow default':x.aiMode;
+    body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt source</span><strong>${escapeHtml(x.goalMode)}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
+  }
+  openModal('taskInfoModal');
+}
+function mutateContextItem(action,state){
+  const t=taskMap[state.ownerId];if(!t)return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const i=state.index;
+  if(action==='up'&&i>0){[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]]}
+  if(action==='down'&&i<batchDraft.length-1){[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]]}
+  if(action==='remove'){batchDraft.splice(i,1)}
+  commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderBoardFromMap();renderFullPlan(t);renderDrawerPlan(t);
+}
+taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=()=>{
+  if(b.disabled||!taskContextState)return;const state={...taskContextState},action=b.dataset.contextAction;hideTaskContextMenu();
+  const t=taskMap[state.ownerId];if(!t)return;
+  if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
+  if(action==='edit'){if(state.scope==='list')openListNameDialog('rename',t);else loadTaskEditor('edit-item',{ownerId:t.id,index:state.index});return}
+  if(action==='info'){showContextInfo(state);return}
+  if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
+  if(action==='remove'&&state.scope==='list'){delete taskMap[t.id];persistCurrentPresetFromTaskMap();renderBoardFromMap();document.getElementById('taskOverlay').classList.remove('open');showToast('Task List deleted')}
+});
+document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();if(planSubviewType)leavePlanSubview()}});
+window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
+
+const renderFullPlanBeforeContext=renderFullPlan;
+renderFullPlan=function(t){
+  renderFullPlanBeforeContext(t);
+  document.querySelectorAll('#planFormList [data-plan-row]').forEach(r=>r.oncontextmenu=e=>openItemContextMenu(e,t,+r.dataset.planRow));
+};
+const renderDrawerPlanBeforeContext=renderDrawerPlan;
+renderDrawerPlan=function(t){
+  renderDrawerPlanBeforeContext(t);
+  document.querySelectorAll('#formList [data-drawer-item]').forEach(r=>r.oncontextmenu=e=>openItemContextMenu(e,t,+r.dataset.drawerItem));
+};
+const bindTaskCardsBeforeContext=bindTaskCards;
+bindTaskCards=function(){
+  bindTaskCardsBeforeContext();
+  document.querySelectorAll('.taskcard').forEach(card=>card.oncontextmenu=e=>{const t=taskMap[card.dataset.id];if(t)openListContextMenu(e,t)});
+};
+
 renderTaskKindUi=function(){};
 renderNewTaskSources();
 renderChatSession();
