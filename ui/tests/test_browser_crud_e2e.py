@@ -954,6 +954,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatModeQuick").input_value() == "read"
 
             page.get_by_role("button", name="Other / custom answer").click()
+            page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Stale custom answer")
+            page.get_by_role("button", name="Safe", exact=True).click()
+            page.get_by_role("button", name="Other / custom answer").click()
+            assert page.locator(".project-chat-ask-input[aria-label='Custom answer']").input_value() == ""
             page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Custom browser approach")
             page.get_by_role("button", name="Other / custom answer").click()
             assert page.locator(".project-chat-ask-input[aria-label='Custom answer']").input_value() == "Custom browser approach"
@@ -977,6 +981,18 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert answered_ask["status"] == "answered"
             assert answered_ask["answers"]["approach"]["other"] == "Custom browser approach"
             assert answered_ask["answers"]["reason"] == "Browser reason"
+
+            # Cancel is explicit and also releases next-turn Queue processing.
+            page.fill("#projectChatInput", "ask browser message")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
+            page.fill("#projectChatInput", "queued before cancel")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1")
+            page.locator(".project-chat-ask-actions").get_by_role("button", name="Cancel", exact=True).click()
+            page.wait_for_function("document.querySelector('.project-chat-ask') === null")
+            page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 0")
+            page.wait_for_function("document.querySelector('#projectChatMessages')?.textContent.includes('Browser queued reply · queued before cancel')")
 
             page.fill("#projectChatInput", "queue browser message")
             page.click("#projectChatSendButton")
