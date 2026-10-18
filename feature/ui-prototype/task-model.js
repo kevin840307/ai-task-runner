@@ -80,7 +80,6 @@ const baseOpenTaskById=openTaskById;
 openTaskById=function(id){
   baseOpenTaskById(id);
   const t=taskMap[id],isList=!!t&&(t.kind==='list'||t.workspaceKind==='batch');
-  const tab=document.getElementById('drawerItemsTab');tab.hidden=!isList;
   const host=document.getElementById('drawerListItems');
   if(!isList){host.innerHTML='';return}
   const items=t.listItems||[];host.className='drawer-list-items';
@@ -363,16 +362,14 @@ syncTaskListDraftToParent=function(){
 
 openTaskListEditor=function(id){
   const t=taskMap[id];if(!t)return;
+  if(typeof openPlanDialog==='function')return openPlanDialog(id,{returnTarget:'close'});
   prepareStepsForTask(t);
-  document.querySelectorAll('.drawertab').forEach(b=>b.classList.toggle('active',b.dataset.drawertab==='items'));
-  document.querySelectorAll('.drawer-pane').forEach(p=>p.classList.toggle('active',p.id==='drawer-items'));
 };
 
 const finalBaseOpenTaskById=openTaskById;
 openTaskById=function(id){
   finalBaseOpenTaskById(id);
   const t=taskMap[id];if(!t)return;
-  document.getElementById('drawerItemsTab').hidden=false;
   prepareStepsForTask(t);
 };
 
