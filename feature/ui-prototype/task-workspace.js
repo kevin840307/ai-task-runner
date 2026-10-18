@@ -399,7 +399,15 @@ renderDrawerPlan=function(t){
   if(selectedTaskRef?.ownerId===t.id&&canonicalTaskItems(t)[selectedTaskRef.index])selectTaskItem(t,selectedTaskRef.index);else syncWorkflowActions();
 };
 const taskSelectOpenTask=openTaskById;
-openTaskById=function(id){clearTaskSelection();taskSelectOpenTask(id);syncWorkflowActions()};
+openTaskById=function(id){
+  clearTaskSelection();
+  planModalEl.classList.remove('open','subview-open');
+  planSubviewMount.hidden=true;
+  taskEditorReturnContext=null;planSubviewType=null;
+  taskSelectOpenTask(id);
+  const t=taskMap[id];if(t)restoreTaskInfoShell(t);
+  syncWorkflowActions();
+};
 
 // Right-click selects the Task, keeps Info on the right, and offers only useful actions.
 const contextItemBeforeSelection=openItemContextMenu;
@@ -547,23 +555,47 @@ workspaceInfoButton.onclick=()=>{
 const workspaceRenderFull=renderFullPlan;
 renderFullPlan=function(t){workspaceRenderFull(t);if(!selectedTaskRef||selectedTaskRef.ownerId!==t.id)resetWorkspaceInspector(t)};
 
-// Opening a workspace always starts on the List view, preserving the Board in the background.
+// Opening a workspace switches the existing Drawer from Info -> List; no second shell is opened.
 const workspaceOpenPlan=openPlanDialog;
-openPlanDialog=function(id=currentTaskId){
+openPlanDialog=function(id=currentTaskId,options={}){
+  const t=taskMap[id];if(!t)return;
+  const previousRoute=taskDrawerEl.dataset.route||'info',overlayWasOpen=taskOverlayEl.classList.contains('open');
+  taskDrawerListReturnTarget=options.returnTarget||(
+    t._chatDraft?'chat':
+    (overlayWasOpen&&previousRoute==='info'?'info':'close')
+  );
   if(taskEditorReturnContext){taskEditorReturnContext=null;hideTaskEditorView()}
   if(planSubviewType)leavePlanSubview();
   workspaceOpenPlan(id);
-  const t=taskMap[id],back=document.getElementById('planBackToTask');
-  if(t){
-    resetWorkspaceInspector(t);
-    if(t._chatDraft){back.textContent='←';back.title='Back to Chat Draft';document.getElementById('planPageMeta').textContent=`MOCK AI Draft · ${canonicalTaskItems(t).length} task${canonicalTaskItems(t).length===1?'':'s'}`}
-    else{back.textContent='×';back.title=''}
-  }
+  planModalEl.classList.add('open');
+  resetWorkspaceInspector(t);
+  const meta=t._chatDraft
+    ?`MOCK AI Draft · ${canonicalTaskItems(t).length} task${canonicalTaskItems(t).length===1?'':'s'}`
+    :taskDrawerMetaFor(t);
+  setTaskDrawerShell('list',{
+    title:t.title,
+    meta,
+    showBack:taskDrawerListReturnTarget!=='close',
+    backTitle:taskDrawerListReturnTarget==='info'?'Back to Task Info':taskDrawerListReturnTarget==='chat'?'Back to Chat Draft':'Back'
+  });
+  taskDrawerBack.onclick=handleTaskDrawerBack;
 };
 openFullPlanPage=openPlanDialog;
 
-// Closing the workspace also clears item selection / transient inspector state.
-document.getElementById('planBackToTask').onclick=()=>{if(planSubviewType){leavePlanSubview();return}clearTaskSelection();closeModal('planModal')};
+function handleTaskDrawerBack(){
+  if(taskEditorReturnContext){leaveTaskEditorOverlay();return}
+  if(planSubviewType){leavePlanSubview();return}
+  workspaceInfoRef=null;clearTaskSelection();
+  const t=taskMap[currentTaskId];
+  if(taskDrawerListReturnTarget==='chat'||t?._chatDraft){
+    planModalEl.classList.remove('open');taskOverlayEl.classList.remove('open');showView('chat');renderChatSession();return;
+  }
+  if(taskDrawerListReturnTarget==='info'&&t){
+    planModalEl.classList.remove('open');openTaskById(t.id);return;
+  }
+  closeTaskDrawerShell();
+}
+taskDrawerBack.onclick=handleTaskDrawerBack;
 
 // --- Workspace inspector state + secondary-action guards. ---
 let workspaceInfoRef=null;
@@ -581,13 +613,6 @@ renderFullPlan=function(t){
   if(workspaceInfoRef?.ownerId===t.id&&canonicalTaskItems(t)[workspaceInfoRef.index])workspaceInfoShow(t,workspaceInfoRef.index);
 };
 
-const workspaceClosePlan=document.getElementById('planBackToTask').onclick;
-document.getElementById('planBackToTask').onclick=()=>{
-  workspaceInfoRef=null;
-  const t=taskMap[currentTaskId];
-  if(t?._chatDraft){clearTaskSelection();closeModal('planModal');showView('chat');renderChatSession();return}
-  workspaceClosePlan();
-};
 
 // --- Empty-list CTAs use the same embedded Task Editor too. ---
 const directEmptyRenderFull=renderFullPlan;
@@ -605,7 +630,7 @@ renderDrawerPlan=function(t){
 // --- Practical interaction pass: fewer controls, inline rename, useful List view. ---
 let workspaceRenameOriginal='';
 function commitWorkspaceRename(cancel=false){
-  const title=document.getElementById('planPageTitle'),t=taskMap[currentTaskId];
+  const title=document.getElementById('drawerTitle'),t=taskMap[currentTaskId];
   if(!title||!t||title.contentEditable!=='true')return;
   const next=cancel?workspaceRenameOriginal:title.textContent.trim();
   title.contentEditable='false';title.classList.remove('editing');
@@ -617,16 +642,29 @@ function commitWorkspaceRename(cancel=false){
 }
 function beginWorkspaceRename(t=taskMap[currentTaskId]){
   if(!t||!taskEditable(t)){showToast(t?.status==='ongoing'?'Pause before renaming':'Task List is read-only');return}
-  const title=document.getElementById('planPageTitle');if(!title)return;
+  const title=document.getElementById('drawerTitle');if(!title)return;
   workspaceRenameOriginal=t.title;title.contentEditable='true';title.classList.add('editing');title.focus();
   const range=document.createRange();range.selectNodeContents(title);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
 }
 document.getElementById('planRenameList').onclick=()=>beginWorkspaceRename();
-document.getElementById('planPageTitle').addEventListener('keydown',e=>{
+document.getElementById('drawerTitle').addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();commitWorkspaceRename(false)}
   if(e.key==='Escape'){e.preventDefault();commitWorkspaceRename(true)}
 });
-document.getElementById('planPageTitle').addEventListener('blur',()=>commitWorkspaceRename(false));
+document.getElementById('drawerTitle').addEventListener('blur',()=>commitWorkspaceRename(false));
+
+document.getElementById('closeDrawer').onclick=closeTaskDrawerShell;
+taskOverlayEl.addEventListener('click',e=>{
+  if(e.target!==taskOverlayEl)return;
+  e.preventDefault();e.stopImmediatePropagation();closeTaskDrawerShell();
+},true);
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!taskOverlayEl.classList.contains('open'))return;
+  e.preventDefault();e.stopImmediatePropagation();
+  if(taskEditorReturnContext)leaveTaskEditorOverlay();
+  else if(planSubviewType)leavePlanSubview();
+  else closeTaskDrawerShell();
+},true);
 
 document.getElementById('editTaskDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
