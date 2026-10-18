@@ -363,3 +363,24 @@
   cursor: pointer;
   outline: none;
 }
+
+.project-chat-queue-item.editing { align-items: start; }
+.project-chat-queue-editor { min-width: 0; display: grid; gap: 4px; }
+.project-chat-queue-editor textarea {
+  width: 100%;
+  min-height: 54px;
+  max-height: 120px;
+  resize: vertical;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+.project-chat-queue-error {
+  color: var(--fail, #b42318);
+  font-size: 9px;
+  font-weight: 700;
+}

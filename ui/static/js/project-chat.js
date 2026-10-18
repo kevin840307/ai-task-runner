@@ -16,6 +16,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let queuePollTimer = 0;
   let settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], default_agent: "" };
   let settingsLoading = false;
+  let editingQueueId = "";
+  let editingQueueValue = "";
+  let editingQueueError = "";
 
   const byId = (id) => document.getElementById(id);
 
@@ -423,28 +426,130 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     for (const item of queueItems) {
       const row = document.createElement("div");
       row.className = "project-chat-queue-item";
-      const copy = document.createElement("div");
-      copy.className = "project-chat-queue-copy";
-      copy.textContent = String(item.content || "");
-      copy.title = String(item.content || "");
-      const actions = document.createElement("span");
-      actions.className = "project-chat-queue-actions";
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.textContent = "Edit";
-      edit.onclick = () => void editQueueItem(item);
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.textContent = "Delete";
-      remove.onclick = () => void deleteQueueItem(item);
-      actions.append(edit, remove);
-      row.append(copy, actions);
+      if (item.queue_id === editingQueueId) {
+        row.classList.add("editing");
+        const editor = document.createElement("div");
+        editor.className = "project-chat-queue-editor";
+        const input = document.createElement("textarea");
+        input.rows = 2;
+        input.value = editingQueueValue;
+        input.setAttribute("aria-label", "Queued message");
+        input.oninput = () => {
+          editingQueueValue = input.value;
+          if (editingQueueError && input.value.trim()) {
+            editingQueueError = "";
+            renderQueue();
+            requestAnimationFrame(() => {
+              const next = byId("projectChatQueueList")?.querySelector(".project-chat-queue-item.editing textarea");
+              if (next) { next.focus(); next.selectionStart = next.selectionEnd = next.value.length; }
+            });
+          }
+        };
+        input.onkeydown = (event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancelQueueEdit();
+          } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            void saveQueueEdit(item);
+          }
+        };
+        editor.appendChild(input);
+        if (editingQueueError) {
+          const error = document.createElement("div");
+          error.className = "project-chat-queue-error";
+          error.textContent = editingQueueError;
+          editor.appendChild(error);
+        }
+        const actions = document.createElement("span");
+        actions.className = "project-chat-queue-actions";
+        const save = document.createElement("button");
+        save.type = "button";
+        save.textContent = "Save";
+        save.onclick = () => void saveQueueEdit(item);
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.textContent = "Cancel";
+        cancel.onclick = cancelQueueEdit;
+        actions.append(save, cancel);
+        row.append(editor, actions);
+        requestAnimationFrame(() => input.focus());
+      } else {
+        const copy = document.createElement("div");
+        copy.className = "project-chat-queue-copy";
+        copy.textContent = String(item.content || "");
+        copy.title = String(item.content || "");
+        const actions = document.createElement("span");
+        actions.className = "project-chat-queue-actions";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.textContent = "Edit";
+        edit.onclick = () => beginQueueEdit(item);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Delete";
+        remove.onclick = () => void deleteQueueItem(item);
+        actions.append(edit, remove);
+        row.append(copy, actions);
+      }
       list.appendChild(row);
+    }
+  }
+
+  function beginQueueEdit(item) {
+    editingQueueId = String(item.queue_id || "");
+    editingQueueValue = String(item.content || "");
+    editingQueueError = "";
+    renderQueue();
+  }
+
+  function cancelQueueEdit() {
+    editingQueueId = "";
+    editingQueueValue = "";
+    editingQueueError = "";
+    renderQueue();
+  }
+
+  async function saveQueueEdit(item) {
+    const next = String(editingQueueValue || "").trim();
+    if (!next) {
+      editingQueueError = "Queued message cannot be empty.";
+      renderQueue();
+      return;
+    }
+    if (next === String(item.content || "").trim()) {
+      cancelQueueEdit();
+      return;
+    }
+    try {
+      const data = await api("/api/chat/queue/update", {
+        method: "POST",
+        body: JSON.stringify({
+          project: projectPath(),
+          session_id: activeSessionId,
+          queue_id: item.queue_id,
+          message: next,
+        }),
+      });
+      editingQueueId = "";
+      editingQueueValue = "";
+      editingQueueError = "";
+      applyQueueState(data);
+      showToast?.("Queue updated");
+    } catch (error) {
+      editingQueueError = String(error?.message || "Queue update failed");
+      renderQueue();
+      showError?.(error.message, "Queue update failed");
     }
   }
 
   function applyQueueState(data = {}) {
     queueItems = Array.isArray(data.items) ? data.items : [];
+    if (editingQueueId && !queueItems.some((item) => item.queue_id === editingQueueId)) {
+      editingQueueId = "";
+      editingQueueValue = "";
+      editingQueueError = "";
+    }
     queueBusy = !!data.busy;
     renderQueue();
     renderTurnState();
@@ -468,32 +573,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     );
     if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
     applyQueueState(data);
-  }
-
-  async function editQueueItem(item) {
-    const next = await inputDialog?.({
-      title: "Edit queued message",
-      label: "Message",
-      value: String(item.content || ""),
-      confirmLabel: "Save",
-    });
-    if (next === null || next === undefined || String(next).trim() === String(item.content || "").trim()) return;
-    try {
-      const data = await api("/api/chat/queue/update", {
-        method: "POST",
-        body: JSON.stringify({
-          project: projectPath(),
-          session_id: activeSessionId,
-          queue_id: item.queue_id,
-          message: String(next),
-        }),
-      });
-      applyQueueState(data);
-      showToast?.("Queue updated");
-    } catch (error) {
-      showError?.(error.message, "Queue update failed");
-      await refreshQueue().catch(() => {});
-    }
   }
 
   async function deleteQueueItem(item) {
