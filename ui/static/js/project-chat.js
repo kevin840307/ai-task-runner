@@ -723,6 +723,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     return taskDraftsBySession.get(activeSessionId) || [];
   }
 
+  function findTaskDraft(sessionId, draftId) {
+    const rows = taskDraftsBySession.get(sessionId) || [];
+    return rows.find((row) => row.draft_id === draftId) || null;
+  }
+
   function renderTaskDraftCard(entry, root) {
     const card = document.createElement("article");
     card.className = "message project-chat-message assistant project-chat-task-draft";
@@ -761,14 +766,15 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     edit.onclick = () => {
       const originProject = projectPath();
       const originSession = activeSessionId;
+      const current = findTaskDraft(originSession, entry.draft_id);
+      if (!current) return;
       openTaskDraft?.({
         project: originProject,
-        draft: entry.draft,
+        draft: current.draft,
         workflows: settingsCatalog.workflows,
         returnFocus: edit,
         onSave: (nextDraft) => {
-          const rows = taskDraftsBySession.get(originSession) || [];
-          const target = rows.find((row) => row.draft_id === entry.draft_id);
+          const target = findTaskDraft(originSession, entry.draft_id);
           if (!target) return;
           target.draft = nextDraft;
           if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
@@ -779,7 +785,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     create.type = "button";
     create.className = "primary";
     create.textContent = "Create Task";
-    create.onclick = () => void createTaskFromDraft(entry);
+    create.onclick = () => void createTaskFromDraft(entry.draft_id);
     const dismiss = document.createElement("button");
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
@@ -1098,10 +1104,15 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     void refreshMessages();
   }
 
-  async function createTaskFromDraft(entry) {
+  async function createTaskFromDraft(draftId) {
     const path = projectPath();
     const session = activeSessionId;
     if (!path || !session) return;
+    const entry = findTaskDraft(session, draftId);
+    if (!entry) {
+      showError?.("TaskDraft is no longer available in this Chat.", "Create Task failed");
+      return;
+    }
     try {
       const task = await api("/api/tasks/create", {
         method: "POST",
