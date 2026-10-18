@@ -28,9 +28,13 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
 - Settings sections:
   - Execution
   - Interface
-  - Agents (future)
+  - Defaults
 - Interface owns global Appearance and Theme palette preferences.
 - Language is a separate Global Settings section so localization is not coupled to visual appearance.
+- Defaults owns the initial Agent / Model / Mode / Workflow copied into newly created Projects.
+- Global Defaults are templates, not live inheritance: changing them never mutates existing Projects.
+- New Chat sessions read their Project settings; Chat does not own another default layer.
+- Prototype may store Global Defaults in localStorage; production should move them to the versioned Global Settings owner.
 - Appearance options:
   - System
   - Light
@@ -83,6 +87,8 @@ Each Project independently stores:
 - Workflow
 
 Behavior:
+- A new Project copies the current Global Defaults once, then owns its own four settings.
+- Existing Projects never follow later Global Defaults changes.
 - All Chat sessions under the same Project share those four settings.
 - Switching Chat sessions does not reset them.
 - Switching Projects loads that Project's own settings.
