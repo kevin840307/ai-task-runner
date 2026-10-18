@@ -466,10 +466,16 @@ renderProjectOptions=function(priorityKey=currentProjectKey){
 };
 const projectPriorityLoadTaskEditor=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
-  renderProjectOptions(currentProjectKey);
+  const draftMode=mode==='draft-create-item'||mode==='draft-edit-item';
+  const draftProject=projectMeta[newTaskListDraft?.project]?newTaskListDraft.project:currentProjectKey;
+  renderProjectOptions(draftMode?draftProject:currentProjectKey);
   projectPriorityLoadTaskEditor(mode,args);
   const input=document.getElementById('newTaskProject');
-  if(mode!=='edit-item'){input.value=currentProjectKey}else{
+  if(draftMode){
+    const item=mode==='draft-edit-item'?newTaskListDraft?.items?.[args.index]:null;
+    const key=item?Object.keys(projectMeta).find(k=>projectRefMatches(item.project,k)):draftProject;
+    input.value=key||draftProject;
+  }else if(mode!=='edit-item'){input.value=currentProjectKey}else{
     const owner=taskMap[args.ownerId],item=owner?canonicalTaskItems(owner)[args.index]:null;
     if(item){const key=Object.keys(projectMeta).find(k=>projectRefMatches(item.project,k));input.value=key||item.project}
   }
