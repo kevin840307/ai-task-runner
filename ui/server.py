@@ -172,6 +172,13 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     query.get("session_id", [""])[0],
                 ))
+            if parsed.path == "/api/chat/ask":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.chat_service.ask(
+                    project,
+                    query.get("session_id", [""])[0],
+                ))
             if parsed.path == "/api/chat/queue":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
@@ -319,6 +326,21 @@ class Handler(SimpleHTTPRequestHandler):
                     model=str(preferences.get("model") or ""),
                     mode=str(preferences.get("mode") or "auto"),
                     reasoning=str(preferences.get("reasoning") or ""),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/chat/ask/submit":
+                return self._json(self.state.chat_service.submit_ask(
+                    self._project(body),
+                    str(body.get("session_id", "")),
+                    str(body.get("ask_id", "")),
+                    body.get("answers"),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/chat/ask/cancel":
+                return self._json(self.state.chat_service.cancel_ask(
+                    self._project(body),
+                    str(body.get("session_id", "")),
+                    str(body.get("ask_id", "")),
                     request_id=str(body.get("request_id", "")),
                 ))
             if parsed.path == "/api/chat/queue/drain":

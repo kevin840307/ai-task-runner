@@ -87,12 +87,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Execution 新增 Global `Merge failure limit`，Prototype 預設 3 並持久化；正式版只由 Global Settings owner 保存 `merge_failure_limit`，Task 只保存實際 `merge_failure_count`；每次 real failure 後讀 Global limit，count > limit 即停止自動 merge並 fallback 成 Isolated Worktree close / worktree_ready。
 [x] Execution 新增 Global `Allow concurrent Main tasks` 開關，Prototype 預設 Off；Off 維持 Main busy disabled/block，On 解除限制並讓 Main Task selector / resolver 一致允許並行。
 [x] 修正 TaskEditor 後載入 `renderNewTaskWorkspace()` override 仍以 `!!busy` 無條件 disable Main 的問題；現在 Concurrent Main=On 時 core resolver 與 Task Editor UI 都一致可選。
-[ ] 正式 Backend/config schema 必須持久化 Global `merge_failure_limit` + `allow_concurrent_main_tasks`，UI / CLI / API 共用同一設定 owner；Task 不複製一份 merge limit。
+[x] 正式 Backend/config schema 必須持久化 Global `merge_failure_limit` + `allow_concurrent_main_tasks`，UI / CLI / API 共用同一設定 owner；Task 不複製一份 merge limit。
 [x] Settings → Interface 集中 Appearance / Theme palette；Language 獨立為一個 Settings section；移除左上獨立 themeBtn。
 [x] Appearance 支援 System / Light / Dark；Theme palette 對齊現有 UI：Teal / Deep Blue / Violet / Amber / Rose。Prototype 立即套用並保存。
 [x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
-[ ] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
-[ ] 正式版設定 schema 需可版本化、驗證、migration，UI / CLI / API 讀同一份設定。
+[x] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
+[x] 正式版設定 schema 需可版本化、驗證、migration，UI / CLI / API 讀同一份設定。
 [ ] Browser 驗證 Settings section 切換、重新整理保存、System appearance 跟隨 OS、5 組 palette 在 Light/Dark 下可讀，Project 切換不影響 Global preference。
 
 
@@ -102,14 +102,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
 [ ] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
 [ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
-[ ] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
-[ ] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
-[ ] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
-[ ] 自動提示支援文字篩選、↑ / ↓、Enter / Tab 接受、Escape 關閉；接受後只插入文字，不自動送出。
-[ ] 提示清單顯示名稱、描述、來源與啟用狀態；停用或無權限的能力不應被列為可執行項目。
-[ ] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
-[ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
-[ ] @goal、@task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
+[x] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
+[x] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
+[x] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
+[x] 自動提示支援文字篩選、↑ / ↓、Enter / Tab 接受、Escape 關閉；接受後只插入文字，不自動送出。
+[x] 提示清單顯示名稱、描述、來源與啟用狀態；停用或無權限的能力不應被列為可執行項目。
+[x] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
+[x] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
+[x] @goal、@task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
 [x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
 [x] Chat Composer 不顯示 Ask mock 按鈕；多問題流程以 @ask-demo 測試。
 
@@ -117,7 +117,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 4. Project Chat Settings：Agent / Model / Mode / Reasoning / Workflow
 ------------------------------
 
-[ ] Agent / Model / Mode / Reasoning / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
+[x] Agent / Model / Mode / Reasoning / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
 [x] Settings 的 Agents(Later) 改為 Global Defaults，提供 Default Agent / Model / Mode / Reasoning / Workflow。
 [x] Global Defaults 只在建立新 Project 時 copy 一份；修改 Global Defaults 不得回寫既有 Project。
 [x] 既有 Project 無設定時維持 legacy base defaults，不因之後修改 Global Defaults 而改變。
@@ -131,36 +131,36 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Project-level Reasoning prototype 支援固定五種：low / medium / high / xhigh / max；預設 medium，跟 Project localStorage 一起保存。
 [x] Global Defaults 增加 Default Reasoning；新 Project copy 一次，既有 Project 缺欄位時使用 legacy base medium，不受之後 Global Defaults 改動影響。
 [x] Agent 切換只重設相依的 Model / Mode；Reasoning 保留 Project 原值。正式版再由 AgentAdapter / Backend 回報各 Agent / Model 支援的 reasoning levels。
-[ ] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
-[ ] Agent / Model / Mode / Reasoning / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
-[ ] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Reasoning / Workflow，Slash / Ask capability 也同步刷新。
-[ ] Chat Settings 使用 viewport 定位；不可因為打開設定而撐開、縮窄或重新排版 Chat。
-[ ] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
-[ ] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
-[ ] UI 提供 Read / Auto / YOLO 三種產品層級模式，但它們不是假設所有 Agent 的原生模式完全相同。
-[ ] Adapter 必須回報每個模式是否支援，以及對應的原生設定；不支援的模式需隱藏或 disabled，不可默默模擬。
-[ ] Qwen Code：Read 對應原生 Plan / read-only；Auto 與 YOLO 依目前 CLI 支援的 approval mode 映射。
-[ ] OpenCode：Read 對應禁止 edit / write / bash 等修改權限的 permission profile；Auto 使用安全預設與必要 Ask；YOLO 只有在 Agent 真正支援時才映射為允許全部工具。
+[x] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
+[x] Agent / Model / Mode / Reasoning / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
+[x] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Reasoning / Workflow，Slash / Ask capability 也同步刷新。
+[x] Chat Settings 使用 viewport 定位；不可因為打開設定而撐開、縮窄或重新排版 Chat。
+[x] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
+[x] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
+[x] UI 提供 Read / Auto / YOLO 三種產品層級模式，但它們不是假設所有 Agent 的原生模式完全相同。
+[x] Adapter 必須回報每個模式是否支援，以及對應的原生設定；不支援的模式需隱藏或 disabled，不可默默模擬。
+[x] Qwen Code：Read 對應原生 Plan / read-only；Auto 與 YOLO 依目前 CLI 支援的 approval mode 映射。
+[x] OpenCode：Read 對應禁止 edit / write / bash 等修改權限的 permission profile；Auto 使用安全預設與必要 Ask；YOLO 只有在 Agent 真正支援時才映射為允許全部工具。
 [ ] UI 顯示目前模式的簡短安全說明，尤其 YOLO 要清楚指出可能自動核准工具。
-[ ] 真正的權限設定與工具核准仍由 Agent / Backend adapter 執行；不能只在 UI 顯示文字。
+[x] 真正的權限設定與工具核准仍由 Agent / Backend adapter 執行；不能只在 UI 顯示文字。
 [ ] 測試切換 Agent 後 Model 是否重設到合法預設，且不會留下另一個 Agent 的 Model ID。
 
 
 5. Agent Skills / Slash Commands 的取得方式
 -------------------------------------------
 
-[ ] 新增統一的 Agent capability discovery 介面，前端只顯示 Backend 回傳的能力，不自行掃描本機檔案系統。
-[ ] 能力資料至少包含：token / name、description、kind、source、user_invocable、enabled、permission / availability。
-[ ] Qwen Code adapter 優先使用 Qwen Code 的 SkillManager / slash-command registry 或目前 Agent process 可提供的能力投影。
+[x] 新增統一的 Agent capability discovery 介面，前端只顯示 Backend 回傳的能力，不自行掃描本機檔案系統。
+[x] 能力資料至少包含：token / name、description、kind、source、user_invocable、enabled、permission / availability。
+[x] Qwen Code adapter 優先使用 Qwen Code 的 SkillManager / slash-command registry 或目前 Agent process 可提供的能力投影。
 [ ] Qwen Code 要尊重內建命令、擴充命令、專案 / 個人 Skills、path-gated Skills 與 user-invocable 設定；不要只用檔名猜測。
-[ ] OpenCode adapter 使用其 resolved command / skill registry 或官方 UI/TUI 使用的能力來源。
+[x] OpenCode adapter 使用其 resolved command / skill registry 或官方 UI/TUI 使用的能力來源。
 [ ] OpenCode 要尊重專案與全域 Skills、命令設定、Agent 的 skill permission、deny / ask / allow 與停用 skill tool 的規則。
 [ ] OpenCode 的 Skills 可能來自 .opencode/skills、.claude/skills、.agents/skills 及使用者全域目錄；由 OpenCode 自己決定解析結果，前端不重做搜尋。
-[ ] 不把 Skill 全文塞入前端清單；列表只呈現摘要，使用者選取後交由 Agent 原生機制載入。
-[ ] capability 結果可以快取作為 UI 投影，但 Agent、Project、設定或權限改變時必須重新整理。
+[x] 不把 Skill 全文塞入前端清單；列表只呈現摘要，使用者選取後交由 Agent 原生機制載入。
+[x] capability 結果可以快取作為 UI 投影，但 Agent、Project、設定或權限改變時必須重新整理。
 [ ] Mock Qwen / OpenCode 的 / 清單應不同，讓使用者可以測試切換 Agent 的效果。
-[ ] 正式版若某個能力取得失敗，要顯示錯誤 / Retry，不可退回一份看似真實的硬編碼清單。
-[ ] 保留 /btw 等 Agent 原生 side question 命令；它與本系統 Ask（暫停目前 turn 向使用者詢問）不是同一功能。
+[x] 正式版若某個能力取得失敗，要顯示錯誤 / Retry，不可退回一份看似真實的硬編碼清單。
+[x] 保留 /btw 等 Agent 原生 side question 命令；它與本系統 Ask（暫停目前 turn 向使用者詢問）不是同一功能。
 
 參考：
 - OpenCode Skills： https://opencode.ai/docs/skills/
@@ -173,19 +173,19 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 6. Chat Queue（對話排隊）
 -------------------------
 
-[ ] Queue 與 Runner Task List 是完全不同的概念；Chat Queue 只保存尚待送給目前 Chat Agent 的 Prompt。
-[ ] Queue 以 Chat session 為單位儲存，切換 Project / Chat 不可串錯。
-[ ] 有 Agent turn 執行中時，使用者送出的後續 Prompt 應依 Agent 原生能力加入 Queue；若 Agent 沒有原生 Queue，Backend 提供相同產品契約。
+[x] Queue 與 Runner Task List 是完全不同的概念；Chat Queue 只保存尚待送給目前 Chat Agent 的 Prompt。
+[x] Queue 以 Chat session 為單位儲存，切換 Project / Chat 不可串錯。
+[x] 有 Agent turn 執行中時，使用者送出的後續 Prompt 應依 Agent 原生能力加入 Queue；若 Agent 沒有原生 Queue，Backend 提供相同產品契約。
 [x] Queue 項目直接顯示在 Composer 上方；沒有項目時整塊隱藏，busy 時另顯示自動排隊提示。
-[ ] 每個項目顯示順序、可閱讀的摘要與 Edit / Delete。
-[ ] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
-[ ] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
-[ ] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
+[x] 每個項目顯示順序、可閱讀的摘要與 Edit / Delete。
+[x] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
+[x] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
+[x] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
 [ ] 以 Qwen Code 原生 queued-next-turn 行為為參考（例如 Ctrl+Q）；由 adapter 決定是否支援原生快捷鍵。
 [x] Prototype 不提供 Queue 按鈕；Mock 模擬 Agent busy，連續按傳送會自動排隊，並可編輯／刪除多筆 Queue。Ctrl+Q 只保留為 busy 時的可選快捷鍵。
 [ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
-[ ] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
-[ ] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
+[x] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
+[x] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
 [ ] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。
 
 
@@ -194,21 +194,21 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [ ] Ask 指的是 Agent 在目前工作過程中遇到需要使用者決定的事項，暫停目前 turn 並向使用者提問。
 [ ] Ask 不是 Qwen /btw 這種獨立 side question；/btw 保持為 Agent 原生能力。
-[ ] 統一 Ask 問題資料格式，避免 Qwen 與 OpenCode 各做一套前端流程。
-[ ] 一次 Ask 可以有多個問題；每題可為選項題或自由文字題。
-[ ] 選項題最後固定提供「其他／自行輸入」，選擇後顯示文字輸入框。
-[ ] 選項題未選選項、Other 沒填文字、文字題空白時，不可 Next / Submit。
-[ ] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
+[x] 統一 Ask 問題資料格式，避免 Qwen 與 OpenCode 各做一套前端流程。
+[x] 一次 Ask 可以有多個問題；每題可為選項題或自由文字題。
+[x] 選項題最後固定提供「其他／自行輸入」，選擇後顯示文字輸入框。
+[x] 選項題未選選項、Other 沒填文字、文字題空白時，不可 Next / Submit。
+[x] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
 [ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
 [ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
-[ ] 正式版 Ask 卡片嵌入 Chat 訊息流，選項清單有獨立捲動區，不使用遮住訊息的浮層。
+[x] 正式版 Ask 卡片嵌入 Chat 訊息流，選項清單有獨立捲動區，不使用遮住訊息的浮層。
 [ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
 [ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
 [ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
-[ ] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
+[x] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
 [ ] Prototype 的一般訊息可以隨機觸發 Ask；@ask-demo 可以強制觸發，不依賴機率。
 [ ] Mock 至少覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session。
-[ ] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
+[x] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
 [ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
 
 

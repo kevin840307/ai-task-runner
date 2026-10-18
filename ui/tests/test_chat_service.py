@@ -687,3 +687,144 @@ def test_chat_agent_passes_snapshotted_reasoning_to_runner(tmp_path: Path) -> No
     )
     assert calls[0]["reasoning"] == "deep"
     assert calls[0]["model"] == "openai/gpt-5.2"
+
+
+
+def test_chat_ask_is_durable_session_scoped_and_validated(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    first = chat.sessions(project)["active_session_id"]
+    second = chat.create_session(project, request_id="ask-second-session")["session_id"]
+
+    created = chat.create_ask(
+        project,
+        first,
+        request_id="turn-request-1",
+        turn_id="turn-stable-1",
+        questions=[
+            {
+                "id": "approach",
+                "header": "Approach",
+                "question": "Which approach?",
+                "options": [
+                    {"value": "safe", "label": "Safe", "description": "Keep compatibility"},
+                    {"value": "clean", "label": "Clean"},
+                ],
+            },
+            {
+                "id": "reason",
+                "header": "Reason",
+                "question": "Why?",
+                "kind": "text",
+            },
+        ],
+    )
+    ask_id = created["ask"]["ask_id"]
+    assert created["ask"]["turn_id"] == "turn-stable-1"
+    assert created["ask"]["questions"][0]["allow_other"] is True
+    assert chat.ask(project, second)["ask"] is None
+
+    restarted = ChatService()
+    pending = restarted.ask(project, first)["ask"]
+    assert pending["ask_id"] == ask_id
+    assert pending["status"] == "waiting"
+
+    try:
+        restarted.submit_ask(
+            project,
+            first,
+            ask_id,
+            {"approach": {"other": ""}, "reason": ""},
+            request_id="answer-1",
+        )
+    except ValueError as exc:
+        assert "answer" in str(exc).lower()
+    else:
+        raise AssertionError("blank Ask answer was accepted")
+
+    answered = restarted.submit_ask(
+        project,
+        first,
+        ask_id,
+        {
+            "approach": {"other": "Use a narrow compatibility shim"},
+            "reason": "It limits migration risk",
+        },
+        request_id="answer-2",
+    )
+    assert answered["ask"]["status"] == "answered"
+    assert answered["ask"]["answers"]["approach"]["other"] == "Use a narrow compatibility shim"
+    repeated = restarted.submit_ask(
+        project,
+        first,
+        ask_id,
+        {
+            "approach": {"value": "safe"},
+            "reason": "ignored duplicate payload",
+        },
+        request_id="answer-2",
+    )
+    assert repeated["duplicate"] is True
+    assert repeated["ask"]["answers"]["approach"]["other"] == "Use a narrow compatibility shim"
+
+
+def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    created = server.state.chat_service.create_ask(
+        project,
+        session_id,
+        request_id="http-turn-1",
+        turn_id="turn-http-1",
+        questions=[{
+            "question_id": "confirm",
+            "header": "Confirm",
+            "prompt": "Continue?",
+            "kind": "choice",
+            "options": ["yes", "no"],
+        }],
+    )
+    ask_id = created["ask"]["ask_id"]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    project_query = urllib.parse.quote(str(project))
+    try:
+        pending = _json_request(
+            f"{base}/api/chat/ask?project={project_query}&session_id={session_id}"
+        )
+        assert pending["ask"]["ask_id"] == ask_id
+
+        cancelled = _json_request(
+            f"{base}/api/chat/ask/cancel",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "ask_id": ask_id,
+                "request_id": "cancel-http-1",
+            },
+        )
+        assert cancelled["ask"]["status"] == "cancelled"
+        repeated = _json_request(
+            f"{base}/api/chat/ask/cancel",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "ask_id": ask_id,
+                "request_id": "cancel-http-1",
+            },
+        )
+        assert repeated["duplicate"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

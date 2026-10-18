@@ -445,3 +445,55 @@
   padding: 4px 9px;
   font-size: 10px;
 }
+
+
+.project-chat-ask {
+  width: min(760px, calc(100% - 18px));
+  justify-self: start;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+.project-chat-ask-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.project-chat-ask-head > div { min-width: 0; display: grid; gap: 2px; }
+.project-chat-ask-head small { color: var(--accent); font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.project-chat-ask-head strong { font-size: 12px; }
+.project-chat-ask-head > span { flex: 0 0 auto; color: var(--muted); font-size: 9px; font-weight: 800; }
+.project-chat-ask-prompt { margin: 0; color: var(--text); font-size: 11px; line-height: 1.5; }
+.project-chat-ask-body { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.project-chat-ask-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  box-shadow: none;
+}
+.project-chat-ask-option:hover,
+.project-chat-ask-option.selected { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); background: var(--accent-soft); }
+.project-chat-ask-option strong { font-size: 10px; }
+.project-chat-ask-option small { color: var(--muted); font-size: 9px; }
+.project-chat-ask-input {
+  width: 100%;
+  min-height: 54px;
+  max-height: 120px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+.project-chat-ask-error { color: var(--fail, #b42318); font-size: 9px; font-weight: 750; }
+.project-chat-ask-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.project-chat-ask-actions button { min-height: 28px; padding: 4px 9px; font-size: 10px; }

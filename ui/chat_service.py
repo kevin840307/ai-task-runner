@@ -15,9 +15,14 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+try:
+    from .chat_ask import normalize_questions, validate_answers
+except ImportError:  # pragma: no cover - script import compatibility
+    from chat_ask import normalize_questions, validate_answers
+
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 3
+STATE_VERSION = 4
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
@@ -25,6 +30,7 @@ QUEUE_LIMIT = 100
 _SESSION_ID = re.compile(r"^chat-[0-9a-f]{32}$")
 _MESSAGE_ID = re.compile(r"^msg-[0-9a-f]{32}$")
 _QUEUE_ID = re.compile(r"^queue-[0-9a-f]{32}$")
+_ASK_ID = re.compile(r"^ask-[0-9a-f]{32}$")
 
 
 class ChatService:
@@ -170,6 +176,133 @@ class ChatService:
             session["updated_at"] = row["time"]
             self._write(project, state)
             return dict(row)
+
+    def ask(self, project: Path, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(session.get("ask")),
+            }
+
+    def create_ask(
+        self,
+        project: Path,
+        session_id: str,
+        *,
+        request_id: str,
+        questions: Any,
+        turn_id: str = "",
+    ) -> dict[str, Any]:
+        request = self._request_id(request_id)
+        normalized_questions = normalize_questions(questions)
+        turn = str(turn_id or "").strip() or f"turn-{uuid.uuid4().hex}"
+        if len(turn) > 160:
+            raise ValueError("Ask turn_id is too long")
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            existing = session.get("ask")
+            if isinstance(existing, dict) and existing.get("status") == "waiting":
+                if existing.get("request_id") == request:
+                    return {
+                        "session_id": session["session_id"],
+                        "ask": self._public_ask(existing),
+                        "duplicate": True,
+                    }
+                raise ValueError("Chat already has a pending Ask")
+            now = time.time()
+            value = {
+                "ask_id": f"ask-{uuid.uuid4().hex}",
+                "request_id": request,
+                "turn_id": turn,
+                "status": "waiting",
+                "questions": normalized_questions,
+                "answers": None,
+                "answer_request_id": "",
+                "created_at": now,
+                "resolved_at": 0.0,
+            }
+            session["ask"] = value
+            session["updated_at"] = now
+            self._write(project, state)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(value),
+                "duplicate": False,
+            }
+
+    def submit_ask(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+        answers: Any,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        request = self._request_id(request_id)
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            ask = self._require_ask(session, ask_id)
+            if ask["status"] == "answered":
+                if ask.get("answer_request_id") == request:
+                    return {
+                        "session_id": session["session_id"],
+                        "ask": self._public_ask(ask),
+                        "duplicate": True,
+                    }
+                raise ValueError("Ask has already been answered")
+            if ask["status"] != "waiting":
+                raise ValueError("Ask is no longer waiting for an answer")
+            ask["answers"] = validate_answers(ask["questions"], answers)
+            ask["answer_request_id"] = request
+            ask["status"] = "answered"
+            ask["resolved_at"] = time.time()
+            session["updated_at"] = ask["resolved_at"]
+            self._write(project, state)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(ask),
+                "duplicate": False,
+            }
+
+    def cancel_ask(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        request = self._request_id(request_id)
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            ask = self._require_ask(session, ask_id)
+            if ask["status"] == "cancelled":
+                if ask.get("answer_request_id") == request:
+                    return {
+                        "session_id": session["session_id"],
+                        "ask": self._public_ask(ask),
+                        "duplicate": True,
+                    }
+                raise ValueError("Ask has already been cancelled")
+            if ask["status"] != "waiting":
+                raise ValueError("Ask is no longer waiting for a response")
+            ask["answers"] = None
+            ask["answer_request_id"] = request
+            ask["status"] = "cancelled"
+            ask["resolved_at"] = time.time()
+            session["updated_at"] = ask["resolved_at"]
+            self._write(project, state)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(ask),
+                "duplicate": False,
+            }
 
     def queue(self, project: Path, session_id: str) -> dict[str, Any]:
         with self._lock:
@@ -343,10 +476,11 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, 2, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
         legacy_v1 = state.get("version") == 1
         legacy_before_reasoning = state.get("version") in {1, 2}
+        legacy_before_ask = state.get("version") in {1, 2, 3}
         sessions = state.get("sessions")
         create_requests = state.get("create_requests")
         turn_requests = {} if legacy_v1 else state.get("turn_requests", {})
@@ -397,6 +531,7 @@ class ChatService:
                     "mode": str(item.get("mode") or "auto"),
                     "reasoning": "" if legacy_before_reasoning else str(item.get("reasoning") or ""),
                 })
+            ask = None if legacy_before_ask else self._normalize_ask(row.get("ask"))
             normalized.append({
                 "session_id": session_id,
                 "title": self._title(str(row.get("title") or "")),
@@ -405,6 +540,7 @@ class ChatService:
                 "agent_backend": str(row.get("agent_backend") or ""),
                 "agent_session_id": str(row.get("agent_session_id") or ""),
                 "queue": queue_rows,
+                "ask": ask,
             })
         active = str(state.get("active_session_id") or "")
         if active and active not in seen:
@@ -487,7 +623,66 @@ class ChatService:
             "agent_backend": "",
             "agent_session_id": "",
             "queue": [],
+            "ask": None,
         }
+
+    @staticmethod
+    def _normalize_ask(raw: Any) -> dict[str, Any] | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ValueError("Chat state contains an invalid Ask")
+        ask_id = str(raw.get("ask_id") or "")
+        request_id = str(raw.get("request_id") or "").strip()
+        turn_id = str(raw.get("turn_id") or "").strip()
+        status = str(raw.get("status") or "")
+        if (
+            not _ASK_ID.fullmatch(ask_id)
+            or not request_id
+            or not turn_id
+            or status not in {"waiting", "answered", "cancelled"}
+        ):
+            raise ValueError("Chat state contains an invalid Ask")
+        questions = normalize_questions(raw.get("questions"))
+        answers = None
+        if status == "answered":
+            answers = validate_answers(questions, raw.get("answers"))
+        return {
+            "ask_id": ask_id,
+            "request_id": request_id,
+            "turn_id": turn_id,
+            "status": status,
+            "questions": questions,
+            "answers": answers,
+            "answer_request_id": str(raw.get("answer_request_id") or ""),
+            "created_at": float(raw.get("created_at") or 0),
+            "resolved_at": float(raw.get("resolved_at") or 0),
+        }
+
+    @staticmethod
+    def _public_ask(raw: Any) -> dict[str, Any] | None:
+        if not isinstance(raw, dict):
+            return None
+        return {
+            "ask_id": raw["ask_id"],
+            "request_id": raw["request_id"],
+            "turn_id": raw["turn_id"],
+            "status": raw["status"],
+            "questions": [dict(item) for item in raw["questions"]],
+            "answers": raw.get("answers"),
+            "created_at": raw["created_at"],
+            "resolved_at": raw["resolved_at"],
+        }
+
+    @staticmethod
+    def _require_ask(session: dict[str, Any], ask_id: str) -> dict[str, Any]:
+        value = str(ask_id or "")
+        if not _ASK_ID.fullmatch(value):
+            raise ValueError("Invalid Chat Ask id")
+        ask = session.get("ask")
+        if not isinstance(ask, dict) or ask.get("ask_id") != value:
+            raise ValueError("Chat Ask does not exist")
+        return ask
 
     @staticmethod
     def _title(value: str, *, required: bool = False) -> str:

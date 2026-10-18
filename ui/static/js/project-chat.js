@@ -22,6 +22,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let editingQueueId = "";
   let editingQueueValue = "";
   let editingQueueError = "";
+  let messageRows = [];
+  let activeAsk = null;
+  let askIndex = 0;
+  let askAnswers = {};
+  let askError = "";
 
   const byId = (id) => document.getElementById(id);
 
@@ -443,7 +448,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       queuePollTimer = 0;
       if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
       try {
-        await Promise.all([refreshMessages(), refreshQueue()]);
+        await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
       } catch (_) {}
     }, 900);
   }
@@ -756,14 +761,239 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     root.appendChild(card);
   }
 
-  function renderMessages(rows = []) {
+  function currentAskQuestion() {
+    const questions = Array.isArray(activeAsk?.questions) ? activeAsk.questions : [];
+    return questions[askIndex] || null;
+  }
+
+  function askAnswerValid(question) {
+    if (!question) return false;
+    const value = askAnswers[question.question_id];
+    if (question.kind === "text") return !!String(value || "").trim();
+    if (value && typeof value === "object" && "other" in value) return !!String(value.other || "").trim();
+    return !!(value && typeof value === "object" && String(value.value || "").trim());
+  }
+
+  function renderAskCard(root) {
+    if (!activeAsk || activeAsk.status !== "waiting") return;
+    const questions = Array.isArray(activeAsk.questions) ? activeAsk.questions : [];
+    const question = currentAskQuestion();
+    if (!question) return;
+
+    const card = document.createElement("article");
+    card.className = "message project-chat-message assistant project-chat-ask";
+    card.dataset.askId = activeAsk.ask_id;
+
+    const head = document.createElement("div");
+    head.className = "project-chat-ask-head";
+    const heading = document.createElement("div");
+    const badge = document.createElement("small");
+    badge.textContent = "ASK";
+    const title = document.createElement("strong");
+    title.textContent = String(question.header || "Question");
+    heading.append(badge, title);
+    const progress = document.createElement("span");
+    progress.textContent = String(askIndex + 1) + " / " + String(questions.length);
+    head.append(heading, progress);
+
+    const prompt = document.createElement("p");
+    prompt.className = "project-chat-ask-prompt";
+    prompt.textContent = String(question.prompt || "");
+
+    const body = document.createElement("div");
+    body.className = "project-chat-ask-body";
+    if (question.kind === "choice") {
+      const selected = askAnswers[question.question_id];
+      for (const option of (Array.isArray(question.options) ? question.options : [])) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "project-chat-ask-option";
+        button.classList.toggle("selected", selected?.value === option.value);
+        const label = document.createElement("strong");
+        label.textContent = String(option.label || option.value || "");
+        button.appendChild(label);
+        if (option.description) {
+          const description = document.createElement("small");
+          description.textContent = String(option.description);
+          button.appendChild(description);
+        }
+        button.onclick = () => {
+          askAnswers = { ...askAnswers, [question.question_id]: { value: option.value } };
+          askError = "";
+          renderMessages();
+        };
+        body.appendChild(button);
+      }
+      const other = document.createElement("button");
+      other.type = "button";
+      other.className = "project-chat-ask-option";
+      other.classList.toggle("selected", !!(selected && typeof selected === "object" && "other" in selected));
+      other.textContent = "Other / custom answer";
+      other.onclick = () => {
+        const current = askAnswers[question.question_id];
+        const keep = current && typeof current === "object" && "other" in current ? String(current.other || "") : "";
+        askAnswers = { ...askAnswers, [question.question_id]: { other: keep } };
+        askError = "";
+        renderMessages();
+      };
+      body.appendChild(other);
+      if (selected && typeof selected === "object" && "other" in selected) {
+        const custom = document.createElement("textarea");
+        custom.className = "project-chat-ask-input";
+        custom.rows = 2;
+        custom.placeholder = "Type your answer…";
+        custom.setAttribute("aria-label", "Custom answer");
+        custom.value = String(selected.other || "");
+        custom.oninput = () => {
+          askAnswers = { ...askAnswers, [question.question_id]: { other: custom.value } };
+          askError = "";
+          const next = card.querySelector(".project-chat-ask-primary");
+          if (next) next.disabled = !askAnswerValid(question);
+        };
+        body.appendChild(custom);
+        requestAnimationFrame(() => custom.focus());
+      }
+    } else {
+      const input = document.createElement("textarea");
+      input.className = "project-chat-ask-input";
+      input.rows = 3;
+      input.placeholder = "Type your answer…";
+      input.setAttribute("aria-label", "Ask text answer");
+      input.value = String(askAnswers[question.question_id] || "");
+      input.oninput = () => {
+        askAnswers = { ...askAnswers, [question.question_id]: input.value };
+        askError = "";
+        const next = card.querySelector(".project-chat-ask-primary");
+        if (next) next.disabled = !askAnswerValid(question);
+      };
+      body.appendChild(input);
+    }
+
+    if (askError) {
+      const error = document.createElement("div");
+      error.className = "project-chat-ask-error";
+      error.textContent = askError;
+      body.appendChild(error);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "project-chat-ask-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => void cancelAsk();
+    const next = document.createElement("button");
+    next.type = "button";
+    next.className = "primary project-chat-ask-primary";
+    next.textContent = askIndex + 1 === questions.length ? "Submit" : "Next";
+    next.disabled = !askAnswerValid(question);
+    next.onclick = () => {
+      if (!askAnswerValid(question)) {
+        askError = "Answer this question before continuing.";
+        renderMessages();
+        return;
+      }
+      if (askIndex + 1 < questions.length) {
+        askIndex += 1;
+        askError = "";
+        renderMessages();
+        return;
+      }
+      void submitAsk();
+    };
+    actions.append(cancel, next);
+    card.append(head, prompt, body, actions);
+    root.appendChild(card);
+  }
+
+  function applyAskState(data = {}) {
+    const next = data?.ask && data.ask.status === "waiting" ? data.ask : null;
+    if (next?.ask_id !== activeAsk?.ask_id) {
+      askIndex = 0;
+      askAnswers = {};
+      askError = "";
+    }
+    activeAsk = next;
+    renderMessages();
+  }
+
+  async function refreshAsk() {
+    const path = projectPath();
+    if (!path || !activeSessionId) {
+      activeAsk = null;
+      return renderMessages();
+    }
+    const expectedProject = path;
+    const expectedSession = activeSessionId;
+    const data = await api(
+      "/api/chat/ask?project=" + encodeURIComponent(path) +
+      "&session_id=" + encodeURIComponent(expectedSession),
+      { timeoutMs: 15000 },
+    );
+    if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+    applyAskState(data);
+  }
+
+  async function submitAsk() {
+    const path = projectPath();
+    const session = activeSessionId;
+    const ask = activeAsk;
+    if (!path || !session || !ask) return;
+    try {
+      const data = await api("/api/chat/ask/submit", {
+        method: "POST",
+        body: JSON.stringify({
+          project: path,
+          session_id: session,
+          ask_id: ask.ask_id,
+          answers: askAnswers,
+          request_id: requestId(),
+        }),
+      });
+      if (projectPath() !== path || activeSessionId !== session || activeAsk?.ask_id !== ask.ask_id) return;
+      applyAskState(data);
+      showToast?.("Answer submitted");
+    } catch (error) {
+      askError = String(error?.message || "Ask submit failed");
+      renderMessages();
+      showError?.(error.message, "Ask submit failed");
+    }
+  }
+
+  async function cancelAsk() {
+    const path = projectPath();
+    const session = activeSessionId;
+    const ask = activeAsk;
+    if (!path || !session || !ask) return;
+    try {
+      const data = await api("/api/chat/ask/cancel", {
+        method: "POST",
+        body: JSON.stringify({
+          project: path,
+          session_id: session,
+          ask_id: ask.ask_id,
+          request_id: requestId(),
+        }),
+      });
+      if (projectPath() !== path || activeSessionId !== session || activeAsk?.ask_id !== ask.ask_id) return;
+      applyAskState(data);
+      showToast?.("Question cancelled");
+    } catch (error) {
+      askError = String(error?.message || "Ask cancel failed");
+      renderMessages();
+      showError?.(error.message, "Ask cancel failed");
+    }
+  }
+
+  function renderMessages(rows = messageRows) {
+    messageRows = Array.isArray(rows) ? rows : [];
     const root = byId("projectChatMessages");
     const empty = byId("projectChatEmptyMessages");
     if (!root || !empty) return;
     root.querySelectorAll(".project-chat-message").forEach((node) => node.remove());
     const drafts = activeDrafts();
-    empty.hidden = rows.length > 0 || drafts.length > 0;
-    for (const message of rows) {
+    empty.hidden = messageRows.length > 0 || drafts.length > 0 || !!activeAsk;
+    for (const message of messageRows) {
       const item = document.createElement("article");
       const role = ["user", "assistant", "system"].includes(message.role) ? message.role : "assistant";
       item.className = "message project-chat-message " + role;
@@ -774,6 +1004,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       root.appendChild(item);
     }
     for (const draft of drafts) renderTaskDraftCard(draft, root);
+    renderAskCard(root);
     requestAnimationFrame(() => { root.scrollTop = root.scrollHeight; });
   }
 
@@ -800,7 +1031,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     sessions = Array.isArray(data.sessions) ? data.sessions : [];
     activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
     renderSessions();
-    await Promise.all([refreshMessages(), refreshQueue()]);
+    await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
   }
 
   function renderPendingUser(text) {
@@ -926,7 +1157,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       });
       if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
       applyQueueState(data);
-      await refreshMessages();
+      await Promise.all([refreshMessages(), refreshAsk()]);
       if (data.status === "error" && data.error) {
         showError?.(String(data.error), "Chat turn failed");
       }
@@ -935,6 +1166,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       await Promise.all([
         refreshMessages().catch(() => {}),
         refreshQueue().catch(() => {}),
+        refreshAsk().catch(() => {}),
       ]);
       showError?.(error.message, "Chat turn failed");
     } finally {
@@ -955,7 +1187,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.session_id || data.active_session_id || "");
       renderSessions();
-      await Promise.all([refreshMessages(), refreshQueue()]);
+      await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
       showToast?.("New Chat created");
     } catch (error) {
       showError?.(error.message, "Create Chat failed");
@@ -973,7 +1205,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.active_session_id || sessionId);
       renderSessions();
-      await Promise.all([refreshMessages(), refreshQueue()]);
+      await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
     } catch (error) {
       showError?.(error.message, "Open Chat failed");
     }
@@ -1016,7 +1248,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : [];
       activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
       renderSessions();
-      await Promise.all([refreshMessages(), refreshQueue()]);
+      await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
       showToast?.("Chat deleted");
     } catch (error) {
       showError?.(error.message, "Delete Chat failed");
@@ -1033,6 +1265,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     clearQueuePoll();
     queueItems = [];
     queueBusy = false;
+    messageRows = [];
+    activeAsk = null;
+    askIndex = 0;
+    askAnswers = {};
+    askError = "";
     renderPreferences();
     void Promise.all([
       refreshSettingsCatalog(),
@@ -1116,6 +1353,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     refreshSessions,
     refreshMessages,
     refreshQueue,
+    refreshAsk,
     renderPreferences,
     activeSessionId: () => activeSessionId,
   };

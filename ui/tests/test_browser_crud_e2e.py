@@ -143,6 +143,9 @@ def _bridge_for(state: UIState):
                     }
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
+                elif path == "/api/chat/ask":
+                    session_id = query.get("session_id", [""])[0]
+                    data = state.chat_service.ask(project, session_id)
                 elif path == "/api/chat/queue":
                     session_id = query.get("session_id", [""])[0]
                     queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])
@@ -321,7 +324,35 @@ def _bridge_for(state: UIState):
                 elif path == "/api/chat/turn":
                     session_id = str(body.get("session_id", ""))
                     message = str(body.get("message", ""))
-                    if message == "queue browser message":
+                    if message == "ask browser message":
+                        state.chat_service.append_message(
+                            Path(body["project"]), session_id, "user", message
+                        )
+                        state.chat_service.create_ask(
+                            Path(body["project"]),
+                            session_id,
+                            request_id=str(body.get("request_id", "")),
+                            turn_id="turn-browser-ask",
+                            questions=[
+                                {
+                                    "id": "approach",
+                                    "header": "Approach",
+                                    "question": "Choose an approach",
+                                    "options": [
+                                        {"value": "safe", "label": "Safe"},
+                                        {"value": "clean", "label": "Clean"},
+                                    ],
+                                },
+                                {
+                                    "id": "reason",
+                                    "header": "Reason",
+                                    "question": "Explain why",
+                                    "kind": "text",
+                                },
+                            ],
+                        )
+                        data = {"session_id": session_id, "items": [], "busy": False, "status": "waiting_ask"}
+                    elif message == "queue browser message":
                         queue = getattr(state, "_browser_chat_queue", {})
                         queue.setdefault(session_id, []).append({
                             "queue_id": "queue-" + "1" * 32,
@@ -346,6 +377,21 @@ def _bridge_for(state: UIState):
                             Path(body["project"]), session_id, "assistant", "Browser Chat reply"
                         )
                         data = {"session_id": session_id, "messages": [user, assistant], "items": [], "busy": False}
+                elif path == "/api/chat/ask/submit":
+                    data = state.chat_service.submit_ask(
+                        Path(body["project"]),
+                        str(body.get("session_id", "")),
+                        str(body.get("ask_id", "")),
+                        body.get("answers"),
+                        request_id=str(body.get("request_id", "")),
+                    )
+                elif path == "/api/chat/ask/cancel":
+                    data = state.chat_service.cancel_ask(
+                        Path(body["project"]),
+                        str(body.get("session_id", "")),
+                        str(body.get("ask_id", "")),
+                        request_id=str(body.get("request_id", "")),
+                    )
                 elif path == "/api/chat/queue/update":
                     session_id = str(body.get("session_id", ""))
                     queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])
@@ -768,6 +814,26 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             assert page.locator("#projectChatView").is_visible()
             assert page.locator("#chatView").is_hidden()
+
+            page.fill("#projectChatInput", "ask browser message")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
+            assert page.locator(".project-chat-ask-head").get_by_text("1 / 2").is_visible()
+            page.get_by_role("button", name="Other / custom answer").click()
+            page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Custom browser approach")
+            page.get_by_role("button", name="Other / custom answer").click()
+            assert page.locator(".project-chat-ask-input[aria-label='Custom answer']").input_value() == "Custom browser approach"
+            page.get_by_role("button", name="Next", exact=True).click()
+            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('2 / 2')")
+            assert page.get_by_role("button", name="Submit", exact=True).is_disabled()
+            page.fill(".project-chat-ask-input[aria-label='Ask text answer']", "Browser reason")
+            assert page.get_by_role("button", name="Submit", exact=True).is_enabled()
+            page.get_by_role("button", name="Submit", exact=True).click()
+            page.wait_for_function("document.querySelector('.project-chat-ask') === null")
+            answered_ask = state.chat_service.ask(state.repo_root, state.chat_service.sessions(state.repo_root)["active_session_id"])["ask"]
+            assert answered_ask["status"] == "answered"
+            assert answered_ask["answers"]["approach"]["other"] == "Custom browser approach"
+            assert answered_ask["answers"]["reason"] == "Browser reason"
 
             page.fill("#projectChatInput", "queue browser message")
             page.click("#projectChatSendButton")
