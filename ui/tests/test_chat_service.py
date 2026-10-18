@@ -542,3 +542,53 @@ def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+def test_project_chat_delete_is_guarded_while_turn_is_active(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_runner(**kwargs):
+        started.set()
+        assert release.wait(timeout=3)
+        return {"text": "done", "session_id": "native"}
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    server.state.chat_agent = ChatAgentService(repo, runner=fake_runner)
+    server.state.project_preferences.update(project, {"agent": "qwen"})
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    worker = threading.Thread(
+        target=lambda: server.state.chat_agent.turn(
+            project,
+            server.state.chat_service,
+            session_id=session_id,
+            message="busy",
+            backend="qwen",
+            request_id="busy-delete-1",
+        ),
+        daemon=True,
+    )
+    worker.start()
+    assert started.wait(timeout=2)
+    status = server.state.chat_agent.status(
+        project,
+        server.state.chat_service,
+        session_id=session_id,
+    )
+    assert status["busy"] is True
+    try:
+        if status["busy"]:
+            raise ValueError("Stop or wait for the active Chat turn before deleting this Chat")
+    except ValueError as exc:
+        assert "active Chat turn" in str(exc)
+    else:
+        raise AssertionError("busy Chat delete guard was not enforced")
+    release.set()
+    worker.join(timeout=4)
+    assert not worker.is_alive()

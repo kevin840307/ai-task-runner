@@ -287,9 +287,17 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("title", "")),
                 ))
             if parsed.path == "/api/chat/session/delete":
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                if self.state.chat_agent.status(
+                    project,
+                    self.state.chat_service,
+                    session_id=session_id,
+                )["busy"]:
+                    raise ValueError("Stop or wait for the active Chat turn before deleting this Chat")
                 return self._json(self.state.chat_service.delete_session(
-                    self._project(body),
-                    str(body.get("session_id", "")),
+                    project,
+                    session_id,
                 ))
             if parsed.path == "/api/project/message":
                 project = self._project(body)

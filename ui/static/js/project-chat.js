@@ -424,6 +424,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
       applyQueueState(data);
       await refreshMessages();
+      if (data.status === "error" && data.error) {
+        showError?.(String(data.error), "Chat turn failed");
+      }
     } catch (error) {
       if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
       await Promise.all([
