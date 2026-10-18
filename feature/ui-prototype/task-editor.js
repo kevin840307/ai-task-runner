@@ -1205,7 +1205,7 @@ document.getElementById('confirmDiscardTaskEditor')?.addEventListener('click',()
   closeModal('taskEditorDiscardModal');taskEditorInitialSnapshot='';action?.();
 });
 document.querySelectorAll('[data-close-modal="taskEditorDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskEditorDiscardAction=null;restoreTaskEditorDiscardFocus()}));
-document.getElementById('taskEditorDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskEditorDiscardAction=null;restoreTaskEditorDiscardFocus()}});
+document.getElementById('taskEditorDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskEditorDiscardAction=null;closeModal('taskEditorDiscardModal');restoreTaskEditorDiscardFocus()}});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape'||!document.getElementById('taskEditorDiscardModal')?.classList.contains('open'))return;
   e.preventDefault();e.stopImmediatePropagation();taskEditorDiscardAction=null;closeModal('taskEditorDiscardModal');restoreTaskEditorDiscardFocus();
@@ -1630,7 +1630,10 @@ function requestDiscardNewTaskListDraft(onDiscard){
   if(!newTaskListDraft){onDiscard?.();return true}
   if(!taskListDraftHasChanges()){discardNewTaskListDraft({close:false});onDiscard?.();return true}
   taskListDraftDiscardAction=typeof onDiscard==='function'?onDiscard:null;
-  taskListDraftDiscardReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const active=document.activeElement;
+  taskListDraftDiscardReturnFocus=active instanceof HTMLElement&&!active.closest('.modal-overlay:not(.open)')
+    ?active
+    :document.querySelector('#taskOverlay .drawer');
   openModal('taskListDraftDiscardModal');
   setTimeout(()=>document.getElementById('confirmDiscardTaskListDraft')?.focus({preventScroll:true}),0);
   return false;
@@ -1640,7 +1643,7 @@ document.getElementById('confirmDiscardTaskListDraft')?.addEventListener('click'
   discardNewTaskListDraft({close:false});closeModal('taskListDraftDiscardModal');action?.();
 });
 document.querySelectorAll('[data-close-modal="taskListDraftDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskListDraftDiscardAction=null;restoreTaskListDraftDiscardFocus()}));
-document.getElementById('taskListDraftDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskListDraftDiscardAction=null;restoreTaskListDraftDiscardFocus()}});
+document.getElementById('taskListDraftDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskListDraftDiscardAction=null;closeModal('taskListDraftDiscardModal');restoreTaskListDraftDiscardFocus()}});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape'||!document.getElementById('taskListDraftDiscardModal')?.classList.contains('open'))return;
   e.preventDefault();e.stopImmediatePropagation();taskListDraftDiscardAction=null;closeModal('taskListDraftDiscardModal');restoreTaskListDraftDiscardFocus();
