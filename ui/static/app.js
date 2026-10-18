@@ -7,21 +7,98 @@ const UI_PREFS_KEY = "ai-task-runner.ui.preferences.v1";
 function loadUiPreferences() {
   try {
     const raw = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
-    return raw && typeof raw === "object" ? { lastProject: String(raw.lastProject || ""), builderBackend: String(raw.builderBackend || ""), projects: raw.projects && typeof raw.projects === "object" ? raw.projects : {} } : { lastProject: "", builderBackend: "", projects: {} };
-  } catch (_) { return { lastProject: "", builderBackend: "", projects: {} }; }
+    if (!raw || typeof raw !== "object") return { lastProject: "", builderBackend: "", legacyProjects: {} };
+    return {
+      lastProject: String(raw.lastProject || ""),
+      builderBackend: String(raw.builderBackend || ""),
+      legacyProjects: raw.projects && typeof raw.projects === "object" ? raw.projects : {},
+    };
+  } catch (_) { return { lastProject: "", builderBackend: "", legacyProjects: {} }; }
 }
-function saveUiPreferences() { try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(state.preferences || { lastProject: "", builderBackend: "", projects: {} })); } catch (_) {} }
-function currentProjectPreferences() {
-  if (!state.preferences) state.preferences = loadUiPreferences();
-  const path = state.project?.path || ""; if (!path) return {};
-  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", workflow: "", validators: {} });
+function saveUiPreferences() {
+  try {
+    const prefs = state.preferences || { lastProject: "", builderBackend: "", legacyProjects: {} };
+    const value = { lastProject: String(prefs.lastProject || ""), builderBackend: String(prefs.builderBackend || "") };
+    if (prefs.legacyProjects && Object.keys(prefs.legacyProjects).length) value.projects = prefs.legacyProjects;
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(value));
+  } catch (_) {}
 }
-function rememberProjectPreference(key, value) { const prefs = currentProjectPreferences(); if (!state.project) return; prefs[key] = value; saveUiPreferences(); }
-function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
-function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
+function projectPreferencesProjection(data = {}) {
+  return {
+    backend: String(data.agent || ""),
+    model: String(data.model || ""),
+    mode: String(data.mode || "auto"),
+    reasoning: String(data.reasoning || "medium"),
+    workflow: String(data.workflow || ""),
+    validators: data.validators && typeof data.validators === "object" ? { ...data.validators } : {},
+    aiValidatorPrompts: data.ai_validator_prompts && typeof data.ai_validator_prompts === "object" ? { ...data.ai_validator_prompts } : {},
+  };
+}
+function currentProjectPreferences() { return state.projectPreferences || {}; }
+async function refreshProjectPreferences(projectPath = state.project?.path || "") {
+  if (!projectPath) { state.projectPreferences = null; return {}; }
+  let data = await api("/api/project/preferences?project=" + encodeURIComponent(projectPath), { timeoutMs: 15000 });
+  if (!sameProjectPath(state.project?.path, projectPath)) return {};
+  const legacy = state.preferences?.legacyProjects?.[projectPath];
+  if (!data.exists && legacy && typeof legacy === "object") {
+    data = await api("/api/project/preferences", {
+      method: "POST",
+      body: JSON.stringify({
+        project: projectPath,
+        agent: String(legacy.backend || ""),
+        workflow: String(legacy.workflow || ""),
+        validators: legacy.validators && typeof legacy.validators === "object" ? legacy.validators : {},
+        ai_validator_prompts: legacy.aiValidatorPrompts && typeof legacy.aiValidatorPrompts === "object" ? legacy.aiValidatorPrompts : {},
+      }),
+    });
+    if (!sameProjectPath(state.project?.path, projectPath)) return {};
+    delete state.preferences.legacyProjects[projectPath];
+    saveUiPreferences();
+  }
+  state.projectPreferences = projectPreferencesProjection(data);
+  return state.projectPreferences;
+}
+function persistProjectPreferences(patch) {
+  const projectPath = state.project?.path || ""; if (!projectPath) return;
+  const write = async () => {
+    try {
+      await api("/api/project/preferences", {
+        method: "POST",
+        body: JSON.stringify({ project: projectPath, ...patch }),
+      });
+    } catch (error) {
+      if (sameProjectPath(state.project?.path, projectPath)) {
+        try { await refreshProjectPreferences(projectPath); renderBackendPicker(); renderWorkflowPicker(); }
+        catch (_) {}
+        showActionError(error.message, "Project preference update failed");
+      }
+    }
+  };
+  state.projectPreferencesWrite = (state.projectPreferencesWrite || Promise.resolve()).then(write, write);
+}
+function rememberProjectPreference(key, value) {
+  if (!state.project) return;
+  const prefs = state.projectPreferences || (state.projectPreferences = projectPreferencesProjection());
+  prefs[key] = value;
+  persistProjectPreferences({ [key === "backend" ? "agent" : key]: value });
+}
+function rememberValidator(workflow, value) {
+  if (!state.project || !workflow) return;
+  const prefs = state.projectPreferences || (state.projectPreferences = projectPreferencesProjection());
+  prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {};
+  prefs.validators[workflow] = value;
+  persistProjectPreferences({ validators: prefs.validators });
+}
+function rememberAiValidatorPrompt(workflow, value) {
+  if (!state.project || !workflow) return;
+  const prefs = state.projectPreferences || (state.projectPreferences = projectPreferencesProjection());
+  prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {};
+  prefs.aiValidatorPrompts[workflow] = value;
+  persistProjectPreferences({ ai_validator_prompts: prefs.aiValidatorPrompts });
+}
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -451,12 +528,14 @@ async function selectProject(project) {
     state.validatorWorkflowPath = "";
     state.aiValidatorPromptWorkflowPath = "";
   }
-  state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
+  state.project = project; state.projectPreferences = null; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
-  if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
+  if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects();
   $("projectName").textContent = project.name; $("projectPath").textContent = project.path; $("emptyState").hidden = true;
   $("summary").hidden = false; $("messages").hidden = false; $("composePanel").hidden = false; $("errorText").textContent = ""; requestAnimationFrame(syncComposerReserve);
   try {
+    await refreshProjectPreferences(project.path);
+    renderBackendPicker();
     await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path })]);
     refreshStudioFiles({ force: true, projectPath: project.path });
   } catch (error) { showActionError(error.message, "Project loading failed"); }

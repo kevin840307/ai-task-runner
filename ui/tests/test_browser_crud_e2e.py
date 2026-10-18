@@ -139,6 +139,8 @@ def _bridge_for(state: UIState):
                             exclude_runtime_path=query.get("exclude_runtime", [""])[0]
                         )
                     }
+                elif path == "/api/project/preferences":
+                    data = state.project_preferences.get(project)
                 elif path == "/api/project/messages":
                     data = {"messages": []}
                 elif path == "/api/project/runs":
@@ -183,7 +185,9 @@ def _bridge_for(state: UIState):
                 else:
                     raise ValueError(f"Unhandled browser E2E GET {path}")
             else:
-                if path == "/api/studio/prompt/create":
+                if path == "/api/project/preferences":
+                    data = state.project_preferences.update(Path(body["project"]), body)
+                elif path == "/api/studio/prompt/create":
                     data = state.studio_prompt_create(
                         body.get("name", ""),
                         body.get("destination", "global"),
