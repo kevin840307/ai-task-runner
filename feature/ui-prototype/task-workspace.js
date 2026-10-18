@@ -774,6 +774,6 @@ positionTaskContextMenu=function(x,y){
 window.TaskUi=Object.freeze({
   openEditor(mode,args={}){return loadTaskEditor(mode,args)},
   openList(ownerId=currentTaskId){return openPlanDialog(ownerId)},
-  createList(){return createEmptyTaskListAndOpen()},
+  createList(initialProjectKey=currentProjectKey){return createEmptyTaskListAndOpen(initialProjectKey)},
   addTask(ownerId=currentTaskId,returnTarget=detectTaskEditorReturnTarget()){return createTaskDirectlyInWorkspace(ownerId,returnTarget)}
 });
