@@ -73,7 +73,7 @@ function restoreSurfaceCloseBehavior(surface,overlayId){
   if(cancel){cancel.textContent='Cancel';cancel.onclick=()=>closeModal(overlayId)}
 }
 function taskEditorBackLabel(returnTarget){
-  return returnTarget==='info'?'Back to Info':returnTarget==='chat'?'Back to Chat Draft':returnTarget==='list'?'Back to Task List':'Close';
+  return returnTarget==='info'?'Back to Info':returnTarget==='chat'?'Back to Chat Draft':returnTarget==='list-draft'?'Back to Task List Draft':returnTarget==='list'?'Back to Task List':'Close';
 }
 function detectTaskEditorReturnTarget(){
   if(planModalEl.classList.contains('open')&&!planModalEl.classList.contains('subview-open'))return 'list';
@@ -84,7 +84,7 @@ function showTaskEditorView(){
   planSubviewMount.hidden=false;
   planModalEl.classList.add('subview-open','open');
   taskEditorHome.classList.add('open');
-  const ctx=taskEditorReturnContext,owner=ctx?.ownerId?taskMap[ctx.ownerId]:null;
+  const ctx=taskEditorReturnContext,owner=ctx?.mode==='draft-create-item'?newTaskListDraft:(ctx?.ownerId?taskMap[ctx.ownerId]:null);
   const title=document.getElementById('taskFormTitle')?.textContent||'Task';
   const meta=owner
     ? `${owner.id} · ${ctx?.index==null?'Task':`Task ${ctx.index+1} of ${canonicalTaskItems(owner).length}`}`
@@ -100,8 +100,14 @@ function leaveTaskEditorOverlay(){
   const ctx=taskEditorReturnContext;if(!ctx)return;
   taskEditorReturnContext=null;
   hideTaskEditorView();
-  const owner=ctx.ownerId?taskMap[ctx.ownerId]:null;
-  if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  const owner=ctx.mode==='draft-create-item'?newTaskListDraft:(ctx.ownerId?taskMap[ctx.ownerId]:null);
+  if(owner&&!owner._newListDraft){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  if(ctx.returnTarget==='list-draft'){
+    planModalEl.classList.add('open');
+    setTaskDrawerShell('list-draft',{title:newTaskListDraft?.title||'New Task List',meta:'Draft · not created yet',showBack:false});
+    renderNewTaskListDraftWorkspace();
+    return;
+  }
   if(ctx.returnTarget==='chat'){
     planModalEl.classList.remove('open');taskOverlayEl.classList.remove('open');showView('chat');renderChatSession();return;
   }
@@ -153,23 +159,24 @@ function leavePlanSubview(){
 
 const taskEditorLoadBeforeOverlay=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
-  const ownerId=args.ownerId||currentTaskId,owner=mode==='root-create'?null:taskMap[ownerId];
+  const draftMode=mode==='draft-create-item';
+  const ownerId=args.ownerId||currentTaskId,owner=mode==='root-create'?null:(draftMode?newTaskListDraft:taskMap[ownerId]);
   if(mode!=='root-create'&&!owner)return;
-  const returnTarget=args.returnTarget||(mode==='root-create'?'close':detectTaskEditorReturnTarget());
+  const returnTarget=args.returnTarget||(mode==='root-create'?'close':draftMode?'list-draft':detectTaskEditorReturnTarget());
   if(typeof hideComposerSuggestions==='function')hideComposerSuggestions();
   if(typeof closeComposerPicker==='function')closeComposerPicker();
   if(returnTarget==='chat')showView('chat');
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
   closeModal('addPlanTaskModal');
   taskEditorLoadBeforeOverlay(mode,args);
-  taskEditorReturnContext={mode,ownerId:owner?.id||null,index:args.index??(owner?canonicalTaskItems(owner).length:null),returnTarget,scrollTop:scrollHost.scrollTop||0};
+  taskEditorReturnContext={mode,ownerId:owner?._newListDraft?null:(owner?.id||null),index:args.index??(owner?(owner.items||canonicalTaskItems(owner)).length:null),returnTarget,scrollTop:scrollHost.scrollTop||0};
   document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':mode==='root-create'?'New Task':'New task';
   document.getElementById('taskFormHelp').textContent=returnTarget==='chat'
     ?(mode==='edit-item'?'Edit this Task Draft item. Chat stays behind this workspace.':'Configure this Task Draft item. Chat stays behind this workspace.')
     :(mode==='root-create'?'Create one Task in this workspace.':mode==='edit-item'?'Edit this task only.':'Configure this task only.');
   document.getElementById('editTaskScopeNote').hidden=true;
   showTaskEditorView();
-  const editorOwner=ownerId?taskMap[ownerId]:null;
+  const editorOwner=draftMode?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
   setTaskDrawerShell('editor',{
     title:document.getElementById('taskFormTitle').textContent,
     meta:editorOwner?`${editorOwner.id} · ${mode==='edit-item'?`Task ${(args.index??0)+1} of ${canonicalTaskItems(editorOwner).length}`:'New child task'}`:'New Task',
@@ -184,7 +191,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   const ctx=taskEditorReturnContext;
   taskEditorSaveBeforeOverlay();
   if(!ctx)return;
-  const itemSaved=['Task saved','Saved · current task will restart'].includes(toast.textContent);
+  const itemSaved=['Task saved','Saved · current task will restart','Draft task added'].includes(toast.textContent);
   const rootSaved=ctx.mode==='root-create'&&String(toast.textContent).startsWith('Task created');
   if(itemSaved||rootSaved)leaveTaskEditorOverlay();
 };
