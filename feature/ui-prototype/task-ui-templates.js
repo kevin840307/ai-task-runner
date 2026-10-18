@@ -10,22 +10,23 @@
     <div class="task-view-meta" hidden><h2 id="taskFormTitle">New task</h2><p id="taskFormHelp">Configure this task only.</p></div>
     <div class="modal-body">
       <div class="modal-grid task-basics">
-        <div class="field full" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from task prompt" value=""></div>
-        <div class="field full"><label>Project</label><div class="project-combobox"><input id="newTaskProject" autocomplete="off" placeholder="Select a project or type a path"><button type="button" id="projectDropdownToggle" aria-label="Show all projects" aria-expanded="false"><span class="project-dropdown-chevron" aria-hidden="true"></span></button><div class="project-dropdown" id="projectDropdown" hidden></div></div><small class="field-help" id="projectFieldHelp">Current Project is the default. You can also type a new local path.</small><datalist id="projectOptions" hidden></datalist></div>
-        <div class="field full" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
+        <div class="field task-project-field"><label>Project</label><div class="project-combobox"><input id="newTaskProject" autocomplete="off" placeholder="Select a project or type a path"><button type="button" id="projectDropdownToggle" aria-label="Show all projects" aria-expanded="false"><span class="project-dropdown-chevron" aria-hidden="true"></span></button><div class="project-dropdown" id="projectDropdown" hidden></div></div><small class="field-help" id="projectFieldHelp">Current Project is used by default · type a local path to override.</small><datalist id="projectOptions" hidden></datalist></div>
+        <div class="field task-workflow-field" id="newTaskWorkflowField"><label>Workflow</label><select id="newTaskWorkflow"><option>ralphy_ai_validate.yaml</option><option>mixed.yaml</option><option>file.yaml</option><option>dynamic_handoff.yaml</option></select></div>
+        <div class="field task-title-field" id="taskEditorTitleField"><label>Title <span class="field-optional">optional</span></label><input id="newTaskTitle" placeholder="Auto from prompt" value=""></div>
       </div>
       <div id="newTaskWorkflowCaps" class="workflow-caps"></div>
       <div id="editTaskScopeNote" class="edit-task-scope-note" hidden></div>
       <div id="newTaskListSetup" hidden></div>
-      <div id="newTaskPromptSource"></div>
-      <div id="newTaskValidationSource"></div>
-      <div class="workspace-selector-wrap">
+      <div class="task-input-grid" id="newTaskInputGrid">
+        <div id="newTaskPromptSource" class="task-input-primary"></div>
+        <div id="newTaskValidationSource" class="task-input-supporting"></div>
+      </div>
+      <div class="workspace-selector-wrap task-editor-secondary">
         <div class="workspace-selector-title"><div><strong>Workspace</strong><small>Auto / Main / isolated Worktree</small></div><span class="workspace-recommended">Auto recommended</span></div>
         <div id="newTaskWorkspace"></div>
       </div>
       <div hidden><button type="button" id="addNextTaskFromNew"></button><button type="button" id="addExistingTaskFromNew"></button></div>
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
-      <div class="state-hint">Task settings belong to this task only. Workflow capabilities decide which validation fields appear.</div>
     </div>
     <div class="modal-foot"><button class="btn" id="taskEditorBack" type="button" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
 </section>`;
