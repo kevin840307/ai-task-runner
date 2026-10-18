@@ -133,6 +133,7 @@ class BaseBackend(ABC):
         self.timeout = timeout
         self.mode: BackendMode = "runtime"
         self.interaction_mode: InteractionMode | None = None
+        self.reasoning = ""
         self.allow_project_read = False
         self.sandbox = False
         self._validate_command(command)
@@ -255,6 +256,21 @@ class BaseBackend(ABC):
         model: str,
     ) -> tuple[ReasoningOptionSpec, ...]:
         return ()
+
+    def configure_reasoning(self, reasoning: str) -> None:
+        value = str(reasoning or "").strip()
+        if not value:
+            self.reasoning = ""
+            return
+        options = self.reasoning_options(
+            self.root,
+            self.model_from_args(self.extra_args),
+        )
+        if options and value not in {item.id for item in options}:
+            raise BackendError(
+                f"{self.name} does not support reasoning option: {value}"
+            )
+        self.reasoning = value
 
     def prepare_project(self) -> list[Path]:
         return []

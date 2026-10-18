@@ -273,6 +273,25 @@ class OpenCodeBackend(BaseBackend):
             })
         return sorted(_configured_opencode_models(root))
 
+    def configure_reasoning(self, reasoning: str) -> None:
+        value = str(reasoning or "").strip()
+        if not value:
+            self.reasoning = ""
+            return
+        selected = self.model_from_args(self.extra_args).split("#", 1)[0]
+        if not selected:
+            raise BackendError("OpenCode reasoning variant requires an explicit model")
+        options = self.reasoning_options(self.root, selected)
+        if value not in {item.id for item in options}:
+            raise BackendError(
+                f"opencode model {selected} does not support variant: {value}"
+            )
+        self.extra_args = self.configure_model_args(
+            self.extra_args,
+            f"{selected}#{value}",
+        )
+        self.reasoning = value
+
     @classmethod
     def configure_args(
         cls,

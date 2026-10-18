@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", required=True)
     parser.add_argument("--model", default="")
     parser.add_argument("--mode", choices=("read", "auto", "yolo"), default="auto")
+    parser.add_argument("--reasoning", default="")
     parser.add_argument("--session", default="")
     parser.add_argument("--timeout", type=int, default=7200)
     args = parser.parse_args(argv)
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout=args.timeout,
         )
         backend.configure_interaction(args.mode)
+        backend.configure_reasoning(args.reasoning)
         result = backend.ask(prompt, args.session)
     except (BackendError, OSError, ValueError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))

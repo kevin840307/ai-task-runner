@@ -1223,3 +1223,51 @@ def test_opencode_reasoning_options_come_from_selected_model_variants(tmp_path, 
     assert values[1].native == "openai/gpt-5.2#high"
     assert values[1].description == "Deeper reasoning"
     assert reasoning_options("opencode", tmp_path, "openai/missing") == ()
+
+
+
+def test_opencode_configure_reasoning_applies_native_model_variant(tmp_path, monkeypatch):
+    from runner.agent import opencode as opencode_module
+
+    monkeypatch.setattr(
+        opencode_module,
+        "_opencode_api_payload",
+        lambda root, operation: [{
+            "providerID": "openai",
+            "id": "gpt-5.2",
+            "variants": [{"id": "low"}, {"id": "deep"}],
+        }] if operation == "model.list" else [],
+    )
+    backend = OpenCodeBackend(
+        sys.executable,
+        tmp_path,
+        ["--model", "openai/gpt-5.2"],
+    )
+    backend.configure_reasoning("deep")
+    assert backend.reasoning == "deep"
+    assert backend.model_from_args(backend.extra_args) == "openai/gpt-5.2#deep"
+    with pytest.raises(BackendError, match="does not support variant"):
+        backend.configure_reasoning("missing")
+
+
+def test_qwen_configure_reasoning_uses_temporary_system_settings_overlay(tmp_path, monkeypatch):
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    system = tmp_path / "system-settings.json"
+    system.write_text(
+        json.dumps({"security": {"auth": {"selectedType": "openai"}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    monkeypatch.setenv("QWEN_CODE_SYSTEM_SETTINGS_PATH", str(system))
+    backend = QwenBackend(sys.executable, tmp_path, ["--model", "model-a"])
+    backend.configure_reasoning("high")
+    env = backend.process_environment()
+    overlay = Path(env["QWEN_CODE_SYSTEM_SETTINGS_PATH"])
+    value = json.loads(overlay.read_text(encoding="utf-8"))
+    assert value["model"]["reasoningEffort"] == "high"
+    assert value["security"]["auth"]["selectedType"] == "openai"
+    assert overlay != system
+    backend._cleanup_reasoning_settings()
+    assert not overlay.exists()
+    assert system.exists()

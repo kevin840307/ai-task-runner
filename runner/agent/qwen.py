@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -691,6 +692,54 @@ def _qwen_reasoning_options(root: Path, model: str) -> tuple[ReasoningOptionSpec
 
 
 class QwenBackend(BaseBackend):
+    def configure_reasoning(self, reasoning: str) -> None:
+        super().configure_reasoning(reasoning)
+        self._reasoning_settings_path = None
+
+    def process_environment(self) -> dict[str, str]:
+        if not self.reasoning:
+            return {}
+        current = getattr(self, "_reasoning_settings_path", None)
+        if isinstance(current, Path) and current.is_file():
+            return {"QWEN_CODE_SYSTEM_SETTINGS_PATH": str(current)}
+
+        source = _qwen_settings_paths(self.root)[-1]
+        settings = _read_qwen_settings(source)
+        model = settings.get("model")
+        model_settings = dict(model) if isinstance(model, dict) else {}
+        model_settings["reasoningEffort"] = self.reasoning
+        settings = dict(settings)
+        settings["model"] = model_settings
+
+        handle, raw_path = tempfile.mkstemp(
+            prefix="ai-task-runner-qwen-chat-",
+            suffix=".json",
+        )
+        os.close(handle)
+        path = Path(raw_path)
+        path.write_text(
+            json.dumps(settings, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        self._reasoning_settings_path = path
+        return {"QWEN_CODE_SYSTEM_SETTINGS_PATH": str(path)}
+
+    def _cleanup_reasoning_settings(self) -> None:
+        path = getattr(self, "_reasoning_settings_path", None)
+        self._reasoning_settings_path = None
+        if isinstance(path, Path):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+    def ask(self, *args, **kwargs) -> BackendResult:
+        try:
+            return super().ask(*args, **kwargs)
+        finally:
+            self._cleanup_reasoning_settings()
+
+
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
     sandbox_flags = ("-s", "--sandbox")
