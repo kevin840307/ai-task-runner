@@ -1038,15 +1038,15 @@ function stagedUploadHint(source,field){
   return meta?`<div class="file-upload-hint"><strong>Uploaded · ${escapeHtml(meta.name)}</strong><span>Managed target path is shown above now; file bytes are copied there when the Task is created/saved.</span></div>`:'';
 }
 function newTaskPromptBodySimple(){
-  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Or type an existing prompt file path"><button class="mini-btn task-upload-btn" type="button" id="taskPickGoal">Upload file</button></div>${stagedUploadHint(newTaskDraft,'goalFile')}`;
-  if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
-  return `<textarea id="taskPromptInline" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(newTaskDraft.prompt)}</textarea>`;
+  if(newTaskDraft.goalMode==='file')return `<div class="task-source-mode-panel" data-source-mode="file"><div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Or type an existing prompt file path"><button class="mini-btn task-upload-btn" type="button" id="taskPickGoal">Upload file</button></div>${stagedUploadHint(newTaskDraft,'goalFile')}</div>`;
+  if(newTaskDraft.goalMode==='asset')return `<div class="task-source-mode-panel" data-source-mode="asset"><div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div></div>`;
+  return `<div class="task-source-mode-panel" data-source-mode="inline"><textarea id="taskPromptInline" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(newTaskDraft.prompt)}</textarea></div>`;
 }
 function newTaskAiBodySimple(){
-  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="Or type an existing AI prompt file path"><button class="mini-btn" type="button" id="taskPickAi">Upload file</button></div>${stagedUploadHint(newTaskDraft,'aiFile')}`;
-  if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
-  if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(newTaskDraft.aiPrompt)}</textarea>`;
-  return `<div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div>`;
+  if(newTaskDraft.aiMode==='file')return `<div class="task-source-mode-panel" data-source-mode="file"><div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="Or type an existing AI prompt file path"><button class="mini-btn task-upload-btn" type="button" id="taskPickAi">Upload file</button></div>${stagedUploadHint(newTaskDraft,'aiFile')}</div>`;
+  if(newTaskDraft.aiMode==='asset')return `<div class="task-source-mode-panel" data-source-mode="asset"><div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div></div>`;
+  if(newTaskDraft.aiMode==='inline')return `<div class="task-source-mode-panel" data-source-mode="inline"><textarea id="taskAiInline" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(newTaskDraft.aiPrompt)}</textarea></div>`;
+  return `<div class="task-source-mode-panel" data-source-mode="default"><div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div></div>`;
 }
 renderNewTaskSources=function(){
   const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
