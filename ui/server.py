@@ -115,6 +115,14 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     query.get("session_id", [""])[0],
                 ))
+            if parsed.path == "/api/chat/queue":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.chat_agent.status(
+                    project,
+                    self.state.chat_service,
+                    session_id=query.get("session_id", [""])[0],
+                ))
             if parsed.path == "/api/backends":
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])
@@ -222,7 +230,45 @@ class Handler(SimpleHTTPRequestHandler):
                     backend=backend,
                     model=str(preferences.get("model") or ""),
                     mode=str(preferences.get("mode") or "auto"),
+                    request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/chat/queue/drain":
+                return self._json(self.state.chat_agent.drain(
+                    self._project(body),
+                    self.state.chat_service,
+                    session_id=str(body.get("session_id", "")),
+                ))
+            if parsed.path == "/api/chat/queue/update":
+                project = self._project(body)
+                value = self.state.chat_service.update_queue_item(
+                    project,
+                    str(body.get("session_id", "")),
+                    str(body.get("queue_id", "")),
+                    str(body.get("message", "")),
+                )
+                return self._json({
+                    **value,
+                    "busy": self.state.chat_agent.status(
+                        project,
+                        self.state.chat_service,
+                        session_id=str(body.get("session_id", "")),
+                    )["busy"],
+                })
+            if parsed.path == "/api/chat/queue/delete":
+                project = self._project(body)
+                value = self.state.chat_service.delete_queue_item(
+                    project,
+                    str(body.get("session_id", "")),
+                    str(body.get("queue_id", "")),
+                )
+                return self._json({
+                    **value,
+                    "busy": self.state.chat_agent.status(
+                        project,
+                        self.state.chat_service,
+                        session_id=str(body.get("session_id", "")),
+                    )["busy"],
+                })
             if parsed.path == "/api/chat/session/create":
                 return self._json(self.state.chat_service.create_session(
                     self._project(body),

@@ -345,3 +345,146 @@ def test_agent_capability_service_fails_closed_on_discovery_error(tmp_path: Path
         assert "native registry unavailable" in str(exc)
     else:
         raise AssertionError("capability discovery silently fell back")
+
+
+
+def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    first = chat.sessions(project)["active_session_id"]
+    second = chat.create_session(project, request_id="second-session")["session_id"]
+
+    chat.enqueue_turn(
+        project, first, "one",
+        request_id="turn-1", backend="qwen", model="m1", mode="auto",
+    )
+    chat.enqueue_turn(
+        project, first, "two",
+        request_id="turn-2", backend="qwen", model="m1", mode="auto",
+    )
+    chat.enqueue_turn(
+        project, second, "other",
+        request_id="turn-3", backend="opencode", model="m2", mode="read",
+    )
+
+    restarted = ChatService()
+    assert [row["content"] for row in restarted.queue(project, first)["items"]] == ["one", "two"]
+    assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
+
+    first_item = restarted.queue(project, first)["items"][0]
+    restarted.update_queue_item(project, first, first_item["queue_id"], "one edited")
+    assert restarted.queue(project, first)["items"][0]["content"] == "one edited"
+    restarted.delete_queue_item(project, first, first_item["queue_id"])
+    assert [row["content"] for row in restarted.queue(project, first)["items"]] == ["two"]
+    assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
+
+
+def test_chat_agent_busy_turns_queue_and_drain_fifo(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    started = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+
+    def fake_runner(**kwargs):
+        prompt = kwargs["prompt"]
+        calls.append(prompt)
+        if prompt == "one":
+            started.set()
+            assert release.wait(timeout=3)
+        return {
+            "text": "reply-" + prompt,
+            "session_id": kwargs.get("session_id") or "agent-session",
+        }
+
+    chat = ChatService()
+    service = ChatAgentService(repo, runner=fake_runner)
+    session_id = chat.sessions(project)["active_session_id"]
+    owner_result: list[dict] = []
+
+    thread = threading.Thread(
+        target=lambda: owner_result.append(service.turn(
+            project, chat, session_id=session_id, message="one",
+            backend="qwen", model="m", mode="auto", request_id="r1",
+        )),
+        daemon=True,
+    )
+    thread.start()
+    assert started.wait(timeout=2)
+
+    second = service.turn(
+        project, chat, session_id=session_id, message="two",
+        backend="qwen", model="m", mode="auto", request_id="r2",
+    )
+    third = service.turn(
+        project, chat, session_id=session_id, message="three",
+        backend="qwen", model="m", mode="auto", request_id="r3",
+    )
+    assert second["status"] == "queued"
+    assert third["status"] == "queued"
+    assert [row["content"] for row in service.status(
+        project, chat, session_id=session_id
+    )["items"]] == ["two", "three"]
+
+    release.set()
+    thread.join(timeout=4)
+    assert not thread.is_alive()
+    assert calls == ["one", "two", "three"]
+    assert owner_result[0]["status"] == "idle"
+    assert service.status(project, chat, session_id=session_id)["items"] == []
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
+        "one", "reply-one", "two", "reply-two", "three", "reply-three",
+    ]
+
+
+def test_chat_queue_recovers_processing_item_after_restart(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.enqueue_turn(
+        project, session_id, "persisted",
+        request_id="persisted-1", backend="qwen", mode="auto",
+    )
+    claimed = chat.claim_next(project, session_id)
+    assert claimed is not None
+    assert chat.queue(project, session_id)["processing"]["content"] == "persisted"
+
+    calls: list[str] = []
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: (
+            calls.append(kwargs["prompt"])
+            or {"text": "ok", "session_id": "native"}
+        ),
+    )
+    result = service.drain(project, ChatService(), session_id=session_id)
+    assert result["status"] == "idle"
+    assert calls == ["persisted"]
+    assert ChatService().queue(project, session_id)["items"] == []
+
+
+def test_chat_queue_backend_failure_records_error_and_preserves_later_items(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.enqueue_turn(project, session_id, "bad", request_id="bad-1", backend="qwen")
+    chat.enqueue_turn(project, session_id, "later", request_id="later-1", backend="qwen")
+
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("backend down")),
+    )
+    result = service.drain(project, chat, session_id=session_id)
+    assert result["status"] == "error"
+    assert "backend down" in result["error"]
+    assert [row["content"] for row in result["items"]] == ["later"]
+    messages = chat.messages(project, session_id)["messages"]
+    assert messages[-1]["role"] == "system"
+    assert "backend down" in messages[-1]["content"]

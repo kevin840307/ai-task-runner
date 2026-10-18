@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import threading
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ class ChatAgentService:
         backend: str,
         model: str = "",
         mode: str = "auto",
+        request_id: str = "",
     ) -> dict[str, Any]:
         text = str(message or "").strip()
         if not text:
@@ -45,38 +47,132 @@ class ChatAgentService:
         agent = str(backend or "").strip()
         if not agent:
             raise ValueError("Chat Agent is required")
-
+        request = str(request_id or "").strip() or f"direct-{uuid.uuid4().hex}"
+        queued = chat.enqueue_turn(
+            project,
+            session_id,
+            text,
+            request_id=request,
+            backend=agent,
+            model=str(model or "").strip(),
+            mode=mode,
+        )
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
         if not lock.acquire(blocking=False):
-            raise ValueError("This Chat already has an Agent turn in progress")
-        try:
-            previous_session = chat.agent_session(project, session_id, agent)
-            user = chat.append_message(project, session_id, "user", text)
-            result = self._runner(
-                project=project,
-                backend=agent,
-                model=str(model or "").strip(),
-                mode=mode,
-                session_id=previous_session,
-                prompt=text,
-            )
-            answer = str(result.get("text") or "").strip()
-            if not answer:
-                raise RuntimeError("Chat Agent returned an empty response")
-            next_session = str(result.get("session_id") or previous_session).strip()
-            if next_session:
-                chat.set_agent_session(project, session_id, agent, next_session)
-            assistant = chat.append_message(project, session_id, "assistant", answer)
             return {
-                "session_id": session_id,
-                "agent": agent,
-                "model": str(model or "").strip(),
-                "mode": mode,
-                "messages": [user, assistant],
+                **queued,
+                "status": "queued",
+                "busy": True,
             }
+        try:
+            return self._drain_locked(project, chat, session_id)
         finally:
             lock.release()
+
+    def drain(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+    ) -> dict[str, Any]:
+        key = (str(project.resolve()), str(session_id))
+        lock = self._lock_for(key)
+        if not lock.acquire(blocking=False):
+            return {**chat.queue(project, session_id), "status": "busy", "busy": True}
+        try:
+            return self._drain_locked(project, chat, session_id)
+        finally:
+            lock.release()
+
+    def status(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+    ) -> dict[str, Any]:
+        key = (str(project.resolve()), str(session_id))
+        lock = self._lock_for(key)
+        snapshot = chat.queue(project, session_id)
+        return {
+            **snapshot,
+            "status": "busy" if lock.locked() else "idle",
+            "busy": lock.locked(),
+        }
+
+    def _drain_locked(
+        self,
+        project: Path,
+        chat: ChatService,
+        session_id: str,
+    ) -> dict[str, Any]:
+        chat.recover_processing(project, session_id)
+        processed: list[str] = []
+        failure = ""
+        while True:
+            item = chat.claim_next(project, session_id)
+            if item is None:
+                break
+            try:
+                self._execute_item(project, chat, session_id, item)
+            except Exception as exc:
+                failure = str(exc) or exc.__class__.__name__
+                chat.append_message(
+                    project,
+                    session_id,
+                    "system",
+                    f"Agent error: {failure}",
+                )
+                chat.complete_queue_item(
+                    project,
+                    session_id,
+                    item["queue_id"],
+                    outcome="failed",
+                )
+                break
+            chat.complete_queue_item(project, session_id, item["queue_id"])
+            processed.append(item["queue_id"])
+        return {
+            **chat.queue(project, session_id),
+            "status": "error" if failure else "idle",
+            "busy": False,
+            "processed": processed,
+            "error": failure,
+        }
+
+    def _execute_item(
+        self,
+        project: Path,
+        chat: ChatService,
+        session_id: str,
+        item: dict[str, Any],
+    ) -> None:
+        agent = str(item.get("backend") or "").strip()
+        if not agent:
+            raise ValueError("Queued Chat turn is missing Agent")
+        mode = str(item.get("mode") or "auto")
+        if mode not in {"read", "auto", "yolo"}:
+            raise ValueError("Queued Chat turn has unsupported mode")
+        model = str(item.get("model") or "").strip()
+        previous_session = chat.agent_session(project, session_id, agent)
+        chat.append_message(project, session_id, "user", str(item["content"]))
+        result = self._runner(
+            project=project,
+            backend=agent,
+            model=model,
+            mode=mode,
+            session_id=previous_session,
+            prompt=str(item["content"]),
+        )
+        answer = str(result.get("text") or "").strip()
+        if not answer:
+            raise RuntimeError("Chat Agent returned an empty response")
+        next_session = str(result.get("session_id") or previous_session).strip()
+        if next_session:
+            chat.set_agent_session(project, session_id, agent, next_session)
+        chat.append_message(project, session_id, "assistant", answer)
 
     def _lock_for(self, key: tuple[str, str]) -> threading.Lock:
         with self._locks_guard:
