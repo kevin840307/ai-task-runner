@@ -64,59 +64,63 @@ Task-level choices remain:
 - Isolated Worktree
 
 Execution invariant:
-- Every Task run executes in its own isolated Git worktree.
-- Runner receives only project_root and remains unaware of Git integration.
-- The captured Project branch is the canonical truth.
-- Main is a delivery mode name; it does not imply the Git branch is literally named main.
+- Every Task run executes in its own isolated Git worktree/local Task branch.
+- Runner receives only project_root and remains unaware of Git merge orchestration.
+- Project branch is canonical truth.
+- Main means Runner result must be merged back into captured Project branch before Task is complete.
 
 Task start:
-- Capture the Project repository's currently checked-out branch as target_branch.
-- Create the Task branch/worktree directly from target_branch HEAD.
-- Uncommitted Project working-tree changes are not silently imported into the Task base; commit them first if they should become part of new Task bases.
-- Task branch/path uses Task + Run identity, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
+- Capture current Project branch + HEAD as target_branch / target_head_sha_at_start.
+- Create local/task/<task-id>-r<run> directly from captured HEAD.
+- Uncommitted Project working-tree changes are not silently imported into Task base; commit them first if needed.
 
 Global Settings -> Execution:
 - Auto workspace policy:
-  - Busy project -> Isolated Worktree: idle => Main, busy => Isolated Worktree.
+  - Busy project -> Worktree: idle => Main, busy => Isolated Worktree.
   - Always Main: Auto => Main.
   - Always Worktree: Auto => Isolated Worktree.
 - Merge failure limit:
-  - Read `Global Settings.merge_failure_limit` from the single Global Settings owner; default 3.
-  - Maintain one Task-local `merge_failure_count` containing the actual real merge/semantic/validation failure count.
-  - When `merge_failure_count > Global Settings.merge_failure_limit`, stop automatic Main delivery, preserve Task branch/worktree, and close as Isolated Worktree / worktree_ready fallback.
+  - Global Settings owns merge_failure_limit; default 3.
+  - Task owns actual merge_failure_count only.
+  - Every real merge fail increments count once, then reads current Global limit.
+  - count > limit => stop automatic Main merge and close as Isolated Worktree / worktree_ready fallback.
 - Allow concurrent Main tasks:
-  - Default Off: preserve current Main-busy disabled/block behavior.
-  - On: a Task that resolves/selects Main may run concurrently in a separate Task worktree.
-  - This switch does not rewrite Auto policy: Busy project → Worktree still resolves Auto to Worktree while busy; Always Main may run Main concurrently only when this switch is On.
-  - Delivery to the same target branch remains serialized through the Integration Queue.
+  - Default Off: preserve Main-busy block.
+  - On: a Task that resolves/selects Main may run concurrently in its own worktree.
+  - Busy→Worktree Auto still resolves Worktree while busy even when this switch is On.
+  - Direct merges into the same target branch are serialized.
+
 Auto policy × Concurrent Main:
 
-| Auto workspace policy | Main already running | Concurrent Off | Concurrent On |
+| Auto policy / selection | Main already running | Concurrent Off | Concurrent On |
 | --- | --- | --- | --- |
-| Busy project → Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
-| Always Main | Auto Task | Block Main start | Main |
-| Always Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
-| Explicit Main | Main selected directly | Block Main start | Main |
+| Busy project → Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Always Main / Auto | yes | Block Main start | Main |
+| Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Explicit Main | yes | Block Main start | Main |
 
+effective Main:
+- Runner Complete does not close the Task.
+- Commit remaining Task changes to its local Task branch.
+- Queue direct normal Git merge of Task/recovery source branch into captured Project branch.
+- Merge conflict => abort merge, merge_failure_count += 1, read Global merge_failure_limit.
+- Within limit => existing Runner redoes Task against latest Project branch in a recovery worktree, commits result, retries normal merge.
+- Above limit => preserve result and close as Isolated Worktree / worktree_ready fallback.
+- Merge success => Closed / merged.
+- Do not use normal-path candidate branches.
+- Do not use merge --squash.
 
-Rules:
-- Explicit Task-level Main / Isolated Worktree overrides Global Auto policy.
-- All entry points call the same workspace resolver; do not duplicate busy/concurrency logic.
-- Persist requested mode and resolved effective mode per Task run.
-- effective Main:
-  - Runner Completed => commit remaining Task changes locally, but the Main Task is still Ongoing.
-  - Integration Queue creates a temporary candidate from latest target branch HEAD.
-  - Normal Git merge Task branch into candidate so Git can detect conflicts using shared ancestry.
-  - Conflict/code repair reuses existing Runner; Integration Manager does not become another code-repair engine.
-  - Validate candidate, then `git merge --squash candidate` into captured target branch and create exactly one Project-branch commit.
-  - Main becomes Closed only after that Project-branch commit succeeds, or when `merge_failure_count > Global Settings.merge_failure_limit` and delivery falls back to Isolated Worktree close.
-- effective Isolated Worktree:
-  - Runner Completed => snapshot/commit result locally.
-  - Preserve branch/worktree and do not auto-modify target branch.
-- Target delivery worktree must be safe/clean; never auto-stash/reset/commit unrelated user changes.
-- Never auto-switch the user's Project checkout branch.
-- Remote push remains a separate explicit Publish action.
-- Detailed implementation source of truth: feature/git-worktree-todo.md.
+effective Isolated Worktree:
+- Runner Complete => commit/snapshot result locally.
+- Preserve branch/worktree and Close · worktree_ready.
+- No automatic Project-branch merge.
+
+Safety:
+- Do not auto-switch user's Project checkout branch.
+- Dirty target merge workspace => waiting_target_clean; do not auto-stash/reset/stage/commit user changes.
+- Target in unmanaged/user worktree => waiting_target_workspace.
+- Remote push remains separate explicit Publish action.
+- Detailed source of truth: feature/git-worktree-todo.md.
 
 4. Project-level Chat run settings
 ----------------------------------
