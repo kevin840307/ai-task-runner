@@ -1077,6 +1077,11 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
   min-width:86px;
   justify-content:center
 }
+#newTaskModal .task-source-mode-panel[data-source-mode="file"],
+#newTaskModal .task-source-mode-panel[data-source-mode="asset"],
+#newTaskModal .task-source-mode-panel[data-source-mode="default"]{
+  justify-content:center
+}
 #newTaskModal .task-source-mode-panel[data-source-mode="default"] .compact-default-value{
   min-height:34px
 }
