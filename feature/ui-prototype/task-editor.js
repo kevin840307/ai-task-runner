@@ -872,15 +872,16 @@ function openChatTaskDraftEditor(session){
   if(items.length===1){(window.TaskUi?.openEditor||loadTaskEditor)('edit-item',{ownerId:model.id,index:0,returnTarget:'chat'});return}
   (window.TaskUi?.openList||openPlanDialog)(model.id,{returnTarget:'chat'});
 }
-function createTaskFromChatDraft(session){
-  const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId)return;
+function createTaskFromChatDraft(session,button=null){
+  const draft=session?.taskDraft,model=draft?.model;if(!model||draft.createdTaskId||button?.dataset.submitting==='true')return;
   const items=canonicalTaskItems(model);
   if(!items.length){showToast('Task Draft 至少需要一個 Task');return}
   if(items.some(x=>x.goalMode==='inline'&&!String(x.prompt||'').trim())){showToast('Task Draft contains an empty Task Prompt');return}
+  if(button){button.dataset.submitting='true';button.disabled=true}
   const oldId=model.id,id='T-'+(++taskSequence);
   for(let i=0;i<items.length;i++){
     const item=items[i],projectKey=projectKeyFromPath(item.project,model.projectContext||currentProjectKey),resolved=resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,item.workspacePolicy||'auto');
-    if(!resolved.ok){taskSequence--;showToast(resolved.reason);return}
+    if(!resolved.ok){taskSequence--;if(button){delete button.dataset.submitting;button.disabled=false}showToast(resolved.reason);return}
     item.workspaceKind=resolved.kind;item.branch=resolved.branch;item.executionRoot=resolved.root;item.itemId=`${id}-I${i+1}`;
   }
   delete taskMap[oldId];model.id=id;delete model._chatDraft;model.status='new';model.runtime='idle';model.stage='Idle';model.progress=[0,items.length];
@@ -903,7 +904,7 @@ function renderChatTaskDraft(session,box){
   }
   box.appendChild(card);
   card.querySelector('[data-chat-draft-edit]')?.addEventListener('click',()=>openChatTaskDraftEditor(session));
-  card.querySelector('[data-chat-draft-create]')?.addEventListener('click',()=>createTaskFromChatDraft(session));
+  card.querySelector('[data-chat-draft-create]')?.addEventListener('click',e=>createTaskFromChatDraft(session,e.currentTarget));
   card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
 }
@@ -1159,6 +1160,8 @@ function editorItemRef(){
 }
 function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
 function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProjectKey=null}={}){
+  const editorSubmit=document.getElementById('createTaskConfirm');
+  if(editorSubmit){delete editorSubmit.dataset.submitting;editorSubmit.disabled=false}
   if(mode==='root-create'){
     setTaskFormCreateMode();
     document.getElementById('createTaskConfirm').disabled=false;
@@ -1224,12 +1227,19 @@ function buildEditorItem(owner,index){
   },owner,index||0);
 }
 
+function lockTaskEditorSubmit(){
+  const button=document.getElementById('createTaskConfirm');
+  if(button?.dataset.submitting==='true')return false;
+  if(button){button.dataset.submitting='true';button.disabled=true}
+  return true;
+}
 document.getElementById('createTaskConfirm').onclick=()=>{
   const ctx=taskEditorContext;
+  if(document.getElementById('createTaskConfirm')?.dataset.submitting==='true')return;
   if(ctx.mode==='draft-create-item'||ctx.mode==='draft-edit-item'){
     if(!newTaskListDraft)return;
     const creating=ctx.mode==='draft-create-item',index=creating?newTaskListDraft.items.length:ctx.index;
-    const item=buildEditorItem(newTaskListDraft,index);if(!item)return;
+    const item=buildEditorItem(newTaskListDraft,index);if(!item||!lockTaskEditorSubmit())return;
     if(creating)newTaskListDraft.items.push(item);
     else newTaskListDraft.items[index]={...newTaskListDraft.items[index],...item,itemId:newTaskListDraft.items[index].itemId};
     newTaskListDraft.listItems=newTaskListDraft.items;
@@ -1238,6 +1248,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   if(ctx.mode==='root-create'){
     const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
     const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
+    if(!lockTaskEditorSubmit()){taskSequence--;return}
     const boardTitle=document.getElementById('newTaskTitle').value.trim()||planTitle(item,0).slice(0,72)||'New Task';
     const projectKey=projectKeyFromPath(item.project,currentProjectKey);
     const t={id,kind:'task_list',status:'new',title:boardTitle,runtime:'idle',desc:'1 task',tags:['1 task'],workflow:item.workflow,project:projectKey,progress:[0,1],elapsed:'—',stage:'Idle',session:'—',goal:item.prompt,
@@ -1248,7 +1259,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   const owner=taskMap[ctx.ownerId];if(!owner||!taskEditable(owner))return;
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
   const targetIndex=ctx.mode==='create-item'?batchDraft.length:ctx.index;
-  const item=buildEditorItem(owner,targetIndex);if(!item)return;
+  const item=buildEditorItem(owner,targetIndex);if(!item||!lockTaskEditorSubmit())return;
   const markDirty=ctx.mode==='edit-item'&&owner.status==='paused'&&targetIndex===batchState.index;
   if(ctx.mode==='create-item'){batchDraft.push(item);sequenceExpandedIndex=-1;pushTaskHistory(owner,'Task added');}
   else{batchDraft[targetIndex]={...batchDraft[targetIndex],...item,itemId:batchDraft[targetIndex].itemId};pushTaskHistory(owner,`Task ${targetIndex+1} edited`)}
