@@ -32,17 +32,6 @@
 
   const taskListWorkspace=()=>`
 <section id="planModal" class="task-drawer-route" data-task-surface="list-workspace">
-  <div class="task-list-create-draft" id="taskListCreateDraft" hidden>
-    <div class="task-list-create-card">
-      <div class="field"><label>Task List title</label><input id="taskListDraftTitle" value="New Task List" autocomplete="off"></div>
-      <div class="field"><label>Project</label><select id="taskListDraftProject"></select></div>
-      <div class="state-hint">This is only a draft. It will not appear on the Board until you create it.</div>
-    </div>
-    <div class="task-list-create-foot">
-      <button class="btn" type="button" id="cancelTaskListDraft">Cancel</button>
-      <button class="btn primary" type="button" id="confirmTaskListDraft">Create Task List</button>
-    </div>
-  </div>
   <div class="plan-page-body">
     <main class="plan-main">
       <div class="plan-intro"><div><strong>Task order</strong><span>Tasks run from top to bottom inside this Task List.</span></div><span class="pill" id="planStatePill">Editable</span></div>
