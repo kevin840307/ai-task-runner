@@ -84,6 +84,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Always Main
     - Always Worktree
 [x] Task-level Main / Worktree 明確 override Global Auto policy；只有 Task-level Auto 讀取 Global policy。
+[x] Execution 新增 Global `Merge failure limit`，Prototype 預設 3 並持久化；正式 Git integration 在 real merge failure count > limit 時停止自動 merge，fallback 成 Isolated Worktree close / worktree_ready。
+[x] Execution 新增 Global `Allow concurrent Main tasks` 開關，Prototype 預設 Off；Off 維持 Main busy disabled/block，On 解除限制並讓 Main Task selector / resolver 一致允許並行。
+[ ] 正式 Backend/config schema 必須持久化 merge_failure_limit + allow_concurrent_main_tasks，UI / CLI / API 共用同一設定 owner。
 [x] Settings → Interface 集中 Appearance / Theme palette；Language 獨立為一個 Settings section；移除左上獨立 themeBtn。
 [x] Appearance 支援 System / Light / Dark；Theme palette 對齊現有 UI：Teal / Deep Blue / Violet / Amber / Rose。Prototype 立即套用並保存。
 [x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
@@ -396,57 +399,51 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 ------------------------
 
 [ ] Workspace policy 保留 Auto / Main / Isolated Worktree。
-[x] Prototype 的 Auto 已改成讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
-[ ] 正式版需更新同一個 Workspace resolver 到 all-worktree execution；不新增第二套 resolver。
-[ ] 三種模式執行時一律建立獨立 Task Run worktree；Main 不直接讓 Runner 寫 Project checkout。
-[ ] Branch / path 包含 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2；Reset/Rerun 不可撞舊 retained worktree。
-[ ] Task Run 啟動時捕捉 Project 當下 checkout branch 為 target_branch 並固定保存；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
-[ ] local/integration 必須是有 commit history 的 canonical local branch，固定 checkout 在系統管理的 .worktrees/integration。
-[ ] local/integration 與 Project branch 的同步只看 commit ancestry，不看檔案內容是否相同。
-[ ] local/integration 缺少 Project branch commit 才更新：可 fast-forward 就 fast-forward；雙方 diverged 時要 merge/reconcile Project 新 commit，同時保留已接受的 Task commit。
-[ ] 如果 local/integration 已包含 Project HEAD，只是因 Task merge 造成檔案不一致，不可 reset/recreate 掉 Task history。
-[ ] Uncommitted Project working-tree 修改不屬於 ancestry sync；要成為新 Main Task base，需先 commit 到 Project branch。
-[ ] Delete/recreate/reset local/integration 只允許在沒有 accepted undelivered Task commits 時；典型安全點是 squash delivery 成功後 re-baseline 到新的 Project commit。
+[x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
+[x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
+[ ] 正式版更新同一個 Workspace resolver 到 all-worktree execution；不新增第二套 resolver。
+[ ] 三種模式實際執行一律建立獨立 Task Run worktree；Main 不直接讓 Runner 寫 Project checkout。
+[ ] Project branch 是 canonical truth；不建立/維護 permanent local/integration branch。
+[ ] Task Run 啟動時捕捉 Project 當下 checkout branch 為 target_branch + HEAD SHA；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
+[ ] Task branch/worktree 直接從 captured target HEAD 建立；Branch / path 包含 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
+[ ] Uncommitted Project working-tree 修改不自動進 Task base；要成為新 Task base 先 commit。
 [ ] Global Auto policy：
-    - Busy project → Isolated Worktree：保留現有產品 policy，但不再是 path-safety 必需。
-    - Always Main：Auto 一律 effective Main；每個 Task 都有自己的 worktree，不可因另一個 Main Task running 就 block Run。
-    - Always Worktree：Auto 一律 effective Isolated Worktree。
+    - Busy project → Isolated Worktree：idle => Main，busy => Isolated Worktree。
+    - Always Main：Auto => Main；是否允許 busy 時再跑 Main 由 `Allow concurrent Main tasks` 決定。
+    - Always Worktree：Auto => Isolated Worktree。
+[ ] `Allow concurrent Main tasks=false`：保留目前 Main busy guard。
+[ ] `Allow concurrent Main tasks=true`：允許多個 Main Task 各自在 isolated worktree 平行跑；同 target branch delivery 仍必須排隊。
 [ ] Explicit Main / Isolated Worktree override Global Auto policy；Auto 保存 requested mode + resolved effective mode。
-[ ] 每個 child Task / RunRequest 若能有自己的 Workspace policy，就必須有自己的 Task-run worktree/result；Board parent 只做 aggregate。
-[ ] Workspace resolver 是唯一決定 Project/target branch、Task worktree、branch identity 的來源；UI 不自行拼正式路徑。
-[ ] Backend 對 path 做正規化與 ownership 保護，避免 path traversal、跨 Project 寫入與錯刪資料夾。
-[ ] Stop / Resume / Restart / process recovery 必須保留同一 Task Run workspace identity。
-[ ] Task 刪除、Task reset、Run 完成與 Worktree cleanup policy 分開；不能默默刪掉尚未整合或 retained 的修改。
-[ ] 平行 Agent 一律靠不同 worktree 隔離；不直接同時寫同一 working tree。
+[ ] 每個 child Task / RunRequest 若有自己的 Workspace policy，就有自己的 Task-run worktree/result；Board parent 只 aggregate。
+[ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
+[ ] Backend 對 path 做正規化與 ownership 保護。
+[ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
+[ ] Task 刪除、Task reset、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
 
 
 11. Workspace Results / Integration / Merge
 -------------------------------------------
 
-[ ] 詳細 Git integration source of truth 使用 feature/git-worktree-todo.md；本段不得再維護衝突的第二套流程。
-[ ] effective Main：Runner Completed 後先 git add -A + local snapshot commit，讓 Task branch 變成可 merge 的穩定 Git 結果。
-[ ] effective Isolated Worktree：Runner Completed 後同樣可 snapshot/commit 結果，但不自動 merge；Closed · worktree_ready。
-[ ] 一個 repository 固定只有一條 canonical local/integration，因此 Integration Queue / lock 必須 per repository。
-[ ] Task → local/integration 必須使用 normal Git merge（candidate 上可用 --no-ff --no-commit），不可用 squash；這樣多 Task 才共享 merge base 並能抓到真實 conflict。
-[ ] local/integration → Project target_branch 才使用 git merge --squash，保持 Project history 一個 Task 一個乾淨 commit。
-[ ] 原始 completed Task worktree 不可 rebase/改寫；Integration 從最新 local/integration 建 temporary candidate，再 normal merge Task branch。
-[ ] 兩個 Task 若從同一 integration commit C 開始：T1/T2 各自 commit；先 merge T1 後，merge T2 必須讓 Git 以 C 為 merge base，因此同區域不相容修改可正常 conflict。
-[ ] 每次 merge Task 前先確認 target_branch 是否有 local/integration 缺少的新 commit；有就先 ancestry sync/reconcile，不能直接 reset 掉 integration 已接受的 Task commit。
-[ ] conflict / semantic incompatibility / candidate validation failure 若需要改 Code，一律重新呼叫既有 Runner，帶 original Task、Task/base SHA、latest integration SHA、conflict files、Git error；不可在 Integration Manager 另造 code-repair engine。
-[ ] merge failure 只有「Runner/Recovery 已完成 → 真正 merge Task 到 integration → 因 Code/semantic/validation 無法接受」才 +1；queue wait、lock busy、target dirty、單純發現 Project 新 commit、暫時 Git error 都不計。
-[ ] merge_failure_count 保留 lifetime history；merge_retry_attempt 是目前自動 retry budget；超過 configured N 停止 Main 自動 recovery。
-[ ] Main 超過 N 次後：mode 仍是 Main，自動保留 Task branch/worktree，Closed · Awaiting merge / merge_retry_exhausted，可 Retry merge；不可偷偷改成 Isolated Worktree。
-[ ] candidate merge + validate 成功後才 advance canonical local/integration。
-[ ] 最終 Main delivery：captured target_branch clean 時 git merge --squash local/integration → 一個 local commit，commit trailer 記 AI-Task-Run identity，並立刻記 target_commit_sha。
-[ ] squash delivery 成功後，因 squash 不保留 ancestry，必須 reset/recreate local/integration 到新的 target_branch HEAD，讓下一輪 ancestry 判斷乾淨。
-[ ] target checkout dirty 時自動 delivery 必須 Closed · waiting_target_clean；不可 auto-stash / reset / discard / commit 使用者修改。
-[ ] 不得自動 git switch 使用者 Project checkout：target_branch 沒有安全 delivery workspace 時用 managed delivery worktree；若 target 被 unmanaged/user worktree checkout，Closed · waiting_target_workspace。
-[ ] Workspace Results 依 Project / Task Run 聚合顯示 Branch、Path、target branch、requested/effective mode、integration state、merge failure count、conflict summary。
-[ ] Board 不新增 Waiting Merge / Merged / Cleanup 欄位；維持 New / Ongoing / Paused / Closed，Git delivery 用 secondary state。
-[ ] Closed 可呈現 pending_merge / integrating / conflict_recovery / project_commit_sync / waiting_target_clean / waiting_target_workspace / Awaiting merge / integrated / worktree_ready。
-[ ] Isolated Worktree 或 Main Awaiting merge 可提供 Merge / Merge Chat / Retry merge 等後續操作，但 UI 不另造獨立 Git Worktree 主頁。
-[ ] Merge Chat 建立新的 Project Chat session，不污染目前 Chat；預填來源 Task Run/worktree/branch、captured target branch、latest integration SHA、conflict/error context，且不自動送出。
-[ ] Merge / Retry merge / Delete 等 backend action 再次做 branch/path/clean/lock/ownership preflight，不能只靠 UI disabled。
+[ ] 詳細 Git integration source of truth 使用 feature/git-worktree-todo.md；本段不得維護第二套衝突流程。
+[ ] effective Main：Runner Completed 後 git add -A + local snapshot commit，讓 Task branch 變成穩定 Git result。
+[ ] effective Isolated Worktree：Runner Completed 後 snapshot/commit 結果，Closed · worktree_ready，不自動 merge。
+[ ] Integration Queue 以 repository + captured target branch 序列化 delivery；Runner execution 可平行。
+[ ] 每次 Main integration 從 latest target HEAD 建 temporary candidate，再 normal Git merge Task branch 進 candidate；不可直接先改 target checkout。
+[ ] 原始 completed Task branch/worktree 不可 rebase/改寫；candidate 是 disposable merge/recovery sandbox。
+[ ] candidate merge conflict / semantic incompatibility / validation failure 若要改 Code，一律呼叫既有 Runner，帶 original Task、base/snapshot SHA、latest target SHA、conflict files、Git error。
+[ ] candidate validate 成功後先 commit temporary candidate merge result，再 `git merge --squash candidate` 到 captured target branch，Project history 一個 Task 一個 commit。
+[ ] target HEAD 在 candidate 驗證期間有變動 → discard/rebuild candidate from latest HEAD；這本身不算 merge failure。
+[ ] merge failure 只有 real merge / semantic / validation incompatibility 才 +1；queue wait、lock busy、target dirty、target HEAD moved、暫時 Git error 都不計。
+[ ] Global `Merge failure limit` 預設 3；failure count > limit 時停止自動 Main recovery，保留 Task branch/worktree，delivery fallback 成 Isolated Worktree，Closed · worktree_ready，並記 fallback reason=merge_retry_exhausted。
+[ ] fallback 後仍保留 requested/effective origin 供 history/diagnostics；不再自動 Retry merge，但可提供手動 Merge / Merge Chat。
+[ ] target checkout dirty 時 automatic squash delivery => Closed · waiting_target_clean；不可 auto-stash / reset / discard / stage / commit 使用者修改。
+[ ] 不得自動 git switch 使用者 Project checkout；captured target branch 無安全 delivery workspace 時用 managed temporary worktree，若被 unmanaged/user worktree 占用則 waiting_target_workspace。
+[ ] Workspace Results 依 Project / Task Run 聚合 Branch、Path、target branch、requested/effective mode、delivery fallback、integration state、merge failure count、conflict summary。
+[ ] Board 維持 New / Ongoing / Paused / Closed；Git delivery 用 secondary state，不新增 Integration column。
+[ ] Closed 可呈現 pending_merge / integrating / conflict_recovery / target_resync / waiting_target_clean / waiting_target_workspace / integrated / worktree_ready。
+[ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 做 retained/orphaned worktree 管理。
+[ ] Merge Chat 建新的 Project Chat session，不污染目前 Chat；預填 Task Run/worktree/branch、captured target branch、latest target SHA、conflict/error context，且不自動送出。
+[ ] Merge / Delete / cleanup 等 Backend action 再次做 branch/path/clean/lock/ownership preflight，不能只靠 UI disabled。
 [ ] Remote push 是獨立 Publish action；正常 Task integration 不自動 git push origin。
 
 
@@ -529,7 +526,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
 [ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
-[ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Appearance / Theme palette / Language persistence、Auto workspace policy 三種模式。
+[ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 normalization、Allow concurrent Main tasks Off/On 對 Main disabled/resolver 的一致性、Appearance / Theme palette / Language persistence。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
 [x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
