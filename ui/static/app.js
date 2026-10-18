@@ -529,7 +529,7 @@ async function selectProject(project) {
   }
   if ((state.view === "workflow" || state.view === "prompt") && !(await switchView("project-chat"))) return;
   state.projectSwitching = true;
-  setViewLoading("chatView", true, "Opening project…");
+  setViewLoading("projectChatView", true, "Opening project…");
   if (changingProject) {
     state.studioFiles = { workflows: [], prompts: [] };
     state.studioCatalogKey = "";
@@ -549,7 +549,7 @@ async function selectProject(project) {
     await projectChat.openProject(project, currentProjectPreferences());
     refreshStudioFiles({ force: true, projectPath: project.path });
   } catch (error) { showActionError(error.message, "Project loading failed"); }
-  finally { setViewLoading("chatView", false); state.projectSwitching = false; renderProjects(); }
+  finally { setViewLoading("projectChatView", false); state.projectSwitching = false; renderProjects(); }
 }
 
 async function refreshMessages({ forceFollow = false, projectPath = state.project?.path || "" } = {}) {

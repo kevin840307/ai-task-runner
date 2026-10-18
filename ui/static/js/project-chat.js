@@ -213,6 +213,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (name) name.textContent = project?.name || "Select a project";
     if (path) path.textContent = project?.path || "Open a local project folder to begin.";
     renderPreferences();
+    const newChat = byId("newProjectChatButton");
+    if (newChat) newChat.disabled = !project;
     if (!project) {
       sessions = [];
       activeSessionId = "";

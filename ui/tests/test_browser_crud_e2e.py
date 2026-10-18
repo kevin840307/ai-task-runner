@@ -369,6 +369,8 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
                 [first_path],
             )
 
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.wait_for_function("window.__staleRuntimeStarted === true", timeout=5000)
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
             page.wait_for_function(
@@ -532,7 +534,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("#projectList .project-root").first.click()
             page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
             assert not page.locator("#chatNav").evaluate("(node) => node.classList.contains('active')")
-            assert page.locator("#chatView").is_visible()
+            assert page.locator("#projectChatView").is_visible()
+            assert page.locator("#chatView").is_hidden()
             assert page.locator("#workflowView").is_hidden()
 
             page.click("#promptNav")
