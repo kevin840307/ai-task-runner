@@ -130,6 +130,8 @@ function applyUiTranslations(root=document){
   root.querySelectorAll('[data-i18n-title]').forEach(el=>el.setAttribute('title',uiText(el.dataset.i18nTitle)));
   root.querySelectorAll('[data-i18n-aria-label]').forEach(el=>el.setAttribute('aria-label',uiText(el.dataset.i18nAriaLabel)));
 }
+window.uiText=uiText;
+window.applyUiTranslations=applyUiTranslations;
 function loadAutoWorkspacePolicy(){
   try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
   return 'busy_worktree';
