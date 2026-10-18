@@ -322,7 +322,7 @@ bindBatchForm=function(){
 };
 
 // Re-render using the sequence composer after binding override.
-// --- In-place Steps editor behavior ---
+// --- Legacy ordered-task adapter used by Overview / Task List workspace ---
 function isSequenceTask(t){return !!t&&(t.kind==='list'||t.workspaceKind==='batch'||(t.listItems&&t.listItems.length>1))}
 function singleTaskItem(t){
   const p=t.promptSource||{};
@@ -375,7 +375,7 @@ openTaskById=function(id){
 
 document.getElementById('drawerAddStep').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
-  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Tasks 鎖定；請先 Pause');return}
   if(batchParentTaskId!==t.id)prepareStepsForTask(t);
   const root=batchDraft[0]?.project||projectMeta[t.project]?.path||'C:\\project';
   batchDraft.push({prompt:'New step',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:root,workflow:'ralphy_ai_validate.yaml',validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});
@@ -383,7 +383,7 @@ document.getElementById('drawerAddStep').onclick=()=>{
 };
 document.getElementById('drawerAddExisting').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
-  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Steps 鎖定；請先 Pause');return}
+  if(['running','recover'].includes(t.runtime)){showToast('Running 時 Tasks 鎖定；請先 Pause');return}
   if(batchParentTaskId!==t.id)prepareStepsForTask(t);openExistingTaskPicker('sequence');
 };
 // YAML advanced editor is opened by the final yamlPlanModal handler.
@@ -406,7 +406,7 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
   renderBoardFromMap();openTaskById(t.id);
 };
 
-// Normal Task creation is now always one Task; composition happens later in Details > Steps.
+// Normal Task creation is one Task; multi-task composition is edited in the Task List workspace.
 newTaskKind='task';renderTaskKindUi();
 
 // --- Final execution-plan UX: no mode switching; YAML is modal only ---
