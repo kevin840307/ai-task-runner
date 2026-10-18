@@ -32,7 +32,7 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
   - Defaults
 - Interface owns global Appearance and Theme palette preferences.
 - Language is a separate Global Settings section so localization is not coupled to visual appearance.
-- Defaults owns the initial Agent / Model / Mode / Workflow copied into newly created Projects.
+- Defaults owns the initial Agent / Model / Mode / Reasoning / Workflow copied into newly created Projects.
 - Global Defaults are templates, not live inheritance: changing them never mutates existing Projects.
 - New Chat sessions read their Project settings; Chat does not own another default layer.
 - Prototype may store Global Defaults in localStorage; production should move them to the versioned Global Settings owner.
@@ -79,29 +79,31 @@ Rules:
 
 4. Project-level Chat run settings
 ----------------------------------
-Agent / Model / Mode / Workflow belong to the Project, not to an individual Chat session.
+Agent / Model / Mode / Reasoning / Workflow belong to the Project, not to an individual Chat session.
 
 Each Project independently stores:
 - Agent
 - Model
 - Mode
+- Reasoning
 - Workflow
 
 Behavior:
-- A new Project copies the current Global Defaults once, then owns its own four settings.
+- A new Project copies the current Global Defaults once, then owns its own five settings.
 - Existing Projects never follow later Global Defaults changes.
-- All Chat sessions under the same Project share those four settings.
+- All Chat sessions under the same Project share those five settings.
 - Chat sessions are deletable within their Project. Deleting a Chat never deletes Tasks or Project settings; if the last Chat is deleted, create a fresh empty Chat so the Project always has an active conversation surface.
 - Switching Chat sessions does not reset them.
 - Switching Projects loads that Project's own settings.
-- Agent changes revalidate Model and Mode against that Agent's capabilities.
+- Agent changes revalidate Model and Mode against that Agent's capabilities. Reasoning remains the Project value unless the backend reports that level unsupported.
 - Workflow is used by @goal and other Project Chat -> Runner handoffs.
 - Prototype may persist Project preferences in localStorage.
 - Formal implementation should persist through the backend/project configuration owner.
 
 Composer UX:
 - Mode remains visible as a quick control because it is changed frequently.
-- Workflow / Agent / Model are grouped under the compact Chat settings control.
+- Prototype Reasoning values are fixed to low / medium / high / xhigh / max with medium as the base default; production must resolve supported levels from the selected Agent / Model capability.
+- Workflow / Agent / Model / Reasoning are grouped under the compact Chat settings control.
 - Do not restore three large always-visible selectors.
 
 5. Explicit Chat commands
@@ -286,7 +288,7 @@ When moving beyond the prototype:
 - Task Details is one theme surface: Drawer header/tabs/body/footer, Overview cards, Runtime timeline/output, History, Worktree results, Steps, full Task List and nested Task Editor must never fall back to hard-coded light surfaces.
 - Base Task/Plan/Source controls should use theme tokens directly (not rely only on late dark-mode overrides), including prompt textarea, source headers, Add Task footer, workspace selector, sequence rows, menus and Task List tables.
 - Verify language preference persistence and document language projection.
-- Verify each Project independently remembers Agent / Model / Mode / Workflow.
+- Verify each Project independently remembers Agent / Model / Mode / Reasoning / Workflow.
 - Verify same-Project Chat sessions share those settings.
 - Verify @goal immediately creates an Ongoing Task visible in Tasks.
 - Verify Auto workspace policy is identical across all known Run entry points.
