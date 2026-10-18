@@ -973,6 +973,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       });
       if (projectPath() !== path || activeSessionId !== session || activeAsk?.ask_id !== ask.ask_id) return;
       applyAskState(data);
+      applyQueueState(data);
+      await Promise.all([refreshMessages(), refreshQueue()]);
       showToast?.("Answer submitted");
     } catch (error) {
       askError = String(error?.message || "Ask submit failed");
@@ -998,6 +1000,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       });
       if (projectPath() !== path || activeSessionId !== session || activeAsk?.ask_id !== ask.ask_id) return;
       applyAskState(data);
+      applyQueueState(data);
+      await Promise.all([refreshMessages(), refreshQueue()]);
       showToast?.("Question cancelled");
     } catch (error) {
       askError = String(error?.message || "Ask cancel failed");
