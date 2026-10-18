@@ -1,13 +1,69 @@
-// --- Canonical Task Editor overlay + reusable YAML subview. ---
+// --- One Task Drawer shell owns Info / List / Editor / YAML routes. ---
+const taskOverlayEl=document.getElementById('taskOverlay');
+const taskDrawerEl=taskOverlayEl.querySelector('.drawer');
+const taskDrawerBack=document.getElementById('planBackToTask');
+const taskDrawerInfoMeta=document.getElementById('drawerInfoMeta');
+const taskDrawerRouteMeta=document.getElementById('drawerRouteMeta');
+const taskDrawerRuntimeSlot=document.getElementById('drawerRuntimeSlot');
+const taskDrawerWorkspaceActions=document.getElementById('drawerWorkspaceActions');
+const taskDrawerRename=document.getElementById('planRenameList');
+const taskDrawerTabs=document.querySelector('#taskOverlay .drawertabs');
+const taskDrawerBody=document.querySelector('#taskOverlay .drawerbody');
+const taskDrawerFoot=document.querySelector('#taskOverlay .drawerfoot');
+const taskDrawerBanner=document.getElementById('drawerWorktreeBanner');
 const planModalEl=document.getElementById('planModal');
-const planListSurface=planModalEl.querySelector(':scope > .plan-modal-card');
+const planListSurface=planModalEl.querySelector('.plan-page-body')||planModalEl;
 const planSubviewMount=document.getElementById('planSubviewMount');
 const taskEditorHome=document.getElementById('newTaskModal');
 const taskEditorSurface=taskEditorHome;
 const yamlEditorHome=document.getElementById('yamlPlanModal');
 const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
 let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
-let taskEditorReturnContext=null;
+let taskEditorReturnContext=null,taskDrawerListReturnTarget='close';
+
+function taskDrawerMetaFor(t,prefix=''){
+  if(!t)return prefix||'';
+  const items=canonicalTaskItems(t);
+  return prefix||`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+}
+function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Back'}={}){
+  const workspace=route!=='info';
+  taskDrawerEl.dataset.route=route;
+  taskDrawerEl.classList.toggle('workspace-route',workspace);
+  taskDrawerTabs.hidden=workspace;
+  taskDrawerBody.hidden=workspace;
+  taskDrawerFoot.hidden=workspace;
+  if(taskDrawerBanner)taskDrawerBanner.hidden=workspace?true:taskDrawerBanner.hidden;
+  taskDrawerInfoMeta.hidden=workspace;
+  taskDrawerRouteMeta.hidden=!workspace;
+  taskDrawerRuntimeSlot.hidden=workspace;
+  taskDrawerWorkspaceActions.hidden=route!=='list';
+  taskDrawerRename.hidden=route!=='list';
+  taskDrawerBack.hidden=!showBack;
+  taskDrawerBack.title=backTitle;
+  taskDrawerBack.textContent='←';
+  if(title)document.getElementById('drawerTitle').textContent=title;
+  if(workspace)taskDrawerRouteMeta.textContent=meta||'';
+  taskOverlayEl.classList.add('open');
+}
+function restoreTaskInfoShell(t){
+  if(!t)return;
+  setTaskDrawerShell('info',{title:t.title});
+  taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
+  taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
+  if(taskDrawerBanner&&typeof renderDrawerWorkspaceBanner==='function')renderDrawerWorkspaceBanner(t);
+}
+function closeTaskDrawerShell(){
+  taskEditorReturnContext=null;
+  if(taskEditorHome.classList.contains('open'))taskEditorHome.classList.remove('open');
+  if(planSubviewType==='yaml'&&yamlEditorSurface.parentNode===planSubviewMount){
+    yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal');
+  }
+  planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;
+  planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open','open');
+  clearTaskSelection?.();
+  taskOverlayEl.classList.remove('open');
+}
 
 function restoreSurfaceCloseBehavior(surface,overlayId){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
@@ -24,12 +80,17 @@ function detectTaskEditorReturnTarget(){
 }
 function showTaskEditorView(){
   planSubviewMount.hidden=false;
-  planModalEl.classList.add('subview-open');
-  openModal('newTaskModal');
-  openModal('planModal');
+  planModalEl.classList.add('subview-open','open');
+  taskEditorHome.classList.add('open');
+  const ctx=taskEditorReturnContext,owner=ctx?.ownerId?taskMap[ctx.ownerId]:null;
+  const title=document.getElementById('taskFormTitle')?.textContent||'Task';
+  const meta=owner
+    ? `${owner.id} · ${ctx?.index==null?'Task':`Task ${ctx.index+1} of ${canonicalTaskItems(owner).length}`}`
+    : 'New Task';
+  setTaskDrawerShell('editor',{title,meta,showBack:ctx?.returnTarget!=='close',backTitle:taskEditorBackLabel(ctx?.returnTarget)});
 }
 function hideTaskEditorView(){
-  closeModal('newTaskModal');
+  taskEditorHome.classList.remove('open');
   planSubviewMount.hidden=true;
   planModalEl.classList.remove('subview-open');
 }
@@ -49,7 +110,8 @@ function leaveTaskEditorOverlay(){
     closeModal('planModal');return;
   }
   if(owner){
-    openModal('planModal');renderFullPlan(owner);
+    planModalEl.classList.add('open');renderFullPlan(owner);
+    setTaskDrawerShell('list',{title:owner.title,meta:taskDrawerMetaFor(owner),showBack:taskDrawerListReturnTarget!=='close',backTitle:taskDrawerListReturnTarget==='info'?'Back to Task Info':taskDrawerListReturnTarget==='chat'?'Back to Chat Draft':'Back'});
     const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
     scrollHost.scrollTop=ctx.scrollTop||0;
     if(ctx.index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${ctx.index}"]`)?.scrollIntoView({block:'nearest'}),0);
@@ -59,19 +121,20 @@ function setSurfaceBackBehavior(surface,type,returnTarget='list'){
   const close=surface.querySelector('.modal-head .close'),cancel=surface.querySelector('.modal-foot [data-close-modal]');
   const label=type==='task'?taskEditorBackLabel(returnTarget):'Back to Task List';
   const leave=type==='task'?leaveTaskEditorOverlay:leavePlanSubview;
-  if(close){
-    close.textContent=returnTarget==='close'&&type==='task'?'×':'←';
-    close.title=label;
-    close.onclick=e=>{e.preventDefault();leave()}
-  }
+  if(close){close.textContent='×';close.title='Close';close.onclick=e=>{e.preventDefault();closeTaskDrawerShell()}}
+  taskDrawerBack.hidden=returnTarget==='close'&&type==='task';
+  taskDrawerBack.title=label;taskDrawerBack.textContent='←';
+  taskDrawerBack.onclick=e=>{e.preventDefault();leave()};
   if(cancel){cancel.textContent=returnTarget==='close'&&type==='task'?'Cancel':label;cancel.onclick=e=>{e.preventDefault();leave()}}
 }
 function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null,returnTarget='list'){
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
   planReturnScroll=scrollHost.scrollTop||0;planSubviewType=type;planSubviewOwnerId=ownerId;planSubviewIndex=index;planSubviewReturnTarget=returnTarget;
   closeModal(sourceOverlay.id);
-  closeModal('newTaskModal');
-  planSubviewMount.appendChild(surface);planSubviewMount.hidden=false;planModalEl.classList.add('subview-open');openModal('planModal');
+  taskEditorHome.classList.remove('open');
+  planSubviewMount.appendChild(surface);planSubviewMount.hidden=false;planModalEl.classList.add('subview-open','open');
+  const owner=taskMap[ownerId];
+  setTaskDrawerShell(type==='yaml'?'yaml':type,{title:type==='yaml'?'Edit task list YAML':'Task',meta:owner?`${owner.id} · ${owner.title}`:'',showBack:true,backTitle:'Back to Task List'});
   setSurfaceBackBehavior(surface,type,returnTarget);
 }
 function leavePlanSubview(){
@@ -79,16 +142,10 @@ function leavePlanSubview(){
   const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex;
   if(type==='yaml'){yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal')}
   planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewReturnTarget='list';planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
-  const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
+  const owner=taskMap[ownerId];if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner);setTaskDrawerShell('list',{title:owner.title,meta:taskDrawerMetaFor(owner),showBack:taskDrawerListReturnTarget!=='close',backTitle:taskDrawerListReturnTarget==='info'?'Back to Task Info':taskDrawerListReturnTarget==='chat'?'Back to Chat Draft':'Back'})}
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;scrollHost.scrollTop=planReturnScroll;
   if(index!=null)setTimeout(()=>document.querySelector(`#planFormList [data-plan-row="${index}"]`)?.scrollIntoView({block:'nearest'}),0);
 }
-planModalEl.addEventListener('click',e=>{
-  if(e.target!==planModalEl)return;
-  if(taskEditorReturnContext){e.preventDefault();e.stopImmediatePropagation();leaveTaskEditorOverlay();return}
-  if(planSubviewType){e.preventDefault();e.stopImmediatePropagation();leavePlanSubview();return}
-  if(taskMap[currentTaskId]?._chatDraft){e.preventDefault();e.stopImmediatePropagation();closeModal('planModal');showView('chat');renderChatSession()}
-},true);
 
 const taskEditorLoadBeforeOverlay=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
@@ -108,6 +165,13 @@ loadTaskEditor=function(mode,args={}){
     :(mode==='root-create'?'Create one Task in this workspace.':mode==='edit-item'?'Edit this task only.':'Configure this task only.');
   document.getElementById('editTaskScopeNote').hidden=true;
   showTaskEditorView();
+  const editorOwner=ownerId?taskMap[ownerId]:null;
+  setTaskDrawerShell('editor',{
+    title:document.getElementById('taskFormTitle').textContent,
+    meta:editorOwner?`${editorOwner.id} · ${mode==='edit-item'?`Task ${(args.index??0)+1} of ${canonicalTaskItems(editorOwner).length}`:'New child task'}`:'New Task',
+    showBack:returnTarget!=='close',
+    backTitle:taskEditorBackLabel(returnTarget)
+  });
   setSurfaceBackBehavior(taskEditorSurface,'task',returnTarget);
 };
 
