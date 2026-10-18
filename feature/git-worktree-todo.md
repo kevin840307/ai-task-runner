@@ -479,7 +479,7 @@ Do not allow two processes to mutate `local/integration` or the same target bran
 
 ## 10. One Task integration transaction
 
-For a Project-Branch delivery Task, treat the following as one serialized transaction:
+For an effective `Main` Task, treat the following as one serialized transaction:
 
 ```text
 Task completed
@@ -562,7 +562,7 @@ This guarantees the next Task starts/integrates against the canonical committed 
 
 ## 12. Per-Task local squash commit
 
-For Project-Branch delivery, each completed Task should normally produce one local commit on the target branch.
+For effective `Main`, each completed Task should normally produce one local commit on the captured target branch.
 
 Example:
 
@@ -1494,7 +1494,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Force repeated Runner-complete → merge-fail cycles and verify each real failed delivery attempt increments exactly once.
 - [ ] Verify retry exhaustion stops automatic Runner recovery and projects `Closed · Awaiting merge`.
 - [ ] Retry manually and confirm retry-session budget resets while lifetime merge failure count is preserved.
-- [ ] Choose Keep as Worktree after exhaustion and confirm target branch is untouched and Task may close as worktree_ready.
+- [ ] Exhaust Main merge retries and confirm the Task automatically retains its worktree/branch, remains mode=Main, target branch is untouched, and UI shows `Closed · Awaiting merge`.
 - [ ] Finish Tasks out of creation order.
 - [ ] Confirm Integration Queue serializes them safely.
 - [ ] Confirm later Tasks replay against the latest integrated target state.
