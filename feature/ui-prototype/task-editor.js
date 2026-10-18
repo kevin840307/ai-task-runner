@@ -1138,7 +1138,7 @@ renderNewTaskWorkspace=function(){
   const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${mode==='worktree'?'worktree-option':''} ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
   const worktree=resolved.ok&&resolved.kind==='worktree';
   host.innerHTML=`<div class="workspace-options">
-    ${option('auto','Auto','Use Main when available; create a Worktree when Main is busy.',busy?`Main busy → Worktree`:'Main available')}
+    ${option('auto','Auto',autoWorkspacePolicyDescription(),autoWorkspaceStatus(busy,ref))}
     ${option('main','Main workspace','Use the project working tree directly.',busy?`Busy · ${busy.id}`:'Available',!!busy)}
     ${option('worktree','Isolated worktree','Create an isolated branch/path for this task.',`task/${ref}`)}
   </div><div class="workspace-preview ${worktree?'worktree-active':''}"><strong>${worktree?'WORKTREE · ISOLATED DEVELOPMENT':'Execution preview'}</strong><br>${resolved.ok?(worktree?`Branch · ${resolved.branch}<br>Path · ${resolved.root}<br>Changes stay isolated until merged.`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
