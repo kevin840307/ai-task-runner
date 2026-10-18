@@ -22,6 +22,9 @@ const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
 let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
 let taskEditorReturnContext=null,taskDrawerListReturnTarget='close',taskDrawerReturnFocus=null;
 taskDrawerEl.tabIndex=-1;
+function unmountTransientChatTask(owner){
+  if(owner?._chatDraft&&taskMap[owner.id]===owner)delete taskMap[owner.id];
+}
 
 function taskDrawerMetaFor(t,prefix=''){
   if(!t)return prefix||'';
@@ -74,6 +77,10 @@ function closeTaskDrawerShell({force=false,restoreFocus=true,skipEditorGuard=fal
     requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
   }
   if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false});
+  const transientOwner=taskEditorReturnContext?.returnTarget==='chat'
+    ?taskMap[taskEditorReturnContext.ownerId]
+    :(taskDrawerListReturnTarget==='chat'?taskMap[currentTaskId]:null);
+  unmountTransientChatTask(transientOwner);
   taskEditorReturnContext=null;taskEditorInitialSnapshot='';
   if(taskEditorHome.classList.contains('open'))taskEditorHome.classList.remove('open');
   if(planSubviewType==='yaml'&&yamlEditorSurface.parentNode===planSubviewMount){
@@ -133,7 +140,7 @@ function leaveTaskEditorOverlay({force=false}={}){
     return;
   }
   if(ctx.returnTarget==='chat'){
-    closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
+    unmountTransientChatTask(owner);closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
   }
   if(ctx.returnTarget==='info'){
     closeModal('planModal');if(owner)openTaskById(owner.id);return;
@@ -624,7 +631,7 @@ function handleTaskDrawerBack(){
   workspaceInfoRef=null;clearTaskSelection();
   const t=taskMap[currentTaskId];
   if(taskDrawerListReturnTarget==='chat'||t?._chatDraft){
-    closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
+    unmountTransientChatTask(t);closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
   }
   if(taskDrawerListReturnTarget==='info'&&t){
     planModalEl.classList.remove('open');openTaskById(t.id);return;
