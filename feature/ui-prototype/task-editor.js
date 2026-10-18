@@ -101,7 +101,7 @@ function bindFullPlan(t){
     el.disabled=!taskEditable(t)||(+el.dataset.planItem)<batchState.index;
     const ev=el.tagName==='SELECT'?'change':'input';el.addEventListener(ev,()=>{
       const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;
-      if(['goalFile','validator','aiFile'].includes(field)&&String(el.value||'').trim())clearStagedUpload(batchDraft[i],field);
+      if(['goalFile','validator','aiFile'].includes(field)&&!isStagedManagedValue(batchDraft[i],field,el.value))clearStagedUpload(batchDraft[i],field);
       batchDraft[i][field]=el.value;
       commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
     });
@@ -1336,9 +1336,10 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     showToast(uiText(creating?'taskListDraft.added':'taskListDraft.updated'));return;
   }
   if(ctx.mode==='root-create'){
-    const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
-    const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
-    if(!lockTaskEditorSubmit()){taskSequence--;return}
+    const id=`T-${taskSequence+1}`,placeholder={id,project:document.getElementById('newTaskProject').value};
+    const item=buildEditorItem(placeholder,0);if(!item)return;
+    if(!lockTaskEditorSubmit())return;
+    taskSequence++;
     materializeItemUploads(item,`${id}-I1`);reflectManagedPathsInTaskEditor(item);
     const boardTitle=document.getElementById('newTaskTitle').value.trim()||planTitle(item,0).slice(0,72)||'New Task';
     const projectKey=projectKeyFromPath(item.project,currentProjectKey);
