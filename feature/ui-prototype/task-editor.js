@@ -1628,7 +1628,6 @@ loadTaskEditor=function(mode,args={}){
 };
 
 // Remove List-oriented wording from the canonical Task Editor itself.
-document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are saved on this task only. Workflow capabilities determine which validation fields are shown.';
 
 // --- Unified + New / column + dropdown: Task or Task List ---
 const createTypeMenu=document.getElementById('createTypeMenu');
