@@ -1018,8 +1018,7 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
   display:grid;
   grid-template-columns:minmax(0,1fr);
   align-items:start;
-  gap:6px;
-  min-height:68px
+  gap:6px
 }
 #newTaskModal .task-primary-source>.source-head>div:first-child,
 #newTaskModal .task-ai-source>.source-head>div:first-child{min-width:0}
@@ -1055,37 +1054,50 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
   flex-direction:column;
   gap:6px
 }
-#newTaskModal .task-primary-source .task-source-mode-panel{min-height:118px}
-#newTaskModal .task-ai-source .task-source-mode-panel{min-height:86px}
 #newTaskModal .task-source-mode-panel>.pathrow,
 #newTaskModal .task-source-mode-panel>.compact-default-value,
 #newTaskModal .task-source-mode-panel>textarea{
   width:100%;
   box-sizing:border-box
 }
-#newTaskModal .task-primary-source .task-source-mode-panel>textarea{
-  min-height:118px!important;
-  height:118px
-}
-#newTaskModal .task-ai-source .task-source-mode-panel>textarea{
-  min-height:86px!important;
-  height:86px
-}
+#newTaskModal .task-primary-source .task-source-mode-panel>textarea{min-height:112px!important}
+#newTaskModal .task-ai-source .task-source-mode-panel>textarea{min-height:78px!important}
 #newTaskModal .task-source-mode-panel>.pathrow input,
 #newTaskModal .task-source-mode-panel>.pathrow select{min-width:0}
 #newTaskModal .task-source-mode-panel>.pathrow .mini-btn{
   min-width:86px;
   justify-content:center
 }
-#newTaskModal .task-source-mode-panel[data-source-mode="file"],
-#newTaskModal .task-source-mode-panel[data-source-mode="asset"],
-#newTaskModal .task-source-mode-panel[data-source-mode="default"]{
-  justify-content:center
-}
 #newTaskModal .task-source-mode-panel[data-source-mode="default"] .compact-default-value{
   min-height:34px
 }
-@media(max-width:820px){
-  #newTaskModal .task-primary-source>.source-head,
-  #newTaskModal .task-ai-source>.source-head{min-height:0}
+/* Mixed validation: Prompt stays visually primary; File + AI share the row below. */
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)){
+  grid-template-columns:1fr
 }
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .validation-stack{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:start
+}
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-primary-source{
+  width:100%
+}
+@media(max-width:620px){
+  #newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .validation-stack{
+    grid-template-columns:1fr!important
+  }
+}
+
+
+#newTaskModal .task-primary-source .source-tabs,
+#newTaskModal .task-ai-source .source-tabs{height:30px}
+#newTaskModal .task-primary-source .source-tabs button,
+#newTaskModal .task-ai-source .source-tabs button{height:30px}
+#newTaskModal .task-primary-source .source-body,
+#newTaskModal .task-file-source .source-body,
+#newTaskModal .task-ai-source .source-body{padding-top:9px}
+#newTaskModal .task-file-source,
+#newTaskModal .task-ai-source{min-width:0}
+#newTaskModal .task-file-source .pathrow,
+#newTaskModal .task-ai-source .pathrow,
+#newTaskModal .task-primary-source .pathrow{grid-template-columns:minmax(0,1fr) auto}
