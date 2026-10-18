@@ -20,7 +20,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] UI、CLI、YAML、API、Dry Run 必須共用同一份核心契約，不可各自實作第二套排程或復原邏輯。
 [ ] Task Draft 是暫存規劃資料，不是已建立 Task，也不能帶入假 Runtime / 假執行結果。
 [ ] 一般 TaskDraft / Create Task 建立後進入 New / idle；只有使用者明確輸入 @goal 時，才允許以單一明確動作 Create + Run，且必須沿用同一 Runner action contract。
-[ ] Task-level Auto / Main / Isolated Worktree 必須共用同一 Workspace resolver；三種模式都固定用 isolated worktree 執行，差別只在完成後 delivery。Runner 仍只吃 project_root，不加入 Git integration 邏輯。
+[ ] 目前 UI/Task flow 的 Auto / Main / Isolated Worktree 共用同一 Workspace resolver，皆先建立 isolated worktree 再 trigger Runner；CLI/standalone Runner 仍只吃 caller-supplied project_root，完全不依賴 Workspace/Worktree/Git integration。
 [ ] Main 完成定義：Runner Complete 只代表 Runner 階段完成，Task 仍是 Ongoing；commit local Task branch 後直接 normal merge 到 captured Project branch，merge 成功後才 Closed · merged。若 real merge fail：abort → merge_failure_count +1 → 讀 Global Settings.merge_failure_limit；count > limit 則 fallback 為 Isolated Worktree · Closed · worktree_ready。
 [ ] 無法使用的按鈕必須 disabled 並說明原因；Backend 仍要再次驗證，不能只依賴 UI。
 [ ] 避免 Dialog 疊 Dialog、俄羅斯娃娃式流程與重複資料副本。
@@ -402,7 +402,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Workspace policy 保留 Auto / Main / Isolated Worktree。
 [x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
 [x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
-[ ] 正式版三種模式執行一律建立獨立 Task Run worktree/local branch；Runner 永遠不直接寫 Project checkout。
+[ ] 正式版 UI/Task flow 三種模式一律先建立獨立 Task Run worktree/local branch 再呼叫 Runner；這是外層 orchestration 規則，不是 Runner contract，CLI Runner 仍可直接跑任意 caller-supplied project_root。
 [ ] Project branch 是 canonical truth。
 [ ] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
 [ ] Task branch/worktree 直接從 captured target HEAD 建立；branch/path 使用 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
@@ -420,6 +420,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
 [ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
+[ ] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch。
 [ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
 
 
@@ -429,9 +430,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
 [ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
 [ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
-[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序。
+[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序；queue head 在 conflict Runner recovery 期間保留順位，但短期 Git lock 必須釋放。
 [ ] Main merge 前先檢查 merge_source_sha 是否已是 target branch ancestry；是則 idempotent finalize merged，不重複 commit；否則在 captured target worktree 執行 `git merge --no-ff --no-commit <merge_source_branch>`，保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
-[ ] merge validation 統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR：Git conflict 或 SOURCE_FAIL 才算 real merge fail；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count，沿用既有 technical retry/backoff / Needs Attention。
+[ ] merge validation 必須 verdict-only / source-non-mutating，統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR；Git conflict 或 SOURCE_FAIL 才算 real merge fail，真正 source repair 只在 recovery worktree 透過 Runner 執行；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count。
 [ ] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
 [ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
 [ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
@@ -441,6 +442,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
 [ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
 [ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
+[ ] captured target branch 被刪除/rename，或 rewrite 後與 current merge source 無有效 common ancestry => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
 [ ] 不得自動 git switch 使用者 Project checkout。
 [ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
 [ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
