@@ -1134,6 +1134,22 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
+  async function openAskDemo() {
+    const path = projectPath();
+    const session = activeSessionId;
+    if (!path || !session) return;
+    const data = await api("/api/chat/ask/demo", {
+      method: "POST",
+      body: JSON.stringify({
+        project: path,
+        session_id: session,
+        request_id: requestId(),
+      }),
+    });
+    if (projectPath() !== path || activeSessionId !== session) return;
+    applyAskState(data);
+  }
+
   async function generateTaskDraft(command) {
     if (!command.spec) {
       showError?.("Usage: " + command.token + " <spec>", "TaskDraft spec required");
@@ -1162,6 +1178,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const text = String(input?.value || "").trim();
     if (!project || !activeSessionId || !text) return;
     const command = taskCommand(text);
+    const askDemo = /^@ask-demo\s*$/i.test(text);
     if (/^@goal(?:\s|$)/i.test(text)) {
       showError?.(
         "@goal is reserved for the atomic Task create+run path and is not enabled until the Workspace phase is installed.",
@@ -1172,6 +1189,16 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     input.value = "";
     autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
     panelHideSuggestions();
+    if (askDemo) {
+      try {
+        await openAskDemo();
+      } catch (error) {
+        showError?.(error.message, "Ask demo failed");
+      } finally {
+        input?.focus();
+      }
+      return;
+    }
     if (command) {
       try {
         await generateTaskDraft(command);
