@@ -1617,8 +1617,9 @@ function renderNewTaskListDraftWorkspace(){
     host.querySelectorAll('[data-draft-down]').forEach(b=>b.onclick=e=>{e.stopPropagation();moveNewTaskListDraftItem(+b.dataset.draftDown,+b.dataset.draftDown+1)});
     let dragIndex=null;
     host.querySelectorAll('[data-draft-row]').forEach(row=>{
-      row.ondblclick=()=>loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'});
+      row.ondblclick=e=>{if(e.target.closest('button'))return;loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'})};
       row.onkeydown=e=>{
+        if(e.target.closest('button'))return;
         const i=+row.dataset.draftRow;
         if(e.key==='Enter'){e.preventDefault();loadTaskEditor('draft-edit-item',{index:i,returnTarget:'list-draft'});return}
         if(e.altKey&&e.key==='ArrowUp'&&i>0){e.preventDefault();moveNewTaskListDraftItem(i,i-1);return}
