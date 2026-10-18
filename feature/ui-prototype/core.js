@@ -340,6 +340,7 @@ function showGlobalSettingsTab(name='execution'){
   document.querySelectorAll('[data-settings-tab]').forEach(b=>b.classList.toggle('active',b.dataset.settingsTab===name));
   document.querySelectorAll('[data-settings-panel]').forEach(p=>p.hidden=p.dataset.settingsPanel!==name);
   if(name==='execution')renderGlobalExecutionSettings();
+  else if(name==='defaults'&&typeof renderGlobalDefaultSettings==='function')renderGlobalDefaultSettings();
   else if(name==='interface')renderGlobalInterfaceSettings();
   else if(name==='language')renderGlobalLanguageSettings();
 }
