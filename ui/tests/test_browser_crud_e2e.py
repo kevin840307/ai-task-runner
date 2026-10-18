@@ -742,11 +742,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
             assert page.locator(".project-chat-task-draft").get_by_text("Browser generated draft").is_visible()
             assert page.locator(".project-chat-task-draft-item").count() == 2
-            assert state.tasks.list(root)["tasks"] == []
+            assert state.tasks.list(state.repo_root)["tasks"] == []
             page.get_by_role("button", name="Create Task", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
-            assert len(state.tasks.list(root)["tasks"]) == 1
-            assert state.tasks.list(root)["tasks"][0]["status"] == "new"
+            assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
+            assert state.tasks.list(state.repo_root)["tasks"][0]["status"] == "new"
 
             page.fill("#projectChatInput", "/re")
             page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
