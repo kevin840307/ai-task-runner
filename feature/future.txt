@@ -211,6 +211,14 @@ Feature components:
 
 Workflow / Prompt workspaces should reuse the same AppShell, navigation and primitives rather than carrying their own visual framework.
 
+Initial render / hydration:
+- Persisted visual state must be resolved before first paint: Theme, Appearance, Language, current Project and lightweight UI filters.
+- Do not render fake persisted-state labels such as "1 selected" and correct them after mount.
+- Stateful controls may use a dimension-preserving pending state until their real derived value is ready.
+- A short theme-aware bootstrap transition may cover first initialization, but it must not become a data-loading state machine.
+- The loading layer must fail open and respect reduced-motion preferences.
+- React should receive pre-hydrated initial UI state before mount; avoid useEffect-driven first-render correction that causes FOUC/layout shift.
+
 React rules:
 - One component implementation per responsibility; no Chat-only or Board-only duplicate Task Editor JSX.
 - Entry points pass mode / ownerId / itemIndex / returnTarget / project context as props or router state.
