@@ -1193,7 +1193,7 @@ function mainBusyTask(project){
 function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
   const busy=mainBusyTask(project);
   const chosen=mode==='auto'?autoWorkspaceKind(!!busy):mode;
-  if(chosen==='main'&&busy)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用 · Auto policy 不使用 Worktree`,busy};
+  if(chosen==='main'&&busy&&!globalExecutionSettings.allowConcurrentMainTasks)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用 · Concurrent Main 已停用`,busy};
   if(chosen==='worktree')return {ok:true,kind:'worktree',branch:`task/${id}`,root:worktreeRootFor(project,id),busy};
   return {ok:true,kind:'main',branch:projectMeta[project]?.branch||'main',root:projectMeta[project]?.path||project,busy};
 }
@@ -1206,7 +1206,7 @@ function prepareTaskWorkspaceForRun(t){
   }
   if(t.workspaceKind==='main'||t.workspacePolicy==='main'){
     const busy=mainBusyTask(t.project);
-    if(busy&&busy.id!==t.id)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用；請改用 Worktree`,busy};
+    if(busy&&busy.id!==t.id&&!globalExecutionSettings.allowConcurrentMainTasks)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用；Concurrent Main 已停用`,busy};
   }
   return {ok:true,kind:t.workspaceKind||t.workspacePolicy||'main',branch:t.branch,root:t.executionRoot};
 }
@@ -1218,7 +1218,7 @@ function renderNewTaskWorkspace(){
   const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
   host.innerHTML=`<div class="workspace-options">
     ${option('auto','Auto',autoWorkspacePolicyDescription(),autoWorkspaceStatus(busy,previewId))}
-    ${option('main','Main workspace','直接使用專案目前 working tree；同一路徑只能一個 Running Task。',busy?`Busy · ${busy.id} 正在執行`:'Available',!!busy)}
+    ${option('main','Main','在 isolated worktree 執行；完成後自動整合回 Project branch。',busy?(globalExecutionSettings.allowConcurrentMainTasks?`Busy · ${busy.id} · concurrent allowed`:`Busy · ${busy.id} 正在執行`):'Available',!!busy&&!globalExecutionSettings.allowConcurrentMainTasks)}
     ${option('worktree','Isolated worktree','為這個 Task 建立獨立 branch/path，可與同專案其他 Task 同時執行。',`task/${previewId}`)}
   </div><div class="workspace-preview"><strong>Execution preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
   host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
