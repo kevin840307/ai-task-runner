@@ -774,6 +774,17 @@ function managedUploadPath(item,itemRef,field,meta){
   const folder=field==='validator'?'validators':field==='aiFile'?'ai-validator-prompts':'task-prompts';
   return `${root}\\.ai-task-runner\\uploads\\${safeUploadSegment(itemRef,'task')}\\${folder}\\${safeUploadSegment(meta?.name,'uploaded-file')}`;
 }
+function uploadItemRefForTarget(){
+  if(pickerTarget?.context==='task'&&typeof editorItemRef==='function')return editorItemRef();
+  const owner=taskMap[currentTaskId];
+  if((pickerTarget?.context==='plan'||pickerTarget?.context==='batch')&&owner)return `${owner.id}-I${(pickerTarget.index??0)+1}`;
+  return `UPLOAD-I${(pickerTarget?.index??0)+1}`;
+}
+function stagedManagedPath(source,field){return stagedUploadMeta(source,field)?.managedPath||''}
+function isStagedManagedValue(source,field,value){
+  const managed=stagedManagedPath(source,field);
+  return !!managed&&String(value||'').trim()===managed;
+}
 function materializeItemUploads(item,itemRef){
   if(!item?._uploads)return item;
   for(const field of ['goalFile','validator','aiFile']){
@@ -807,10 +818,12 @@ function openFileUploadPicker(index,field,kind='file',context='batch'){
 taskFileUploadPicker?.addEventListener('change',()=>{
   const file=taskFileUploadPicker.files?.[0],target=pickerTargetSource();if(!file||!target||!pickerTarget)return;
   clearStagedUpload(target,pickerTarget.field);
-  const token=`U${++stagedUploadSequence}`;
+  const token=`U${++stagedUploadSequence}`,meta={token,name:file.name,size:file.size,type:file.type||'',lastModified:file.lastModified||0};
+  const itemRef=uploadItemRefForTarget(),managedPath=managedUploadPath(target,itemRef,pickerTarget.field,meta);
+  meta.managedPath=managedPath;
   stagedUploadFiles.set(token,file);
-  target._uploads={...(target._uploads||{}),[pickerTarget.field]:{token,name:file.name,size:file.size,type:file.type||'',lastModified:file.lastModified||0}};
-  target[pickerTarget.field]='';
+  target._uploads={...(target._uploads||{}),[pickerTarget.field]:meta};
+  target[pickerTarget.field]=managedPath;
   const owner=taskMap[currentTaskId];
   if((pickerTarget.context==='plan'||pickerTarget.context==='batch')&&owner){
     if(!owner._chatDraft)materializeItemUploads(target,`${owner.id}-I${pickerTarget.index+1}`);
@@ -925,7 +938,9 @@ function bindBatchForm(){
   document.querySelectorAll('[data-item][data-field]').forEach(el=>{
     const handler=()=>{
       const i=+el.dataset.item,field=el.dataset.field;
-      batchDraft[i][field]=el.value;
+      const value=el.value;
+      if(['goalFile','validator','aiFile'].includes(field)&&!isStagedManagedValue(batchDraft[i],field,value))clearStagedUpload(batchDraft[i],field);
+      batchDraft[i][field]=value;
       if(['goalMode','validatorMode','aiMode'].includes(field))renderBatchDraft();
       else syncBatchViews();
     };
@@ -1152,8 +1167,10 @@ function taskAiBody(){
 function captureTaskFileInput(id,field){
   const input=document.getElementById(id);if(!input)return;
   const value=String(input.value||'').trim();
-  if(value){clearStagedUpload(newTaskDraft,field);newTaskDraft[field]=value}
-  else if(!stagedUploadMeta(newTaskDraft,field))newTaskDraft[field]='';
+  if(value){
+    if(!isStagedManagedValue(newTaskDraft,field,value))clearStagedUpload(newTaskDraft,field);
+    newTaskDraft[field]=value;
+  }else if(!stagedUploadMeta(newTaskDraft,field))newTaskDraft[field]='';
 }
 function captureNewTaskSources(){
   if(document.getElementById('taskPromptInline'))newTaskDraft.prompt=document.getElementById('taskPromptInline').value;
