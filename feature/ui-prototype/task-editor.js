@@ -1202,7 +1202,7 @@ function requestDiscardTaskEditorChanges(onDiscard){
 }
 document.getElementById('confirmDiscardTaskEditor')?.addEventListener('click',()=>{
   const action=taskEditorDiscardAction;taskEditorDiscardAction=null;taskEditorDiscardReturnFocus=null;
-  closeModal('taskEditorDiscardModal');taskEditorInitialSnapshot='';action?.();
+  closeModal('taskEditorDiscardModal');action?.();
 });
 document.querySelectorAll('[data-close-modal="taskEditorDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskEditorDiscardAction=null;restoreTaskEditorDiscardFocus()}));
 document.getElementById('taskEditorDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskEditorDiscardAction=null;closeModal('taskEditorDiscardModal');restoreTaskEditorDiscardFocus()}});
