@@ -66,9 +66,9 @@ function restoreTaskInfoShell(t){
   taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
 }
-function closeTaskDrawerShell({force=false}={}){
+function closeTaskDrawerShell({force=false,restoreFocus=true}={}){
   if(!force&&typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
-    requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true}));return;
+    requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
   }
   if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false});
   taskEditorReturnContext=null;
@@ -81,7 +81,7 @@ function closeTaskDrawerShell({force=false}={}){
   clearTaskSelection?.();
   taskOverlayEl.classList.remove('open');
   const focusTarget=taskDrawerReturnFocus;taskDrawerReturnFocus=null;
-  if(focusTarget?.isConnected)setTimeout(()=>focusTarget.focus({preventScroll:true}),0);
+  if(restoreFocus&&focusTarget?.isConnected)setTimeout(()=>focusTarget.focus({preventScroll:true}),0);
 }
 
 function restoreSurfaceCloseBehavior(surface,overlayId){
@@ -132,9 +132,7 @@ function leaveTaskEditorOverlay(){
     closeModal('planModal');if(owner)openTaskById(owner.id);return;
   }
   if(ctx.returnTarget==='close'){
-    planModalEl.classList.remove('open');
-    if(taskDrawerEl.dataset.route!=='info')taskOverlayEl.classList.remove('open');
-    return;
+    closeTaskDrawerShell({force:true});return;
   }
   if(owner){
     planModalEl.classList.add('open');renderFullPlan(owner);
@@ -380,7 +378,7 @@ function selectTaskItem(owner,index){
   syncWorkflowActions();
 }
 function clearTaskSelection(){selectedTaskRef=null;syncWorkflowActions()}
-function openSelectedWorkflow(){const s=selectedItem();if(!s)return;closeModal('planModal');document.getElementById('taskOverlay').classList.remove('open');showView('workflows');showToast(`Open Workflow · ${s.item.workflow}`)}
+function openSelectedWorkflow(){const s=selectedItem();if(!s)return;closeTaskDrawerShell({force:true,restoreFocus:false});showView('workflows');showToast(`Open Workflow · ${s.item.workflow}`)}
 document.getElementById('planOpenWorkflow').onclick=openSelectedWorkflow;document.getElementById('openWorkflowDemo').onclick=openSelectedWorkflow;
 
 function canDragTaskItem(t,index){const items=canonicalTaskItems(t),s=planStateFor(t,index,items.length);if(!taskEditable(t)||s.done)return false;if(t.status==='paused'&&index<=batchState.index)return false;return true}
