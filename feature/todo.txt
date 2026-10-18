@@ -364,6 +364,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 正式 React 將 legacy id planModal/newTaskModal 改為語意元件/route 名稱（TaskWorkspaceShell / list / editor / yaml），避免名稱再次暗示巢狀 modal。
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
 [x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
+[x] New Task / Edit Task 共用 Editor 排版收斂：Project + Workflow + optional Title 同列；Task Prompt 為主視覺；Workflow-required File Validator / AI validation 與 Prompt 並排，Upload file 提升辨識度；Workspace 降為次要 compact 區塊；窄畫面自動改回單欄。
+[ ] Browser 視覺回歸：New Task 在常用 Drawer 寬度確認 Prompt / File Validator 首屏可見；切換 inline / file / asset、file / AI workflow、Light / Dark、820px / 620px breakpoint 不重疊、不截斷。
 [ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
 [ ] React migration 先建立 shared UI primitives：AppShell、Sidebar、Drawer/Modal/Popover、Tabs、Field、Select、Button、Badge/Pill、EmptyState；Theme token 只由一處提供。
 [ ] React page components 建議拆成：ProjectSidebar、ChatWorkspace、ChatComposer、QueueList、AskFlow、TaskBoard、TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskRuntimePanel、GlobalSettings。
