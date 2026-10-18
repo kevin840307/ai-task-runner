@@ -29,7 +29,8 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
   - Execution
   - Interface
   - Agents (future)
-- Interface owns global Appearance, Theme palette, and Language preferences.
+- Interface owns global Appearance and Theme palette preferences.
+- Language is a separate Global Settings section so localization is not coupled to visual appearance.
 - Appearance options:
   - System
   - Light
@@ -165,7 +166,7 @@ When moving beyond the prototype:
 
 9. Prototype acceptance before formalization
 --------------------------------------------
-- Browser-test Global Settings -> Execution / Interface.
+- Browser-test Global Settings -> Execution / Interface / Language.
 - Verify System / Light / Dark appearance and persistence.
 - Verify all five palettes in both Light and Dark, especially Tasks, Worktree cards, selected/hover borders, modals, inputs, and sidebar boundaries.
 - Verify language preference persistence and document language projection.
