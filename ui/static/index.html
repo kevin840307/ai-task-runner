@@ -76,7 +76,34 @@
   </aside>
 
   <main class="workspace">
-    <section id="chatView" class="view-shell">
+    <section id="projectChatView" class="project-chat-view">
+      <header class="header">
+        <div class="title-block">
+          <div class="title-line"><h1 id="projectChatName">Select a project</h1></div>
+          <p id="projectChatPath">Open a local project folder to begin.</p>
+        </div>
+        <div class="project-chat-header-actions">
+          <button id="newProjectChatButton" class="primary action-button" type="button">+ New Chat</button>
+        </div>
+      </header>
+      <div class="project-chat-body">
+        <aside class="project-chat-sessions" aria-label="Project Chats">
+          <div class="project-chat-session-head"><span>Chats</span></div>
+          <div id="projectChatSessionList" class="project-chat-session-list"></div>
+        </aside>
+        <section class="project-chat-conversation">
+          <div id="projectChatPreferences" class="project-chat-preferences" aria-label="Project Chat settings"></div>
+          <div id="projectChatMessages" class="history">
+            <div id="projectChatEmptyMessages" class="project-chat-empty">
+              <h2>Project Chat</h2>
+              <p>This Chat is separate from Runner Task history. Agent execution and Task creation are explicit capabilities, not automatic side effects of normal conversation.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="chatView" class="view-shell" hidden>
       <header class="header">
         <div class="title-block">
           <div class="title-line"><h1 id="projectName" data-i18n="project.select">選擇專案</h1></div>

@@ -9,6 +9,7 @@
 
 /* Lite product-specific behavior only. Core spacing/typography/layout come from static(1). */
 @import url("./css/runner-lite.css");
+@import url("./css/project-chat.css");
 @import url("./css/workflow-studio.css");
 @import url("./css/workflow-generator.css");
 

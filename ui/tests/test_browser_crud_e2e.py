@@ -58,7 +58,7 @@ def _load_main_ui_document(page, html: str) -> None:
 def _install_main_ui_scripts(page, static_root: Path) -> None:
     # app.js is a real ES module. Route the module graph through the same HTTP
     # origin as the document instead of injecting app.js as a classic script.
-    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js"):
+    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js"):
         source = static_root / relative
         page.route(
             f"http://local.test/{relative}",
@@ -141,6 +141,10 @@ def _bridge_for(state: UIState):
                     }
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
+                elif path == "/api/chat/sessions":
+                    data = state.chat_service.sessions(project)
+                elif path == "/api/chat/messages":
+                    data = state.chat_service.messages(project, query.get("session_id", [""])[0])
                 elif path == "/api/project/messages":
                     data = {"messages": []}
                 elif path == "/api/project/runs":
@@ -187,6 +191,20 @@ def _bridge_for(state: UIState):
             else:
                 if path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
+                elif path == "/api/chat/session/create":
+                    data = state.chat_service.create_session(
+                        Path(body["project"]),
+                        title=str(body.get("title", "")),
+                        request_id=str(body.get("request_id", "")),
+                    )
+                elif path == "/api/chat/session/select":
+                    data = state.chat_service.select_session(Path(body["project"]), str(body.get("session_id", "")))
+                elif path == "/api/chat/session/rename":
+                    data = state.chat_service.rename_session(
+                        Path(body["project"]), str(body.get("session_id", "")), str(body.get("title", ""))
+                    )
+                elif path == "/api/chat/session/delete":
+                    data = state.chat_service.delete_session(Path(body["project"]), str(body.get("session_id", "")))
                 elif path == "/api/studio/prompt/create":
                     data = state.studio_prompt_create(
                         body.get("name", ""),
@@ -510,9 +528,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Project rows are a Tasks/Chat navigation affordance from both asset pages.
             # Regression: Prompts used to leave the UI on the Prompt manager because
-            # selectProject() only switched away from the Workflow view.
+            # Project selection always returns to the Project Chat, not the Tasks/Runner surface.
             page.locator("#projectList .project-root").first.click()
-            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+            assert not page.locator("#chatNav").evaluate("(node) => node.classList.contains('active')")
             assert page.locator("#chatView").is_visible()
             assert page.locator("#workflowView").is_hidden()
 
