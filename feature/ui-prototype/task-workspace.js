@@ -122,6 +122,7 @@ function leaveTaskEditorOverlay({force=false}={}){
     requestDiscardTaskEditorChanges(()=>leaveTaskEditorOverlay({force:true}));return;
   }
   taskEditorReturnContext=null;
+  if(force)taskEditorInitialSnapshot='';
   hideTaskEditorView();
   const owner=(ctx.mode==='draft-create-item'||ctx.mode==='draft-edit-item')?newTaskListDraft:(ctx.ownerId?taskMap[ctx.ownerId]:null);
   if(owner&&!owner._newListDraft){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
