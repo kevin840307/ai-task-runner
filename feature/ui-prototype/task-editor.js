@@ -998,11 +998,14 @@ function openPromptsFromTaskEditor(){
     else closeModal('newTaskModal');
     showView('prompts');showToast('Prompt assets are managed in Prompts');
   };
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
-    requestDiscardNewTaskListDraft(go);return;
-  }
-  if(typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){requestDiscardTaskEditorChanges(go);return}
-  go();
+  const guardList=()=>{
+    if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
+      requestDiscardNewTaskListDraft(go);return;
+    }
+    go();
+  };
+  if(typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){requestDiscardTaskEditorChanges(guardList);return}
+  guardList();
 }
 function newTaskPromptBodySimple(){
   if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose file</button></div>`;
