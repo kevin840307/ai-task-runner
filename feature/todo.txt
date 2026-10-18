@@ -274,6 +274,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
 [x] File Validator 固定為外部檔案路徑輸入：Choose file 直接觸發 native file picker，不再經自訂 dialog；也可直接手動輸入。Prototype 不提供 built-in validator file / preset path。
 [x] File Validator path picker 不再列出 ai_task_runner_validator.py / validation.py / shared validator 等預設候選；正式版由 desktop/backend file picker 回填實際路徑。
+[x] 所有 Choose file 改為直接開系統/native file chooser，不再開 pathPickerModal；舊 custom picker DOM / CSS / duplicate openPathPicker 已移除。
+[x] Native chooser 只有取得真實完整 path 才回填欄位；Browser 僅提供 filename / fakepath 時不得寫入，提示手動輸入完整 path。正式 desktop/backend bridge 必須回傳 absolute path。
+[x] Composer 的 Ask mock 按鈕與 handler 已移除；@ask-demo 保留作為 Ask flow 測試入口。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
 [x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
