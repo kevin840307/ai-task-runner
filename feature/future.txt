@@ -97,6 +97,7 @@ Behavior:
 - Switching Projects loads that Project's own settings.
 - Agent changes revalidate Model and Mode against that Agent's capabilities. Reasoning remains the Project value unless the backend reports that level unsupported.
 - Workflow is used by @goal and other Project Chat -> Runner handoffs.
+- File Validator is always an explicit external file path. UI may open the platform file picker or allow manual path entry, but must not expose bundled/built-in validator-file presets. Prompt assets and AI-validator prompt assets are separate concepts.
 - Prototype may persist Project preferences in localStorage.
 - Formal implementation should persist through the backend/project configuration owner.
 
