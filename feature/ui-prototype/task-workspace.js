@@ -37,8 +37,9 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
   taskDrawerInfoMeta.hidden=workspace;
   taskDrawerRouteMeta.hidden=!workspace;
   taskDrawerRuntimeSlot.hidden=workspace;
-  taskDrawerWorkspaceActions.hidden=route!=='list';
+  taskDrawerWorkspaceActions.hidden=!(route==='list'||route==='list-draft');
   taskDrawerRename.hidden=route!=='list';
+  if(typeof syncTaskListDraftActions==='function')syncTaskListDraftActions(route==='list-draft');
   taskDrawerBack.hidden=!showBack;
   taskDrawerBack.title=backTitle;
   taskDrawerBack.textContent='←';
@@ -54,10 +55,7 @@ function restoreTaskInfoShell(t){
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
 }
 function closeTaskDrawerShell(){
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft){
-    newTaskListDraft=null;
-    if(typeof hideTaskListCreateDraft==='function')hideTaskListCreateDraft();
-  }
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false});
   taskEditorReturnContext=null;
   if(taskEditorHome.classList.contains('open'))taskEditorHome.classList.remove('open');
   if(planSubviewType==='yaml'&&yamlEditorSurface.parentNode===planSubviewMount){
@@ -406,7 +404,7 @@ renderDrawerPlan=function(t){
 };
 const taskSelectOpenTask=openTaskById;
 openTaskById=function(id){
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft){newTaskListDraft=null;if(typeof hideTaskListCreateDraft==='function')hideTaskListCreateDraft()}
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false})
   clearTaskSelection();
   planModalEl.classList.remove('open','subview-open');
   planSubviewMount.hidden=true;
@@ -566,7 +564,7 @@ renderFullPlan=function(t){workspaceRenderFull(t);if(!selectedTaskRef||selectedT
 const workspaceOpenPlan=openPlanDialog;
 openPlanDialog=function(id=currentTaskId,options={}){
   const t=taskMap[id];if(!t)return;
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft){newTaskListDraft=null;if(typeof hideTaskListCreateDraft==='function')hideTaskListCreateDraft()}
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false})
   const previousRoute=taskDrawerEl.dataset.route||'info',overlayWasOpen=taskOverlayEl.classList.contains('open');
   taskDrawerListReturnTarget=options.returnTarget||(
     t._chatDraft?'chat':
