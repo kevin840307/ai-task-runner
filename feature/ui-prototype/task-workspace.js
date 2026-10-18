@@ -42,6 +42,7 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
   taskDrawerBack.hidden=!showBack;
   taskDrawerBack.title=backTitle;
   taskDrawerBack.textContent='←';
+  if(route==='list')taskDrawerBack.onclick=handleTaskDrawerBack;
   if(title)document.getElementById('drawerTitle').textContent=title;
   if(workspace)taskDrawerRouteMeta.textContent=meta||'';
   taskOverlayEl.classList.add('open');
@@ -101,13 +102,15 @@ function leaveTaskEditorOverlay(){
   const owner=ctx.ownerId?taskMap[ctx.ownerId]:null;
   if(owner){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
   if(ctx.returnTarget==='chat'){
-    closeModal('planModal');showView('chat');renderChatSession();return;
+    planModalEl.classList.remove('open');taskOverlayEl.classList.remove('open');showView('chat');renderChatSession();return;
   }
   if(ctx.returnTarget==='info'){
     closeModal('planModal');if(owner)openTaskById(owner.id);return;
   }
   if(ctx.returnTarget==='close'){
-    closeModal('planModal');return;
+    planModalEl.classList.remove('open');
+    if(taskDrawerEl.dataset.route!=='info')taskOverlayEl.classList.remove('open');
+    return;
   }
   if(owner){
     planModalEl.classList.add('open');renderFullPlan(owner);
