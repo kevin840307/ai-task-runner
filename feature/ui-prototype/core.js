@@ -324,15 +324,22 @@ function renderGlobalExecutionSettings(){
   }
 }
 function renderGlobalInterfaceSettings(){
-  const appearance=document.getElementById('globalAppearance'),language=document.getElementById('globalLanguage'),preview=document.getElementById('interfaceSettingsPreview');
-  if(appearance)appearance.value=globalInterfaceSettings.appearance;if(language)language.value=globalInterfaceSettings.language;
+  const appearance=document.getElementById('globalAppearance'),preview=document.getElementById('interfaceSettingsPreview');
+  if(appearance)appearance.value=globalInterfaceSettings.appearance;
   document.querySelectorAll('[data-prototype-theme]').forEach(button=>{const active=button.dataset.prototypeTheme===globalInterfaceSettings.theme;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
-  if(preview)preview.innerHTML=`<strong>Appearance</strong> · ${globalInterfaceSettings.appearance==='system'?`System → ${resolvedAppearance()}`:globalInterfaceSettings.appearance}<br><strong>Theme</strong> · ${globalInterfaceSettings.theme}<br><strong>Language</strong> · ${globalInterfaceSettings.language==='zh-TW'?'繁體中文':'English'}`;
+  if(preview)preview.innerHTML=`<strong>Appearance</strong> · ${globalInterfaceSettings.appearance==='system'?`System → ${resolvedAppearance()}`:globalInterfaceSettings.appearance}<br><strong>Theme</strong> · ${globalInterfaceSettings.theme}`;
+}
+function renderGlobalLanguageSettings(){
+  const language=document.getElementById('globalLanguage'),preview=document.getElementById('languageSettingsPreview');
+  if(language)language.value=globalInterfaceSettings.language;
+  if(preview)preview.innerHTML=`<strong>Language</strong> · ${globalInterfaceSettings.language==='zh-TW'?'繁體中文':'English'}<br>Global across all Projects and Chat sessions.`;
 }
 function showGlobalSettingsTab(name='execution'){
   document.querySelectorAll('[data-settings-tab]').forEach(b=>b.classList.toggle('active',b.dataset.settingsTab===name));
   document.querySelectorAll('[data-settings-panel]').forEach(p=>p.hidden=p.dataset.settingsPanel!==name);
-  if(name==='execution')renderGlobalExecutionSettings();else if(name==='interface')renderGlobalInterfaceSettings();
+  if(name==='execution')renderGlobalExecutionSettings();
+  else if(name==='interface')renderGlobalInterfaceSettings();
+  else if(name==='language')renderGlobalLanguageSettings();
 }
 document.querySelectorAll('[data-settings-tab]').forEach(b=>b.addEventListener('click',()=>showGlobalSettingsTab(b.dataset.settingsTab)));
 document.getElementById('globalSettingsButton')?.addEventListener('click',()=>{showGlobalSettingsTab('execution');openModal('globalSettingsModal')});
@@ -348,7 +355,7 @@ document.querySelectorAll('[data-prototype-theme]').forEach(button=>button.addEv
   globalInterfaceSettings.theme=THEME_PALETTES.has(button.dataset.prototypeTheme)?button.dataset.prototypeTheme:'teal';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast(`Theme · ${globalInterfaceSettings.theme}`);
 }));
 document.getElementById('globalLanguage')?.addEventListener('change',e=>{
-  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Language preference updated');
+  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalLanguageSettings();showToast('Language preference updated');
 });
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.appearance==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
