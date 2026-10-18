@@ -174,7 +174,8 @@ openItemContextMenu=function(e,owner,index){
   setContextAction('remove',{visible:true,enabled:taskItemCanRestructure(owner,index),label:'Remove'});
 };
 
-let pendingResetToNewTaskId=null;
+let pendingTaskLifecycleAction=null;
+
 function resetTaskToNew(t){
   if(!t||!['paused','closed'].includes(t.status))return;
   const items=canonicalTaskItems(t),previousStatus=t.status,previousProgress=t.progress?.[0]||0,previousElapsed=t.elapsed||'—';
@@ -194,26 +195,97 @@ function resetTaskToNew(t){
   }
   persistCurrentPresetFromTaskMap();renderBoardFromMap();
 }
-function requestTaskResetToNew(t){
-  if(!t||!['paused','closed'].includes(t.status))return;
-  pendingResetToNewTaskId=t.id;
-  const items=canonicalTaskItems(t),done=Math.min(t.progress?.[0]||0,items.length),closed=t.status==='closed';
-  document.getElementById('taskResetToNewTitle').textContent=closed?'Run this Task again from the beginning?':'Move Task back to New?';
-  document.getElementById('taskResetToNewMeta').textContent=`${t.id} · ${t.title} · progress ${done}/${items.length}`;
-  document.getElementById('taskResetToNewNote').innerHTML=closed
-    ?'<strong>The completed run stays in History.</strong><br>Task configuration stays intact. A new execution starts from Task 1 with fresh runtime state.'
-    :'<strong>This abandons the current resumable execution.</strong><br>Task configuration stays intact, execution progress resets to the beginning, and the abandoned run remains visible in History.';
-  document.getElementById('confirmTaskResetToNew').textContent=closed?'Move to New & Run Again':'Move to New & Reset';
+
+function resetTaskRuntimeConfirmed(t){
+  if(!t)return;
+  t.runtime='idle';t.stage='Idle';t.session='—';t.progress=[0,canonicalTaskItems(t).length];t.elapsed='—';t.configDirty=false;
+  t.desc='Runtime reset from the beginning.';
+  pushTaskHistory(t,'Runtime reset confirmed');
+  persistCurrentPresetFromTaskMap();renderBoardFromMap();
+}
+
+function rerunTaskConfirmed(t){
+  if(!t)return;
+  t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.progress=[0,canonicalTaskItems(t).length];t.elapsed='0m';t.configDirty=false;
+  t.desc='Rerun started from a fresh run; previous history remains visible.';
+  pushTaskHistory(t,'Rerun confirmed · new run identity');
+  persistCurrentPresetFromTaskMap();renderBoardFromMap();
+}
+
+function requestTaskLifecycleConfirmation(t,action){
+  if(!t||!['reset','rerun','move-to-new'].includes(action))return;
+  pendingTaskLifecycleAction={taskId:t.id,action};
+  const items=canonicalTaskItems(t),done=Math.min(t.progress?.[0]||0,items.length);
+  const title=document.getElementById('taskResetToNewTitle');
+  const meta=document.getElementById('taskResetToNewMeta');
+  const note=document.getElementById('taskResetToNewNote');
+  const confirm=document.getElementById('confirmTaskResetToNew');
+  meta.textContent=`${t.id} · ${t.title} · progress ${done}/${items.length}`;
+
+  if(action==='reset'){
+    const movesToNew=t.status==='paused';
+    title.textContent=movesToNew?'Reset paused Task and move it to New?':'Reset this Task?';
+    note.innerHTML=movesToNew
+      ?'<strong>Paused → New.</strong><br>The current resumable execution is abandoned, progress resets to the beginning, and Task configuration stays intact.'
+      :'<strong>Reset execution progress?</strong><br>The Task keeps its current Board status, but runtime progress returns to the beginning.';
+    confirm.textContent=movesToNew?'Reset & Move to New':'Reset Task';
+  }else if(action==='rerun'){
+    const completed=t.status==='closed';
+    title.textContent=completed?'Rerun this completed Task?':'Rerun this Task from the beginning?';
+    note.innerHTML=completed
+      ?'<strong>The completed run stays in History.</strong><br>The Task moves back to New with fresh runtime state, ready to run again from Task 1.'
+      :'<strong>Start a fresh run?</strong><br>Current runtime progress is replaced by a new run from the beginning; existing History remains visible.';
+    confirm.textContent=completed?'Move to New & Rerun':'Rerun Task';
+  }else{
+    const completed=t.status==='closed';
+    title.textContent=completed?'Move completed Task back to New?':'Move paused Task back to New?';
+    note.innerHTML=completed
+      ?'<strong>The completed run stays in History.</strong><br>Task configuration stays intact and runtime progress resets to the beginning.'
+      :'<strong>This abandons the current resumable execution.</strong><br>Task configuration stays intact, progress resets to the beginning, and the abandoned run remains visible in History.';
+    confirm.textContent='Move to New';
+  }
   openModal('taskResetToNewModal');
 }
-document.getElementById('confirmTaskResetToNew').onclick=()=>{
-  const t=taskMap[pendingResetToNewTaskId],fromInfo=document.getElementById('taskOverlay').classList.contains('open');
-  pendingResetToNewTaskId=null;closeModal('taskResetToNewModal');
+
+function requestTaskResetToNew(t){
   if(!t||!['paused','closed'].includes(t.status))return;
-  const wasClosed=t.status==='closed';resetTaskToNew(t);
-  if(fromInfo)openTaskById(t.id)
-  showToast(wasClosed?'Task moved to New · previous run preserved':'Task moved to New · execution reset from start');
+  requestTaskLifecycleConfirmation(t,'move-to-new');
+}
+
+document.getElementById('confirmTaskResetToNew').onclick=()=>{
+  const pending=pendingTaskLifecycleAction;
+  pendingTaskLifecycleAction=null;
+  closeModal('taskResetToNewModal');
+  if(!pending)return;
+  const t=taskMap[pending.taskId],fromInfo=document.getElementById('taskOverlay').classList.contains('open')&&currentTaskId===pending.taskId;
+  if(!t)return;
+
+  if(pending.action==='move-to-new'){
+    if(!['paused','closed'].includes(t.status))return;
+    resetTaskToNew(t);
+    showToast('Task moved to New · execution reset from start');
+  }else if(pending.action==='reset'){
+    if(t.status==='paused'){
+      resetTaskToNew(t);
+      showToast('Paused Task reset · moved to New');
+    }else{
+      resetTaskRuntimeConfirmed(t);
+      showToast('Task reset confirmed');
+    }
+  }else if(pending.action==='rerun'){
+    if(t.status==='closed'){
+      resetTaskToNew(t);
+      showToast('Completed Task moved to New · previous run preserved');
+    }else{
+      rerunTaskConfirmed(t);
+      showToast('Task rerun started');
+    }
+  }
+  if(fromInfo)openTaskById(t.id);
 };
+
+document.querySelectorAll('[data-close-modal="taskResetToNewModal"]').forEach(button=>button.addEventListener('click',()=>{pendingTaskLifecycleAction=null}));
+document.getElementById('taskResetToNewModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)pendingTaskLifecycleAction=null});
 
 // Intercept Paused / Closed → New before the generic Board drop handler mutates status.
 const newDropzone=document.querySelector('.col[data-status="new"] .dropzone');
@@ -225,11 +297,12 @@ newDropzone.addEventListener('drop',e=>{
   requestTaskResetToNew(t);
 },true);
 
-const taskRerunBeforeResetPolicy=document.getElementById('taskSecondaryDemo').onclick;
+// Final lifecycle owner: Reset and Rerun always require confirmation.
+document.getElementById('taskResetDemo').onclick=()=>{
+  const t=taskMap[currentTaskId];if(t)requestTaskLifecycleConfirmation(t,'reset');
+};
 document.getElementById('taskSecondaryDemo').onclick=()=>{
-  const t=taskMap[currentTaskId];
-  if(t?.status==='closed'){requestTaskResetToNew(t);return}
-  taskRerunBeforeResetPolicy();
+  const t=taskMap[currentTaskId];if(t)requestTaskLifecycleConfirmation(t,'rerun');
 };
 
 function openTaskFromBoard(t){
