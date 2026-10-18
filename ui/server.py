@@ -335,20 +335,36 @@ class Handler(SimpleHTTPRequestHandler):
                     request_id=str(body.get("request_id", "")),
                 ))
             if parsed.path == "/api/chat/ask/submit":
-                return self._json(self.state.chat_service.submit_ask(
-                    self._project(body),
-                    str(body.get("session_id", "")),
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                value = self.state.chat_service.submit_ask(
+                    project,
+                    session_id,
                     str(body.get("ask_id", "")),
                     body.get("answers"),
                     request_id=str(body.get("request_id", "")),
-                ))
+                )
+                queue = self.state.chat_agent.drain(
+                    project,
+                    self.state.chat_service,
+                    session_id=session_id,
+                )
+                return self._json({**value, **queue})
             if parsed.path == "/api/chat/ask/cancel":
-                return self._json(self.state.chat_service.cancel_ask(
-                    self._project(body),
-                    str(body.get("session_id", "")),
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                value = self.state.chat_service.cancel_ask(
+                    project,
+                    session_id,
                     str(body.get("ask_id", "")),
                     request_id=str(body.get("request_id", "")),
-                ))
+                )
+                queue = self.state.chat_agent.drain(
+                    project,
+                    self.state.chat_service,
+                    session_id=session_id,
+                )
+                return self._json({**value, **queue})
             if parsed.path == "/api/chat/queue/drain":
                 return self._json(self.state.chat_agent.drain(
                     self._project(body),
