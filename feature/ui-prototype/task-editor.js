@@ -1548,6 +1548,29 @@ function syncTaskListDraftActions(active){
   const cancel=document.getElementById('cancelTaskListDraft'),create=document.getElementById('confirmTaskListDraft');
   if(cancel)cancel.hidden=!active;if(create)create.hidden=!active;
 }
+function taskListDraftHasChanges(){
+  if(!newTaskListDraft)return false;
+  return (newTaskListDraft.items||[]).length>0
+    ||String(newTaskListDraft.title||'').trim()!==String(newTaskListDraft._initialTitle||'').trim()
+    ||newTaskListDraft.project!==newTaskListDraft._initialProject;
+}
+let taskListDraftDiscardAction=null;
+function requestDiscardNewTaskListDraft(onDiscard){
+  if(!newTaskListDraft){onDiscard?.();return true}
+  if(!taskListDraftHasChanges()){discardNewTaskListDraft({close:false});onDiscard?.();return true}
+  taskListDraftDiscardAction=typeof onDiscard==='function'?onDiscard:null;
+  openModal('taskListDraftDiscardModal');
+  setTimeout(()=>document.getElementById('confirmDiscardTaskListDraft')?.focus({preventScroll:true}),0);
+  return false;
+}
+document.getElementById('confirmDiscardTaskListDraft')?.addEventListener('click',()=>{
+  const action=taskListDraftDiscardAction;taskListDraftDiscardAction=null;
+  discardNewTaskListDraft({close:false});closeModal('taskListDraftDiscardModal');action?.();
+});
+function moveNewTaskListDraftItem(from,to){
+  const items=newTaskListDraft?.items;if(!items||from===to||from<0||to<0||from>=items.length||to>=items.length)return;
+  const [item]=items.splice(from,1);items.splice(to,0,item);newTaskListDraft.listItems=items;renderNewTaskListDraftWorkspace();
+}
 function renderNewTaskListDraftWorkspace(){
   if(!newTaskListDraft)return;
   const host=document.getElementById('planFormList'),summary=document.getElementById('planTaskSummary'),items=newTaskListDraft.items||[];
@@ -1562,7 +1585,21 @@ function renderNewTaskListDraftWorkspace(){
       empty.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
     }
   }else{
-    host.innerHTML=items.map((x,i)=>`<article class="plan-row-compact"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span></div></div></article>`).join('')+TaskUiTemplates.addTaskFooter();
+    host.innerHTML=items.map((x,i)=>`<article class="plan-row-compact draft-plan-row" draggable="true" data-draft-row="${i}" tabindex="0"><div class="plan-row-head"><span class="plan-row-num"><span class="drag-grip" aria-hidden="true">⋮⋮</span>${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span><div class="plan-row-controls draft-row-controls"><button type="button" data-draft-up="${i}" title="${escapeAttr(uiText('taskListDraft.moveUp'))}" ${i===0?'disabled':''}>↑</button><button type="button" data-draft-down="${i}" title="${escapeAttr(uiText('taskListDraft.moveDown'))}" ${i===items.length-1?'disabled':''}>↓</button><button type="button" data-draft-edit="${i}">${escapeHtml(uiText('taskListDraft.edit'))}</button><button type="button" data-draft-remove="${i}" class="danger-item" title="${escapeAttr(uiText('taskListDraft.remove'))}">×</button></div></div></div></article>`).join('')+TaskUiTemplates.addTaskFooter();
+    host.querySelectorAll('[data-draft-edit]').forEach(b=>b.onclick=e=>{e.stopPropagation();loadTaskEditor('draft-edit-item',{index:+b.dataset.draftEdit,returnTarget:'list-draft'})});
+    host.querySelectorAll('[data-draft-remove]').forEach(b=>b.onclick=e=>{e.stopPropagation();newTaskListDraft.items.splice(+b.dataset.draftRemove,1);newTaskListDraft.listItems=newTaskListDraft.items;showToast(uiText('taskListDraft.removed'));renderNewTaskListDraftWorkspace()});
+    host.querySelectorAll('[data-draft-up]').forEach(b=>b.onclick=e=>{e.stopPropagation();moveNewTaskListDraftItem(+b.dataset.draftUp,+b.dataset.draftUp-1)});
+    host.querySelectorAll('[data-draft-down]').forEach(b=>b.onclick=e=>{e.stopPropagation();moveNewTaskListDraftItem(+b.dataset.draftDown,+b.dataset.draftDown+1)});
+    let dragIndex=null;
+    host.querySelectorAll('[data-draft-row]').forEach(row=>{
+      row.ondblclick=()=>loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'});
+      row.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'})}};
+      row.ondragstart=e=>{dragIndex=+row.dataset.draftRow;row.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.effectAllowed='move'};
+      row.ondragover=e=>{e.preventDefault();row.classList.add('drag-over')};
+      row.ondragleave=()=>row.classList.remove('drag-over');
+      row.ondrop=e=>{e.preventDefault();const to=+row.dataset.draftRow;row.classList.remove('drag-over');if(dragIndex!=null)moveNewTaskListDraftItem(dragIndex,to)};
+      row.ondragend=()=>{dragIndex=null;host.querySelectorAll('[data-draft-row]').forEach(x=>x.classList.remove('dragging','drag-over'))};
+    });
     const add=host.querySelector('.plan-add-task-footer');
     if(add)add.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
   }
@@ -1585,20 +1622,23 @@ function discardNewTaskListDraft({close=true}={}){
 }
 function createEmptyTaskListAndOpen(initialProjectKey=currentProjectKey){
   const projectKey=projectMeta[initialProjectKey]?initialProjectKey:currentProjectKey;
-  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:uiText('taskListDraft.defaultTitle'),project:projectKey,projectContext:projectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
+  const defaultTitle=uiText('taskListDraft.defaultTitle');
+  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:defaultTitle,project:projectKey,projectContext:projectKey,_initialTitle:defaultTitle,_initialProject:projectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
   planModalEl.classList.remove('subview-open');planModalEl.classList.add('open');
   setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:uiText('taskListDraft.meta'),showBack:false});
   renderNewTaskListDraftWorkspace();
   setTimeout(()=>{const input=document.getElementById('taskListDraftTitle');input?.focus();input?.select()},0);
 }
-document.getElementById('cancelTaskListDraft')?.addEventListener('click',()=>discardNewTaskListDraft());
+document.getElementById('cancelTaskListDraft')?.addEventListener('click',()=>requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true})));
 document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
-  if(!newTaskListDraft)return;
+  const createButton=document.getElementById('confirmTaskListDraft');
+  if(!newTaskListDraft||createButton?.dataset.submitting==='true')return;
   const title=String(document.getElementById('taskListDraftTitle')?.value||newTaskListDraft.title||'').trim();
   const project=document.getElementById('taskListDraftProject')?.value||newTaskListDraft.project||currentProjectKey;
   if(!title){showToast(uiText('taskListDraft.titleRequired'));return}
   const items=(newTaskListDraft.items||[]).map(x=>({...x}));
   if(!items.length){showToast(uiText('taskListDraft.needTask'));renderNewTaskListDraftWorkspace();return}
+  if(createButton){createButton.dataset.submitting='true';createButton.disabled=true;createButton.textContent=uiText('taskListDraft.creating')}
   const id='T-'+(++taskSequence),first=items[0];
   const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:items.length===1?'1 task':`${items.length} ordered tasks`,tags:[`${items.length} task${items.length===1?'':'s'}`],workflow:items.length===1?first.workflow:'Tasks',projectContext:project,project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'—',goal:items.length===1?first.prompt:`${items.length} ordered tasks`,items,listItems:items,workspacePolicy:items.length===1?first.workspacePolicy:'per_item',workspaceKind:items.length===1?first.workspaceKind:'per_item',branch:items.length===1?first.branch:'—',executionRoot:items.length===1?first.executionRoot:'Per-task workspaces'};
   newTaskListDraft=null;syncTaskListDraftActions(false);
