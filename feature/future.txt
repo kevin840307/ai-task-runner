@@ -97,8 +97,13 @@ Behavior:
 - Switching Projects loads that Project's own settings.
 - Agent changes revalidate Model and Mode against that Agent's capabilities. Reasoning remains the Project value unless the backend reports that level unsupported.
 - Workflow is used by @goal and other Project Chat -> Runner handoffs.
-- File Validator is always an explicit external file path. UI may open the platform file picker or allow manual path entry, but must not expose bundled/built-in validator-file presets. Prompt assets and AI-validator prompt assets are separate concepts.
-- Choose file must invoke the platform/native file picker directly; do not wrap it in another application dialog. The adapter must return the absolute filesystem path. Browser-only File objects that expose only a filename or fakepath are insufficient and must not be treated as a valid full path.
+- File-backed Task inputs (Task Prompt file / File Validator / AI Validator Prompt file) have two distinct sources: a manual path or an uploaded file. Prompt assets remain a separate concept.
+- Manual path is authoritative and is passed through unchanged. It must not trigger upload/copy.
+- Upload file stages bytes + metadata only. On final Task Create/Save, backend copies the file into Runner-managed storage using the final Task/item identity, then returns the canonical managed path.
+- The returned managed path becomes the Task field value (`goal_file`, `validator`, or `ai_validator_prompt_file`) and must be written back into the UI input such as `taskValidatorFile`; never display only filename/fakepath as the canonical value.
+- Canonical Task/Workflow state stores only the managed path. Browser File objects, temporary upload tokens and staged bytes are transient UI/backend transfer state and must not enter the canonical Task store.
+- Upload/copy must be fail-closed and atomic from the user's perspective: if copy fails, do not create/save a Task that references a missing managed path; keep the staged upload available for retry.
+- If a user uploads a file and then types a manual path in the same field before Create/Save, the manual path wins and the staged upload for that field is discarded.
 - Ask flow remains testable through explicit command/mock plumbing, but the normal Composer should not expose a dedicated Ask mock button.
 - Prototype may persist Project preferences in localStorage.
 - Formal implementation should persist through the backend/project configuration owner.
