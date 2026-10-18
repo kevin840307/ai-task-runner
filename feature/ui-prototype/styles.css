@@ -876,8 +876,6 @@ html[data-appearance] .context-separator{background-color:var(--line)}
 /* Close remaining high-specificity bright surfaces inside Task details. */
 html[data-appearance] #taskOverlay .workspace-selector-wrap,
 html[data-appearance] #taskOverlay .drawer-list-item,
-html[data-appearance] #taskOverlay #drawer-items .source-card,
-html[data-appearance] #taskOverlay #drawer-items .request-body,
 html[data-appearance] #taskOverlay .tabs.compact,
 html[data-appearance] #taskOverlay .yaml-plan-status{
   background:var(--panel-2)!important;color:var(--text);border-color:var(--line)!important
