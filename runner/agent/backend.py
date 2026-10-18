@@ -48,6 +48,15 @@ class CapabilitySpec:
     availability: str = "available"
 
 
+@dataclass(frozen=True)
+class ReasoningOptionSpec:
+    id: str
+    label: str
+    native: str
+    description: str = ""
+    default: bool = False
+
+
 class BackendError(RunnerError):
     def __init__(
         self,
@@ -238,6 +247,14 @@ class BaseBackend(ABC):
     @classmethod
     def discover_capabilities(cls, root: Path) -> list[CapabilitySpec]:
         raise BackendError(f"{cls.name} does not provide capability discovery")
+
+    @classmethod
+    def reasoning_options(
+        cls,
+        root: Path,
+        model: str,
+    ) -> tuple[ReasoningOptionSpec, ...]:
+        return ()
 
     def prepare_project(self) -> list[Path]:
         return []
@@ -518,6 +535,14 @@ def discover_capabilities(name: str, root: Path) -> list[CapabilitySpec]:
     return _backend_type(name).discover_capabilities(root)
 
 
+def reasoning_options(
+    name: str,
+    root: Path,
+    model: str,
+) -> tuple[ReasoningOptionSpec, ...]:
+    return _backend_type(name).reasoning_options(root, model)
+
+
 def configure_interaction_args(
     name: str,
     mode: InteractionMode,
@@ -566,6 +591,7 @@ __all__ = [
     "BackendMode",
     "BackendResult",
     "CapabilitySpec",
+    "ReasoningOptionSpec",
     "InteractionMode",
     "InteractionModeSpec",
     "BaseBackend",
@@ -579,6 +605,7 @@ __all__ = [
     "default_command",
     "discover_capabilities",
     "interaction_modes",
+    "reasoning_options",
     "model_from_args",
     "register_backend",
     "sandbox_supported",

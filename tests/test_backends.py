@@ -21,6 +21,7 @@ from runner.agent import (
     is_session_invalid_error,
     is_transient_service_error,
     interaction_modes,
+    reasoning_options,
     sandbox_supported,
     split_command,
 )
@@ -1158,3 +1159,67 @@ def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
     assert by_token[("/deploy", "skill")].user_invocable is True
     assert by_token[("/deploy", "skill")].permission == "ask"
     assert by_token[("/private", "skill")].enabled is False
+
+
+
+def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_path, monkeypatch):
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    (qwen_home / "settings.json").write_text(
+        json.dumps({
+            "model": {"name": "model-a", "reasoningEffort": "high"},
+            "modelProviders": {
+                "openai": [{
+                    "id": "model-a",
+                    "capabilities": {
+                        "reasoning": {
+                            "efforts": ["low", "high"],
+                            "defaultEffort": "low",
+                        }
+                    },
+                }]
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    values = reasoning_options("qwen", tmp_path, "model-a")
+    assert [item.id for item in values] == ["low", "high"]
+    assert next(item for item in values if item.default).id == "high"
+
+
+def test_qwen_reasoning_options_fall_back_to_native_effort_ladder(tmp_path, monkeypatch):
+    qwen_home = tmp_path / "qwen-home"
+    qwen_home.mkdir()
+    monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    values = reasoning_options("qwen", tmp_path, "unknown-model")
+    assert [item.id for item in values] == ["low", "medium", "high", "xhigh", "max"]
+
+
+def test_opencode_reasoning_options_come_from_selected_model_variants(tmp_path, monkeypatch):
+    from runner.agent import opencode as opencode_module
+
+    monkeypatch.setattr(
+        opencode_module,
+        "_opencode_api_payload",
+        lambda root, operation: [
+            {
+                "providerID": "openai",
+                "id": "gpt-5.2",
+                "variants": [
+                    {"id": "low"},
+                    {"id": "high", "description": "Deeper reasoning"},
+                ],
+            },
+            {
+                "providerID": "anthropic",
+                "id": "claude",
+                "variants": [{"id": "max"}],
+            },
+        ] if operation == "model.list" else [],
+    )
+    values = reasoning_options("opencode", tmp_path, "openai/gpt-5.2")
+    assert [item.id for item in values] == ["low", "high"]
+    assert values[1].native == "openai/gpt-5.2#high"
+    assert values[1].description == "Deeper reasoning"
+    assert reasoning_options("opencode", tmp_path, "openai/missing") == ()

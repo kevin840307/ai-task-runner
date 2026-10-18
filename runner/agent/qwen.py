@@ -20,7 +20,7 @@ from ..config.defaults import DEFAULT_QWEN_COMMAND
 from ..runtime.process_runner import run_process
 from ..utils import io_path
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
 _QWEN_AUTH_TYPES = {
@@ -617,6 +617,79 @@ def _qwen_capability_specs(
     return sorted(result, key=lambda item: (item.token.lower(), item.kind))
 
 
+
+_QWEN_REASONING_LABELS = {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "xhigh": "Extra high",
+    "max": "Max",
+}
+_QWEN_REASONING_ORDER = tuple(_QWEN_REASONING_LABELS)
+
+
+def _qwen_reasoning_options(root: Path, model: str) -> tuple[ReasoningOptionSpec, ...]:
+    layers = [_read_qwen_settings(path) for path in _qwen_settings_paths(root)]
+    providers = _qwen_replace_setting(layers, "modelProviders")
+    selected = str(model or "").strip() or _qwen_selected_model(layers)
+    configured: dict[str, Any] | None = None
+    for items in providers.values():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict) or str(item.get("id") or "").strip() != selected:
+                continue
+            configured = item
+            break
+        if configured is not None:
+            break
+
+    efforts = list(_QWEN_REASONING_ORDER)
+    default = ""
+    if configured is not None:
+        capabilities = configured.get("capabilities")
+        reasoning = capabilities.get("reasoning") if isinstance(capabilities, dict) else None
+        if reasoning is False:
+            return ()
+        if isinstance(reasoning, dict):
+            raw_efforts = reasoning.get("efforts")
+            if raw_efforts is None:
+                raw_efforts = reasoning.get("effort")
+            if isinstance(raw_efforts, list):
+                narrowed = [
+                    str(value).strip().lower()
+                    for value in raw_efforts
+                    if str(value).strip().lower() in _QWEN_REASONING_LABELS
+                ]
+                if narrowed:
+                    efforts = [value for value in _QWEN_REASONING_ORDER if value in narrowed]
+            default = str(
+                reasoning.get("defaultEffort")
+                or reasoning.get("default")
+                or ""
+            ).strip().lower()
+
+    model_settings: dict[str, Any] = {}
+    for settings in layers:
+        candidate = settings.get("model")
+        if isinstance(candidate, dict):
+            model_settings.update(candidate)
+    selected_effort = str(model_settings.get("reasoningEffort") or "").strip().lower()
+    if selected_effort in efforts:
+        default = selected_effort
+
+    return tuple(
+        ReasoningOptionSpec(
+            id=value,
+            label=_QWEN_REASONING_LABELS[value],
+            native=value,
+            description="Qwen /effort tier; the active provider may map or clamp it.",
+            default=value == default,
+        )
+        for value in efforts
+    )
+
+
 class QwenBackend(BaseBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
@@ -663,6 +736,14 @@ class QwenBackend(BaseBackend):
     def discover_capabilities(cls, root: Path) -> list[CapabilitySpec]:
         commands, resources = _qwen_daemon_snapshot(root)
         return _qwen_capability_specs(commands, resources)
+
+    @classmethod
+    def reasoning_options(
+        cls,
+        root: Path,
+        model: str,
+    ) -> tuple[ReasoningOptionSpec, ...]:
+        return _qwen_reasoning_options(root, model)
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:

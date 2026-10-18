@@ -10,7 +10,7 @@ from typing import Any
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
 from ..runtime.process_runner import run_process
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
 _PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
@@ -167,6 +167,53 @@ def _opencode_capability_specs(
     return sorted(unique.values(), key=lambda item: (item.token.lower(), item.kind))
 
 
+
+
+def _opencode_reasoning_options(root: Path, model: str) -> tuple[ReasoningOptionSpec, ...]:
+    selected = str(model or "").strip().split("#", 1)[0]
+    if not selected or "/" not in selected:
+        return ()
+    provider_id, model_id = selected.split("/", 1)
+    try:
+        models = _opencode_api_payload(root, "model.list")
+    except BackendError:
+        return ()
+    target: dict[str, Any] | None = None
+    for item in models:
+        if (
+            str(item.get("providerID") or item.get("providerId") or "").strip() == provider_id
+            and str(item.get("id") or item.get("modelID") or item.get("modelId") or "").strip() == model_id
+        ):
+            target = item
+            break
+    if target is None:
+        return ()
+    raw_variants = target.get("variants")
+    if not isinstance(raw_variants, list):
+        return ()
+    result: list[ReasoningOptionSpec] = []
+    seen: set[str] = set()
+    for item in raw_variants:
+        if isinstance(item, str):
+            variant_id = item.strip()
+            description = ""
+        elif isinstance(item, dict):
+            variant_id = str(item.get("id") or item.get("name") or "").strip()
+            description = str(item.get("description") or "").strip()
+        else:
+            continue
+        if not variant_id or variant_id in seen:
+            continue
+        seen.add(variant_id)
+        result.append(ReasoningOptionSpec(
+            id=variant_id,
+            label=variant_id.replace("-", " ").replace("_", " ").title(),
+            native=f"{selected}#{variant_id}",
+            description=description or "OpenCode model variant from the current project catalog.",
+        ))
+    return tuple(result)
+
+
 class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = DEFAULT_OPENCODE_COMMAND
@@ -200,6 +247,14 @@ class OpenCodeBackend(BaseBackend):
             _opencode_api_payload(root, "command.list"),
             _opencode_api_payload(root, "skill.list"),
         )
+
+    @classmethod
+    def reasoning_options(
+        cls,
+        root: Path,
+        model: str,
+    ) -> tuple[ReasoningOptionSpec, ...]:
+        return _opencode_reasoning_options(root, model)
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
