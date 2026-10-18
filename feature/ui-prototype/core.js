@@ -42,7 +42,19 @@ const UI_TEXT={
     'taskListDraft.title':'標題','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'狀態',
     'taskListDraft.notCreated':'尚未建立','taskListDraft.needTask':'建立 Task List 前至少要加入一個 Task',
     'taskListDraft.titleRequired':'Task List 標題不可空白','taskListDraft.created':'Task List 已建立 · 可繼續加入 Task',
-    'taskListDraft.added':'已加入草稿 Task'
+    'taskListDraft.added':'已加入草稿 Task',
+    'common.save':'儲存','common.cancel':'取消','common.edit':'編輯','common.delete':'刪除','common.dismiss':'關閉','common.openTask':'開啟 Task',
+    'chat.you':'你','chat.assistant':'Assistant','chat.working':'Agent 正在處理…',
+    'chat.draft.created':'已建立','chat.draft.mock':'MOCK AI · TASK 草稿','chat.draft.task':'Task','chat.draft.taskList':'Task List',
+    'chat.draft.newNotRunning':'New · 尚未執行','chat.draft.review':'建立前請先確認','chat.draft.count':'{count} 個 Task',
+    'chat.draft.create':'建立 Task',
+    'chat.cmd.goal.title':'執行 Goal','chat.cmd.goal.desc':'建立一個 Ongoing Task，並使用 Chat 設定中的 Workflow 立即開始。',
+    'chat.cmd.task.title':'AI 決定 Task 或 Task List','chat.cmd.task.desc':'產生一個 Task 或多個有序 Tasks；Mock 會隨機選擇以供測試。',
+    'chat.cmd.single.title':'建立單一 Task','chat.cmd.single.desc':'強制產生的 TaskDraft 只包含一個 Task。',
+    'chat.cmd.list.title':'建立 Task List','chat.cmd.list.desc':'強制產生的 TaskDraft 包含兩個以上有序 Tasks。',
+    'chat.cmd.workflow.title':'產生 Workflow','chat.cmd.workflow.desc':'模擬既有 Generate Workflow 類型的 system prompt。',
+    'chat.cmd.project.title':'Project context','chat.cmd.project.desc':'顯示綁定到此 Chat 的 Project context。',
+    'chat.cmd.ask.title':'Mock AI 反問','chat.cmd.ask.desc':'強制觸發多題 AI clarification 流程。'
   },
   en:{
     'chat.rename':'Rename','chat.newChat':'+ New Chat','chat.commands':'Commands','chat.typeToFilter':'Type to filter',
@@ -70,7 +82,19 @@ const UI_TEXT={
     'taskListDraft.title':'Title','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'State',
     'taskListDraft.notCreated':'Not created','taskListDraft.needTask':'Add at least one task before creating the Task List',
     'taskListDraft.titleRequired':'Task List title cannot be empty','taskListDraft.created':'Task List created · add tasks when ready',
-    'taskListDraft.added':'Draft task added'
+    'taskListDraft.added':'Draft task added',
+    'common.save':'Save','common.cancel':'Cancel','common.edit':'Edit','common.delete':'Delete','common.dismiss':'Dismiss','common.openTask':'Open Task',
+    'chat.you':'You','chat.assistant':'Assistant','chat.working':'Agent is working…',
+    'chat.draft.created':'CREATED','chat.draft.mock':'MOCK AI · TASK DRAFT','chat.draft.task':'Task','chat.draft.taskList':'Task List',
+    'chat.draft.newNotRunning':'New · not running','chat.draft.review':'Review before Create','chat.draft.count':'{count} task(s)',
+    'chat.draft.create':'Create Task',
+    'chat.cmd.goal.title':'Run goal','chat.cmd.goal.desc':'Create one Task in Ongoing and start immediately with the Workflow selected in Chat settings.',
+    'chat.cmd.task.title':'AI decides Task or Task List','chat.cmd.task.desc':'Create one Task or multiple ordered Tasks; Mock randomly chooses for testing.',
+    'chat.cmd.single.title':'Create one Task','chat.cmd.single.desc':'Force the generated TaskDraft to contain exactly one Task.',
+    'chat.cmd.list.title':'Create Task List','chat.cmd.list.desc':'Force the generated TaskDraft to contain two or more ordered Tasks.',
+    'chat.cmd.workflow.title':'Generate Workflow','chat.cmd.workflow.desc':'Mock the existing Generate Workflow-style system prompt.',
+    'chat.cmd.project.title':'Project context','chat.cmd.project.desc':'Show the Project context bound to this Chat.',
+    'chat.cmd.ask.title':'Mock AI clarification','chat.cmd.ask.desc':'Force a multi-question AI clarification flow.'
   }
 };
 function uiText(key,vars={}){
@@ -427,7 +451,7 @@ document.querySelectorAll('[data-prototype-theme]').forEach(button=>button.addEv
   globalInterfaceSettings.theme=THEME_PALETTES.has(button.dataset.prototypeTheme)?button.dataset.prototypeTheme:'teal';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast(`Theme · ${globalInterfaceSettings.theme}`);
 }));
 document.getElementById('globalLanguage')?.addEventListener('change',e=>{
-  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalLanguageSettings();if(typeof renderChatSession==='function')renderChatSession();if(typeof renderChatQueue==='function')renderChatQueue();if(typeof renderChatTurnStatus==='function')renderChatTurnStatus();if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof renderNewTaskListDraftWorkspace==='function')renderNewTaskListDraftWorkspace();showToast(globalInterfaceSettings.language==='zh-TW'?'語言偏好已更新':'Language preference updated');
+  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalLanguageSettings();if(typeof renderChatSession==='function')renderChatSession();if(typeof renderChatQueue==='function')renderChatQueue();if(typeof renderChatTurnStatus==='function')renderChatTurnStatus();if(typeof renderComposerSuggestions==='function')renderComposerSuggestions();if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof renderNewTaskListDraftWorkspace==='function')renderNewTaskListDraftWorkspace();showToast(globalInterfaceSettings.language==='zh-TW'?'語言偏好已更新':'Language preference updated');
 });
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.appearance==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
