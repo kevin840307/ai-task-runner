@@ -125,10 +125,14 @@ class ChatAgentService:
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
         snapshot = chat.queue(project, session_id)
+        pending_ask = chat.ask(project, session_id).get("ask")
+        waiting_ask = isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting"
+        busy = lock.locked() or waiting_ask
         return {
             **snapshot,
-            "status": "busy" if lock.locked() else "idle",
-            "busy": lock.locked(),
+            "status": "waiting_ask" if waiting_ask else ("busy" if lock.locked() else "idle"),
+            "busy": busy,
+            "waiting_ask": waiting_ask,
         }
 
     def _drain_locked(
