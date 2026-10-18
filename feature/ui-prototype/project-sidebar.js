@@ -3,6 +3,8 @@ const projectActionMenu=document.getElementById('projectActionMenu');
 const projectManageModal=document.getElementById('projectManageModal');
 const projectRenameField=document.getElementById('projectRenameField');
 const projectRenameInput=document.getElementById('projectRenameInput');
+const projectPathField=document.getElementById('projectPathField');
+const projectPathInput=document.getElementById('projectPathInput');
 const projectDeleteNote=document.getElementById('projectDeleteNote');
 const projectManageConfirm=document.getElementById('projectManageConfirm');
 let projectManageState=null;
@@ -43,14 +45,36 @@ function updateProjectRefs(oldKey,nextValue){
   const input=document.getElementById('newTaskProject');if(input?.value===oldKey)input.value=nextValue;
 }
 function openProjectManage(mode){
+  hideProjectActionMenu();
+  if(mode==='create'){
+    projectManageState={key:null,mode:'create'};
+    document.getElementById('projectManageTitle').textContent='New Project';
+    document.getElementById('projectManageMeta').textContent='Creates a Project using the current Global Defaults.';
+    projectRenameField.hidden=false;projectPathField.hidden=false;projectDeleteNote.hidden=true;
+    projectRenameInput.value='';projectPathInput.value='';
+    projectManageConfirm.textContent='Create Project';projectManageConfirm.className='btn primary';
+    openModal('projectManageModal');setTimeout(()=>projectRenameInput.focus(),0);return;
+  }
   const key=projectManageState?.key,meta=projectMeta[key];if(!meta)return;
-  projectManageState={key,mode};hideProjectActionMenu();
+  projectManageState={key,mode};
   document.getElementById('projectManageTitle').textContent=mode==='rename'?'Rename Project':'Delete Project';
   document.getElementById('projectManageMeta').textContent=meta.path;
-  projectRenameField.hidden=mode!=='rename';projectDeleteNote.hidden=mode!=='delete';
+  projectRenameField.hidden=mode!=='rename';projectPathField.hidden=true;projectDeleteNote.hidden=mode!=='delete';
   if(mode==='rename'){projectRenameInput.value=key;projectManageConfirm.textContent='Rename';projectManageConfirm.className='btn primary';setTimeout(()=>{projectRenameInput.focus();projectRenameInput.select()},0)}
   else{projectDeleteNote.innerHTML=`Remove <strong>${escapeHtml(key)}</strong> from Projects?<br>The local folder and existing Tasks are not deleted.`;projectManageConfirm.textContent='Delete Project';projectManageConfirm.className='btn danger'}
   openModal('projectManageModal');
+}
+function createProject(name,path){
+  const key=String(name||'').trim(),root=String(path||'').trim();
+  if(!key){showToast('Project name cannot be empty');return false}
+  if(!root){showToast('Project path cannot be empty');return false}
+  if(projectMeta[key]){showToast('A Project with this name already exists');return false}
+  const duplicatePath=Object.entries(projectMeta).find(([,meta])=>String(meta.path||'').toLowerCase()===root.toLowerCase());
+  if(duplicatePath){showToast(`Project path already exists · ${duplicatePath[0]}`);return false}
+  if(!registerProject(key,root,{subtitle:'main · New Project'}))return false;
+  if(typeof selectedTaskProjectKeys!=='undefined')selectedTaskProjectKeys.add(key);
+  renderProjectOptions(key);syncProjectRowMenus();selectProject(key);showView('chat');renderChatSession();
+  closeModal('projectManageModal');showToast(`Project created · ${key} · Global Defaults copied`);return true;
 }
 function renameProject(oldKey,newKey){
   newKey=String(newKey||'').trim();if(!newKey){showToast('Project name cannot be empty');return false}
@@ -58,6 +82,7 @@ function renameProject(oldKey,newKey){
   if(projectMeta[newKey]){showToast('A Project with this name already exists');return false}
   const meta=projectMeta[oldKey];if(!meta)return false;
   projectMeta[newKey]=meta;delete projectMeta[oldKey];updateProjectRefs(oldKey,newKey);refreshProjectRowKey(oldKey,newKey);
+  if(typeof renameProjectChatSettings==='function')renameProjectChatSettings(oldKey,newKey);
   if(currentProjectKey===oldKey)currentProjectKey=newKey;
   renderProjectOptions(currentProjectKey);renderBoardFromMap();selectProject(currentProjectKey);
   closeModal('projectManageModal');showToast(`Project renamed · ${newKey}`);return true;
@@ -66,6 +91,7 @@ function deleteProject(key){
   const meta=projectMeta[key];if(!meta)return;
   const stablePath=meta.path||key;updateProjectRefs(key,stablePath);
   delete projectMeta[key];
+  if(typeof deleteProjectChatSettings==='function')deleteProjectChatSettings(key);
   document.querySelector(`#projectScroll .project[data-project="${CSS.escape(key)}"]`)?.closest('.project-row')?.remove();
   const remaining=projectRegistryEntries().map(([k])=>k).filter(k=>projectMeta[k]);
   if(currentProjectKey===key){
@@ -90,14 +116,16 @@ projectActionMenu.querySelector('[data-project-action="rename"]').onclick=()=>op
 projectActionMenu.querySelector('[data-project-action="delete"]').onclick=()=>openProjectManage('delete');
 projectManageConfirm.onclick=()=>{
   if(!projectManageState)return;
-  if(projectManageState.mode==='rename')renameProject(projectManageState.key,projectRenameInput.value);
+  if(projectManageState.mode==='create')createProject(projectRenameInput.value,projectPathInput.value);
+  else if(projectManageState.mode==='rename')renameProject(projectManageState.key,projectRenameInput.value);
   else if(projectManageState.mode==='delete')deleteProject(projectManageState.key);
 };
-projectRenameInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();projectManageConfirm.click()}});
+[projectRenameInput,projectPathInput].forEach(input=>input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();projectManageConfirm.click()}}));
 document.addEventListener('click',e=>{if(!projectActionMenu.hidden&&!e.target.closest('#projectActionMenu')&&!e.target.closest('.project-more'))hideProjectActionMenu()});
 window.addEventListener('resize',hideProjectActionMenu);window.addEventListener('scroll',hideProjectActionMenu,true);
 
 const ensureProjectFromInputBeforeMenu=ensureProjectFromInput;
 ensureProjectFromInput=function(raw){const key=ensureProjectFromInputBeforeMenu(raw);syncProjectRowMenus();return key};
+document.getElementById('newProjectDemo').onclick=()=>openProjectManage('create');
 syncProjectRowMenus();
 selectProject(currentProjectKey);
