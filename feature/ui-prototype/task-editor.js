@@ -1,4 +1,6 @@
 // --- Canonical prototype execution-plan renderer ---
+// Cross-file Task Workspace state must initialize before any startup DOM wiring.
+let newTaskListDraft=null;
 function planItemDefaults(x={},t=null,i=0){
   const fallbackProject=projectMeta[t?.project]?.path||t?.project||projectMeta[currentProjectKey]?.path||'C:\\project';
   return {
@@ -1641,7 +1643,6 @@ function showCreateTypeMenu(anchor){
   if(top+112>window.innerHeight)top=Math.max(10,r.top-112-gap);
   createTypeMenu.style.left=`${left}px`;createTypeMenu.style.top=`${top}px`;
 }
-let newTaskListDraft=null;
 function syncTaskListDraftActions(active){
   ['planOpenWorkflow','planAddTask','planAddExisting','planEditYaml'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.hidden=!!active;
