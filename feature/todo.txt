@@ -219,6 +219,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] @goal 與 @task 的責任保持分離：@goal = 快速交付目標並執行；@task = 先產生 Draft / Review / Edit / Create。
 
 
+[x] Chat Ask choice UI 每題最多 5 個可見項目（含固定 Other/custom text）；UI defensive clamp，正式 prompt 也要限制選項數量。
+[x] Chat User message / Ask / Queue surface 改用 appearance/theme tokens，Dark mode 不保留白底/淺色 border。
+
 9. @task / @task-single / @task-list 與 TaskDraft
 -----------------------------------------------
 
