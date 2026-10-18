@@ -17,7 +17,7 @@ from typing import Any
 
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 2
+STATE_VERSION = 3
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
@@ -187,6 +187,7 @@ class ChatService:
         backend: str,
         model: str = "",
         mode: str = "auto",
+        reasoning: str = "",
     ) -> dict[str, Any]:
         text = str(content or "").strip()
         if not text:
@@ -217,6 +218,7 @@ class ChatService:
                 "backend": str(backend or "").strip(),
                 "model": str(model or "").strip(),
                 "mode": str(mode or "auto").strip(),
+                "reasoning": str(reasoning or "").strip(),
             }
             session["queue"].append(item)
             session["updated_at"] = item["created_at"]
@@ -341,9 +343,10 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
         legacy_v1 = state.get("version") == 1
+        legacy_before_reasoning = state.get("version") in {1, 2}
         sessions = state.get("sessions")
         create_requests = state.get("create_requests")
         turn_requests = {} if legacy_v1 else state.get("turn_requests", {})
@@ -392,6 +395,7 @@ class ChatService:
                     "backend": str(item.get("backend") or ""),
                     "model": str(item.get("model") or ""),
                     "mode": str(item.get("mode") or "auto"),
+                    "reasoning": "" if legacy_before_reasoning else str(item.get("reasoning") or ""),
                 })
             normalized.append({
                 "session_id": session_id,

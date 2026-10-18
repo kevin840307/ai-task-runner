@@ -203,6 +203,8 @@ def test_chat_agent_turn_is_separate_from_runner_history_and_reuses_agent_sessio
     ]
     assert calls[0]["session_id"] == ""
     assert calls[1]["session_id"] == "agent-session-1"
+    assert calls[0]["reasoning"] == "high"
+    assert calls[1]["reasoning"] == "high"
     assert not (project / ".ai-task-runner" / "ui" / "messages.jsonl").exists()
 
 
@@ -507,6 +509,7 @@ def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
         request_id="queue-api-1",
         backend="qwen",
         mode="auto",
+        reasoning="high",
     )
     queue_id = queued["queue_id"]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -627,3 +630,54 @@ def test_agent_settings_service_preserves_native_reasoning_ids(tmp_path: Path, m
     assert value["reasoning"][0]["id"] == "deep"
     assert value["models"] == ["openai/gpt-5.2"]
     assert service.get(project, "opencode", "openai/gpt-5.2")["cached"] is True
+
+
+
+def test_chat_queue_snapshots_reasoning_per_item(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.enqueue_turn(
+        project,
+        session_id,
+        "deep work",
+        request_id="reasoning-1",
+        backend="opencode",
+        model="openai/gpt-5.2",
+        mode="auto",
+        reasoning="deep",
+    )
+    claimed = chat.claim_next(project, session_id)
+    assert claimed is not None
+    assert claimed["reasoning"] == "deep"
+    assert claimed["model"] == "openai/gpt-5.2"
+
+
+def test_chat_agent_passes_snapshotted_reasoning_to_runner(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_runner(**kwargs):
+        calls.append(dict(kwargs))
+        return {"text": "ok", "session_id": "native"}
+
+    chat = ChatService()
+    service = ChatAgentService(repo, runner=fake_runner)
+    session_id = chat.sessions(project)["active_session_id"]
+    service.turn(
+        project,
+        chat,
+        session_id=session_id,
+        message="reason",
+        backend="opencode",
+        model="openai/gpt-5.2",
+        mode="auto",
+        reasoning="deep",
+        request_id="reasoning-turn-1",
+    )
+    assert calls[0]["reasoning"] == "deep"
+    assert calls[0]["model"] == "openai/gpt-5.2"

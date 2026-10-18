@@ -275,6 +275,7 @@ class Handler(SimpleHTTPRequestHandler):
                     backend=backend,
                     model=str(preferences.get("model") or ""),
                     mode=str(preferences.get("mode") or "auto"),
+                    reasoning=str(preferences.get("reasoning") or ""),
                     request_id=str(body.get("request_id", "")),
                 ))
             if parsed.path == "/api/chat/queue/drain":

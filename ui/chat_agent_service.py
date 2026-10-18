@@ -37,6 +37,7 @@ class ChatAgentService:
         backend: str,
         model: str = "",
         mode: str = "auto",
+        reasoning: str = "",
         request_id: str = "",
     ) -> dict[str, Any]:
         text = str(message or "").strip()
@@ -56,6 +57,7 @@ class ChatAgentService:
             backend=agent,
             model=str(model or "").strip(),
             mode=mode,
+            reasoning=str(reasoning or "").strip(),
         )
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
@@ -63,6 +65,7 @@ class ChatAgentService:
             "agent": agent,
             "model": str(model or "").strip(),
             "mode": mode,
+            "reasoning": str(reasoning or "").strip(),
         }
         if not lock.acquire(blocking=False):
             return {
@@ -165,6 +168,7 @@ class ChatAgentService:
         if mode not in {"read", "auto", "yolo"}:
             raise ValueError("Queued Chat turn has unsupported mode")
         model = str(item.get("model") or "").strip()
+        reasoning = str(item.get("reasoning") or "").strip()
         previous_session = chat.agent_session(project, session_id, agent)
         chat.append_message(project, session_id, "user", str(item["content"]))
         result = self._runner(
@@ -172,6 +176,7 @@ class ChatAgentService:
             backend=agent,
             model=model,
             mode=mode,
+            reasoning=reasoning,
             session_id=previous_session,
             prompt=str(item["content"]),
         )
@@ -194,6 +199,7 @@ class ChatAgentService:
         backend: str,
         model: str,
         mode: str,
+        reasoning: str,
         session_id: str,
         prompt: str,
     ) -> dict[str, Any]:
@@ -209,6 +215,8 @@ class ChatAgentService:
         ]
         if model:
             command.extend(["--model", model])
+        if reasoning:
+            command.extend(["--reasoning", reasoning])
         if session_id:
             command.extend(["--session", session_id])
         completed = subprocess.run(
