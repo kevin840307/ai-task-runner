@@ -11,6 +11,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let agentCapabilities = [];
   let capabilitiesError = "";
   let suggestionIndex = 0;
+  let queueItems = [];
+  let queueBusy = false;
+  let queuePollTimer = 0;
 
   const byId = (id) => document.getElementById(id);
 
@@ -132,6 +135,143 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (panel) panel.hidden = true;
   }
 
+  function clearQueuePoll() {
+    if (queuePollTimer) {
+      clearTimeout(queuePollTimer);
+      queuePollTimer = 0;
+    }
+  }
+
+  function scheduleQueuePoll() {
+    clearQueuePoll();
+    if (!queueBusy || !project || !activeSessionId) return;
+    const expectedProject = projectPath();
+    const expectedSession = activeSessionId;
+    queuePollTimer = setTimeout(async () => {
+      queuePollTimer = 0;
+      if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+      try {
+        await Promise.all([refreshMessages(), refreshQueue()]);
+      } catch (_) {}
+    }, 900);
+  }
+
+  function renderTurnState() {
+    const status = byId("projectChatTurnStatus");
+    const send = byId("projectChatSendButton");
+    const input = byId("projectChatInput");
+    if (status) status.hidden = !queueBusy;
+    if (send) {
+      send.disabled = !project;
+      send.setAttribute("aria-busy", String(queueBusy));
+      send.textContent = queueBusy ? "Queue" : "Send";
+    }
+    if (input) input.disabled = !project;
+    scheduleQueuePoll();
+  }
+
+  function renderQueue() {
+    const root = byId("projectChatQueue");
+    const list = byId("projectChatQueueList");
+    const count = byId("projectChatQueueCount");
+    if (!root || !list || !count) return;
+    count.textContent = String(queueItems.length);
+    root.hidden = queueItems.length === 0;
+    list.innerHTML = "";
+    for (const item of queueItems) {
+      const row = document.createElement("div");
+      row.className = "project-chat-queue-item";
+      const copy = document.createElement("div");
+      copy.className = "project-chat-queue-copy";
+      copy.textContent = String(item.content || "");
+      copy.title = String(item.content || "");
+      const actions = document.createElement("span");
+      actions.className = "project-chat-queue-actions";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = "Edit";
+      edit.onclick = () => void editQueueItem(item);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.onclick = () => void deleteQueueItem(item);
+      actions.append(edit, remove);
+      row.append(copy, actions);
+      list.appendChild(row);
+    }
+  }
+
+  function applyQueueState(data = {}) {
+    queueItems = Array.isArray(data.items) ? data.items : [];
+    queueBusy = !!data.busy;
+    renderQueue();
+    renderTurnState();
+  }
+
+  async function refreshQueue() {
+    const path = projectPath();
+    if (!path || !activeSessionId) {
+      queueItems = [];
+      queueBusy = false;
+      renderQueue();
+      renderTurnState();
+      return;
+    }
+    const expectedProject = path;
+    const expectedSession = activeSessionId;
+    const data = await api(
+      "/api/chat/queue?project=" + encodeURIComponent(path) +
+      "&session_id=" + encodeURIComponent(expectedSession),
+      { timeoutMs: 15000 }
+    );
+    if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+    applyQueueState(data);
+  }
+
+  async function editQueueItem(item) {
+    const next = await inputDialog?.({
+      title: "Edit queued message",
+      label: "Message",
+      value: String(item.content || ""),
+      confirmLabel: "Save",
+    });
+    if (next === null || next === undefined || String(next).trim() === String(item.content || "").trim()) return;
+    try {
+      const data = await api("/api/chat/queue/update", {
+        method: "POST",
+        body: JSON.stringify({
+          project: projectPath(),
+          session_id: activeSessionId,
+          queue_id: item.queue_id,
+          message: String(next),
+        }),
+      });
+      applyQueueState(data);
+      showToast?.("Queue updated");
+    } catch (error) {
+      showError?.(error.message, "Queue update failed");
+      await refreshQueue().catch(() => {});
+    }
+  }
+
+  async function deleteQueueItem(item) {
+    try {
+      const data = await api("/api/chat/queue/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          project: projectPath(),
+          session_id: activeSessionId,
+          queue_id: item.queue_id,
+        }),
+      });
+      applyQueueState(data);
+      showToast?.("Queued message deleted");
+    } catch (error) {
+      showError?.(error.message, "Queue delete failed");
+      await refreshQueue().catch(() => {});
+    }
+  }
+
   function renderPreferences(next = preferences) {
     preferences = next || {};
     const root = byId("projectChatPreferences");
@@ -242,18 +382,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     sessions = Array.isArray(data.sessions) ? data.sessions : [];
     activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
     renderSessions();
-    await refreshMessages();
-  }
-
-  function setSending(sending) {
-    const button = byId("projectChatSendButton");
-    const input = byId("projectChatInput");
-    if (button) {
-      button.disabled = !!sending || !project;
-      button.setAttribute("aria-busy", String(!!sending));
-      button.textContent = sending ? "Sending…" : "Send";
-    }
-    if (input) input.disabled = !!sending || !project;
+    await Promise.all([refreshMessages(), refreshQueue()]);
   }
 
   function renderPendingUser(text) {
@@ -277,25 +406,35 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (!project || !activeSessionId || !text) return;
     input.value = "";
     autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    const expectedProject = projectPath();
+    const expectedSession = activeSessionId;
     renderPendingUser(text);
-    setSending(true);
+    queueBusy = true;
+    renderTurnState();
     try {
-      await api("/api/chat/turn", {
+      const data = await api("/api/chat/turn", {
         method: "POST",
         body: JSON.stringify({
-          project: projectPath(),
-          session_id: activeSessionId,
+          project: expectedProject,
+          session_id: expectedSession,
           message: text,
           request_id: requestId(),
         }),
       });
+      if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+      applyQueueState(data);
       await refreshMessages();
     } catch (error) {
-      try { await refreshMessages(); } catch (_) {}
+      if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+      await Promise.all([
+        refreshMessages().catch(() => {}),
+        refreshQueue().catch(() => {}),
+      ]);
       showError?.(error.message, "Chat turn failed");
     } finally {
-      setSending(false);
-      input?.focus();
+      if (projectPath() === expectedProject && activeSessionId === expectedSession) {
+        input?.focus();
+      }
     }
   }
 
@@ -310,7 +449,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.session_id || data.active_session_id || "");
       renderSessions();
-      await refreshMessages();
+      await Promise.all([refreshMessages(), refreshQueue()]);
       showToast?.("New Chat created");
     } catch (error) {
       showError?.(error.message, "Create Chat failed");
@@ -328,7 +467,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.active_session_id || sessionId);
       renderSessions();
-      await refreshMessages();
+      await Promise.all([refreshMessages(), refreshQueue()]);
     } catch (error) {
       showError?.(error.message, "Open Chat failed");
     }
@@ -371,7 +510,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : [];
       activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
       renderSessions();
-      await refreshMessages();
+      await Promise.all([refreshMessages(), refreshQueue()]);
       showToast?.("Chat deleted");
     } catch (error) {
       showError?.(error.message, "Delete Chat failed");
@@ -385,11 +524,15 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const path = byId("projectChatPath");
     if (name) name.textContent = project?.name || "Select a project";
     if (path) path.textContent = project?.path || "Open a local project folder to begin.";
+    clearQueuePoll();
+    queueItems = [];
+    queueBusy = false;
     renderPreferences();
     void refreshAgentCapabilities();
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
-    setSending(false);
+    renderQueue();
+    renderTurnState();
     if (!project) {
       sessions = [];
       activeSessionId = "";
@@ -448,6 +591,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     clearProject,
     refreshSessions,
     refreshMessages,
+    refreshQueue,
     renderPreferences,
     activeSessionId: () => activeSessionId,
   };

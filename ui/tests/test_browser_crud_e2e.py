@@ -143,6 +143,16 @@ def _bridge_for(state: UIState):
                     }
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
+                elif path == "/api/chat/queue":
+                    session_id = query.get("session_id", [""])[0]
+                    queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])
+                    data = {
+                        "session_id": session_id,
+                        "items": list(queue),
+                        "processing": None,
+                        "busy": bool(getattr(state, "_browser_chat_busy", False)),
+                        "status": "busy" if getattr(state, "_browser_chat_busy", False) else "idle",
+                    }
                 elif path == "/api/chat/capabilities":
                     data = {
                         "agent": query.get("agent", ["qwen"])[0] or "qwen",
@@ -219,13 +229,50 @@ def _bridge_for(state: UIState):
                     data = state.project_preferences.update(Path(body["project"]), body)
                 elif path == "/api/chat/turn":
                     session_id = str(body.get("session_id", ""))
-                    user = state.chat_service.append_message(
-                        Path(body["project"]), session_id, "user", str(body.get("message", ""))
-                    )
-                    assistant = state.chat_service.append_message(
-                        Path(body["project"]), session_id, "assistant", "Browser Chat reply"
-                    )
-                    data = {"session_id": session_id, "messages": [user, assistant]}
+                    message = str(body.get("message", ""))
+                    if message == "queue browser message":
+                        queue = getattr(state, "_browser_chat_queue", {})
+                        queue.setdefault(session_id, []).append({
+                            "queue_id": "queue-" + "1" * 32,
+                            "content": message,
+                            "created_at": 1,
+                            "status": "queued",
+                        })
+                        state._browser_chat_queue = queue
+                        state._browser_chat_busy = True
+                        data = {
+                            "session_id": session_id,
+                            "items": list(queue[session_id]),
+                            "processing": None,
+                            "busy": True,
+                            "status": "queued",
+                        }
+                    else:
+                        user = state.chat_service.append_message(
+                            Path(body["project"]), session_id, "user", message
+                        )
+                        assistant = state.chat_service.append_message(
+                            Path(body["project"]), session_id, "assistant", "Browser Chat reply"
+                        )
+                        data = {"session_id": session_id, "messages": [user, assistant], "items": [], "busy": False}
+                elif path == "/api/chat/queue/update":
+                    session_id = str(body.get("session_id", ""))
+                    queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])
+                    for item in queue:
+                        if item["queue_id"] == str(body.get("queue_id", "")):
+                            item["content"] = str(body.get("message", ""))
+                    data = {"session_id": session_id, "items": list(queue), "busy": bool(getattr(state, "_browser_chat_busy", False))}
+                elif path == "/api/chat/queue/delete":
+                    session_id = str(body.get("session_id", ""))
+                    queues = getattr(state, "_browser_chat_queue", {})
+                    queues[session_id] = [
+                        item for item in queues.get(session_id, [])
+                        if item["queue_id"] != str(body.get("queue_id", ""))
+                    ]
+                    state._browser_chat_queue = queues
+                    if not queues[session_id]:
+                        state._browser_chat_busy = False
+                    data = {"session_id": session_id, "items": list(queues[session_id]), "busy": bool(getattr(state, "_browser_chat_busy", False))}
                 elif path == "/api/chat/session/create":
                     data = state.chat_service.create_session(
                         Path(body["project"]),
@@ -599,6 +646,16 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             assert page.locator("#projectChatView").is_visible()
             assert page.locator("#chatView").is_hidden()
+
+            page.fill("#projectChatInput", "queue browser message")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1")
+            assert page.locator("#projectChatQueue").is_visible()
+            assert page.locator("#projectChatTurnStatus").is_visible()
+            assert page.locator("#projectChatQueueList").get_by_text("queue browser message").is_visible()
+            page.locator("#projectChatQueueList .project-chat-queue-item button").filter(has_text="Delete").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 0")
+            assert page.locator("#projectChatQueue").is_hidden()
 
             page.click("#newProjectChatButton")
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")

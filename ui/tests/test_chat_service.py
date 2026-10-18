@@ -488,3 +488,57 @@ def test_chat_queue_backend_failure_records_error_and_preserves_later_items(tmp_
     messages = chat.messages(project, session_id)["messages"]
     assert messages[-1]["role"] == "system"
     assert "backend down" in messages[-1]["content"]
+
+
+
+def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+    server = UIServer(repo, "127.0.0.1", 0)
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    queued = server.state.chat_service.enqueue_turn(
+        project,
+        session_id,
+        "queued",
+        request_id="queue-api-1",
+        backend="qwen",
+        mode="auto",
+    )
+    queue_id = queued["queue_id"]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    project_query = urllib.parse.quote(str(project))
+    try:
+        status = _json_request(
+            f"{base}/api/chat/queue?project={project_query}&session_id={session_id}"
+        )
+        assert [row["content"] for row in status["items"]] == ["queued"]
+        updated = _json_request(
+            f"{base}/api/chat/queue/update",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "queue_id": queue_id,
+                "message": "edited",
+            },
+        )
+        assert [row["content"] for row in updated["items"]] == ["edited"]
+        deleted = _json_request(
+            f"{base}/api/chat/queue/delete",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "queue_id": queue_id,
+            },
+        )
+        assert deleted["items"] == []
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

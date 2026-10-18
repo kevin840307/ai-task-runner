@@ -100,6 +100,11 @@
               <p>This Chat is separate from Runner Task history. Agent execution and Task creation are explicit capabilities, not automatic side effects of normal conversation.</p>
             </div>
           </div>
+          <div id="projectChatTurnStatus" class="project-chat-turn-status" hidden>Agent is working · new messages will be queued.</div>
+          <div id="projectChatQueue" class="project-chat-queue" hidden>
+            <div class="project-chat-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="projectChatQueueCount">0</span> pending</strong></div><small>FIFO · scoped to this Chat</small></div>
+            <div id="projectChatQueueList" class="project-chat-queue-list"></div>
+          </div>
           <div id="projectChatComposePanel" class="compose-panel project-chat-compose">
             <div id="projectChatSuggest" class="project-chat-suggest" hidden>
               <div class="project-chat-suggest-head">
