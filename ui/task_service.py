@@ -37,6 +37,10 @@ class TaskService:
                     return deepcopy(row)
         raise ValueError("Task does not exist")
 
+    def validate(self, project: Path, draft: Any) -> dict[str, Any]:
+        """Validate transient editor data without creating durable Task state."""
+        return {"draft": validate_task_draft_for_create(draft, project)}
+
     def create(self, project: Path, draft: Any, *, request_id: str) -> dict[str, Any]:
         request = str(request_id or "").strip()
         if not request:
