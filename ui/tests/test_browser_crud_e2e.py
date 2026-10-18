@@ -832,6 +832,26 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
             page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value=\"deep\"]') !== null")
             page.select_option("#projectChatReasoningSelect", "deep")
+            page.select_option("#projectChatModeQuick", "yolo")
+            page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'yolo'")
+            page.wait_for_function("document.querySelector('#projectChatModeDescription')?.textContent.includes('Automatically approves tools')")
+            assert "Automatically approves tools" in page.locator("#projectChatModeDescription").inner_text()
+            page.select_option("#projectChatModeQuick", "read")
+            page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
+
+            # Agent switch clears the previous Agent's model ID and loads only legal native options.
+            page.select_option("#projectChatAgentSelect", "qwen")
+            page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'qwen'")
+            page.wait_for_function("document.querySelector('#projectChatModelSelect')?.value === ''")
+            assert page.locator("#projectChatModelSelect option[value='openai/gpt-5.2']").count() == 0
+            assert page.locator("#projectChatModelSelect option[value='qwen/model-a']").count() == 1
+
+            # Restore OpenCode for the remaining Project/session-scoping flow.
+            page.select_option("#projectChatAgentSelect", "opencode")
+            page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
+            page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
+            page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value="deep"]') !== null")
+            page.select_option("#projectChatReasoningSelect", "deep")
             page.select_option("#projectChatModeQuick", "read")
             page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
             assert page.locator("#projectChatSettingsPopover").is_visible()
