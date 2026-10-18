@@ -19,7 +19,7 @@ const UI_TEXT={
   'zh-TW':{
     'chat.rename':'重新命名','chat.delete':'刪除','chat.newChat':'+ 新對話','chat.deleteTitle':'刪除對話？','chat.deleteHelp':'只會刪除目前 Project 的這個 Chat；Tasks 不受影響。','chat.deleteCancel':'取消','chat.deleteConfirm':'刪除對話','chat.commands':'指令','chat.typeToFilter':'輸入以篩選',
     'chat.project':'PROJECT','chat.runSettings':'執行設定','chat.workflow':'Workflow','chat.workflowHelp':'供 @goal 與新的 Chat 任務使用',
-    'chat.agent':'Agent','chat.savedProject':'儲存在目前 Project','chat.model':'Model',
+    'chat.agent':'Agent','chat.savedProject':'儲存在目前 Project','chat.model':'Model','chat.reasoning':'推理程度','chat.reasoningHelp':'此 Project 使用的推理程度',
     'chat.turnRunning':'Agent 正在處理；送出訊息會自動加入 Queue','chat.turnWaiting':'Agent 正在等待 Ask 回答；新訊息會排隊',
     'chat.pending':'待處理','chat.queueHint':'Agent 忙碌時，送出會自動排隊',
     'chat.inputPlaceholder':'傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command',
@@ -73,7 +73,7 @@ const UI_TEXT={
   en:{
     'chat.rename':'Rename','chat.delete':'Delete','chat.newChat':'+ New Chat','chat.deleteTitle':'Delete Chat?','chat.deleteHelp':'This removes only this Chat from the current Project. Tasks are unchanged.','chat.deleteCancel':'Cancel','chat.deleteConfirm':'Delete Chat','chat.commands':'Commands','chat.typeToFilter':'Type to filter',
     'chat.project':'PROJECT','chat.runSettings':'Run settings','chat.workflow':'Workflow','chat.workflowHelp':'Used by @goal and new Chat tasks',
-    'chat.agent':'Agent','chat.savedProject':'Saved for this Project','chat.model':'Model',
+    'chat.agent':'Agent','chat.savedProject':'Saved for this Project','chat.model':'Model','chat.reasoning':'Reasoning','chat.reasoningHelp':'Reasoning effort saved for this Project',
     'chat.turnRunning':'Agent is working; new messages are queued automatically','chat.turnWaiting':'Agent is waiting for Ask answers; new messages are queued',
     'chat.pending':'pending','chat.queueHint':'Messages are queued automatically while the Agent is busy',
     'chat.inputPlaceholder':'Message AI…  @ = Runner command · / = Agent Skill / Command',
