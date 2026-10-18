@@ -397,8 +397,8 @@ Git conflict?
     ↓
   run required merge validation, if configured
     ↓
-  validation PASS?
-  ├─ Yes
+  validation result
+  ├─ PASS
   │   ↓
   │ git commit
   │   ↓
@@ -406,11 +406,19 @@ Git conflict?
   │   ↓
   │ Closed · merged
   │
-  └─ No
+  ├─ SOURCE_FAIL
+  │   ↓
+  │ git merge --abort
+  │   ↓
+  │ real merge failure handling
+  │
+  └─ TECHNICAL_ERROR
       ↓
     git merge --abort
       ↓
-    real merge failure handling
+    do NOT increment merge_failure_count
+      ↓
+    existing technical retry/backoff or Needs Attention
 ```
 
 Conceptual merge:
@@ -423,7 +431,13 @@ git commit
 
 If no separate merge validation is configured, a conflict-free merge may proceed directly to `git commit`.
 
-Do not create another validation engine. Reuse the existing configured deterministic/project validation hooks where applicable; source-code correction still belongs to the existing Runner recovery path.
+Validation result semantics:
+
+- `PASS`: merged code is acceptable; commit it.
+- `SOURCE_FAIL`: merged code requires source changes; abort and count exactly one real merge failure.
+- `TECHNICAL_ERROR`: validation could not produce a trustworthy code verdict because of infrastructure/tooling failure; abort the uncommitted merge, do not increment `merge_failure_count`, and reuse the existing technical retry/backoff / Needs Attention owner.
+
+Do not create another validation or technical-retry engine. Reuse existing configured deterministic/project validation and existing technical retry/backoff ownership where applicable; source-code correction still belongs to the existing Runner recovery path.
 
 `--no-ff` gives one consistent Task-delivery merge boundary even when fast-forward would otherwise be possible. `--no-commit` keeps the merge abortable before acceptance.
 
@@ -482,7 +496,7 @@ Examples:
 
 Do not count:
 
-- configured merge validation is unavailable because of an infrastructure/transient error before it can judge the merged code;
+- merge validation returns `TECHNICAL_ERROR` because infrastructure/tooling cannot produce a trustworthy code verdict;
 - waiting in merge queue;
 - merge lock busy;
 - dirty target checkout;
@@ -911,7 +925,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order.
 - [ ] Resolve safe worktree for captured target branch.
 - [ ] Use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
-- [ ] Run required configured merge validation before commit; validation that requires source changes aborts merge and counts as one real merge failure.
+- [ ] Run required configured merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
 - [ ] Commit merge only after acceptance and record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
 
@@ -952,7 +966,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Runner Complete does not close Main before merge.
 - [ ] Task source merges directly into target branch with --no-ff --no-commit.
 - [ ] Conflict-free merge remains uncommitted until configured merge validation passes.
-- [ ] Validation requiring source changes aborts cleanly and counts exactly one real merge failure.
+- [ ] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
+- [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
 - [ ] Merge success commits and closes Main.
 - [ ] Main no_changes closes without a Project merge.
 - [ ] Restart after merge recognizes ancestry and does not duplicate merge.
@@ -1013,9 +1028,14 @@ Runner Complete
 commit Task result locally
 ↓
 git merge --no-ff --no-commit current merge source → Project branch
-├─ conflict / merge validation fail requiring source changes
+├─ conflict / SOURCE_FAIL
 │   → git merge --abort
 │   → merge_failure_count +1
+│   → real merge fail
+├─ TECHNICAL_ERROR
+│   → git merge --abort
+│   → no merge_failure_count change
+│   → existing technical retry/backoff / Needs Attention
 ├─ accepted
 │   → git commit
 │   → Closed / finish
@@ -1023,7 +1043,7 @@ git merge --no-ff --no-commit current merge source → Project branch
     → Closed / finish
 
 real merge fail
-             ↓
+           ↓
            read Global merge_failure_limit
              ↓
            count <= limit
