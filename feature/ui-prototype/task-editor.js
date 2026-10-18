@@ -316,7 +316,7 @@ function openWorktreeMergeChat(t,index){
   document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
   selectProject(projectKey);showView('chat');
   const sessions=ensureProjectChats(projectKey),id=`${projectKey}-chat-${++chatSequence}`;
-  sessions.unshift({id,name:`Merge ${t.id} · Task ${index+1}`,messages:[]});projectActiveChat[projectKey]=id;
+  sessions.unshift({id,name:`Merge ${t.id} · Task ${index+1}`,projectKey,messages:[]});projectActiveChat[projectKey]=id;
   renderChatSession();
   const input=document.getElementById('chatInput');input.value=mergeChatPrompt(t,item,index,projectKey,preflight);resizeChatComposer();input.focus();input.setSelectionRange(input.value.length,input.value.length);
   showToast('Merge prompt prepared · not sent');
@@ -454,11 +454,11 @@ function cloneMessages(messages){return (messages||[]).map(x=>[x[0],x[1]])}
 function ensureProjectChats(key=currentProjectKey){
   if(!projectChats[key]){
     if(key==='ai-task-runner'){
-      projectChats[key]=chatSessions.map(s=>({id:s.id,name:s.name,messages:cloneMessages(s.messages)}));
+      projectChats[key]=chatSessions.map(s=>({id:s.id,name:s.name,projectKey:key,messages:cloneMessages(s.messages)}));
       projectActiveChat[key]='design';
     }else{
       const id=`${key}-chat-1`;
-      projectChats[key]=[{id,name:'Project Chat',messages:[['assistant',`這是 ${key} 的 Project Chat。這裡的對話與其他 Project 分開保存。`]]}];
+      projectChats[key]=[{id,name:'Project Chat',projectKey:key,messages:[['assistant',`這是 ${key} 的 Project Chat。這裡的對話與其他 Project 分開保存。`]]}];
       projectActiveChat[key]=id;
     }
   }
@@ -534,20 +534,29 @@ const mockAgentCapabilities={
     {token:'/test',title:'Focused tests',description:'Mock OpenCode project command.',source:'Command'}
   ]
 };
-function chatAgentKey(session=activeChat()){return session?.agent||'qwen'}
+const PROJECT_CHAT_SETTINGS_KEY='ai-task-runner.prototype.projectChatSettings';
+const PROJECT_CHAT_WORKFLOWS=new Set(['ralphy_ai_validate.yaml','mixed.yaml','file.yaml','dynamic_handoff.yaml']);
+function loadProjectChatSettings(){try{const value=JSON.parse(localStorage.getItem(PROJECT_CHAT_SETTINGS_KEY)||'{}');return value&&typeof value==='object'?value:{}}catch(_){return {}}}
+const projectChatSettings=loadProjectChatSettings();
+function saveProjectChatSettings(){try{localStorage.setItem(PROJECT_CHAT_SETTINGS_KEY,JSON.stringify(projectChatSettings))}catch(_){}}
+function chatProjectKey(session=activeChat()){return session?.projectKey||currentProjectKey}
+function projectChatSettingsFor(key=currentProjectKey){
+  const current=projectChatSettings[key]&&typeof projectChatSettings[key]==='object'?projectChatSettings[key]:{};
+  const agent=mockAgentProfiles[current.agent]?current.agent:'qwen',profile=mockAgentProfiles[agent];
+  const next={agent,model:profile.models.some(x=>x.id===current.model)?current.model:profile.defaultModel,mode:profile.modes.some(x=>x.id===current.mode)?current.mode:profile.defaultMode,workflow:PROJECT_CHAT_WORKFLOWS.has(current.workflow)?current.workflow:'ralphy_ai_validate.yaml'};
+  projectChatSettings[key]=next;return next;
+}
+function chatAgentKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).agent}
 function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||mockAgentProfiles.qwen}
 function chatAgentLabel(key){return chatAgentProfile(key).label}
-function chatWorkflowKey(session=activeChat()){return session?.workflow||'ralphy_ai_validate.yaml'}
+function chatWorkflowKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).workflow}
 function syncChatAgentControl(){
   const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),workflow=document.getElementById('chatWorkflow'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode||!workflow)return;
-  const key=chatAgentKey(session),profile=chatAgentProfile(key);session.agent=key;
-  if(!profile.models.some(x=>x.id===session.model))session.model=profile.defaultModel;
-  if(!profile.modes.some(x=>x.id===session.mode))session.mode=profile.defaultMode;
-  if(!session.workflow)session.workflow='ralphy_ai_validate.yaml';
-  agent.value=key;
-  model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
-  mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===session.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
-  model.value=session.model;mode.value=session.mode;workflow.value=session.workflow;
+  const prefs=projectChatSettingsFor(chatProjectKey(session)),profile=chatAgentProfile(prefs.agent);
+  agent.value=prefs.agent;
+  model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
+  mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
+  model.value=prefs.model;mode.value=prefs.mode;workflow.value=prefs.workflow;
   if(ask){ask.disabled=!profile.askQuestions;ask.title=profile.askQuestions?'Force a mock AI clarification flow':'Selected Agent does not expose interactive questions'}
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
@@ -680,7 +689,7 @@ function mockAskQuestions(context=''){
 }
 function startMockAskFlow(session=activeChat(),context=''){
   const profile=chatAgentProfile(chatAgentKey(session));if(!session||!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
-  session.askFlow={agent:chatAgentKey(session),model:session.model||profile.defaultModel,index:0,questions:mockAskQuestions(context),answers:{},selected:{}};
+  const prefs=projectChatSettingsFor(chatProjectKey(session));session.askFlow={agent:prefs.agent,model:prefs.model,index:0,questions:mockAskQuestions(context),answers:{},selected:{}};
   session.turnState='waiting_ask';
   if(activeChat()===session)renderChatSession();
 }
@@ -903,7 +912,7 @@ renderChatSession=function(){
 document.getElementById('chatPreset').onchange=e=>{projectActiveChat[currentProjectKey]=e.target.value;renderChatSession()};
 document.getElementById('newChat').onclick=()=>{
   const sessions=ensureProjectChats(currentProjectKey),id=`${currentProjectKey}-chat-${++chatSequence}`;
-  sessions.unshift({id,name:`New Chat ${chatSequence}`,messages:[]});projectActiveChat[currentProjectKey]=id;renderChatSession();document.getElementById('chatInput').focus();showToast('New Project Chat');
+  sessions.unshift({id,name:`New Chat ${chatSequence}`,projectKey:currentProjectKey,messages:[]});projectActiveChat[currentProjectKey]=id;renderChatSession();document.getElementById('chatInput').focus();showToast('New Project Chat');
 };
 document.getElementById('renameChatConfirm').onclick=()=>{
   const value=document.getElementById('renameChatInput').value.trim();if(!value){showToast('Chat name 不可空白');return}
@@ -1220,23 +1229,22 @@ chatInputForSuggestions.addEventListener('keydown',e=>{
 },true);
 document.getElementById('chatAgent').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.agent=e.target.value;session.model='';session.mode='';
-  syncChatAgentControl();renderComposerSuggestions();
-  showToast(`Mock Agent · ${chatAgentLabel(e.target.value)}`);
+  const key=chatProjectKey(session),prefs=projectChatSettingsFor(key),profile=chatAgentProfile(e.target.value);prefs.agent=e.target.value;prefs.model=profile.defaultModel;prefs.mode=profile.defaultMode;saveProjectChatSettings();
+  syncChatAgentControl();renderComposerSuggestions();showToast(`${key} · Agent · ${chatAgentLabel(e.target.value)}`);
 };
 document.getElementById('chatWorkflow').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.workflow=e.target.value;showToast(`Workflow · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+  const key=chatProjectKey(session),prefs=projectChatSettingsFor(key);prefs.workflow=e.target.value;saveProjectChatSettings();showToast(`${key} · Workflow · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
 };
 document.getElementById('chatModel').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.model=e.target.value;showToast(`Mock Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
+  const key=chatProjectKey(session),prefs=projectChatSettingsFor(key);prefs.model=e.target.value;saveProjectChatSettings();showToast(`${key} · Model · ${e.target.options[e.target.selectedIndex]?.text||e.target.value}`);
 };
 document.getElementById('chatMode').onchange=e=>{
   const session=activeChat();if(!session)return;
-  session.mode=e.target.value;syncChatAgentControl();
-  const native=chatAgentProfile().modes.find(x=>x.id===session.mode)?.native||session.mode;
-  showToast(`Mock Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
+  const key=chatProjectKey(session),prefs=projectChatSettingsFor(key);prefs.mode=e.target.value;saveProjectChatSettings();syncChatAgentControl();
+  const native=chatAgentProfile(prefs.agent).modes.find(x=>x.id===prefs.mode)?.native||prefs.mode;
+  showToast(`${key} · Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
 };
 document.getElementById('chatAsk').onclick=()=>{
   const input=document.getElementById('chatInput'),session=activeChat(),profile=chatAgentProfile(chatAgentKey(session));
