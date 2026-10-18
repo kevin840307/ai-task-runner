@@ -155,6 +155,8 @@ Keep these scopes explicit in UI/API/storage to prevent accidental cross-project
 - Queue items can be edited and deleted.
 - Queue stays above the Composer.
 - Ask is rendered inside the Chat message stream.
+- Each choice-style Ask question should show no more than 5 visible options total. Reserve the final option for Other/custom text, so generated fixed options should normally be capped at 4.
+- The backend/Agent Ask prompt and schema should state this limit, and the UI must clamp defensively if an Agent returns more.
 - Ask supports multiple questions, choices, text, Other/custom answer, Next, final Submit.
 - Ask uses the outer Chat scrolling; do not add unnecessary nested scrolling unless a future real-world layout proves it necessary.
 
