@@ -420,7 +420,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
 [ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
-[ ] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch。
+[ ] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
 [ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
 
 
@@ -442,7 +442,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
 [ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
 [ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
-[ ] captured target branch 被刪除/rename，或 rewrite 後與 current merge source 無有效 common ancestry => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
+[ ] captured target branch 被刪除/rename => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
+[ ] target force-reset/divergence 後若 merge_source_base_sha 不再是 current target HEAD ancestor => Ongoing · waiting_target_history / Needs Attention；不可 direct merge/recovery，也不增加 merge_failure_count，避免把被移除 history 重新帶回來。
 [ ] 不得自動 git switch 使用者 Project checkout。
 [ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
 [ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
