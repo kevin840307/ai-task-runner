@@ -277,6 +277,11 @@ const projectChat = createProjectChatController({
   showToast,
   showError: showActionError,
   autosizeTextarea,
+  onPreferencesChanged: (data) => {
+    state.projectPreferences = projectPreferencesProjection(data);
+    renderBackendPicker();
+    renderWorkflowPicker();
+  },
 });
 
 function syncComposerReserve() {

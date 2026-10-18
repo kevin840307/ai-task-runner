@@ -153,6 +153,38 @@ def _bridge_for(state: UIState):
                         "busy": bool(getattr(state, "_browser_chat_busy", False)),
                         "status": "busy" if getattr(state, "_browser_chat_busy", False) else "idle",
                     }
+                elif path == "/api/chat/settings-catalog":
+                    selected_agent = query.get("agent", ["qwen"])[0] or "qwen"
+                    selected_model = query.get("model", [""])[0]
+                    if selected_agent == "opencode":
+                        models = ["openai/gpt-5.2"]
+                        reasoning = [
+                            {"id": "low", "label": "Low", "native": "openai/gpt-5.2#low", "description": "Low", "default": False},
+                            {"id": "deep", "label": "Deep", "native": "openai/gpt-5.2#deep", "description": "Deep", "default": True},
+                        ] if selected_model else []
+                    else:
+                        models = ["qwen/model-a"]
+                        reasoning = [
+                            {"id": "low", "label": "Low", "native": "low", "description": "Low", "default": False},
+                            {"id": "medium", "label": "Medium", "native": "medium", "description": "Medium", "default": True},
+                            {"id": "high", "label": "High", "native": "high", "description": "High", "default": False},
+                        ]
+                    data = {
+                        "agent": selected_agent,
+                        "agents": ["qwen", "opencode"],
+                        "default_agent": "qwen",
+                        "models": models,
+                        "modes": [
+                            {"id": "read", "native": "native-read", "description": "Read only", "supported": True, "unsafe": False},
+                            {"id": "auto", "native": "native-auto", "description": "Safe automatic approvals", "supported": True, "unsafe": False},
+                            {"id": "yolo", "native": "native-yolo", "description": "Approve all tools", "supported": True, "unsafe": True},
+                        ],
+                        "reasoning": reasoning,
+                        "workflows": [
+                            {"id": "wf1", "name": "ralphy_ai_validate.yaml", "path": str(state.repo_root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"), "scope": "global"}
+                        ],
+                        "cached": False,
+                    }
                 elif path == "/api/chat/capabilities":
                     data = {
                         "agent": query.get("agent", ["qwen"])[0] or "qwen",
@@ -626,6 +658,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.click("#projectChatSettingsButton")
+            page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
+            assert page.locator("#projectChatSettingsPopover").is_visible()
+            page.select_option("#projectChatAgentSelect", "opencode")
+            page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
+            page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
+            page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value=\"deep\"]') !== null")
+            page.select_option("#projectChatReasoningSelect", "deep")
+            page.select_option("#projectChatModeQuick", "read")
+            page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
+            assert page.locator("#projectChatSettingsPopover").is_visible()
+            page.click("#projectChatSettingsClose")
+            assert page.locator("#projectChatSettingsPopover").is_hidden()
+
             page.fill("#projectChatInput", "/re")
             page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
             assert page.locator("#projectChatSuggestList .project-chat-suggest-item").count() == 1

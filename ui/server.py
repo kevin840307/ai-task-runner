@@ -123,7 +123,13 @@ class Handler(SimpleHTTPRequestHandler):
                     for item in self.state.studio_files(project).get("workflows", [])
                     if not item.get("hidden")
                 ]
-                return self._json({**value, "workflows": workflows})
+                backend_catalog = self.state.backend_catalog(project)
+                return self._json({
+                    **value,
+                    "agents": backend_catalog.get("backends", []),
+                    "default_agent": backend_catalog.get("default", ""),
+                    "workflows": workflows,
+                })
             if parsed.path == "/api/chat/capabilities":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})

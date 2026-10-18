@@ -87,15 +87,27 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
+.project-chat-preference-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
 .project-chat-preferences {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 8px 14px;
+  padding: 8px 8px 8px 14px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+}
+.project-chat-settings-button {
+  margin-right: 12px;
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 10px;
 }
 .project-chat-pref {
   display: inline-flex;
@@ -292,4 +304,62 @@
   min-height: 24px;
   padding: 2px 7px;
   font-size: 9px;
+}
+
+.project-chat-settings-popover {
+  position: fixed;
+  z-index: 460;
+  width: min(430px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 24px));
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--popover-bg, var(--panel));
+  box-shadow: var(--shadow-popover);
+}
+.project-chat-settings-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--popover-bg, var(--panel));
+}
+.project-chat-settings-head > div { min-width: 0; display: grid; gap: 2px; }
+.project-chat-settings-head strong { font-size: 12px; }
+.project-chat-settings-head small { color: var(--muted); font-size: 9px; }
+.project-chat-settings-head button { width: 28px; height: 28px; padding: 0; }
+.project-chat-settings-body { display: grid; gap: 5px; padding: 8px; }
+.project-chat-settings-body label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 46%);
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+}
+.project-chat-settings-body label:hover { background: var(--panel-2); }
+.project-chat-settings-body label > span { min-width: 0; display: grid; gap: 2px; }
+.project-chat-settings-body label strong { font-size: 11px; }
+.project-chat-settings-body label small { color: var(--muted); font-size: 9px; line-height: 1.35; }
+.project-chat-settings-body select {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+}
+.project-chat-mode-hint {
+  width: auto;
+  max-width: 150px;
+  cursor: pointer;
+  outline: none;
 }

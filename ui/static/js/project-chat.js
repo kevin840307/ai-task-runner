@@ -3,7 +3,7 @@ function requestId() {
   return "chat-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea }) {
+export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, onPreferencesChanged }) {
   let project = null;
   let sessions = [];
   let activeSessionId = "";
@@ -14,6 +14,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let queueItems = [];
   let queueBusy = false;
   let queuePollTimer = 0;
+  let settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], default_agent: "" };
+  let settingsLoading = false;
 
   const byId = (id) => document.getElementById(id);
 
@@ -45,6 +47,246 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
     suggestionIndex = 0;
     renderSuggestions();
+  }
+
+  function preferenceValue(key, fallback = "") {
+    if (key === "agent") return String(preferences.backend || preferences.agent || fallback);
+    return String(preferences[key] ?? fallback);
+  }
+
+  function normalizePreferences(data = {}) {
+    return {
+      ...preferences,
+      ...data,
+      backend: String(data.agent ?? data.backend ?? preferences.backend ?? preferences.agent ?? ""),
+      agent: String(data.agent ?? data.backend ?? preferences.agent ?? preferences.backend ?? ""),
+      model: String(data.model ?? preferences.model ?? ""),
+      mode: String(data.mode ?? preferences.mode ?? "auto"),
+      reasoning: String(data.reasoning ?? preferences.reasoning ?? ""),
+      workflow: String(data.workflow ?? preferences.workflow ?? ""),
+    };
+  }
+
+  async function refreshSettingsCatalog({ refresh = false, agent = "", model = "" } = {}) {
+    const path = projectPath();
+    if (!path) {
+      settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], default_agent: "" };
+      renderSettingsControls();
+      return;
+    }
+    const expected = path;
+    const query = new URLSearchParams({ project: path });
+    const selectedAgent = String(agent || preferenceValue("agent"));
+    const selectedModel = String(model || preferenceValue("model"));
+    if (selectedAgent) query.set("agent", selectedAgent);
+    if (selectedModel) query.set("model", selectedModel);
+    if (refresh) query.set("refresh", "1");
+    settingsLoading = true;
+    renderSettingsControls();
+    try {
+      const data = await api("/api/chat/settings-catalog?" + query.toString(), { timeoutMs: 30000 });
+      if (projectPath() !== expected) return;
+      settingsCatalog = {
+        agents: Array.isArray(data.agents) ? data.agents : [],
+        models: Array.isArray(data.models) ? data.models : [],
+        modes: Array.isArray(data.modes) ? data.modes : [],
+        reasoning: Array.isArray(data.reasoning) ? data.reasoning : [],
+        workflows: Array.isArray(data.workflows) ? data.workflows : [],
+        default_agent: String(data.default_agent || ""),
+      };
+    } catch (error) {
+      if (projectPath() !== expected) return;
+      showError?.(error.message, "Project Chat settings unavailable");
+      settingsCatalog = { ...settingsCatalog, models: [], modes: [], reasoning: [] };
+    } finally {
+      if (projectPath() === expected) {
+        settingsLoading = false;
+        renderSettingsControls();
+      }
+    }
+  }
+
+  function addOption(select, value, label, { disabled = false } = {}) {
+    const option = document.createElement("option");
+    option.value = String(value ?? "");
+    option.textContent = String(label ?? value ?? "");
+    option.disabled = !!disabled;
+    select.appendChild(option);
+    return option;
+  }
+
+  function fillSelect(select, rows, saved, emptyLabel, mapper = (row) => [row, row]) {
+    if (!select) return;
+    select.innerHTML = "";
+    addOption(select, "", emptyLabel);
+    for (const row of rows) {
+      const [value, label, disabled] = mapper(row);
+      addOption(select, value, label, { disabled });
+    }
+    const values = [...select.options].map((option) => option.value);
+    if (saved && !values.includes(saved)) addOption(select, saved, saved + " · unavailable", { disabled: true });
+    select.value = values.includes(saved) || !saved ? saved : saved;
+    select.disabled = settingsLoading || !project;
+  }
+
+  function modeRows() {
+    return settingsCatalog.modes.filter((row) => row && row.supported !== false);
+  }
+
+  function renderSettingsControls() {
+    const agent = byId("projectChatAgentSelect");
+    const model = byId("projectChatModelSelect");
+    const mode = byId("projectChatModeSelect");
+    const quick = byId("projectChatModeQuick");
+    const reasoning = byId("projectChatReasoningSelect");
+    const workflow = byId("projectChatWorkflowSelect");
+    const savedAgent = preferenceValue("agent");
+    const savedModel = preferenceValue("model");
+    const savedMode = preferenceValue("mode", "auto");
+    const savedReasoning = preferenceValue("reasoning");
+    const savedWorkflow = preferenceValue("workflow");
+
+    fillSelect(
+      agent,
+      settingsCatalog.agents,
+      savedAgent,
+      settingsCatalog.default_agent ? "Default · " + settingsCatalog.default_agent : "Runner default",
+    );
+    fillSelect(model, settingsCatalog.models, savedModel, "Agent default");
+    fillSelect(
+      mode,
+      modeRows(),
+      savedMode,
+      "Agent default",
+      (row) => [row.id, String(row.id || "").toUpperCase(), false],
+    );
+    fillSelect(
+      quick,
+      modeRows(),
+      savedMode,
+      "Mode",
+      (row) => [row.id, String(row.id || "").toUpperCase(), false],
+    );
+    fillSelect(
+      reasoning,
+      settingsCatalog.reasoning,
+      savedReasoning,
+      "Model default",
+      (row) => [row.id, row.label || row.id, false],
+    );
+    fillSelect(
+      workflow,
+      settingsCatalog.workflows,
+      savedWorkflow,
+      "Project default",
+      (row) => [row.path, row.name + (row.scope ? " · " + row.scope : ""), false],
+    );
+    const description = byId("projectChatModeDescription");
+    const selectedMode = modeRows().find((row) => row.id === savedMode);
+    if (description) {
+      description.textContent = selectedMode
+        ? selectedMode.description + (selectedMode.unsafe ? " · Automatically approves tools." : "")
+        : "Permission / approval mode";
+    }
+    const settingsButton = byId("projectChatSettingsButton");
+    if (settingsButton) settingsButton.disabled = settingsLoading || !project;
+  }
+
+  function positionSettingsPopover() {
+    const panel = byId("projectChatSettingsPopover");
+    const button = byId("projectChatSettingsButton");
+    if (!panel || !button || panel.hidden) return;
+    const rect = button.getBoundingClientRect();
+    const pad = 12;
+    const gap = 7;
+    const width = panel.getBoundingClientRect().width || 430;
+    const height = panel.getBoundingClientRect().height || 420;
+    const left = Math.max(pad, Math.min(window.innerWidth - width - pad, rect.right - width));
+    let top = rect.bottom + gap;
+    if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap);
+    panel.style.left = Math.round(left) + "px";
+    panel.style.top = Math.round(top) + "px";
+  }
+
+  function closeSettingsPopover() {
+    const panel = byId("projectChatSettingsPopover");
+    const button = byId("projectChatSettingsButton");
+    if (panel) panel.hidden = true;
+    if (button) button.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleSettingsPopover(event) {
+    event?.stopPropagation();
+    const panel = byId("projectChatSettingsPopover");
+    const button = byId("projectChatSettingsButton");
+    if (!panel || !button || !project) return;
+    const opening = panel.hidden;
+    if (!opening) return closeSettingsPopover();
+    panel.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    renderSettingsControls();
+    requestAnimationFrame(positionSettingsPopover);
+  }
+
+  async function savePreferencePatch(patch, { refreshCatalog = false, refreshCapabilities = false } = {}) {
+    const path = projectPath();
+    if (!path) return;
+    try {
+      const data = await api("/api/project/preferences", {
+        method: "POST",
+        body: JSON.stringify({ project: path, ...patch }),
+      });
+      if (projectPath() !== path) return;
+      preferences = normalizePreferences(data);
+      onPreferencesChanged?.(data);
+      renderPreferences();
+      if (refreshCatalog) await refreshSettingsCatalog({ refresh: true });
+      else renderSettingsControls();
+      if (refreshCapabilities) await refreshAgentCapabilities({ refresh: true });
+    } catch (error) {
+      showError?.(error.message, "Project preference update failed");
+      await refreshSettingsCatalog({ refresh: true }).catch(() => {});
+    }
+  }
+
+  async function changeAgent(value) {
+    const nextAgent = String(value || "");
+    const catalogQueryAgent = nextAgent || settingsCatalog.default_agent;
+    let nextMode = "auto";
+    try {
+      const path = projectPath();
+      const query = new URLSearchParams({ project: path, agent: catalogQueryAgent, refresh: "1" });
+      const data = await api("/api/chat/settings-catalog?" + query.toString(), { timeoutMs: 30000 });
+      const modes = Array.isArray(data.modes) ? data.modes.filter((row) => row.supported !== false) : [];
+      nextMode = modes.some((row) => row.id === "auto")
+        ? "auto"
+        : modes.some((row) => row.id === "read")
+          ? "read"
+          : String(modes[0]?.id || "auto");
+    } catch (_) {}
+    await savePreferencePatch(
+      { agent: nextAgent, model: "", mode: nextMode, reasoning: "" },
+      { refreshCatalog: true, refreshCapabilities: true },
+    );
+  }
+
+  async function changeModel(value) {
+    const selectedModel = String(value || "");
+    const agent = preferenceValue("agent") || settingsCatalog.default_agent;
+    let nextReasoning = "";
+    try {
+      const query = new URLSearchParams({ project: projectPath(), agent, model: selectedModel, refresh: "1" });
+      const data = await api("/api/chat/settings-catalog?" + query.toString(), { timeoutMs: 30000 });
+      const options = Array.isArray(data.reasoning) ? data.reasoning : [];
+      const current = preferenceValue("reasoning");
+      nextReasoning = options.some((row) => row.id === current)
+        ? current
+        : String(options.find((row) => row.default)?.id || "");
+    } catch (_) {}
+    await savePreferencePatch(
+      { model: selectedModel, reasoning: nextReasoning },
+      { refreshCatalog: true, refreshCapabilities: true },
+    );
   }
 
   function suggestionQuery() {
@@ -276,8 +518,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     preferences = next || {};
     const root = byId("projectChatPreferences");
     if (!root) return;
-    const modeHint = byId("projectChatModeHint");
-    if (modeHint) modeHint.textContent = String(preferences.mode || "auto").toUpperCase();
     root.innerHTML = "";
     const items = [
       ["Agent", preferences.backend || preferences.agent || "Default"],
@@ -297,6 +537,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       item.append(key, text);
       root.appendChild(item);
     }
+    renderSettingsControls();
   }
 
   function renderSessions() {
@@ -531,7 +772,10 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     queueItems = [];
     queueBusy = false;
     renderPreferences();
-    void refreshAgentCapabilities();
+    void Promise.all([
+      refreshSettingsCatalog(),
+      refreshAgentCapabilities(),
+    ]);
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
     renderQueue();
@@ -551,6 +795,20 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   byId("newProjectChatButton")?.addEventListener("click", () => void createSession());
+  byId("projectChatSettingsButton")?.addEventListener("click", toggleSettingsPopover);
+  byId("projectChatSettingsClose")?.addEventListener("click", closeSettingsPopover);
+  byId("projectChatAgentSelect")?.addEventListener("change", (event) => void changeAgent(event.currentTarget.value));
+  byId("projectChatModelSelect")?.addEventListener("change", (event) => void changeModel(event.currentTarget.value));
+  byId("projectChatModeSelect")?.addEventListener("change", (event) => void savePreferencePatch({ mode: event.currentTarget.value }));
+  byId("projectChatModeQuick")?.addEventListener("change", (event) => void savePreferencePatch({ mode: event.currentTarget.value }));
+  byId("projectChatReasoningSelect")?.addEventListener("change", (event) => void savePreferencePatch({ reasoning: event.currentTarget.value }));
+  byId("projectChatWorkflowSelect")?.addEventListener("change", (event) => void savePreferencePatch({ workflow: event.currentTarget.value }));
+  document.addEventListener("click", (event) => {
+    const panel = byId("projectChatSettingsPopover");
+    const button = byId("projectChatSettingsButton");
+    if (panel && !panel.hidden && !panel.contains(event.target) && !button?.contains(event.target)) closeSettingsPopover();
+  });
+  window.addEventListener("resize", positionSettingsPopover);
   byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
   byId("projectChatInput")?.addEventListener("input", (event) => {
     autosizeTextarea?.(event.currentTarget, { minHeight: 46, maxHeight: 180 });
