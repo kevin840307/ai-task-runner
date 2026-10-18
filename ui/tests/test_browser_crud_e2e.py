@@ -154,7 +154,7 @@ def _bridge_for(state: UIState):
                     data = {
                         "session_id": session_id,
                         "items": list(queue),
-                        "processing": None,
+                        "dispatching": None,
                         "busy": busy,
                         "status": "busy" if busy else "idle",
                     }
@@ -353,7 +353,7 @@ def _bridge_for(state: UIState):
                         data = {
                             "session_id": session_id,
                             "items": list(queue),
-                            "processing": None,
+                            "dispatching": None,
                             "busy": True,
                             "status": "waiting_ask",
                         }
@@ -400,7 +400,7 @@ def _bridge_for(state: UIState):
                         data = {
                             "session_id": session_id,
                             "items": list(queue[session_id]),
-                            "processing": None,
+                            "dispatching": None,
                             "busy": True,
                             "status": "queued",
                         }
@@ -446,7 +446,7 @@ def _bridge_for(state: UIState):
                     data = {
                         **data,
                         "items": [],
-                        "processing": None,
+                        "dispatching": None,
                         "busy": False,
                         "status": "idle",
                     }
