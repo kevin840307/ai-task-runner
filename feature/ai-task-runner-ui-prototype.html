@@ -291,6 +291,14 @@
   <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
 </div>
 
+<div class="modal-overlay" id="yamlDiscardModal" role="dialog" aria-modal="true" aria-labelledby="yamlDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="yamlDiscardTitle" data-i18n="yaml.discardTitle">Discard YAML changes?</h2><p data-i18n="yaml.discardHelp">Unsaved YAML changes will be lost.</p></div><button class="close" data-close-modal="yamlDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="yaml.discardBody">Discard the unsaved YAML changes and leave this editor?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="yamlDiscardModal" type="button" data-i18n="yaml.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardYaml" type="button" data-i18n="yaml.discard">Discard changes</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="taskEditorDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskEditorDiscardTitle">
   <div class="modal-card project-manage-modal">
     <div class="modal-head"><div><h2 id="taskEditorDiscardTitle" data-i18n="taskEditor.discardTitle">Discard task changes?</h2><p data-i18n="taskEditor.discardHelp">Unsaved changes in this Task Editor will be lost.</p></div><button class="close" data-close-modal="taskEditorDiscardModal" type="button" aria-label="Close">×</button></div>
