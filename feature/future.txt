@@ -29,11 +29,18 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
   - Execution
   - Interface
   - Agents (future)
-- Interface owns global Theme and Language preferences.
-- Theme options:
+- Interface owns global Appearance, Theme palette, and Language preferences.
+- Appearance options:
   - System
   - Light
   - Dark
+- Theme palette options must stay aligned with the existing UI:
+  - Teal
+  - Deep Blue
+  - Violet
+  - Amber
+  - Rose
+- Theme colors are token-based. Task/Card/Board/border/selected states must use the same palette tokens in both Light and Dark; do not reintroduce fixed teal or white surfaces.
 - Language options:
   - Traditional Chinese
   - English
@@ -160,6 +167,7 @@ When moving beyond the prototype:
 --------------------------------------------
 - Browser-test Global Settings -> Execution / Interface.
 - Verify System / Light / Dark appearance and persistence.
+- Verify all five palettes in both Light and Dark, especially Tasks, Worktree cards, selected/hover borders, modals, inputs, and sidebar boundaries.
 - Verify language preference persistence and document language projection.
 - Verify each Project independently remembers Agent / Model / Mode / Workflow.
 - Verify same-Project Chat sessions share those settings.
