@@ -1022,6 +1022,7 @@ function openPromptsFromTaskEditor(){
   if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
     requestDiscardNewTaskListDraft(go);return;
   }
+  if(typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){requestDiscardTaskEditorChanges(go);return}
   go();
 }
 function newTaskPromptBodySimple(){
@@ -1188,6 +1189,45 @@ function editorItemRef(){
   return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
 }
 function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
+let taskEditorInitialSnapshot='',taskEditorDiscardAction=null,taskEditorDiscardReturnFocus=null;
+function taskEditorSnapshot(){
+  if(!document.getElementById('newTaskModal')?.classList.contains('open'))return '';
+  captureNewTaskSources();
+  return JSON.stringify({
+    title:document.getElementById('newTaskTitle')?.value||'',
+    project:document.getElementById('newTaskProject')?.value||'',
+    workflow:document.getElementById('newTaskWorkflow')?.value||'',
+    workspace:newTaskWorkspaceMode,
+    draft:newTaskDraft
+  });
+}
+function markTaskEditorClean(){taskEditorInitialSnapshot=taskEditorSnapshot()}
+function taskEditorHasChanges(){
+  if(!taskEditorInitialSnapshot||!document.getElementById('newTaskModal')?.classList.contains('open'))return false;
+  return taskEditorSnapshot()!==taskEditorInitialSnapshot;
+}
+function restoreTaskEditorDiscardFocus(){
+  const target=taskEditorDiscardReturnFocus;taskEditorDiscardReturnFocus=null;
+  if(target?.isConnected)setTimeout(()=>target.focus({preventScroll:true}),0);
+}
+function requestDiscardTaskEditorChanges(onDiscard){
+  if(!taskEditorHasChanges()){onDiscard?.();return true}
+  taskEditorDiscardAction=typeof onDiscard==='function'?onDiscard:null;
+  taskEditorDiscardReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  openModal('taskEditorDiscardModal');
+  setTimeout(()=>document.getElementById('confirmDiscardTaskEditor')?.focus({preventScroll:true}),0);
+  return false;
+}
+document.getElementById('confirmDiscardTaskEditor')?.addEventListener('click',()=>{
+  const action=taskEditorDiscardAction;taskEditorDiscardAction=null;taskEditorDiscardReturnFocus=null;
+  closeModal('taskEditorDiscardModal');taskEditorInitialSnapshot='';action?.();
+});
+document.querySelectorAll('[data-close-modal="taskEditorDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskEditorDiscardAction=null;restoreTaskEditorDiscardFocus()}));
+document.getElementById('taskEditorDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskEditorDiscardAction=null;restoreTaskEditorDiscardFocus()}});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!document.getElementById('taskEditorDiscardModal')?.classList.contains('open'))return;
+  e.preventDefault();e.stopImmediatePropagation();taskEditorDiscardAction=null;closeModal('taskEditorDiscardModal');restoreTaskEditorDiscardFocus();
+});
 function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProjectKey=null}={}){
   const editorSubmit=document.getElementById('createTaskConfirm');
   if(editorSubmit){delete editorSubmit.dataset.submitting;editorSubmit.disabled=false}
