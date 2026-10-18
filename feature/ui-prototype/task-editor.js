@@ -1502,7 +1502,7 @@ openTaskById=function(id){
   setPlanDraftForTask(t);renderDrawerPlan(t);
 };
 
-// --- Canonical Task Editor: every Task create/edit entry uses the same overlay surface. ---
+// --- Canonical Task Editor: every Task create/edit entry uses the same Drawer route. ---
 const isolatedTaskEditorLoad=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
   if(mode==='create-item'||mode==='edit-item')closeModal('addPlanTaskModal');
