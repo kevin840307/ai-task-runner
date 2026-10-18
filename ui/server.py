@@ -17,6 +17,8 @@ try:
     from .chat_agent_service import ChatAgentService
     from .chat_service import ChatService
     from .project_preferences import ProjectPreferences
+    from .task_draft_service import TaskDraftService
+    from .task_service import TaskService
     from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
@@ -27,6 +29,8 @@ except ImportError:
     from chat_agent_service import ChatAgentService
     from chat_service import ChatService
     from project_preferences import ProjectPreferences
+    from task_draft_service import TaskDraftService
+    from task_service import TaskService
     from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
@@ -56,6 +60,8 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.agent_capabilities = AgentCapabilityService(self.repo_root)
         self.agent_settings = AgentSettingsService(self.repo_root)
         self.project_preferences = ProjectPreferences()
+        self.task_drafts = TaskDraftService(self.repo_root)
+        self.tasks = TaskService()
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
@@ -145,6 +151,10 @@ class Handler(SimpleHTTPRequestHandler):
                     agent,
                     refresh=query.get("refresh", ["0"])[0] == "1",
                 ))
+            if parsed.path == "/api/tasks":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.tasks.list(project))
             if parsed.path == "/api/chat/sessions":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
@@ -259,6 +269,33 @@ class Handler(SimpleHTTPRequestHandler):
                     self.state.agent_capabilities.invalidate(project)
                     self.state.agent_settings.invalidate(project)
                 return self._json(value)
+            if parsed.path == "/api/chat/task-draft":
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                self.state.chat_service.messages(project, session_id)
+                preferences = self.state.project_preferences.get(project)
+                backend = str(preferences.get("agent") or "").strip()
+                if not backend:
+                    backend = str(
+                        self.state.backend_catalog(project).get("default") or ""
+                    ).strip()
+                return self._json(self.state.task_drafts.generate(
+                    project,
+                    spec=str(body.get("spec", "")),
+                    draft_mode=str(body.get("mode", "")),
+                    backend=backend,
+                    model=str(preferences.get("model") or ""),
+                    reasoning=str(preferences.get("reasoning") or ""),
+                    workflow=str(preferences.get("workflow") or ""),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/tasks/create":
+                project = self._project(body)
+                return self._json(self.state.tasks.create(
+                    project,
+                    body.get("draft"),
+                    request_id=str(body.get("request_id", "")),
+                ))
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
                 preferences = self.state.project_preferences.get(project)
