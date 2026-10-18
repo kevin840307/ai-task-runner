@@ -347,8 +347,6 @@ Different target branches may have independent merge queues, while short reposit
 
 ## 10. Direct Main merge transaction
 
-There is no permanent integration branch and no normal-path candidate branch.
-
 ```text
 Task snapshot commit ready
 ↓
@@ -383,10 +381,6 @@ Conceptual merge:
 ```bash
 git merge local/task/T-001-r1
 ```
-
-Do not use `merge --squash`.
-
-Do not create a candidate branch for the normal merge path.
 
 Normal merge preserves ancestry so later Tasks based on older Project commits can conflict correctly.
 
@@ -540,8 +534,6 @@ merge_failure_count
 ```
 
 This is the actual count of real merge failures for the Task.
-
-Do not add `merge_retry_attempt`.
 
 Do not copy another merge-limit field into Task metadata.
 
@@ -799,7 +791,7 @@ B Runner Complete
             → retry merge
 ```
 
-Therefore concurrent Tasks still get real Git conflict detection without candidate/squash/integration branches.
+Therefore concurrent Tasks still get real Git conflict detection while keeping the merge path direct.
 
 ---
 
@@ -809,7 +801,7 @@ Therefore concurrent Tasks still get real Git conflict detection without candida
 
 - [ ] Preserve Auto / Main / Isolated Worktree.
 - [ ] Global Settings owns `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
-- [ ] Task persists only actual `merge_failure_count`; do not add another retry counter or Task-local limit copy.
+- [ ] Task persists only actual `merge_failure_count`; Global Settings owns the merge failure limit.
 - [ ] Capture target branch + HEAD per Task run.
 - [ ] Keep Runner architecture unchanged.
 
@@ -833,8 +825,6 @@ Therefore concurrent Tasks still get real Git conflict detection without candida
 - [ ] Serialize merge per repository + target branch.
 - [ ] Resolve safe worktree for captured target branch.
 - [ ] Normal `git merge <Task/recovery source branch>` directly into target branch.
-- [ ] Do not use `merge --squash`.
-- [ ] Do not create normal-path candidate/integration branches.
 - [ ] Merge success is the effective Main completion boundary.
 
 ### Phase E — fail merge / recovery
@@ -908,8 +898,6 @@ Therefore concurrent Tasks still get real Git conflict detection without candida
 - Do not redesign Runner.
 - Do not add a Git Workflow Stage.
 - Do not add a second retry/recovery engine.
-- Do not use normal-path candidate branches.
-- Do not use `merge --squash` for Task delivery.
 - Do not create a permanent integration branch.
 - Do not auto-switch user Project checkout branch.
 - Do not auto-stash/reset/discard/commit unrelated dirty Project files.
