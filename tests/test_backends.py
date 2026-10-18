@@ -14,10 +14,12 @@ from runner.agent import (
     backend_names,
     configure_backend_args,
     configure_model_args,
+    configure_interaction_args,
     create_ai_client,
     create_backend,
     is_session_invalid_error,
     is_transient_service_error,
+    interaction_modes,
     sandbox_supported,
     split_command,
 )
@@ -1027,3 +1029,49 @@ def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypa
     )
     opencode_command = opencode.build_command("prompt", "")
     assert opencode_command[opencode_command.index("--model") + 1] == "provider/model-a"
+
+
+
+def test_qwen_chat_modes_use_native_approval_mode_without_runtime_safe_mode():
+    specs = {item.id: item for item in interaction_modes("qwen")}
+    assert set(specs) == {"read", "auto", "yolo"}
+    assert specs["read"].native == "plan"
+    assert specs["auto"].native == "auto"
+    assert specs["yolo"].unsafe is True
+
+    read = configure_interaction_args("qwen", "read", ["--yolo", "--model", "m"])
+    auto = configure_interaction_args("qwen", "auto", ["--approval-mode=yolo"])
+    yolo = configure_interaction_args("qwen", "yolo", [])
+    assert read == ["--model", "m", "--approval-mode", "plan"]
+    assert auto == ["--approval-mode", "auto"]
+    assert yolo == ["--approval-mode", "yolo"]
+    assert "--safe-mode" not in read
+
+
+def test_opencode_chat_modes_map_to_auto_and_permission_profiles(tmp_path):
+    specs = {item.id: item for item in interaction_modes("opencode")}
+    assert set(specs) == {"read", "auto", "yolo"}
+    assert specs["yolo"].unsafe is True
+
+    read_args = configure_interaction_args("opencode", "read", ["--auto", "--model", "p/m"])
+    auto_args = configure_interaction_args("opencode", "auto", [])
+    yolo_args = configure_interaction_args("opencode", "yolo", [])
+    assert read_args == ["--model", "p/m"]
+    assert auto_args == ["--auto"]
+    assert yolo_args == ["--auto"]
+
+    read_backend = OpenCodeBackend(sys.executable, tmp_path, read_args)
+    read_backend.configure_interaction("read")
+    read_policy = json.loads(read_backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert read_policy["*"] == "deny"
+    assert read_policy["read"] == "allow"
+    assert read_policy["bash"] == "deny" if "bash" in read_policy else True
+
+    auto_backend = OpenCodeBackend(sys.executable, tmp_path, auto_args)
+    auto_backend.configure_interaction("auto")
+    assert auto_backend.process_environment() == {}
+
+    yolo_backend = OpenCodeBackend(sys.executable, tmp_path, yolo_args)
+    yolo_backend.configure_interaction("yolo")
+    yolo_policy = json.loads(yolo_backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert yolo_policy == {"*": "allow"}

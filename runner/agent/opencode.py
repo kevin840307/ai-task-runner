@@ -10,7 +10,7 @@ from typing import Any
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
 from ..runtime.process_runner import run_process
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, InteractionMode, InteractionModeSpec
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
 _PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
@@ -82,6 +82,28 @@ class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = DEFAULT_OPENCODE_COMMAND
     supports_sandbox = True
+
+    @classmethod
+    def interaction_modes(cls) -> tuple[InteractionModeSpec, ...]:
+        return (
+            InteractionModeSpec("read", "permission:read-only", "Read-only project inspection; edits and commands are denied."),
+            InteractionModeSpec("auto", "--auto", "Auto-approve permission requests that are not explicitly denied."),
+            InteractionModeSpec("yolo", "permission:allow", "Allow all OpenCode permissions for this Chat turn.", unsafe=True),
+        )
+
+    @classmethod
+    def configure_interaction_args(
+        cls,
+        mode: InteractionMode,
+        extra_args: Sequence[str],
+    ) -> list[str]:
+        supported = {item.id for item in cls.interaction_modes()}
+        if mode not in supported:
+            raise BackendError(f"{cls.name} does not support Chat mode: {mode}")
+        result = [value for value in extra_args if str(value) != "--auto"]
+        if mode in {"auto", "yolo"}:
+            result.append("--auto")
+        return result
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
@@ -174,6 +196,18 @@ class OpenCodeBackend(BaseBackend):
         return {OPENCODE_CONFIG_CONTENT: json.dumps(content, separators=(",", ":"))}
 
     def _permission_policy(self) -> dict[str, Any]:
+        if self.interaction_mode == "read":
+            return {
+                "*": "deny",
+                "read": "allow",
+                "glob": "allow",
+                "grep": "allow",
+                "lsp": "allow",
+            }
+        if self.interaction_mode == "auto":
+            return {}
+        if self.interaction_mode == "yolo":
+            return {"*": "allow"}
         if self.mode == "no_tool":
             return {"*": "deny"}
         if self.mode == "planning":

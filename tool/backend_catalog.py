@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from runner.agent import available_models, backend_names
+from runner.agent import available_models, backend_names, interaction_modes
 from runner.config.defaults import DEFAULT_BACKEND
 from runner.plugins.registry import discover_plugins
 
@@ -32,6 +32,19 @@ def main(argv: list[str] | None = None) -> int:
             if args.models
             else {}
         ),
+        "modes": {
+            name: [
+                {
+                    "id": item.id,
+                    "native": item.native,
+                    "description": item.description,
+                    "supported": item.supported,
+                    "unsafe": item.unsafe,
+                }
+                for item in interaction_modes(name)
+            ]
+            for name in names
+        },
     }
     print(json.dumps(payload, ensure_ascii=True))
     return 0

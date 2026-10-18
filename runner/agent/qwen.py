@@ -13,7 +13,7 @@ from ..config.defaults import DEFAULT_QWEN_COMMAND
 from ..runtime.process_runner import run_process
 from ..utils import io_path
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, InteractionMode, InteractionModeSpec
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
 _QWEN_AUTH_TYPES = {
@@ -403,6 +403,42 @@ class QwenBackend(BaseBackend):
     default_command = DEFAULT_QWEN_COMMAND
     sandbox_flags = ("-s", "--sandbox")
     supports_sandbox = True
+
+    @classmethod
+    def interaction_modes(cls) -> tuple[InteractionModeSpec, ...]:
+        return (
+            InteractionModeSpec("read", "plan", "Read-only analysis; no file edits or shell commands."),
+            InteractionModeSpec("auto", "auto", "Classifier-approved safe actions with risky actions blocked."),
+            InteractionModeSpec("yolo", "yolo", "Automatically approve all tool calls.", unsafe=True),
+        )
+
+    @classmethod
+    def configure_interaction_args(
+        cls,
+        mode: InteractionMode,
+        extra_args: Sequence[str],
+    ) -> list[str]:
+        supported = {item.id: item for item in cls.interaction_modes()}
+        if mode not in supported:
+            raise BackendError(f"{cls.name} does not support Chat mode: {mode}")
+        result: list[str] = []
+        values = list(extra_args)
+        index = 0
+        while index < len(values):
+            value = str(values[index])
+            if value in {"--yolo", "-y"}:
+                index += 1
+                continue
+            if value == "--approval-mode":
+                index += 2
+                continue
+            if value.startswith("--approval-mode="):
+                index += 1
+                continue
+            result.append(value)
+            index += 1
+        result.extend(["--approval-mode", supported[mode].native])
+        return result
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:

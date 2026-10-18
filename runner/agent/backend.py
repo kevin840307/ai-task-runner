@@ -17,12 +17,22 @@ from ..errors import RunnerError
 from ..runtime.process_runner import ProcessResult, run_process
 
 BackendMode = Literal["planning", "review", "validation", "no_tool", "runtime"]
+InteractionMode = Literal["read", "auto", "yolo"]
 
 
 @dataclass(frozen=True)
 class BackendResult:
     text: str
     session_id: str = ""
+
+
+@dataclass(frozen=True)
+class InteractionModeSpec:
+    id: InteractionMode
+    native: str
+    description: str
+    supported: bool = True
+    unsafe: bool = False
 
 
 class BackendError(RunnerError):
@@ -100,6 +110,7 @@ class BaseBackend(ABC):
         self.extra_args = list(extra_args)
         self.timeout = timeout
         self.mode: BackendMode = "runtime"
+        self.interaction_mode: InteractionMode | None = None
         self.allow_project_read = False
         self.sandbox = False
         self._validate_command(command)
@@ -189,6 +200,27 @@ class BaseBackend(ABC):
 
     def process_environment(self) -> dict[str, str]:
         return {}
+
+    @classmethod
+    def interaction_modes(cls) -> tuple[InteractionModeSpec, ...]:
+        return ()
+
+    @classmethod
+    def configure_interaction_args(
+        cls,
+        mode: InteractionMode,
+        extra_args: Sequence[str],
+    ) -> list[str]:
+        supported = {item.id for item in cls.interaction_modes() if item.supported}
+        if mode not in supported:
+            raise BackendError(f"{cls.name} does not support Chat mode: {mode}")
+        return list(extra_args)
+
+    def configure_interaction(self, mode: InteractionMode) -> None:
+        supported = {item.id for item in self.interaction_modes() if item.supported}
+        if mode not in supported:
+            raise BackendError(f"{self.name} does not support Chat mode: {mode}")
+        self.interaction_mode = mode
 
     def prepare_project(self) -> list[Path]:
         return []
@@ -461,6 +493,18 @@ def available_models(name: str, root: Path) -> list[str]:
     return _backend_type(name).available_models(root)
 
 
+def interaction_modes(name: str) -> tuple[InteractionModeSpec, ...]:
+    return _backend_type(name).interaction_modes()
+
+
+def configure_interaction_args(
+    name: str,
+    mode: InteractionMode,
+    extra_args: Sequence[str],
+) -> list[str]:
+    return _backend_type(name).configure_interaction_args(mode, extra_args)
+
+
 def configure_sandbox_args(
     name: str,
     extra_args: Sequence[str],
@@ -500,14 +544,18 @@ __all__ = [
     "BackendError",
     "BackendMode",
     "BackendResult",
+    "InteractionMode",
+    "InteractionModeSpec",
     "BaseBackend",
     "available_models",
     "backend_names",
     "configure_backend_args",
     "configure_model_args",
+    "configure_interaction_args",
     "configure_sandbox_args",
     "create_backend",
     "default_command",
+    "interaction_modes",
     "model_from_args",
     "register_backend",
     "sandbox_supported",
