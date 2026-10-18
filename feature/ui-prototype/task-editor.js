@@ -7,6 +7,7 @@ function planItemDefaults(x={},t=null,i=0){
     project:x.project||fallbackProject,workflow:x.workflow||'ralphy_ai_validate.yaml',
     validatorMode:x.validatorMode||((x.validator&&x.validator!=='ai')?'file':x.validator==='ai'?'ai':'none'),validator:x.validator&&x.validator!=='ai'?x.validator:'',
     aiMode:x.aiMode||'default',aiPrompt:x.aiPrompt||'',aiFile:x.aiFile||'',aiAsset:x.aiAsset||'common/ai_validator.md',
+    _uploads:cloneUploadMeta(x._uploads),
     originTaskId:x.originTaskId||x.origin_task_id||'',originTaskTitle:x.originTaskTitle||''
   };
 }
@@ -61,7 +62,7 @@ function planizeSourceHtml(html,i){
 }
 function planRowBody(x,i,editable){
   const caps=workflowCaps(x.workflow),validation=[];
-  if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
+  if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
   if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="aiMode"`)}</div><div class="source-body">${planizeSourceHtml(aiSourceBody(x,i),i)}</div></div>`);
   return `<div class="workflow-row"><div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],`data-plan-source data-plan-item="${i}" data-plan-field="goalMode"`)}</div><div class="source-body">${planizeSourceHtml(goalSourceBody(x,i),i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">This Workflow needs no extra validator input.</div>'}`;
 }
@@ -99,12 +100,14 @@ function bindFullPlan(t){
   document.querySelectorAll('[data-plan-item][data-plan-field]').forEach(el=>{
     el.disabled=!taskEditable(t)||(+el.dataset.planItem)<batchState.index;
     const ev=el.tagName==='SELECT'?'change':'input';el.addEventListener(ev,()=>{
-      const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;batchDraft[i][field]=el.value;
+      const i=+el.dataset.planItem,field=el.dataset.planField;if(!batchDraft[i])return;
+      if(['goalFile','validator','aiFile'].includes(field)&&String(el.value||'').trim())clearStagedUpload(batchDraft[i],field);
+      batchDraft[i][field]=el.value;
       commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});if(field==='workflow')renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap();
     });
   });
   document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
-  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'plan'));
+  document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openFileUploadPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'plan'));
   document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 }
@@ -1030,12 +1033,12 @@ function openPromptsFromTaskEditor(){
   guardList();
 }
 function newTaskPromptBodySimple(){
-  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose file</button></div>`;
+  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Upload file</button></div>`;
   if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
   return `<textarea id="taskPromptInline" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(newTaskDraft.prompt)}</textarea>`;
 }
 function newTaskAiBodySimple(){
-  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" id="taskPickAi">Choose file</button></div>`;
+  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" id="taskPickAi">Upload file</button></div>`;
   if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
   if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(newTaskDraft.aiPrompt)}</textarea>`;
   return `<div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div>`;
@@ -1049,32 +1052,32 @@ renderNewTaskSources=function(){
       <div class="source-body">${newTaskPromptBodySimple()}</div>
     </div>`;
   const rows=[];
-  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
   if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>Use workflow default unless you really need an override</small></div><select class="simple-source-select" id="taskAiModeSelect">${simpleModeOptions(newTaskDraft.aiMode,[['default','Workflow default'],['inline','Override text'],['file','Override file'],['asset','Prompt asset']])}</select></div><div class="source-body">${newTaskAiBodySimple()}</div></div>`);
   document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
   document.getElementById('taskGoalModeSelect').onchange=e=>{captureNewTaskSources();newTaskDraft.goalMode=e.target.value;renderNewTaskSources()};
   document.getElementById('taskAiModeSelect')?.addEventListener('change',e=>{captureNewTaskSources();newTaskDraft.aiMode=e.target.value;renderNewTaskSources()});
-  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
-  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
-  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openFileUploadPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openFileUploadPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openFileUploadPicker(-1,'aiFile','ai','task'));
   document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };
 
 function planPromptBodySimple(x,i){
-  if(x.goalMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="goalFile" data-plan-pick-kind="goal">Choose file</button></div>`;
+  if(x.goalMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="goalFile" data-plan-pick-kind="goal">Upload file</button></div>`;
   if(x.goalMode==='asset')return `<div class="pathrow"><select data-plan-item="${i}" data-plan-field="goalAsset">${assetOptions(x.goalAsset)}</select><button class="mini-btn" type="button" data-plan-view-prompts="1">Open Prompts</button></div>`;
   return `<textarea data-plan-item="${i}" data-plan-field="prompt" class="primary-task-prompt" placeholder="Describe what this task should do…">${escapeHtml(x.prompt||'')}</textarea>`;
 }
 function planAiBodySimple(x,i){
-  if(x.aiMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="aiFile" data-plan-pick-kind="ai">Choose file</button></div>`;
+  if(x.aiMode==='file')return `<div class="pathrow"><input data-plan-item="${i}" data-plan-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt file"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="aiFile" data-plan-pick-kind="ai">Upload file</button></div>`;
   if(x.aiMode==='asset')return `<div class="pathrow"><select data-plan-item="${i}" data-plan-field="aiAsset">${assetOptions(x.aiAsset)}</select><button class="mini-btn" type="button" data-plan-view-prompts="1">Open Prompts</button></div>`;
   if(x.aiMode==='inline')return `<textarea data-plan-item="${i}" data-plan-field="aiPrompt" placeholder="Only add instructions that differ from the workflow default">${escapeHtml(x.aiPrompt||'')}</textarea>`;
   return `<div class="compact-default-value"><strong>Workflow default</strong><span>No override prompt</span></div>`;
 }
 planRowBody=function(x,i,editable){
   const caps=workflowCaps(x.workflow),rows=[];
-  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
   if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>Use workflow default unless an override is needed</small></div><select class="simple-source-select" data-plan-item="${i}" data-plan-field="aiMode">${simpleModeOptions(x.aiMode,[['default','Workflow default'],['inline','Override text'],['file','Override file'],['asset','Prompt asset']])}</select></div><div class="source-body">${planAiBodySimple(x,i)}</div></div>`);
   return `
     <div class="plan-basic-stack">
@@ -1109,23 +1112,23 @@ renderNewTaskSources=(function(){return function(){
   document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
   document.getElementById('newTaskPromptSource').innerHTML=`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>What should this task do?</small></div><select class="simple-source-select" id="taskGoalModeSelect">${simpleModeOptions(newTaskDraft.goalMode,[['inline','Write'],['file','Use file'],['asset','Prompt asset']])}</select></div><div class="source-body">${newTaskPromptBodySimple()}</div></div>`;
   const rows=[];
-  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
   if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>${newTaskDraft.aiMode==='default'?'Workflow default':'Custom override'}</small></div>${aiOverrideHeadNew()}</div><div class="source-body">${newTaskAiBodySimple()}</div></div>`);
   document.getElementById('newTaskValidationSource').innerHTML=rows.length?`<div class="validation-stack">${rows.join('')}</div>`:'<div class="validation-empty">This workflow needs no extra validation input.</div>';
   document.getElementById('taskGoalModeSelect').onchange=e=>{captureNewTaskSources();newTaskDraft.goalMode=e.target.value;renderNewTaskSources()};
   document.getElementById('taskAiOverride')?.addEventListener('click',()=>{captureNewTaskSources();newTaskDraft.aiMode='inline';renderNewTaskSources()});
   document.getElementById('taskAiModeSelect')?.addEventListener('change',e=>{captureNewTaskSources();newTaskDraft.aiMode=e.target.value;renderNewTaskSources()});
   document.getElementById('taskAiReset')?.addEventListener('click',()=>{captureNewTaskSources();newTaskDraft.aiMode='default';newTaskDraft.aiPrompt='';newTaskDraft.aiFile='';renderNewTaskSources()});
-  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
-  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
-  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openFileUploadPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openFileUploadPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openFileUploadPicker(-1,'aiFile','ai','task'));
   document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };})();
 
 planRowBody=(function(){return function(x,i,editable){
   const caps=workflowCaps(x.workflow),rows=[];
-  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
+  if(caps.file)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>File Validator</strong><small>Required by this workflow</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-plan-item="${i}" data-plan-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-plan-pick="${i}" data-plan-pick-field="validator" data-plan-pick-kind="validator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div></div></div>`);
   if(caps.ai)rows.push(`<div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>AI Validation</strong><small>${x.aiMode==='default'?'Workflow default':'Custom override'}</small></div>${aiOverrideHeadPlan(x,i)}</div><div class="source-body">${planAiBodySimple(x,i)}</div></div>`);
   return `<div class="plan-basic-stack"><div class="field"><label>Project root</label><input data-plan-item="${i}" data-plan-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-plan-item="${i}" data-plan-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card simple-source-card"><div class="source-head simple-source-head"><div><strong>Task Prompt</strong><small>Primary task instruction</small></div><select class="simple-source-select" data-plan-item="${i}" data-plan-field="goalMode">${simpleModeOptions(x.goalMode,[['inline','Write'],['file','Use file'],['asset','Prompt asset']])}</select></div><div class="source-body">${planPromptBodySimple(x,i)}</div></div>${rows.length?`<div class="validation-stack">${rows.join('')}</div>`:''}`;
 };})();
@@ -1192,7 +1195,7 @@ function editorItemRef(){
   if(taskEditorContext.mode==='draft-edit-item')return `${owner?.id||'DRAFT-LIST'}-I${(taskEditorContext.index??0)+1}`;
   return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
 }
-function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
+function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',_uploads:{}}}
 let taskEditorInitialSnapshot='',taskEditorDiscardAction=null,taskEditorDiscardReturnFocus=null;
 function taskEditorSnapshot(){
   if(!document.getElementById('newTaskModal')?.classList.contains('open'))return '';
@@ -1246,7 +1249,7 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProject
   if(mode==='draft-edit-item'&&owner&&index!=null)item=owner.items?.[index]||null;
   else if(owner&&index!=null&&!draftMode){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
   if((mode==='edit-item'||mode==='draft-edit-item')&&!item)return;
-  newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
+  newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset,_uploads:cloneUploadMeta(item._uploads)}:blankTaskEditorDraft();
   if(fromChat)newTaskDraft.prompt=fromChat;
   newTaskWorkspaceMode=item?.workspacePolicy||'auto';
   const preferredProject=projectMeta[initialProjectKey]?initialProjectKey:currentProjectKey;
@@ -1468,7 +1471,7 @@ renderNewTaskSources=function(){
   const rows=[];
   if(caps.file)rows.push(TaskUiTemplates.sourceCard({
     title:'File Validator',subtitle:'Required by this workflow',control:'<span class="cap-chip">Required</span>',
-    body:`<div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div>`
+    body:`<div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div>`
   }));
   if(caps.ai)rows.push(TaskUiTemplates.sourceCard({
     title:'AI Validation',subtitle:newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source',
@@ -1485,9 +1488,9 @@ renderNewTaskSources=function(){
     if(newTaskDraft.aiMode==='default'){newTaskDraft.aiPrompt='';newTaskDraft.aiFile=''}
     renderNewTaskSources();
   });
-  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
-  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
-  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openFileUploadPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openFileUploadPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openFileUploadPicker(-1,'aiFile','ai','task'));
   document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };
