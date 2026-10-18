@@ -147,8 +147,10 @@ Keep one resolver owner. Do not duplicate busy/worktree logic inside Integration
 
 Because every mode now runs in a worktree:
 
-- `Always Main` does not need to block merely because another Main Task is executing;
-- multiple Main Tasks may execute concurrently;
+- `Always Main` resolves Auto to Main;
+- by default, the existing Main-busy restriction remains enabled;
+- Global Settings → Execution → `Allow concurrent Main tasks` can explicitly remove that restriction;
+- when enabled, multiple Main Tasks may execute concurrently in isolated worktrees and later serialize delivery to the same target branch;
 - safety comes from isolated worktrees + serialized delivery to the same target branch;
 - `Busy → Worktree` may remain a product policy, not a filesystem-safety requirement.
 
@@ -615,15 +617,18 @@ Recommended metadata:
 git:
   merge_failure_count: 0
   merge_retry_attempt: 0
-  max_merge_failures: 3
+  merge_failure_limit: 3   # Global Settings → Execution
   last_merge_failure: null
+  delivery_fallback: null
 ```
+
+`merge_failure_limit` is global. Default: `3`. The fallback happens when the failure count **exceeds** the configured value; with `3`, the 4th real failed integration attempt falls back.
 
 Semantics:
 
 - `merge_failure_count`: lifetime diagnostic count for this Task delivery;
 - `merge_retry_attempt`: automatic retry count in the current retry session;
-- `max_merge_failures`: configurable automatic recovery limit;
+- `merge_failure_limit`: global automatic recovery limit copied/read from the single Global Settings owner;
 - `last_merge_failure`: structured latest failure detail.
 
 ### Count exactly once per real failed integration attempt
@@ -658,25 +663,21 @@ Examples that do **not** count:
 
 ### Exhaustion behavior for Main
 
-When automatic retry budget is exhausted:
+When the real merge failure count exceeds the Global merge failure limit, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
 
 ```text
-mode               = Main
-Board              = Closed
-Integration        = merge_retry_exhausted
-Reason             = Awaiting merge
-Task branch        = retained
-Task worktree      = retained
+requested/effective origin = Main
+delivery_fallback           = isolated_worktree
+Board                       = Closed
+Integration                 = worktree_ready
+Reason                      = Merge retry exhausted
+Task branch                 = retained
+Task worktree               = retained
 ```
 
-Do not silently convert the mode to Isolated Worktree.
+Preserve the original requested/effective mode for history/diagnostics, but the **delivery outcome** is now Isolated Worktree. Do not continue automatic merge recovery.
 
-`Retry merge` starts a new retry session:
-
-- reset `merge_retry_attempt = 0`;
-- preserve lifetime `merge_failure_count`;
-- preserve mode=Main;
-- create a fresh candidate from latest target HEAD.
+The retained result may still expose manual Merge / Merge Chat later.
 
 ---
 
@@ -708,7 +709,7 @@ Git delivery is a secondary Task state.
 | Target HEAD changed; rebuilding candidate | Closed | target_resync |
 | Target checkout dirty | Closed | waiting_target_clean |
 | Captured target branch unavailable | Closed | waiting_target_workspace |
-| Main retries exhausted | Closed | Awaiting merge / merge_retry_exhausted |
+| Main merge failures exceed Global limit | Closed | worktree_ready · fallback from Main |
 | Main delivered | Closed | integrated |
 | Isolated result retained | Closed | worktree_ready |
 
@@ -721,7 +722,7 @@ T-001  Closed
 Integrated · feature/ui
 
 T-002  Closed
-Awaiting merge · 4 failures
+Worktree ready · Main fallback · 4 failures
 
 T-003  Closed
 Conflict recovery · retry 2
@@ -749,7 +750,7 @@ Attention         —
 
 Do not add a top-level Git Worktree page.
 
-Daily operations stay Task-centric. Project-level Workspace Results may be the secondary view for retained/orphaned worktrees, Awaiting Merge items, branches, paths and cleanup.
+Daily operations stay Task-centric. Project-level Workspace Results may be the secondary view for retained/orphaned worktrees, Main→Isolated fallbacks, branches, paths and cleanup.
 
 ### Task List / child Tasks
 
@@ -767,7 +768,7 @@ The Board parent may aggregate:
 
 ```text
 Closed
-Integration · 2 integrated · 1 worktree ready · 1 awaiting merge
+Integration · 2 integrated · 2 worktree ready
 ```
 
 ---
@@ -799,7 +800,7 @@ git:
 
   merge_failure_count: 0
   merge_retry_attempt: 0
-  max_merge_failures: 3
+  merge_failure_limit: 3
   last_merge_failure: null
 ```
 
@@ -900,7 +901,7 @@ Fail-safe defaults:
 
 - temporary candidate/recovery worktrees: remove after the attempt is durably finalized;
 - successful Main Task branch/worktree: may remove after target commit is durably recorded;
-- Main `Awaiting merge` / failed / blocked result: retain;
+- Main fallback-to-Isolated / failed / blocked result: retain;
 - Isolated Worktree `worktree_ready`: retain until explicit cleanup/delete;
 - never delete an unknown/unowned path merely because its name resembles a Task ID.
 
@@ -992,6 +993,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 ### Phase A — contracts / metadata
 
 - [ ] Preserve Auto / Main / Isolated Worktree semantics.
+- [ ] Add Global Execution settings: `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
 - [ ] Remove the canonical `local/integration` branch concept from the new implementation.
 - [ ] Capture `target_branch` + `target_head_sha_at_start` per Task run.
 - [ ] Define Task + Run branch/path identity.
@@ -1017,6 +1019,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 ### Phase D — Integration Queue
 
 - [ ] Serialize delivery per repository + captured target branch.
+- [ ] If `allow_concurrent_main_tasks=false`, preserve current Main-busy selection/run guard; if true, allow parallel Main execution and rely on isolated worktrees + target delivery queue.
 - [ ] Allow parallel Runner execution.
 - [ ] Persist queue state for restart recovery.
 - [ ] Re-read latest target HEAD when a queued Task begins integration.
@@ -1038,7 +1041,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] Require normal Runner Review / Validate.
 - [ ] Commit recovered result and retry candidate merge.
 - [ ] Count only real code/semantic/validation integration failures.
-- [ ] Stop automatic recovery after configured N and retain Main result as Closed · Awaiting merge.
+- [ ] Read the Global merge failure limit (default 3); when real merge failures exceed it, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
 
 ### Phase G — Project delivery
 
@@ -1054,7 +1057,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] Show Git delivery as secondary state.
 - [ ] Show requested/effective mode, target branch, Task run/branch, base/snapshot/latest target SHA, merge failures and attention reason.
 - [ ] Keep Paused execution-only.
-- [ ] Main retry exhaustion => Closed · Awaiting merge.
+- [ ] Main merge failures > Global limit => Closed · worktree_ready with fallback reason `merge_retry_exhausted`.
 - [ ] Isolated Worktree => Closed · worktree_ready.
 - [ ] Do not add top-level Git Worktree page; use Task Info + Project Workspace Results.
 - [ ] Backend owns allowed actions; UI disabled state is UX only.
@@ -1103,7 +1106,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 
 - [ ] Repeated real merge/validation failures increment exactly once per failed attempt.
 - [ ] Queue wait / lock contention / target movement / dirty target do not increment.
-- [ ] Exhaust budget => Closed · Awaiting merge and retain Task branch/worktree.
+- [ ] Exceed Global merge failure limit => fallback to Isolated Worktree close, retain Task branch/worktree, and stop automatic retries.
 - [ ] Retry merge resets session attempt but preserves lifetime failure count.
 
 ### Restart / idempotency
