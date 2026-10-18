@@ -11,7 +11,10 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from .task_models import DRAFT_MODES, bounded_text, validate_generated_draft
+try:
+    from .task_models import DRAFT_MODES, bounded_text, validate_generated_draft
+except ImportError:
+    from task_models import DRAFT_MODES, bounded_text, validate_generated_draft
 
 CACHE_LIMIT = 128
 
