@@ -4,7 +4,7 @@
 >
 > Scope: add parallel Task worktree + local Git integration around the existing Runner. **Do not redesign Runner execution.**
 >
-> Core rule: **all Tasks execute in isolated Git worktrees.** Preserve `Auto` / `Main` / `Isolated Worktree`. For effective Main, `local/integration` mirrors the Project's current working state (current branch HEAD + staged + unstaged + untracked non-ignored files), Tasks branch from it, completed Task results merge back into it, and the Project working state is then updated from the integrated result.
+> Core rule: **all Tasks execute in isolated Git worktrees.** Preserve `Auto` / `Main` / `Isolated Worktree`. For effective Main, `local/integration` is a committed local integration branch synchronized from the captured Project branch by **commit ancestry**. Tasks branch from it, completed Task results are committed and merged back into it, and accepted integration results are squash-delivered back to the captured Project branch.
 
 ---
 
@@ -47,20 +47,13 @@ The worktree / branch / integration lifecycle must remain outside this contract 
 For effective `Main`:
 
 ```text
-UI
+Project current branch HEAD = P
   ↓
-Create / Run Task
-  ↓
-Workspace Manager
-  ↓
-capture Project current branch + current working state
-(HEAD + staged + unstaged + untracked non-ignored)
-  ↓
-create/update local/integration from that Project working-state snapshot
+create / synchronize local/integration by commit ancestry
+  ├─ integration missing Project commits → bring those commits in
+  └─ integration already contains P → do NOT reset just because files differ
   ↓
 git worktree add -b local/task/<task-id>-r<run> <worktree-path> local/integration
-  ↓
-isolated Task worktree
   ↓
 Runner(project_root = Task worktree)
   ↓
@@ -70,23 +63,31 @@ Review / Validate
   ↓
 Runner Completed
   ↓
-freeze Task result
+commit any remaining Task worktree changes
+  ↓
+Task branch now has a stable Git result
   ↓
 Integration Queue
   ↓
-refresh local/integration from latest Project working state if safe
-  ↓
-merge Task result into local/integration
-  ├─ success → validate integrated result
+normal Git merge Task branch into latest local/integration
+  ├─ success → validate merged candidate
   └─ conflict / semantic failure
         ↓
-      error context + existing Runner redo/recovery
+      collect Git error + latest integration context
         ↓
-      retry merge into local/integration
+      existing Runner redo / recovery
+        ↓
+      commit recovered result
+        ↓
+      retry merge
   ↓
-local/integration accepted
+validated merge becomes new local/integration HEAD
   ↓
-update Project working state from the new integrated result
+git merge --squash local/integration into captured Project branch
+  ↓
+one local Project-branch commit
+  ↓
+re-baseline local/integration to the new Project commit
   ↓
 Closed · integrated
 ```
@@ -96,8 +97,9 @@ For effective `Isolated Worktree`:
 ```text
 same isolated execution
 → Runner Completed
-→ preserve Task branch/worktree
-→ no automatic merge into local/integration / Project
+→ commit/snapshot the Task result locally
+→ keep Task branch/worktree
+→ do not auto-merge into local/integration / Project branch
 → Closed · worktree_ready
 ```
 
@@ -306,56 +308,66 @@ The existing Merge / Merge Chat style actions may still be offered later if the 
 
 ---
 
-## 6. Target branch + Project working-state snapshot
+## 6. Target branch + commit-ancestry synchronization
 
 Do not hardcode `main`.
 
-When a Task run starts, capture:
+When a Task run starts, capture the Project repository's currently checked-out branch as `target_branch`.
 
-1. the Project repository's currently checked-out branch as `target_branch`;
-2. the branch HEAD SHA;
-3. the Project's **current file state**, including:
-   - committed files from HEAD;
-   - staged changes;
-   - unstaged tracked changes;
-   - tracked deletions;
-   - untracked non-ignored files.
-
-Ignored files remain excluded.
-
-Example:
+Examples:
 
 ```text
-Project branch: feature/ui
-HEAD: C
+Project currently on feature/ui
+→ target_branch = feature/ui
 
-working tree:
-M task-editor.js
-M styles.css
-?? new-helper.js
+Project currently on release/v4
+→ target_branch = release/v4
 
-Project working-state snapshot:
-C + those current file changes
+Project currently on main
+→ target_branch = main
 ```
 
-The snapshot is local orchestration state only. It must not create a commit on the user's `feature/ui` branch and must not modify the user's staging/index state.
+The captured `target_branch` remains stable for that Task run even if the user later switches the Project checkout.
 
-Recommended metadata:
+### Synchronization source is committed branch history
 
-```yaml
-git:
-  target_branch: feature/ui
-  target_head_sha_at_start: <sha>
-  project_state_snapshot_sha: <local-snapshot-sha>
+`local/integration` synchronization is based on Git commit ancestry, **not file-tree equality**.
+
+Let:
+
+```text
+P = target_branch HEAD
+I = local/integration HEAD
 ```
 
-### Capture branch once per Task run
+Rules:
 
-`target_branch` remains stable for that Task run.
+```text
+local/integration missing
+→ create local/integration at P
 
-If T-001 starts while the Project is on `feature/ui`, T-001 still targets `feature/ui` even if the user later switches the Project checkout to `release/v4`.
+P is ancestor of I
+→ integration already contains the Project branch commit history
+→ do NOT reset/update merely because Task merges changed files
 
-A new T-002 started after that switch captures `release/v4`.
+I is ancestor of P
+→ Project branch has newer commits and integration has no unique divergent work
+→ fast-forward local/integration to P
+
+P and I diverged
+→ Project branch has newer commits AND local/integration has accepted Task commits
+→ merge/reconcile missing Project commits into local/integration
+→ never discard accepted Task commits
+→ a real code conflict follows normal Runner recovery
+```
+
+> **Different file contents are not a synchronization signal. Missing Project commits are.**
+
+### Uncommitted Project changes
+
+Uncommitted Project working-tree changes are **not** part of this synchronization contract.
+
+They have no stable commit identity and cannot participate reliably in ancestry/conflict detection. If the user wants those changes to become the base for new Main tasks, they must first be committed on the Project branch.
 
 ### Detached HEAD
 
@@ -363,73 +375,70 @@ If the Project is detached HEAD at Task start, fail closed or require an explici
 
 ---
 
-## 7. Synchronize local/integration from the current Project working state
+## 7. Create / update local/integration before Task worktree creation
 
-Before creating a Main-mode Task worktree, under the repository Git lock:
+Under the repository Git lock:
 
-1. capture the current Project working-state snapshot;
-2. create/update `local/integration` to exactly that snapshot;
-3. create the Task-run branch/worktree from `local/integration`;
-4. pass that worktree path to Runner.
+1. read `target_branch` HEAD;
+2. compare ancestry with `local/integration`;
+3. create/update/reconcile only Project commits missing from `local/integration`;
+4. create the Task-run branch/worktree from the resulting integration HEAD.
 
-Conceptually:
-
-```text
-Project current branch HEAD
-+ staged changes
-+ unstaged changes
-+ untracked non-ignored files
-        ↓
-local snapshot commit (system-owned only)
-        ↓
-local/integration
-        ↓
-local/task/T-001-r1
-        ↓
-Task worktree
-```
-
-The implementation may hard-reset the dedicated integration worktree to the new snapshot or delete/recreate `local/integration` when safe. The semantic requirement is simply:
-
-> `local/integration` must represent the latest accepted Project working state before the Task branch is created.
-
-### Do not mutate the user's Project index/worktree while snapshotting
-
-Do not use a workflow that temporarily commits, stashes, resets, or restages the user's files.
-
-Prefer a system-owned temporary index/plumbing path or equivalent deterministic snapshot mechanism that captures the final file contents without changing:
-
-- Project branch history;
-- user's staging selection;
-- user's working tree.
-
-### Safe refresh rule
-
-Do not refresh/reset `local/integration` from the Project while it contains an accepted Task integration result that has not yet been reflected back to the Project working state.
-
-The Main transaction is therefore:
+### No extra empty sync commit is required
 
 ```text
-Project state → local/integration
-→ Task result merged into local/integration
-→ Project state updated
-→ only then may local/integration be refreshed again
+feature/ui:
+A ─ B ─ C
+
+local/integration missing
+→ create local/integration at C
 ```
 
-### Parallel Task starts
+`C` itself is already a real commit and is the common ancestor Git needs for conflict detection.
 
-Task creation is briefly serialized only while the latest Project state is snapshotted and the Task branch is forked.
+Then:
 
-Once a Task-run worktree exists, Runner execution is independent and parallel.
-
-Each run records its base:
-
-```yaml
-git:
-  target_branch: feature/ui
-  integration_base_sha: <local-integration-snapshot-sha>
-  task_branch: local/task/T-001-r1
+```bash
+git worktree add -b local/task/T-001-r1 <worktree-path> local/integration
 ```
+
+### Do not reset accepted Task history
+
+```text
+feature/ui:
+A ─ B ─ C
+
+local/integration:
+A ─ B ─ C ─ M1
+```
+
+Do not reset integration back to `C`; `M1` is intentional accepted Task history.
+
+### If the Project branch gains new commits
+
+Simple fast-forward case:
+
+```text
+feature/ui:        A ─ B ─ C ─ D
+local/integration: A ─ B ─ C
+```
+
+→ fast-forward integration to `D`.
+
+Diverged case:
+
+```text
+feature/ui:        A ─ B ─ C ─ D
+local/integration: A ─ B ─ C ─ M1
+```
+
+→ reconcile/merge `D` into integration while preserving `M1`. If that conflicts, collect error context and use existing Runner recovery.
+
+### Delete/recreate is allowed only when safe
+
+Deleting/recreating integration is allowed only when it has no accepted undelivered Task commits.
+
+Typical safe moment: after the accepted integration result has been squash-delivered to Project branch and the Project branch has a new commit. Because squash does not preserve ancestry, integration can then be reset/recreated at that new Project commit.
 
 
 ---
