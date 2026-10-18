@@ -671,7 +671,7 @@ Do not count:
 
 ## 12. Conflict recovery uses existing Runner
 
-Integration Manager owns deterministic Git mechanics only:
+`workspace/` Merge Manager owns deterministic Git mechanics only:
 
 - target-branch merge lock;
 - target worktree selection;
@@ -936,7 +936,7 @@ already merged
 
 4. otherwise continue the pending merge/recovery state without changing queue order.
 
-If a crash happens while the target worktree is in an unfinished merge state, Integration Manager must first reconcile ownership and either finalize the already-durable merge or safely abort its own incomplete merge before retrying.
+If a crash happens while the target worktree is in an unfinished merge state, `workspace/` Merge Manager must first reconcile ownership and either finalize the already-durable merge or safely abort its own incomplete merge before retrying.
 
 Do not create duplicate merge commits after a crash.
 
