@@ -743,33 +743,33 @@ function renderAskFlow(session=activeChat(),{preserveScroll=false}={}){
   box.querySelector('#composerAsk')?.remove();
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const panel=document.createElement('section');panel.id='composerAsk';panel.className='composer-ask chat-ask-card';
-  panel.innerHTML=`<div class='composer-ask-head'><div><span class='ask-badge'>ASK · MOCK</span><strong id='composerAskTitle'></strong><span class='ask-optional' id='composerAskOptional' hidden>選填</span></div><span id='composerAskProgress'></span></div><div class='composer-ask-question' id='composerAskQuestion'></div><div class='composer-ask-options' id='composerAskOptions'></div><textarea class='composer-ask-text' id='composerAskText' rows='2'></textarea><div class='composer-ask-foot'><button class='btn' type='button' id='composerAskCancel'>Cancel</button><button class='btn primary' type='button' id='composerAskNext'>Next</button></div>`;
-  panel.querySelector('#composerAskTitle').textContent=q.header||'Clarification';
+  panel.innerHTML=`<div class='composer-ask-head'><div><span class='ask-badge'>ASK · MOCK</span><strong id='composerAskTitle'></strong><span class='ask-optional' id='composerAskOptional' hidden>${escapeHtml(uiText('chat.askOptional'))}</span></div><span id='composerAskProgress'></span></div><div class='composer-ask-question' id='composerAskQuestion'></div><div class='composer-ask-options' id='composerAskOptions'></div><textarea class='composer-ask-text' id='composerAskText' rows='2'></textarea><div class='composer-ask-foot'><button class='btn' type='button' id='composerAskCancel'>${escapeHtml(uiText('chat.askCancel'))}</button><button class='btn primary' type='button' id='composerAskNext'>${escapeHtml(uiText('chat.askNext'))}</button></div>`;
+  panel.querySelector('#composerAskTitle').textContent=q.header||uiText('chat.askClarification');
   panel.querySelector('#composerAskOptional').hidden=q.required!==false;
-  panel.querySelector('#composerAskProgress').textContent=`Question ${flow.index+1} of ${flow.questions.length}`;
+  panel.querySelector('#composerAskProgress').textContent=uiText('chat.askQuestion',{current:flow.index+1,total:flow.questions.length});
   panel.querySelector('#composerAskQuestion').textContent=q.question||'';
   const options=panel.querySelector('#composerAskOptions'),textInput=panel.querySelector('#composerAskText'),next=panel.querySelector('#composerAskNext');
   const key=String(flow.index),answer=flow.answers[key]||'',selected=flow.selected[key]||'';
   if(q.type==='choice'){
     const MAX_ASK_VISIBLE_OPTIONS=5;
     const fixed=(q.options||[]).slice(0,MAX_ASK_VISIBLE_OPTIONS-1);
-    const rows=[...fixed,{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
+    const rows=[...fixed,{label:uiText('chat.askOther'),description:uiText('chat.askOtherDesc'),custom:true}];
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
     options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session,{preserveScroll:true});const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus({preventScroll:true}),0)});
-    textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
-  }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder=q.required===false?'選填，可直接 Next':'輸入你的回答…'}
+    textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder=uiText('chat.askCustomPlaceholder');
+  }else{options.hidden=true;options.innerHTML='';textInput.hidden=false;textInput.value=answer;textInput.placeholder=q.required===false?uiText('chat.askOptionalPlaceholder'):uiText('chat.askAnswerPlaceholder')}
   textInput.oninput=()=>{flow.answers[key]=textInput.value};
-  next.textContent=flow.index===flow.questions.length-1?'Submit':'Next';
+  next.textContent=flow.index===flow.questions.length-1?uiText('chat.askSubmit'):uiText('chat.askNext');
   panel.querySelector('#composerAskNext').onclick=()=>advanceAskFlow(session);
-  panel.querySelector('#composerAskCancel').onclick=()=>{session.askFlow=null;session.turnState='idle';session.messages.push(['assistant','Mock Ask 已取消；未提交任何答案。']);if(activeChat()===session)renderChatSession();drainChatQueue(session)};
+  panel.querySelector('#composerAskCancel').onclick=()=>{session.askFlow=null;session.turnState='idle';session.messages.push(['assistant',uiText('chat.askCancelled')]);if(activeChat()===session)renderChatSession();drainChatQueue(session)};
   box.appendChild(panel);
   if(preserveScroll)box.scrollTop=outerScrollTop;else box.scrollTop=box.scrollHeight;
 }
 function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
-  if(q.type==='choice'&&!selected){showToast('請先選擇一個選項');return}
-  if((q.type==='text'||selected==='__other__')&&!answer&&q.required!==false){showToast('請填寫回答');return}
+  if(q.type==='choice'&&!selected){showToast(uiText('chat.askChoose'));return}
+  if((q.type==='text'||selected==='__other__')&&!answer&&q.required!==false){showToast(uiText('chat.askRequired'));return}
   if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
   if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
   const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
