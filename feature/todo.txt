@@ -293,6 +293,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
 [x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
 [x] Chat Draft 單筆、Task List child Add/Edit、Task Info Edit 都共用同一 Editor View；returnTarget 只控制回 List / Info / Chat / Close。
+[x] Chat / Composer Dark mode 已完整 token 化：composerwrap、msg user、Ask、Queue、suggest、settings popover、workflow-setting、Mode / New Task / Ask controls、Chat TaskDraft 均不再依賴 light-only 色值。
+[x] Chat composer 的 Project tag 已移除；Mode 旁 New Task 重用 Tasks 頁同一個 + New → Task / Task List menu，預設帶入目前 Chat Project。
+[x] 新增共用 uiText / data-i18n translation layer；這次新增或修改的 Chat / Composer / Task Draft / Task List Draft 文案均提供 zh-TW / en。
+[x] Queue / Ask / command suggestions / Chat TaskDraft / Task List Draft 等動態文字改走 uiText，不只靜態 HTML 翻譯。
+[ ] Browser 測試 Light / Dark × Teal / Blue / Violet / Amber / Rose：Chat composer、Ask、Queue、settings popover、Task Draft 不得出現亮白殘留。
+[ ] Browser 測試 zh-TW / en 即時切換：Composer 靜態文案、Queue / Ask / command suggestions / Task Draft / Task List Draft 應同步更新。
 [x] YAML 保持同一 Task Workspace Shell 的 subview；長表單不得再開第二個 full-size overlay。
 [ ] 正式 React 將 legacy id planModal/newTaskModal 改為語意元件/route 名稱（TaskWorkspaceShell / list / editor / yaml），避免名稱再次暗示巢狀 modal。
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
