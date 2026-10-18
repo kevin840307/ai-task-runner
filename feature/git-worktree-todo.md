@@ -53,9 +53,9 @@ Workspace Manager
   ↓
 sync local/integration to target branch committed HEAD
   ↓
-create local/task/<task-id>
+git worktree add -b local/task/<task-id> <worktree-path> local/integration
   ↓
-create isolated Task worktree
+isolated Task worktree ready
   ↓
 Runner(project_root = Task worktree)
   ↓
@@ -232,9 +232,8 @@ Before creating a Task worktree:
 
 1. Read target branch HEAD.
 2. Synchronize `local/integration` to that committed SHA.
-3. Create the Task branch from `local/integration`.
-4. Create the Task worktree.
-5. Pass the Task worktree path to Runner.
+3. Create the Task branch and Task worktree in one operation from `local/integration`.
+4. Pass the Task worktree path to Runner.
 
 Example:
 
@@ -904,7 +903,7 @@ T-002 then repeats against the latest committed target.
 
 ### Phase B — Workspace Manager
 
-- [ ] Add create Task branch/worktree from committed target snapshot.
+- [ ] Create the Task branch and Task worktree atomically from the committed target snapshot with `git worktree add -b local/task/<task-id> <worktree-path> local/integration`.
 - [ ] Before Task creation, under a short Git lock, synchronize `local/integration` to target branch committed HEAD.
 - [ ] Explicitly exclude uncommitted target working-tree changes from new Task bases.
 - [ ] Return Task worktree path as the existing Runner `project_root`.
