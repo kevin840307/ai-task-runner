@@ -250,12 +250,24 @@ function uniqueProjectKey(base,path){
   while(projectMeta[key]&&normalizeProjectRef(projectMeta[key].path)!==normalizeProjectRef(path))key=`${clean}-${n++}`;
   return key;
 }
+function appendProjectSidebarEntry(key,subtitle='main · Added'){
+  const host=document.getElementById('projectScroll');if(!host||host.querySelector(`.project[data-project="${CSS.escape(key)}"]`))return;
+  const btn=document.createElement('button');btn.className='project project-list-item project-combobox-new';btn.type='button';btn.dataset.project=key;
+  btn.innerHTML=`<span class="dot"></span><span class="project-copy"><strong>${escapeHtml(key)}</strong><small>${escapeHtml(subtitle)}</small></span>`;
+  host.appendChild(btn);if(typeof syncProjectRowMenus==='function')syncProjectRowMenus();
+}
+function registerProject(key,path,{subtitle='main · Added'}={}){
+  key=String(key||'').trim();path=String(path||'').trim();if(!key||!path||projectMeta[key])return null;
+  projectMeta[key]={path,branch:'main'};
+  if(typeof initializeProjectChatSettings==='function')initializeProjectChatSettings(key);
+  appendProjectSidebarEntry(key,subtitle);renderProjectOptions();return key;
+}
 function ensureProjectFromInput(raw){
   raw=String(raw||'').trim();if(projectMeta[raw])return raw;
   const found=Object.keys(projectMeta).find(k=>normalizeProjectRef(projectMeta[k].path)===normalizeProjectRef(raw));if(found)return found;
-  const key=uniqueProjectKey(basename(raw),raw);projectMeta[key]={path:raw,branch:'main'};
-  const host=document.getElementById('projectScroll'),btn=document.createElement('button');btn.className='project project-list-item project-combobox-new';btn.type='button';btn.dataset.project=key;btn.innerHTML=`<span class="dot"></span><span class="project-copy"><strong>${escapeHtml(key)}</strong><small>main · Added from Task</small></span>`;host.appendChild(btn);
-  renderProjectOptions();showToast(`Project added · ${key}`);return key;
+  const key=uniqueProjectKey(basename(raw),raw);
+  registerProject(key,raw,{subtitle:'main · Added from Task'});
+  showToast(`Project added · ${key}`);return key;
 }
 renderProjectOptions();
 document.getElementById('newTaskProject').addEventListener('input',()=>renderNewTaskWorkspace());
