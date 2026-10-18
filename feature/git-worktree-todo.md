@@ -102,7 +102,7 @@ git add -A + commit remaining Task changes
 ↓
 local Task branch owns the completed result
 ↓
-normal Git merge Task branch → captured Project branch
+normal Git merge current merge source → captured Project branch
 ├─ merge success
 │   ↓
 │ record merged target HEAD
@@ -126,7 +126,7 @@ normal Git merge Task branch → captured Project branch
   │   ↓
   │ commit recovered local branch
   │   ↓
-  │ retry normal merge → Project branch
+  │ retry current merge source → Project branch
   │
   └─ Yes
       ↓
@@ -262,7 +262,7 @@ The mode controls what happens after Runner Complete.
 ```text
 Runner Complete
 → commit local Task branch
-→ automatic normal merge into captured Project branch
+→ automatic normal merge of current merge source into captured Project branch
 → merge success
 → Closed
 ```
@@ -530,6 +530,11 @@ Git conflict?
   validation result
   ├─ PASS
   │   ↓
+  │ transaction ownership pre-commit check:
+  │     target HEAD still equals pre-merge target HEAD
+  │     MERGE_HEAD still equals merge_source_sha
+  │     target worktree/index still belongs to this merge transaction
+  │   ↓
   │ git commit
   │   ↓
   │ record merge commit / merged_target_head_sha
@@ -606,7 +611,7 @@ A recovery source created from latest target `L` uses `merge_source_base_sha=L`.
 
 If target advances again before delivery, post-merge validation becomes required.
 
-If no post-merge validation is required, a conflict-free merge may proceed directly to `git commit`.
+If no post-merge validation is required, a conflict-free merge may proceed to the same transaction ownership pre-commit check and then `git commit`.
 
 Validation result semantics:
 
@@ -616,7 +621,7 @@ Validation result semantics:
 
 The validation-only path must not repair/edit source inside the pending target merge. All source edits happen through Runner recovery in a separate recovery workspace.
 
-Do not create another validation or technical-retry engine. Reuse existing configured deterministic/project validation and existing technical retry/backoff ownership where applicable; source-code correction still belongs to the existing Runner recovery path.
+Do not create another validation or technical-retry engine. Reuse existing configured deterministic/project validation only if its public validation-only path can guarantee the source-non-mutating verdict contract; otherwise add the thin validation-only API. Reuse existing technical retry/backoff ownership. Source-code correction still belongs to the existing Runner recovery path.
 
 `--no-ff` gives one consistent Task-delivery merge boundary even when fast-forward would otherwise be possible. `--no-commit` keeps the merge abortable before acceptance.
 
@@ -650,7 +655,7 @@ merge_failure_count > merge_failure_limit ?
 │   ↓
 │ commit recovered result to local recovery/source branch
 │   ↓
-│ retry normal merge → captured Project branch
+│ retry current merge source → captured Project branch
 │
 └─ Yes
     ↓
@@ -1154,7 +1159,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
 - [ ] Reuse an existing public validation entry point or add only a thin Git-unaware, source-non-mutating `validate(project_root, validation_config)` API; no worktree/branch/merge args.
 - [ ] Run required post-merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
-- [ ] Commit merge only after acceptance and record merged_target_head_sha.
+- [ ] Before merge commit, verify target HEAD is still the pre-merge HEAD, MERGE_HEAD matches merge_source_sha, and target worktree/index still belongs to this transaction; fail closed/abort on mismatch.
+- [ ] Commit merge only after acceptance and transaction ownership check, then record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
 
 ### Phase E — fail merge / recovery
@@ -1202,6 +1208,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Validation-only API does not intentionally modify Project source; required edits return SOURCE_FAIL and happen only in recovery workspace.
 - [ ] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
 - [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
+- [ ] Before commit, unexpected target HEAD / MERGE_HEAD / worktree transaction changes fail closed and never commit mixed state.
 - [ ] Merge success commits and closes Main.
 - [ ] Main no_changes closes without a Project merge.
 - [ ] Restart/external pre-delivery merge recognizes merge_source_sha ancestry and does not duplicate merge.
@@ -1293,7 +1300,7 @@ real merge fail
            count <= limit
            → existing Runner redo against latest Project
            → commit recovery result
-           → retry normal merge
+           → retry current merge source
 
            count > limit
            → Isolated Worktree fallback
