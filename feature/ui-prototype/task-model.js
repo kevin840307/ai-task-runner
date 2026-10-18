@@ -70,17 +70,8 @@ function syncTaskListDraftToParent(){
 }
 
 function openTaskListEditor(id){
-  const t=taskMap[id];if(!t||!(t.kind==='list'||t.workspaceKind==='batch'))return;
-  document.getElementById('taskOverlay').classList.remove('open');
-  batchParentTaskId=id;
-  batchDraft=cloneBatch(t.listItems?.length?t.listItems:defaultTaskListItems(t.project));
-  if(t.runtime==='running'||t.runtime==='recover'){batchState={status:'running',index:t.progress?.[0]||0,recovered:t.runtime==='recover',currentDirty:false}}
-  else if(t.runtime==='stopped'||t.runtime==='failed'||t.status==='paused'){batchState={status:'stopped',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
-  else if(t.runtime==='done'){batchState={status:'completed',index:batchDraft.length,recovered:false,currentDirty:false}}
-  else{batchState={status:'idle',index:t.progress?.[0]||0,recovered:false,currentDirty:false}}
-  document.getElementById('taskListEditorTitle').textContent=t.title;
-  document.getElementById('taskListParentHint').textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
-  renderBatchDraft();showView('yaml');
+  if(typeof openPlanDialog==='function')return openPlanDialog(id,{returnTarget:'close'});
+  const t=taskMap[id];if(!t)return;showView('tasks');openTaskById(id);
 }
 document.getElementById('backToTasks').onclick=()=>{syncTaskListDraftToParent();renderBoardFromMap();showView('tasks')};
 // Legacy Edit List button removed; execution plan is edited in Overview.
