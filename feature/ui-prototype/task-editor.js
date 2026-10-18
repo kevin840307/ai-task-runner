@@ -393,7 +393,6 @@ selectProject=function(key){
   const meta=projectMeta[key];if(!meta)return;
   document.getElementById('chatProjectTitle').textContent=key;
   document.getElementById('chatProjectLine').textContent=`${meta.path} · Project Chat · 不建立 Runner Task`;
-  document.getElementById('tasksProjectLine').textContent=`${meta.path} · Tasks 使用同一個 ordered tasks`;
 };
 // Sidebar Project navigation is owned by project-sidebar.js.
 
@@ -998,7 +997,6 @@ selectProject=(function(base){return function(key){
   base(key);ensureProjectChats(key);
   document.getElementById('chatProjectTitle').textContent=key;
   document.getElementById('chatProjectLine').textContent=`${projectMeta[key].path} · Project Chat`;
-  document.getElementById('tasksProjectLine').textContent=`${projectMeta[key].path} · ordered tasks`;
   if(document.getElementById('view-chat').classList.contains('active'))renderChatSession();
 };})(selectProject);
 
@@ -1483,17 +1481,17 @@ renderNewTaskSources=function(){
   const workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
   document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
   document.getElementById('newTaskPromptSource').innerHTML=TaskUiTemplates.sourceCard({
-    title:'Task Prompt',subtitle:'Choose how this task gets its prompt',
+    title:'Task Prompt',subtitle:'Choose how this task gets its prompt',classes:'simple-source-card task-primary-source',
     control:sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode'),
     body:newTaskPromptBodySimple()
   });
   const rows=[];
   if(caps.file)rows.push(TaskUiTemplates.sourceCard({
-    title:'File Validator',subtitle:'Required by this workflow',control:'<span class="cap-chip">Required</span>',
+    title:'File Validator',subtitle:'Required by this workflow',classes:'simple-source-card task-file-source',control:'<span class="cap-chip">Required</span>',
     body:`<div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Or type an existing validator path"><button class="mini-btn task-upload-btn" type="button" id="taskPickValidator">Upload file</button></div>${stagedUploadHint(newTaskDraft,'validator')}<div class="source-note">Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.</div>`
   }));
   if(caps.ai)rows.push(TaskUiTemplates.sourceCard({
-    title:'AI Validation',subtitle:newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source',
+    title:'AI Validation',subtitle:newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source',classes:'simple-source-card task-ai-source',
     control:sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode'),
     body:newTaskAiBodySimple()
   }));
