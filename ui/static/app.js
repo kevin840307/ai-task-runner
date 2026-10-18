@@ -1,6 +1,7 @@
 import { autosizeTextarea, setControlLocked, createLatestActionGate } from "./js/ui-lifecycle.js";
 import { createWorkflowGenerator } from "./js/workflow-generator.js";
 import { createProjectChatController } from "./js/project-chat.js";
+import { createTaskWorkspaceController } from "./js/task-workspace.js";
 const $ = (id) => document.getElementById(id);
 const t = (key, fallback = "") => window.I18n?.t(key, fallback) ?? fallback ?? key;
 const tf = (key, values = {}, fallback = "") => window.I18n?.format?.(key, values, fallback) ?? fallback ?? key;
@@ -270,6 +271,11 @@ async function withButtonBusy(button, busyLabel, action) {
 const confirmDialog = (options) => window.UiDialogs.confirm(options);
 const inputDialog = (options) => window.UiDialogs.input(options);
 const choiceDialog = (options) => window.UiDialogs.choice(options);
+const taskWorkspace = createTaskWorkspaceController({
+  api,
+  confirmDialog,
+  showError: showActionError,
+});
 const projectChat = createProjectChatController({
   api,
   inputDialog,
@@ -277,6 +283,7 @@ const projectChat = createProjectChatController({
   showToast,
   showError: showActionError,
   autosizeTextarea,
+  openTaskDraft: (options) => taskWorkspace.openDraft(options),
   onPreferencesChanged: (data) => {
     state.projectPreferences = projectPreferencesProjection(data);
     renderBackendPicker();
