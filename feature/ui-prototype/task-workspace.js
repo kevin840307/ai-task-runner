@@ -225,20 +225,6 @@ function setContextAction(name,{visible=true,enabled=true,label=null}={}){
   const b=taskContextMenu.querySelector(`[data-context-action="${name}"]`);if(!b)return;
   b.hidden=!visible;b.disabled=!enabled;if(label)b.querySelector('span').textContent=label;
 }
-function renderContextSideInfo(state){
-  const t=taskMap[state.ownerId];if(!t)return;
-  const title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta'),body=document.getElementById('taskInfoBody');
-  if(state.scope==='list'){
-    const items=canonicalTaskItems(t);
-    title.textContent=t.title;meta.textContent=`${t.id} · Task List`;
-    body.innerHTML=`<span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Elapsed</span><strong>${escapeHtml(t.elapsed||'—')}</strong>`;
-    return;
-  }
-  const items=canonicalTaskItems(t),x=items[state.index];if(!x)return;
-  const s=planStateFor(t,state.index,items.length),ai=x.aiMode==='default'?'Workflow default':x.aiMode;
-  title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
-  body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt</span><strong>${escapeHtml(x.goalMode||'inline')}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
-}
 function openItemContextMenu(e,owner,index){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();
   const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
@@ -246,28 +232,14 @@ function openItemContextMenu(e,owner,index){
   taskContextState={scope:'item',ownerId:owner.id,index};
   setContextAction('open',{visible:false});setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
   setContextAction('up',{visible:true,enabled:canRestructure&&index>0&&(owner.status!=='paused'||index-1>batchState.index),label:'Move up'});setContextAction('down',{visible:true,enabled:canRestructure&&index<items.length-1,label:'Move down'});setContextAction('remove',{visible:true,enabled:canRestructure,label:'Remove'});
-  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
+  positionTaskContextMenu(e.clientX,e.clientY);
 }
 function openListContextMenu(e,t){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();const editable=taskEditable(t),canDelete=t.status==='new'&&t.runtime==='idle';
   taskContextState={scope:'list',ownerId:t.id,index:null};
   setContextAction('open',{visible:true,enabled:true,label:'Open list'});setContextAction('edit',{visible:true,enabled:editable,label:'Rename'});
   setContextAction('up',{visible:false});setContextAction('down',{visible:false});setContextAction('remove',{visible:true,enabled:canDelete,label:'Delete'});
-  renderContextSideInfo(taskContextState);positionTaskContextMenu(e.clientX,e.clientY);
-}
-function showContextInfo(state){
-  const t=taskMap[state.ownerId];if(!t)return;
-  const body=document.getElementById('taskInfoBody'),title=document.getElementById('taskInfoTitle'),meta=document.getElementById('taskInfoMeta');
-  if(state.scope==='list'){
-    const items=canonicalTaskItems(t);title.textContent=t.title;meta.textContent=`${t.id} · ${statusLabel(t.status)} · ${runtimeLabel(t.runtime)}`;
-    body.innerHTML=`<span>Type</span><strong>Task List</strong><span>Tasks</span><strong>${items.length}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong><span>Status</span><strong>${statusLabel(t.status)}</strong><span>Runtime</span><strong>${runtimeLabel(t.runtime)}</strong>`;
-  }else{
-    const x=canonicalTaskItems(t)[state.index],s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(!x)return;
-    title.textContent=planTitle(x,state.index);meta.textContent=`Task ${state.index+1} · ${s.label}`;
-    const ai=x.aiMode==='default'?'Workflow default':x.aiMode;
-    body.innerHTML=`<span>Project</span><strong>${escapeHtml(x.project)}</strong><span>Workflow</span><strong>${escapeHtml(x.workflow)}</strong><span>Prompt source</span><strong>${escapeHtml(x.goalMode)}</strong><span>File validator</span><strong>${escapeHtml(x.validator||'—')}</strong><span>AI validation</span><strong>${escapeHtml(ai)}</strong><span>Workspace</span><strong>${escapeHtml(workspaceLabelForItem(x))}</strong><span>Branch</span><strong>${escapeHtml(x.branch||'—')}</strong><span>Path</span><strong>${escapeHtml(x.executionRoot||'—')}</strong>`;
-  }
-  openModal('taskInfoModal');
+  positionTaskContextMenu(e.clientX,e.clientY);
 }
 function mutateContextItem(action,state){
   const t=taskMap[state.ownerId];if(!t)return;if(batchParentTaskId!==t.id)setPlanDraftForTask(t);const i=state.index,items=canonicalTaskItems(t),s=planStateFor(t,i,items.length),currentLocked=t.status==='paused'&&s.current;
@@ -286,7 +258,7 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(action==='remove'&&state.scope==='list'){requestTaskDelete(t.id)}
 });
 document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','taskListNameModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskListNameModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
 window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
 
 const renderFullPlanBeforeContext=renderFullPlan;
