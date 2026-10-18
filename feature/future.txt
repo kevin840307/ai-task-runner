@@ -55,27 +55,53 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
 
 3. Workspace / Worktree policy
 ------------------------------
-Task-level workspace choices remain:
+Task-level choices remain:
 - Auto
 - Main
-- Worktree
+- Isolated Worktree
 
-Global Settings -> Execution defines how Auto resolves:
-- Busy project -> Worktree
-  - Main available => Main
-  - Main busy => Worktree
+Execution invariant:
+- Every Task run executes in its own isolated Git worktree.
+- Main is a delivery mode name; it does not mean Runner writes directly into the Project checkout and it does not mean the Git branch must literally be named main.
+- Runner continues to receive only project_root and remains unaware of Git integration.
+
+At Task run start:
+- Capture the Project repository's currently checked-out branch as target_branch.
+- Capture only its committed HEAD; uncommitted Project checkout changes are excluded.
+- Use Task + Run identity for branch/path, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
+- target_branch remains fixed for that run even if the user later switches the Project checkout.
+
+Global Settings -> Execution still defines how Auto resolves:
+- Busy project -> Isolated Worktree
+  - Project idle => effective Main
+  - Project busy => effective Isolated Worktree
+  - This is now a delivery policy, not filesystem-safety; all execution is isolated anyway.
 - Always Main
-  - Auto => Main
-  - Main busy => block Run
+  - Auto => effective Main.
+  - Multiple Main Tasks may execute concurrently in separate worktrees; do not block merely because another Main Task is running.
 - Always Worktree
-  - Auto => Worktree even when Main is idle
+  - Auto => effective Isolated Worktree.
 
 Rules:
-- Explicit Task-level Main / Worktree always overrides the Global Auto policy.
-- All entry points must call the same workspace resolver.
-- @goal, New Task, Task Draft/Create, and Tasks-page Run must not duplicate busy/worktree logic.
-- One project path may have only one Main workspace Task running at a time.
-- Worktree remains optional isolation, not a second Runner or scheduler.
+- Explicit Task-level Main / Isolated Worktree overrides Global Auto policy.
+- All entry points must call the same workspace resolver; update the resolver for the all-worktree model rather than adding another resolver.
+- Persist both requested mode and resolved effective mode for each Task run.
+- Effective Main:
+  - Runner Completed => Closed · pending_merge.
+  - Serialize integration per repository through the single local/integration branch.
+  - Re-sync local/integration to latest committed target HEAD before integration.
+  - Apply the completed Task snapshot in a temporary candidate worktree.
+  - Conflict/code repair goes back through the existing Runner; do not build a second repair engine.
+  - On success: git merge --squash local/integration into captured target_branch, create one local commit, then reset local/integration to the new target HEAD.
+  - If real merge failures exceed configured N: stop automatic recovery, preserve Task branch/worktree, remain mode=Main, Closed · Awaiting merge.
+- Effective Isolated Worktree:
+  - Runner Completed => Closed · worktree_ready.
+  - Preserve branch/worktree and do not auto-integrate into target_branch.
+- Never auto-switch the user's Project checkout branch.
+- Never auto-stash/reset user dirty files.
+- Remote push remains a separate explicit action.
+- Detailed implementation source of truth: feature/git-worktree-todo.md.
+
 
 4. Project-level Chat run settings
 ----------------------------------
