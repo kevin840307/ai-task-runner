@@ -389,14 +389,17 @@ function renderProjectDropdown(filter=''){
   const q=String(filter||'').trim().toLowerCase();
   const entries=projectRegistryEntries().filter(([key,meta])=>!q||key.toLowerCase().includes(q)||String(meta.path||'').toLowerCase().includes(q));
   projectDropdown.innerHTML=entries.length?entries.map(([key,meta])=>`<button type="button" class="project-dropdown-option ${projectRefMatches(projectComboInput.value,key)?'selected':''}" data-project-choice="${escapeAttr(key)}"><strong>${escapeHtml(key)}${key===currentProjectKey?' · current':''}</strong><small>${escapeHtml(meta.path||'')}</small></button>`).join(''):'<div class="project-dropdown-empty">No matching Project. Type a local path to add it when saving.</div>';
-  projectDropdown.querySelectorAll('[data-project-choice]').forEach(b=>b.onclick=()=>{projectComboInput.value=b.dataset.projectChoice;projectDropdown.hidden=true;renderNewTaskWorkspace()});
+  projectDropdown.querySelectorAll('[data-project-choice]').forEach(b=>b.onclick=()=>{projectComboInput.value=b.dataset.projectChoice;setProjectDropdownOpen(false);renderNewTaskWorkspace()});
 }
-function openProjectDropdown(showAll=true){renderProjectDropdown(showAll?'':projectComboInput.value);projectDropdown.hidden=false}
-projectDropdownToggle.onclick=e=>{e.preventDefault();e.stopPropagation();if(projectDropdown.hidden)openProjectDropdown(true);else projectDropdown.hidden=true};
+function setProjectDropdownOpen(open){
+  projectDropdown.hidden=!open;projectDropdownToggle.setAttribute('aria-expanded',String(open));
+}
+function openProjectDropdown(showAll=true){renderProjectDropdown(showAll?'':projectComboInput.value);setProjectDropdownOpen(true)}
+projectDropdownToggle.onclick=e=>{e.preventDefault();e.stopPropagation();if(projectDropdown.hidden)openProjectDropdown(true);else setProjectDropdownOpen(false)};
 projectComboInput.addEventListener('focus',()=>openProjectDropdown(true));
-projectComboInput.addEventListener('input',()=>{renderProjectDropdown(projectComboInput.value);projectDropdown.hidden=false;renderNewTaskWorkspace()});
-projectComboInput.addEventListener('keydown',e=>{if(e.key==='Escape')projectDropdown.hidden=true});
-document.addEventListener('click',e=>{if(!e.target.closest('.project-combobox'))projectDropdown.hidden=true});
+projectComboInput.addEventListener('input',()=>{renderProjectDropdown(projectComboInput.value);setProjectDropdownOpen(true);renderNewTaskWorkspace()});
+projectComboInput.addEventListener('keydown',e=>{if(e.key==='Escape')setProjectDropdownOpen(false)});
+document.addEventListener('click',e=>{if(!e.target.closest('.project-combobox'))setProjectDropdownOpen(false)});
 
 // Keep legacy datalist population harmless, but drive visible choices from the custom menu.
 const visibleProjectOptions=renderProjectOptions;
