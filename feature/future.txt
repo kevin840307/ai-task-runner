@@ -246,6 +246,9 @@ React rules:
 - Canonical items[] remains the data source for Task List rows, YAML, Chat Draft editing and execution.
 - UI composition must not create another state machine or another Task model.
 - Shared components use theme tokens and the same validation / capability rules.
+- User-visible text in shared components must come from the shared i18n owner (zh-TW / en); Chat-only or Task-only duplicated translations are not allowed.
+- Dynamic UI such as Queue, Ask, command suggestions and TaskDraft must use the same uiText/i18n source as static labels.
+- Themeable surfaces must use semantic tokens; feature CSS must not add light-only background/border colors that require later dark-mode overrides.
 - When migrating from the static prototype, remove task-ui-templates.js after React components cover the same boundaries; do not keep both implementations.
 
 9. Formal implementation direction
