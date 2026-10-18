@@ -80,8 +80,8 @@ function renderDrawerPlan(t){
 }
 function renderFullPlan(t){
   const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:planItemsForTask(t),editable=taskEditable(t);
-  document.getElementById('planPageTitle').textContent=t.title;
-  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('drawerTitle').textContent=t.title;
+  document.getElementById('drawerRouteMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
   document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
   document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   host.innerHTML=items.map((x,i)=>{
@@ -1306,8 +1306,8 @@ document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hide
 function workspaceLabelForItem(x){return itemUsesWorktree(x)?'WORKTREE':x.workspaceKind==='main'||x.workspacePolicy==='main'?'Main':'Auto'}
 renderFullPlan=function(t){
   const host=document.getElementById('planFormList'),items=batchDraft.length?batchDraft:canonicalTaskItems(t),editable=taskEditable(t);
-  document.getElementById('planPageTitle').textContent=t.title;
-  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('drawerTitle').textContent=t.title;
+  document.getElementById('drawerRouteMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
   document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
   document.getElementById('planTaskSummary').innerHTML=`<span>Project</span><strong>${escapeHtml(t.project)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   host.innerHTML=items.map((x,i)=>{
@@ -1476,8 +1476,8 @@ renderDrawerPlan=function(t){
 
 renderFullPlan=function(t){
   const host=document.getElementById('planFormList'),items=canonicalTaskItems(t),editable=taskEditable(t);
-  document.getElementById('planPageTitle').textContent=t.title;
-  document.getElementById('planPageMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
+  document.getElementById('drawerTitle').textContent=t.title;
+  document.getElementById('drawerRouteMeta').textContent=`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
   document.getElementById('planStatePill').textContent=editable?'Editable':(t.status==='ongoing'?'Pause to edit':'Read-only');
   document.getElementById('planTaskSummary').innerHTML=`<span>List</span><strong>${escapeHtml(t.title)}</strong><span>Status</span><strong>${escapeHtml(statusLabel(t.status))}</strong><span>Runtime</span><strong>${escapeHtml(runtimeLabel(t.runtime))}</strong><span>Progress</span><strong>${t.progress?.[0]||0} / ${items.length}</strong>`;
   if(items.length===0){host.innerHTML=TaskUiTemplates.emptyTaskList({large:true,id:'planEmptyAddTask'});document.getElementById('planEmptyAddTask').onclick=()=>loadTaskEditor('create-item',{ownerId:t.id,index:0,returnTarget:'list'})}
