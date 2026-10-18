@@ -447,6 +447,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
+            # Runner options belong to Tasks, not the default Project Chat.
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
+
             # Environment diagnostics stay readable but the completed checklist can collapse.
             page.locator("#optionsButton").click()
             page.locator("#environmentCheckButton").click()
@@ -819,6 +823,8 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.locator("#optionsButton").click()
             assert page.locator("#activeRunDetails").count() == 0
 
