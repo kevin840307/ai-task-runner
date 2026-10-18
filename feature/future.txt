@@ -1,0 +1,168 @@
+AI Task Runner — feature/ui Future Direction
+=============================================
+
+Updated: 2026-10-18
+Scope: feature/ prototype only
+
+Purpose
+-------
+This file records the current prototype product direction while feature/ui is still being designed.
+It does not replace the root runtime contract, AGENTS.md, DevFollow.txt, or formal release documentation.
+During this prototype phase, changes stay under feature/. When the design is accepted, the formal implementation
+must reconcile these decisions with the authoritative runtime/API contracts and tests.
+
+1. Product structure
+--------------------
+- Project is the primary context.
+- Clicking a Project opens that Project's Chat.
+- Tasks remain the durable work records / Board lifecycle.
+- Runner Core remains authoritative for execution and runtime truth.
+- Chat is for conversation, clarification, queueing, and explicit Runner commands.
+- Workflows / Prompts remain reusable assets and are not owned by one Chat.
+
+2. Global Settings
+------------------
+- Global Settings lives at the bottom of the left sidebar.
+- Global Settings must not be tied to the current Project or Chat.
+- Remove the standalone theme button from the brand/header area.
+- Settings sections:
+  - Execution
+  - Interface
+  - Agents (future)
+- Interface owns global Theme and Language preferences.
+- Theme options:
+  - System
+  - Light
+  - Dark
+- Language options:
+  - Traditional Chinese
+  - English
+- Prototype may persist these preferences in localStorage.
+- Formal implementation should use one versioned settings owner/schema instead of browser-only state.
+
+3. Workspace / Worktree policy
+------------------------------
+Task-level workspace choices remain:
+- Auto
+- Main
+- Worktree
+
+Global Settings -> Execution defines how Auto resolves:
+- Busy project -> Worktree
+  - Main available => Main
+  - Main busy => Worktree
+- Always Main
+  - Auto => Main
+  - Main busy => block Run
+- Always Worktree
+  - Auto => Worktree even when Main is idle
+
+Rules:
+- Explicit Task-level Main / Worktree always overrides the Global Auto policy.
+- All entry points must call the same workspace resolver.
+- @goal, New Task, Task Draft/Create, and Tasks-page Run must not duplicate busy/worktree logic.
+- One project path may have only one Main workspace Task running at a time.
+- Worktree remains optional isolation, not a second Runner or scheduler.
+
+4. Project-level Chat run settings
+----------------------------------
+Agent / Model / Mode / Workflow belong to the Project, not to an individual Chat session.
+
+Each Project independently stores:
+- Agent
+- Model
+- Mode
+- Workflow
+
+Behavior:
+- All Chat sessions under the same Project share those four settings.
+- Switching Chat sessions does not reset them.
+- Switching Projects loads that Project's own settings.
+- Agent changes revalidate Model and Mode against that Agent's capabilities.
+- Workflow is used by @goal and other Project Chat -> Runner handoffs.
+- Prototype may persist Project preferences in localStorage.
+- Formal implementation should persist through the backend/project configuration owner.
+
+Composer UX:
+- Mode remains visible as a quick control because it is changed frequently.
+- Workflow / Agent / Model are grouped under the compact Chat settings control.
+- Do not restore three large always-visible selectors.
+
+5. Explicit Chat commands
+-------------------------
+@goal <spec>
+- Explicit fast execution path.
+- Create one Task and immediately Run it.
+- Task appears in Tasks -> Ongoing immediately.
+- Uses the current Project's Workflow.
+- Uses the shared workspace resolver and Global Auto workspace policy.
+- If required Workflow inputs are missing, fail closed rather than inventing values.
+
+@task <spec>
+- Generate TaskDraft.
+- AI decides single Task vs Task List.
+- Review/Edit/Create before execution.
+
+@task-single <spec>
+- Generate exactly one TaskDraft item.
+
+@task-list <spec>
+- Generate two or more ordered TaskDraft items.
+
+Responsibility split:
+- @goal = deliver a goal and run now.
+- @task* = draft/review/create, not auto-run.
+- Ordinary Chat never guesses Runner execution intent.
+
+6. Chat session scope
+---------------------
+Chat-session scoped:
+- Messages
+- Queue
+- Ask / clarification state
+- Current turn state
+
+Project scoped:
+- Agent
+- Model
+- Mode
+- Workflow
+
+Global scoped:
+- Auto workspace policy
+- Theme
+- Language
+
+Keep these scopes explicit in UI/API/storage to prevent accidental cross-project/session leakage.
+
+7. Ask / Queue UX
+-----------------
+- Busy Chat automatically queues additional Send actions; no separate +Queue button.
+- Queue items can be edited and deleted.
+- Queue stays above the Composer.
+- Ask is rendered inside the Chat message stream.
+- Ask supports multiple questions, choices, text, Other/custom answer, Next, final Submit.
+- Ask uses the outer Chat scrolling; do not add unnecessary nested scrolling unless a future real-world layout proves it necessary.
+
+8. Formal implementation direction
+----------------------------------
+When moving beyond the prototype:
+- Do not copy localStorage behavior directly into production architecture.
+- Add backend-owned schemas for Global Settings and Project Chat preferences.
+- UI / CLI / YAML / API should share the same workspace resolver and Runner action contract.
+- @goal should be idempotent and durable: create + run must not leave a fake Running Task if startup fails.
+- AgentAdapter owns live Model / Mode / capability discovery.
+- Project settings must validate Agent/Model/Mode compatibility on load and on Agent change.
+- Tests must cover Project switching, Chat-session switching, reload persistence, all Auto workspace policies, and @goal failure/retry cases.
+- Preserve 24H unattended reliability and existing Runner recovery behavior.
+
+9. Prototype acceptance before formalization
+--------------------------------------------
+- Browser-test Global Settings -> Execution / Interface.
+- Verify System / Light / Dark appearance and persistence.
+- Verify language preference persistence and document language projection.
+- Verify each Project independently remembers Agent / Model / Mode / Workflow.
+- Verify same-Project Chat sessions share those settings.
+- Verify @goal immediately creates an Ongoing Task visible in Tasks.
+- Verify Auto workspace policy is identical across all known Run entry points.
+- Verify no stale themeBtn, duplicate workspace busy logic, or session-level copies of Project preferences remain.
