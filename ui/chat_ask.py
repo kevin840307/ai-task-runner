@@ -150,3 +150,25 @@ def validate_answers(
             raise ValueError(f"Invalid Ask option for {question_id}")
         result[question_id] = {"value": selected_text}
     return result
+
+
+
+def demo_questions() -> list[dict[str, Any]]:
+    """Deterministic explicit Ask fixture used by @ask-demo only."""
+    return normalize_questions([
+        {
+            "id": "approach",
+            "header": "Approach",
+            "question": "Which implementation approach should this Chat use?",
+            "options": [
+                {"value": "safe", "label": "Safe", "description": "Prefer the narrowest compatible change."},
+                {"value": "clean", "label": "Clean", "description": "Prefer the cleaner architecture even if broader."},
+            ],
+        },
+        {
+            "id": "reason",
+            "header": "Reason",
+            "question": "Add any context the Agent should consider.",
+            "kind": "text",
+        },
+    ])
