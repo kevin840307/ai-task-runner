@@ -6,27 +6,11 @@
   <title>AI Task Runner</title>
   <script>
     (() => {
-      const validTheme = new Set(["teal", "blue", "violet", "amber", "rose"]);
-      const validAppearance = new Set(["system", "light", "dark"]);
-      const validMotion = new Set(["full", "system", "reduced"]);
-      let theme = "teal";
-      let appearance = "system";
-      let motion = "full";
-      try {
-        const savedTheme = localStorage.getItem("ai-task-runner.theme");
-        const savedAppearance = localStorage.getItem("ai-task-runner.appearance");
-        const savedMotion = localStorage.getItem("ai-task-runner.motion");
-        if (validTheme.has(savedTheme)) theme = savedTheme;
-        if (validAppearance.has(savedAppearance)) appearance = savedAppearance;
-        if (validMotion.has(savedMotion)) motion = savedMotion;
-      } catch (_) {}
-      const resolved = appearance === "system"
-        ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-        : appearance;
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.dataset.appearance = resolved;
-      document.documentElement.dataset.appearancePreference = appearance;
-      document.documentElement.dataset.motion = motion;
+      const appearance = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = "teal";
+      document.documentElement.dataset.appearance = appearance;
+      document.documentElement.dataset.appearancePreference = "system";
+      document.documentElement.dataset.motion = "full";
     })();
   </script>
   <link rel="stylesheet" href="/styles.css" />
@@ -35,9 +19,17 @@
   <aside class="projects">
     <div class="projects-head">
       <div class="brand">Agent Workflow</div>
-      <button id="themeButton" class="theme-toggle-button" type="button" title="主題與外觀" data-i18n-title="theme.open" aria-haspopup="dialog" aria-expanded="false">◐</button>
+    <nav class="project-nav" aria-label="Application navigation">
+      <button id="chatNav" class="project-nav-link active" type="button" title="任務" data-i18n-title="nav.tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13.5h5"/></svg></span><strong>Tasks</strong></button>
+      <button id="workflowNav" class="project-nav-link" type="button" title="工作流程" data-i18n-title="nav.workflows"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.4 8.1l3.3 7.6M16.6 8.1l-3.3 7.6"/></svg></span><strong data-i18n="nav.workflows">Workflows</strong></button>
+      <button id="promptNav" class="project-nav-link" type="button" title="Prompts" data-i18n-title="nav.prompts"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 4.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 12.5h8M8 16h5"/></svg></span><strong data-i18n="nav.prompts">Prompts</strong></button>
+    </nav>
+    <div class="project-section-label"><span data-i18n="projects.label">專案</span><button id="openProject" class="project-add-button" type="button" title="新增 / 開啟專案" data-i18n-title="projects.add" aria-label="新增 / 開啟專案" data-i18n-aria="projects.add"><span aria-hidden="true">+</span></button></div>
+    <div id="projectList" class="project-list"></div>
+    <div class="sidebar-global-settings">
+      <button id="themeButton" class="project-nav-link global-settings-button" type="button" title="Global Settings" aria-haspopup="dialog" aria-expanded="false"><span aria-hidden="true">⚙</span><strong>Settings</strong></button>
       <section id="themePanel" class="theme-panel" role="dialog" aria-label="主題與外觀" data-i18n-aria="theme.open" hidden>
-        <div class="theme-panel-head"><strong data-i18n="theme.settings">介面設定</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close" data-i18n-aria="common.close">×</button></div>
+        <div class="theme-panel-head"><strong>Global Settings</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close" data-i18n-aria="common.close">×</button></div>
         <div class="theme-setting-group">
           <span class="theme-setting-label" data-i18n="theme.appearance">外觀</span>
           <div class="appearance-options" role="group" aria-label="Appearance">
@@ -63,15 +55,24 @@
             <button type="button" data-language-option="en">English</button>
           </div>
         </div>
-      </section>
+      
+        <div class="theme-setting-group">
+          <span class="theme-setting-label">Execution</span>
+          <label class="global-setting-row"><span>Auto workspace policy</span><select id="globalAutoWorkspacePolicy"><option value="busy-worktree">Busy project → Worktree</option><option value="always-main">Always Main</option><option value="always-worktree">Always Worktree</option></select></label>
+          <label class="global-setting-row"><span>Merge failure limit</span><input id="globalMergeFailureLimit" type="number" min="0" max="100" step="1" /></label>
+          <label class="global-setting-row global-setting-check"><span>Allow concurrent Main tasks</span><input id="globalAllowConcurrentMain" type="checkbox" /></label>
+        </div>
+        <div class="theme-setting-group">
+          <span class="theme-setting-label">Defaults</span>
+          <label class="global-setting-row"><span>Agent</span><select id="globalDefaultAgent"></select></label>
+          <label class="global-setting-row"><span>Model</span><input id="globalDefaultModel" type="text" placeholder="Agent default" /></label>
+          <label class="global-setting-row"><span>Mode</span><select id="globalDefaultMode"><option value="read">Read</option><option value="auto">Auto</option><option value="yolo">YOLO</option></select></label>
+          <label class="global-setting-row"><span>Reasoning</span><select id="globalDefaultReasoning"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></label>
+          <label class="global-setting-row"><span>Workflow</span><input id="globalDefaultWorkflow" type="text" placeholder="Project default" /></label>
+        </div>
+</section>
     </div>
-    <nav class="project-nav" aria-label="Application navigation">
-      <button id="chatNav" class="project-nav-link active" type="button" title="任務" data-i18n-title="nav.tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13.5h5"/></svg></span><strong>Tasks</strong></button>
-      <button id="workflowNav" class="project-nav-link" type="button" title="工作流程" data-i18n-title="nav.workflows"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.4 8.1l3.3 7.6M16.6 8.1l-3.3 7.6"/></svg></span><strong data-i18n="nav.workflows">Workflows</strong></button>
-      <button id="promptNav" class="project-nav-link" type="button" title="Prompts" data-i18n-title="nav.prompts"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 4.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 12.5h8M8 16h5"/></svg></span><strong data-i18n="nav.prompts">Prompts</strong></button>
-    </nav>
-    <div class="project-section-label"><span data-i18n="projects.label">專案</span><button id="openProject" class="project-add-button" type="button" title="新增 / 開啟專案" data-i18n-title="projects.add" aria-label="新增 / 開啟專案" data-i18n-aria="projects.add"><span aria-hidden="true">+</span></button></div>
-    <div id="projectList" class="project-list"></div>
+    </div>
     <div class="sidebar-foot" data-i18n="sidebar.history">每個專案保留一份任務紀錄</div>
   </aside>
 

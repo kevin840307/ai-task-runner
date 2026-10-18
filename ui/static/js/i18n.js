@@ -1,6 +1,5 @@
 (() => {
   const DEFAULT_LANGUAGE = "zh-TW";
-  const STORAGE_KEY = "ai-task-runner.language";
   const messages = {
     "zh-TW": {
       "theme.open": "Theme & Appearance", "theme.settings": "Settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
@@ -124,8 +123,7 @@
     }
   };
   function normalize(value) { return value === "en" ? "en" : "zh-TW"; }
-  function initialLanguage() { try { return normalize(localStorage.getItem(STORAGE_KEY) || DEFAULT_LANGUAGE); } catch (_) { return DEFAULT_LANGUAGE; } }
-  let language = initialLanguage();
+  let language = DEFAULT_LANGUAGE;
   function t(key, fallback = "") { return messages[language]?.[key] ?? messages[DEFAULT_LANGUAGE]?.[key] ?? fallback ?? key; }
   function format(key, values = {}, fallback = "") {
     return String(t(key, fallback)).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? `{${name}}`);
@@ -138,9 +136,8 @@
     root.querySelectorAll?.("[data-i18n-aria]").forEach((node) => { node.setAttribute("aria-label", t(node.dataset.i18nAria, node.getAttribute("aria-label") || "")); });
     window.dispatchEvent(new CustomEvent("app-language-changed", { detail: { language } }));
   }
-  function setLanguage(next, { persist = true } = {}) {
+  function setLanguage(next) {
     language = normalize(next);
-    if (persist) { try { localStorage.setItem(STORAGE_KEY, language); } catch (_) {} }
     apply(document);
     return language;
   }

@@ -174,7 +174,18 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/settings":
                 return self._json(self.state.global_settings.update(body))
             if parsed.path == "/api/projects/add":
-                return self._json(self.state.add_project(str(body.get("path", ""))))
+                project_info = self.state.add_project(str(body.get("path", "")))
+                project = Path(project_info["path"]).resolve()
+                if not self.state.project_preferences.get(project).get("exists"):
+                    defaults = self.state.global_settings.get()["defaults"]
+                    self.state.project_preferences.update(project, {
+                        "agent": defaults["agent"],
+                        "model": defaults["model"],
+                        "mode": defaults["mode"],
+                        "reasoning": defaults["reasoning"],
+                        "workflow": defaults["workflow"],
+                    })
+                return self._json(project_info)
             if parsed.path == "/api/projects/remove":
                 self.state.remove_project(str(body.get("path", "")))
                 return self._json({"ok": True})

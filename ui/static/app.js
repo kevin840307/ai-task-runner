@@ -99,7 +99,7 @@ function rememberAiValidatorPrompt(workflow, value) {
 }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "project-chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -116,35 +116,71 @@ const state = {
 };
 const runActionGate = createLatestActionGate();
 
-const THEME_STORAGE_KEY = "ai-task-runner.theme";
-const APPEARANCE_STORAGE_KEY = "ai-task-runner.appearance";
-const MOTION_STORAGE_KEY = "ai-task-runner.motion";
 const THEME_VALUES = new Set(["teal", "blue", "violet", "amber", "rose"]);
 const APPEARANCE_VALUES = new Set(["system", "light", "dark"]);
 const MOTION_VALUES = new Set(["full", "system", "reduced"]);
 const systemColorScheme = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-function readThemePreference() { try { const value = localStorage.getItem(THEME_STORAGE_KEY); return THEME_VALUES.has(value) ? value : "teal"; } catch (_) { return "teal"; } }
-function readAppearancePreference() { try { const value = localStorage.getItem(APPEARANCE_STORAGE_KEY); return APPEARANCE_VALUES.has(value) ? value : "system"; } catch (_) { return "system"; } }
-function readMotionPreference() { try { const value = localStorage.getItem(MOTION_STORAGE_KEY); return MOTION_VALUES.has(value) ? value : "full"; } catch (_) { return "full"; } }
-function applyMotionPreference(value = readMotionPreference(), { persist = false } = {}) {
+function applyMotionPreference(value = "full") {
   const motion = MOTION_VALUES.has(value) ? value : "full";
   document.documentElement.dataset.motion = motion;
-  if (persist) { try { localStorage.setItem(MOTION_STORAGE_KEY, motion); } catch (_) {} }
   renderThemeControls();
 }
 function resolvedAppearance(preference) { return preference === "system" ? (systemColorScheme?.matches ? "dark" : "light") : preference; }
-function applyThemePreferences(theme = readThemePreference(), appearance = readAppearancePreference(), { persist = false } = {}) {
-  theme = THEME_VALUES.has(theme) ? theme : "teal"; appearance = APPEARANCE_VALUES.has(appearance) ? appearance : "system";
-  document.documentElement.dataset.theme = theme; document.documentElement.dataset.appearancePreference = appearance; document.documentElement.dataset.appearance = resolvedAppearance(appearance);
-  if (persist) { try { localStorage.setItem(THEME_STORAGE_KEY, theme); localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance); } catch (_) {} }
+function applyThemePreferences(theme = "teal", appearance = "system") {
+  theme = THEME_VALUES.has(theme) ? theme : "teal";
+  appearance = APPEARANCE_VALUES.has(appearance) ? appearance : "system";
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.appearancePreference = appearance;
+  document.documentElement.dataset.appearance = resolvedAppearance(appearance);
   renderThemeControls();
+}
+function applyGlobalSettings(value = state.globalSettings) {
+  if (!value) return;
+  const ui = value.interface || {};
+  applyThemePreferences(ui.theme || "teal", ui.appearance || "system");
+  applyMotionPreference(ui.motion || "full");
+  window.I18n?.setLanguage?.(value.language || "zh-TW");
+  renderGlobalSettingsForm();
+  renderProjects();
+}
+async function loadGlobalSettings() {
+  const value = await api("/api/settings", { timeoutMs: 15000 });
+  state.globalSettings = value;
+  applyGlobalSettings(value);
+  return value;
+}
+async function updateGlobalSettings(patch) {
+  const value = await api("/api/settings", {
+    method: "POST",
+    body: JSON.stringify(patch),
+  });
+  state.globalSettings = value;
+  applyGlobalSettings(value);
+  return value;
+}
+function renderGlobalSettingsForm() {
+  const value = state.globalSettings; if (!value) return;
+  const execution = value.execution || {}, defaults = value.defaults || {};
+  if ($("globalAutoWorkspacePolicy")) $("globalAutoWorkspacePolicy").value = execution.auto_workspace_policy || "busy-worktree";
+  if ($("globalMergeFailureLimit")) $("globalMergeFailureLimit").value = String(execution.merge_failure_limit ?? 3);
+  if ($("globalAllowConcurrentMain")) $("globalAllowConcurrentMain").checked = !!execution.allow_concurrent_main_tasks;
+  const agent = $("globalDefaultAgent");
+  if (agent) {
+    const selected = String(defaults.agent || "");
+    agent.innerHTML = "";
+    const base = document.createElement("option"); base.value = ""; base.textContent = state.defaultBackend ? "Default · " + state.defaultBackend : "Runner default"; agent.appendChild(base);
+    for (const name of state.backends) { const option = document.createElement("option"); option.value = name; option.textContent = name; agent.appendChild(option); }
+    agent.value = [...agent.options].some((o) => o.value === selected) ? selected : "";
+  }
+  if ($("globalDefaultModel")) $("globalDefaultModel").value = String(defaults.model || "");
+  if ($("globalDefaultMode")) $("globalDefaultMode").value = String(defaults.mode || "auto");
+  if ($("globalDefaultReasoning")) $("globalDefaultReasoning").value = String(defaults.reasoning || "medium");
+  if ($("globalDefaultWorkflow")) $("globalDefaultWorkflow").value = String(defaults.workflow || "");
 }
 function renderThemeControls() {
   const theme = document.documentElement.dataset.theme || "teal", appearance = document.documentElement.dataset.appearancePreference || "system";
   document.querySelectorAll("[data-theme-option]").forEach((button) => { const active = button.dataset.themeOption === theme; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
   document.querySelectorAll("[data-appearance-option]").forEach((button) => { const active = button.dataset.appearanceOption === appearance; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
-  const motion = document.documentElement.dataset.motion || "full";
-  document.querySelectorAll("[data-motion-option]").forEach((button) => { const active = button.dataset.motionOption === motion; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
   const language = window.I18n?.getLanguage?.() || "zh-TW";
   document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
@@ -889,7 +925,7 @@ async function sendMessage() {
 }
 
 async function refreshBackends() {
-  try { const data = await api("/api/backends", { timeoutMs: 15000 }); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
+  try { const data = await api("/api/backends", { timeoutMs: 15000 }); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); renderGlobalSettingsForm(); }
   catch (_) { state.backends = []; state.defaultBackend = ""; renderBackendPicker(); }
 }
 async function refreshWorkflowCatalog() {
@@ -2108,13 +2144,21 @@ $("optionsCloseButton").onclick = closeOptionsPanel;
 $("environmentCheckButton").onclick = checkEnvironment;
 $("themeButton").onclick = toggleThemePanel;
 $("themeCloseButton").onclick = closeThemePanel;
-document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => applyThemePreferences(button.dataset.themeOption, document.documentElement.dataset.appearancePreference || "system", { persist: true }); });
-document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => applyThemePreferences(document.documentElement.dataset.theme || "teal", button.dataset.appearanceOption, { persist: true }); });
+$("globalAutoWorkspacePolicy")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { auto_workspace_policy: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalMergeFailureLimit")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { merge_failure_limit: Number(event.currentTarget.value) } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalAllowConcurrentMain")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { allow_concurrent_main_tasks: !!event.currentTarget.checked } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultAgent")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { agent: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultModel")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { model: event.currentTarget.value.trim() } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultMode")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { mode: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultReasoning")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { reasoning: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultWorkflow")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { workflow: event.currentTarget.value.trim() } }).catch((error) => showActionError(error.message, "Settings update failed")));
+document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => void updateGlobalSettings({ interface: { theme: button.dataset.themeOption } }).catch((error) => showActionError(error.message, "Settings update failed")); });
+document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => void updateGlobalSettings({ interface: { appearance: button.dataset.appearanceOption } }).catch((error) => showActionError(error.message, "Settings update failed")); });
 document.querySelectorAll("[data-motion-option]").forEach((button) => { button.onclick = () => applyMotionPreference(button.dataset.motionOption, { persist: true }); });
-document.querySelectorAll("[data-language-option]").forEach((button) => { button.onclick = () => { window.I18n?.setLanguage?.(button.dataset.languageOption, { persist: true }); renderThemeControls(); renderProjects(); }; });
+document.querySelectorAll("[data-language-option]").forEach((button) => { button.onclick = () => void updateGlobalSettings({ language: button.dataset.languageOption }).catch((error) => showActionError(error.message, "Settings update failed")); });
 window.addEventListener("app-language-changed", () => { renderThemeControls(); if (state?.projects) renderProjects(); });
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
-applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
+applyThemePreferences(document.documentElement.dataset.theme || "teal", document.documentElement.dataset.appearancePreference || "system"); applyMotionPreference(document.documentElement.dataset.motion || "full");
 $("sendButton").onclick = sendMessage;
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
@@ -2168,7 +2212,7 @@ window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
+}); Promise.allSettled([loadGlobalSettings(), refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
   await restoreWorkflowStudioNavigation();
   await restoreActiveWorkflowGenerator();
 }); refreshPromptTags(); startNonOverlappingPoll(() => state.view === "tasks" ? refreshRuntime() : Promise.resolve(), 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);

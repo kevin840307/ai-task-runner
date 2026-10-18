@@ -133,7 +133,9 @@ def _bridge_for(state: UIState):
             project_value = query.get("project", [""])[0]
             project = Path(project_value) if project_value else None
             if method == "GET":
-                if path == "/api/projects":
+                if path == "/api/settings":
+                    data = state.global_settings.get()
+                elif path == "/api/projects":
                     data = {
                         "projects": state.projects(
                             exclude_runtime_path=query.get("exclude_runtime", [""])[0]
@@ -211,7 +213,9 @@ def _bridge_for(state: UIState):
                 else:
                     raise ValueError(f"Unhandled browser E2E GET {path}")
             else:
-                if path == "/api/project/preferences":
+                if path == "/api/settings":
+                    data = state.global_settings.update(body)
+                elif path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
                 elif path == "/api/chat/turn":
                     session_id = str(body.get("session_id", ""))
