@@ -52,7 +52,6 @@ function restoreTaskInfoShell(t){
   setTaskDrawerShell('info',{title:t.title});
   taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
-  if(taskDrawerBanner&&typeof renderDrawerWorkspaceBanner==='function')renderDrawerWorkspaceBanner(t);
 }
 function closeTaskDrawerShell(){
   taskEditorReturnContext=null;
