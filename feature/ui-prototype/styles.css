@@ -218,7 +218,7 @@ html.ui-ready .app-bootstrap-card{
 .modal-head h2{margin:0;font-size:14px}.modal-head p{margin:4px 0 0;color:var(--muted);font-size:9px}
 .modal-body{padding:14px 16px}.modal-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;border-top:1px solid var(--line);background:#fbfcfe}
 .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.modal-grid .full{grid-column:1/-1}
-.picker-options{display:grid;gap:7px}.picker-option{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);text-align:left}.picker-option:hover{border-color:var(--accent);background:var(--accent-softer)}.picker-option strong{display:block;font-size:10px}.picker-option small{display:block;margin-top:3px;color:var(--muted);font-size:8px}
+.picker-options{display:grid;gap:7px}.picker-option{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);text-align:left}.picker-option:hover{border-color:var(--accent);background:var(--accent-softer)}.picker-option strong{display:block;font-size:10px}.picker-option small{display:block;margin-top:3px;color:var(--muted);font-size:8px}.picker-path-only{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}.picker-path-only label{font-size:9px;font-weight:850}.picker-path-only small{color:var(--muted);font-size:8px;line-height:1.5}
 .empty-panel{display:grid;place-items:center;min-height:180px;padding:28px;text-align:center;color:var(--muted);font-size:10px}
 @media(max-width:1050px){.validation-grid{grid-template-columns:1fr}}
 
