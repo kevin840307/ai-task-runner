@@ -264,6 +264,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
 [x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
 [ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
+[ ] React migration 先建立 shared UI primitives：AppShell、Sidebar、Drawer/Modal/Popover、Tabs、Field、Select、Button、Badge/Pill、EmptyState；Theme token 只由一處提供。
+[ ] React page components 建議拆成：ProjectSidebar、ChatWorkspace、ChatComposer、QueueList、AskFlow、TaskBoard、TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskRuntimePanel、GlobalSettings。
+[ ] Workflow / Prompt 保留既有 workspace，但未來 React 只接同一套 AppShell / Sidebar / shared primitives，不另做第二套 layout/theme。
+[ ] Component 不直接擁有 Runner state machine；透過既有 runtime projection / service hooks 讀資料與 allowed actions。
+[ ] Prototype 階段只抽「會重複且已穩定」的 shared template；不要為模組化而複製 state 或提前造 React-like framework。
 [ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
 [ ] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
 
