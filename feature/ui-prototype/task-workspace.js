@@ -597,6 +597,8 @@ openPlanDialog=function(id=currentTaskId,options={}){
   taskDrawerBack.onclick=handleTaskDrawerBack;
 };
 openFullPlanPage=openPlanDialog;
+// Legacy mock callers must land on the current Task List Drawer; the old yaml page no longer exists.
+openTaskListEditor=function(id=currentTaskId){return openPlanDialog(id,{returnTarget:'close'})};
 
 function handleTaskDrawerBack(){
   if(taskEditorReturnContext){leaveTaskEditorOverlay();return}
