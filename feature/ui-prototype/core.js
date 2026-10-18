@@ -10,13 +10,24 @@ const toast=document.getElementById('toast');
 let toastTimer;
 function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1900)}
 const AUTO_WORKSPACE_POLICY_KEY='ai-task-runner.prototype.autoWorkspacePolicy';
+const INTERFACE_SETTINGS_KEY='ai-task-runner.prototype.interfaceSettings';
 const AUTO_WORKSPACE_POLICIES=new Set(['busy_worktree','main_only','always_worktree']);
+const THEMES=new Set(['system','light','dark']);
+const LANGUAGES=new Set(['zh-Hant','en']);
 function loadAutoWorkspacePolicy(){
   try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
   return 'busy_worktree';
 }
+function loadInterfaceSettings(){
+  try{const raw=JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY)||'{}');return {theme:THEMES.has(raw.theme)?raw.theme:'system',language:LANGUAGES.has(raw.language)?raw.language:'zh-Hant'}}catch(_){return {theme:'system',language:'zh-Hant'}}
+}
 const globalExecutionSettings={autoWorkspacePolicy:loadAutoWorkspacePolicy()};
+const globalInterfaceSettings=loadInterfaceSettings();
 function saveAutoWorkspacePolicy(){try{localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
+function saveInterfaceSettings(){try{localStorage.setItem(INTERFACE_SETTINGS_KEY,JSON.stringify(globalInterfaceSettings))}catch(_){}}
+function resolvedTheme(){return globalInterfaceSettings.theme==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):globalInterfaceSettings.theme}
+function applyInterfaceSettings(){document.documentElement.dataset.theme=resolvedTheme();document.documentElement.lang=globalInterfaceSettings.language}
+applyInterfaceSettings();
 function autoWorkspaceKind(busy){
   if(globalExecutionSettings.autoWorkspacePolicy==='always_worktree')return 'worktree';
   if(globalExecutionSettings.autoWorkspacePolicy==='main_only')return 'main';
@@ -34,7 +45,6 @@ function autoWorkspaceStatus(busy,id='Task'){
   if(kind==='worktree')return globalExecutionSettings.autoWorkspacePolicy==='always_worktree'?`${id} → Worktree`:`${busy?'Main busy → ':''}${id} → Worktree`;
   return busy?'Main busy → Run blocked':'Main available → Main';
 }
-document.getElementById('themeBtn').addEventListener('click',()=>showToast('Mock demo 保持目前 Teal light theme，不另外改設計語言'));
 
 const projectMeta={
   'ai-task-runner':{path:'C:\\Users\\kevin\\ai-task-runner',branch:'feature/ui'},
@@ -309,12 +319,30 @@ function renderGlobalExecutionSettings(){
     preview.innerHTML=rows+'<br>Task-level Main / Worktree always overrides this setting.';
   }
 }
-document.getElementById('globalSettingsButton')?.addEventListener('click',()=>{renderGlobalExecutionSettings();openModal('globalSettingsModal')});
+function renderGlobalInterfaceSettings(){
+  const theme=document.getElementById('globalTheme'),language=document.getElementById('globalLanguage'),preview=document.getElementById('interfaceSettingsPreview');
+  if(theme)theme.value=globalInterfaceSettings.theme;if(language)language.value=globalInterfaceSettings.language;
+  if(preview)preview.innerHTML=`<strong>Theme</strong> · ${globalInterfaceSettings.theme==='system'?`System → ${resolvedTheme()}`:globalInterfaceSettings.theme}<br><strong>Language</strong> · ${globalInterfaceSettings.language==='zh-Hant'?'繁體中文':'English'}`;
+}
+function showGlobalSettingsTab(name='execution'){
+  document.querySelectorAll('[data-settings-tab]').forEach(b=>b.classList.toggle('active',b.dataset.settingsTab===name));
+  document.querySelectorAll('[data-settings-panel]').forEach(p=>p.hidden=p.dataset.settingsPanel!==name);
+  if(name==='execution')renderGlobalExecutionSettings();else if(name==='interface')renderGlobalInterfaceSettings();
+}
+document.querySelectorAll('[data-settings-tab]').forEach(b=>b.addEventListener('click',()=>showGlobalSettingsTab(b.dataset.settingsTab)));
+document.getElementById('globalSettingsButton')?.addEventListener('click',()=>{showGlobalSettingsTab('execution');openModal('globalSettingsModal')});
 document.getElementById('autoWorkspacePolicy')?.addEventListener('change',e=>{
   globalExecutionSettings.autoWorkspacePolicy=AUTO_WORKSPACE_POLICIES.has(e.target.value)?e.target.value:'busy_worktree';saveAutoWorkspacePolicy();renderGlobalExecutionSettings();
   if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
   showToast('Auto workspace policy updated');
 });
+document.getElementById('globalTheme')?.addEventListener('change',e=>{
+  globalInterfaceSettings.theme=THEMES.has(e.target.value)?e.target.value:'system';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Theme updated');
+});
+document.getElementById('globalLanguage')?.addEventListener('change',e=>{
+  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-Hant';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Language preference updated');
+});
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.theme==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 document.getElementById('newTask').addEventListener('click',()=>{
   document.getElementById('newTaskTitle').value='New Task';
