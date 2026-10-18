@@ -3,7 +3,7 @@ function requestId() {
   return "chat-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, onPreferencesChanged }) {
+export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, openTaskDraft, onPreferencesChanged }) {
   let project = null;
   let sessions = [];
   let activeSessionId = "";
@@ -747,6 +747,27 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
     const actions = document.createElement("div");
     actions.className = "project-chat-task-draft-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "Edit";
+    edit.setAttribute("aria-label", "Edit Draft");
+    edit.onclick = () => {
+      const originProject = projectPath();
+      const originSession = activeSessionId;
+      openTaskDraft?.({
+        project: originProject,
+        draft: entry.draft,
+        workflows: settingsCatalog.workflows,
+        returnFocus: edit,
+        onSave: (nextDraft) => {
+          const rows = taskDraftsBySession.get(originSession) || [];
+          const target = rows.find((row) => row.draft_id === entry.draft_id);
+          if (!target) return;
+          target.draft = nextDraft;
+          if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
+        },
+      });
+    };
     const create = document.createElement("button");
     create.type = "button";
     create.className = "primary";
@@ -756,7 +777,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
     dismiss.onclick = () => dismissTaskDraft(entry.draft_id);
-    actions.append(create, dismiss);
+    actions.append(edit, create, dismiss);
     card.append(head, items, actions);
     root.appendChild(card);
   }
