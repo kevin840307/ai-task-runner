@@ -58,7 +58,7 @@ def _load_main_ui_document(page, html: str) -> None:
 def _install_main_ui_scripts(page, static_root: Path) -> None:
     # app.js is a real ES module. Route the module graph through the same HTTP
     # origin as the document instead of injecting app.js as a classic script.
-    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js"):
+    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js", "js/task-workspace.js"):
         source = static_root / relative
         page.route(
             f"http://local.test/{relative}",
@@ -293,6 +293,11 @@ def _bridge_for(state: UIState):
                     data = state.project_preferences.update(Path(body["project"]), body)
                 elif path == "/api/chat/task-draft":
                     mode = str(body.get("mode", "auto"))
+                    spec = str(body.get("spec", ""))
+                    if spec == "mock:error":
+                        raise ValueError("Browser TaskDraft backend failure")
+                    if spec == "mock:invalid":
+                        raise ValueError("TaskDraft generator returned invalid structured data")
                     count = 2 if mode == "list" else 1
                     data = {
                         "draft_id": "draft-" + "a" * 32,
@@ -315,6 +320,11 @@ def _bridge_for(state: UIState):
                             ],
                         },
                     }
+                elif path == "/api/tasks/validate-draft":
+                    data = state.tasks.validate(
+                        Path(body["project"]),
+                        body.get("draft"),
+                    )
                 elif path == "/api/tasks/create":
                     data = state.tasks.create(
                         Path(body["project"]),
@@ -789,10 +799,59 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".project-chat-task-draft").get_by_text("Browser generated draft").is_visible()
             assert page.locator(".project-chat-task-draft-item").count() == 2
             assert state.tasks.list(state.repo_root)["tasks"] == []
+
+            chat_before = page.locator("#projectChatView").bounding_box()
+            page.get_by_role("button", name="Edit Draft").click()
+            page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator(".task-workspace-list-row").count() == 2
+            chat_during = page.locator("#projectChatView").bounding_box()
+            assert chat_before and chat_during
+            assert abs(chat_before["x"] - chat_during["x"]) <= 1
+            assert abs(chat_before["width"] - chat_during["width"]) <= 1
+
+            page.locator(".task-workspace-row-edit").first.click()
+            page.fill("#taskWorkspacePrompt", "Edited browser item one")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 2")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            assert page.locator(".project-chat-task-draft-item").first.get_by_text("Edited browser item one").is_visible()
+            assert state.tasks.list(state.repo_root)["tasks"] == []
+
             page.get_by_role("button", name="Create Task", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
             assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
             assert state.tasks.list(state.repo_root)["tasks"][0]["status"] == "new"
+            assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Edited browser item one"
+
+            page.fill("#projectChatInput", "@task-single browser one")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
+            assert page.locator(".project-chat-task-draft-item").count() == 1
+            page.get_by_role("button", name="Edit Draft").click()
+            page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
+            assert page.locator(".task-workspace-list-row").count() == 0
+            page.fill("#taskWorkspacePrompt", "Edited single draft")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            assert page.locator(".project-chat-task-draft-item").get_by_text("Edited single draft").is_visible()
+            page.get_by_role("button", name="Dismiss", exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
+            assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
+
+            page.fill("#projectChatInput", "@task browser auto")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
+            page.get_by_role("button", name="Dismiss", exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
+
+            page.fill("#projectChatInput", "@task mock:error")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('Browser TaskDraft backend failure'))")
+            page.fill("#projectChatInput", "@task mock:invalid")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('invalid structured data'))")
 
             page.fill("#projectChatInput", "/re")
             page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
