@@ -67,6 +67,15 @@ class ChatAgentService:
             "mode": mode,
             "reasoning": str(reasoning or "").strip(),
         }
+        pending_ask = chat.ask(project, session_id).get("ask")
+        if isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting":
+            return {
+                **queued,
+                **metadata,
+                "status": "waiting_ask",
+                "busy": True,
+                "waiting_ask": True,
+            }
         if not lock.acquire(blocking=False):
             return {
                 **queued,
@@ -89,6 +98,14 @@ class ChatAgentService:
         *,
         session_id: str,
     ) -> dict[str, Any]:
+        pending_ask = chat.ask(project, session_id).get("ask")
+        if isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting":
+            return {
+                **chat.queue(project, session_id),
+                "status": "waiting_ask",
+                "busy": True,
+                "waiting_ask": True,
+            }
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
         if not lock.acquire(blocking=False):
