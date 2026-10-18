@@ -425,6 +425,7 @@ workspace ownership preflight:
   registered worktree still matches this Task/Run
   repository identity is expected
   current branch is the expected Task branch
+  expected source base SHA is still an ancestor of current workspace HEAD
   no merge/rebase/cherry-pick/revert/bisect operation is active
 ↓
 git add -A
@@ -436,7 +437,7 @@ record task_snapshot_sha
 
 If Agent already created commits, keep them and commit only remaining changes.
 
-If ownership/branch/operation preflight fails, fail closed and retain the workspace for diagnosis. Do not guess the branch, switch it automatically, or commit to an unexpected ref.
+If ownership/branch/ancestry/operation preflight fails, fail closed and retain the workspace for diagnosis. Do not guess the branch, switch it automatically, rewrite history, or commit to an unexpected ref. Agent-created commits are allowed only while the Task/Recovery HEAD remains descended from its expected source base.
 
 If there is no effective diff:
 
@@ -510,7 +511,11 @@ resolve safe worktree for target_branch
 ↓
 read latest target HEAD
 ↓
-is merge_source_sha already an ancestor of target_branch?
+is merge_source_base_sha still an ancestor of latest target HEAD?
+├─ No → target history rewritten/diverged → waiting_target_history · Needs Attention
+└─ Yes
+    ↓
+  is merge_source_sha already an ancestor of target_branch?
 ├─ Yes → record current target HEAD → Closed · merged
 └─ No
     ↓
@@ -873,7 +878,14 @@ Needs Attention
 
 Do not recreate it automatically, retarget to `main`, or guess a replacement branch.
 
-If the branch still exists but was rewritten and there is no valid common ancestry with the current merge source, fail closed into the same attention path (or an equivalent structured target-history error) before attempting source recovery. Explicit user/backend reconciliation is required.
+If the branch still exists but history was rewritten/diverged so `merge_source_base_sha` is no longer an ancestor of the current target HEAD:
+
+```text
+Ongoing · waiting_target_history
+Needs Attention
+```
+
+Fail closed before direct merge or source recovery. A mere common ancestor is not sufficient: merging a source whose base was removed from target history could accidentally reintroduce commits the user intentionally reset/reverted by history rewrite. This condition does not increment `merge_failure_count`. Explicit user/backend reconciliation is required.
 
 ---
 
@@ -890,7 +902,8 @@ If the branch still exists but was rewritten and there is no valid common ancest
 | Conflict Runner recovery | Ongoing | conflict_recovery |
 | Target checkout dirty | Ongoing | waiting_target_clean |
 | Target workspace unavailable | Ongoing | waiting_target_workspace |
-| Captured target branch missing/history invalid | Ongoing | waiting_target_branch |
+| Captured target branch missing | Ongoing | waiting_target_branch |
+| Captured target history rewritten/diverged from merge-source base | Ongoing | waiting_target_history |
 | Main has no effective changes | Closed | no_changes |
 | Merge success | Closed | merged |
 | Merge failures exceed limit | Closed | worktree_ready · Main fallback · merge_failure_limit_exceeded |
@@ -1138,7 +1151,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Create Task branch/worktree directly from captured target HEAD.
 - [ ] Pass Task worktree to Runner as project_root in the current UI/Task flow; standalone/CLI Runner remains caller-project_root driven and workspace-independent.
 - [ ] Support unique Task + Run identity.
-- [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch and absence of active Git operation; fail closed on mismatch.
+- [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch, expected source-base ancestry and absence of active Git operation; fail closed on mismatch.
 - [ ] Create recovery worktree only after a merge failure that needs source redo.
 - [ ] Ownership-safe cleanup.
 
@@ -1154,7 +1167,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Keep direct merge implementation inside top-level workspace package, not Runner/UI.
 - [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order; queue head retains its turn during Runner recovery while short Git locks are released.
 - [ ] Resolve safe worktree for captured target branch.
-- [ ] Before merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
+- [ ] Before merge, require merge_source_base_sha to remain an ancestor of current target HEAD; otherwise waiting_target_history / Needs Attention without incrementing merge_failure_count.
+- [ ] If merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
 - [ ] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
 - [ ] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
 - [ ] Reuse an existing public validation entry point or add only a thin Git-unaware, source-non-mutating `validate(project_root, validation_config)` API; no worktree/branch/merge args.
@@ -1234,7 +1248,10 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] Dirty target => waiting_target_clean; do not mutate user changes.
 - [ ] Target in unmanaged worktree => waiting_target_workspace.
-- [ ] Captured target branch deleted/renamed or target history has no valid common ancestry => waiting_target_branch / structured Needs Attention; never guess/recreate/retarget.
+- [ ] Captured target branch deleted/renamed => waiting_target_branch; never guess/recreate/retarget.
+- [ ] merge_source_base_sha no longer ancestor of current target HEAD after history rewrite/divergence => waiting_target_history; do not merge/recover automatically and do not count merge failure.
+- [ ] Task/Recovery branch reset/rebase that breaks expected source-base ancestry fails closed before snapshot.
+- [ ] Target force-reset/divergence that removes merge_source_base_sha from target ancestry => waiting_target_history and never reintroduces removed history.
 - [ ] User branch switch after Task start never retargets old Task.
 
 ### Local-only
@@ -1278,6 +1295,10 @@ Runner Complete
 ↓
 commit Task result locally
 ↓
+verify merge_source_base_sha is still target ancestry
+├─ No → waiting_target_history / Needs Attention
+└─ Yes
+    ↓
 git merge --no-ff --no-commit current merge source → Project branch
 ├─ conflict / SOURCE_FAIL
 │   → git merge --abort
