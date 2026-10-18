@@ -105,7 +105,7 @@ function bindFullPlan(t){
   });
   document.querySelectorAll('[data-plan-source]').forEach(b=>b.onclick=()=>{if(!taskEditable(t))return;const i=+b.dataset.planItem;if(i<batchState.index)return;batchDraft[i][b.dataset.planField]=b.dataset.sourceValue;commitPlanDraft(t,{markDirty:t.status==='paused'&&i===batchState.index});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
   document.querySelectorAll('[data-plan-pick]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.planPick,b.dataset.planPickField,b.dataset.planPickKind,'plan'));
-  document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
+  document.querySelectorAll('[data-plan-view-prompts]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{const i=+b.dataset.planRemove;if(i<batchState.index||batchDraft.length<=1)return;batchDraft.splice(i,1);sequenceExpandedIndex=Math.min(sequenceExpandedIndex,batchDraft.length-1);commitPlanDraft(t,{markDirty:false});renderFullPlan(t);renderDrawerPlan(t);renderBoardFromMap()});
 }
 function renderExecutionPlan(t){
