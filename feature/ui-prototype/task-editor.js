@@ -650,21 +650,21 @@ function chatTurnState(session=activeChat()){if(!session)return 'idle';if(!sessi
 function renderChatTurnStatus(session=activeChat()){
   const el=document.getElementById('composerTurnStatus');if(!el||!session||activeChat()!==session)return;
   const state=chatTurnState(session);el.hidden=state==='idle';
-  el.textContent=state==='waiting_ask'?'Agent 正在等待 Ask 回答；新訊息會排隊':'Agent 正在處理；送出訊息會自動加入 Queue';
+  el.textContent=state==='waiting_ask'?uiText('chat.turnWaiting'):uiText('chat.turnRunning');
 }
 function renderChatQueue(session=activeChat()){
   const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
   const queue=ensureChatQueue(session);panel.hidden=!queue.length;if(count)count.textContent=queue.length;
   host.innerHTML=queue.map((item,index)=>item.editing
-    ?`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><div class="composer-queue-edit"><textarea data-queue-edit-input>${escapeHtml(item.editValue??item.text)}</textarea><button type="button" data-queue-save>Save</button><button type="button" data-queue-cancel>Cancel</button></div></div>`
-    :`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><span class="composer-queue-copy" title="${escapeAttr(item.text)}">${escapeHtml(item.text)}</span><span class="composer-queue-actions"><button type="button" data-queue-edit>Edit</button><button class="danger" type="button" data-queue-delete>Delete</button></span></div>`).join('');
+    ?`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><div class="composer-queue-edit"><textarea data-queue-edit-input>${escapeHtml(item.editValue??item.text)}</textarea><button type="button" data-queue-save>${escapeHtml(uiText('chat.queueSave'))}</button><button type="button" data-queue-cancel>${escapeHtml(uiText('chat.queueCancel'))}</button></div></div>`
+    :`<div class="composer-queue-item" data-queue-id="${item.id}"><span class="composer-queue-index">${index+1}</span><span class="composer-queue-copy" title="${escapeAttr(item.text)}">${escapeHtml(item.text)}</span><span class="composer-queue-actions"><button type="button" data-queue-edit>${escapeHtml(uiText('chat.queueEdit'))}</button><button class="danger" type="button" data-queue-delete>${escapeHtml(uiText('chat.queueDelete'))}</button></span></div>`).join('');
   host.querySelectorAll('[data-queue-id]').forEach(row=>{
     const item=queue.find(x=>String(x.id)===row.dataset.queueId);if(!item)return;
     row.querySelector('[data-queue-edit]')?.addEventListener('click',()=>{queue.forEach(x=>{if(x!==item){x.editing=false;delete x.editValue}});item.editValue=item.text;item.editing=true;renderChatQueue(session);setTimeout(()=>document.querySelector(`#composerQueueList [data-queue-id="${item.id}"] [data-queue-edit-input]`)?.focus(),0)});
     row.querySelector('[data-queue-edit-input]')?.addEventListener('input',e=>{item.editValue=e.target.value});
     row.querySelector('[data-queue-delete]')?.addEventListener('click',()=>{const i=queue.indexOf(item);if(i>=0)queue.splice(i,1);renderChatQueue(session);resizeChatComposer()});
     row.querySelector('[data-queue-cancel]')?.addEventListener('click',()=>{item.editing=false;delete item.editValue;renderChatQueue(session);if(chatTurnState(session)==='idle')drainChatQueue(session)});
-    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=String(row.querySelector('[data-queue-edit-input]')?.value??item.editValue??'').trim();if(!value){showToast('Queued prompt cannot be empty');return}item.text=value;item.editing=false;delete item.editValue;renderChatQueue(session);showToast('Queue updated');if(chatTurnState(session)==='idle')drainChatQueue(session)});
+    row.querySelector('[data-queue-save]')?.addEventListener('click',()=>{const value=String(row.querySelector('[data-queue-edit-input]')?.value??item.editValue??'').trim();if(!value){showToast(uiText('chat.queueEmpty'));return}item.text=value;item.editing=false;delete item.editValue;renderChatQueue(session);showToast(uiText('chat.queueUpdated'));if(chatTurnState(session)==='idle')drainChatQueue(session)});
   });
   resizeChatComposer();
 }
@@ -672,7 +672,7 @@ function enqueueChatMessage(session,text,{notify=true}={}){
   const value=String(text||'').trim();if(!session||!value)return false;
   ensureChatQueue(session).push({id:String(++chatQueueSequence),text:value,editing:false});
   if(activeChat()===session){renderChatQueue(session);renderChatTurnStatus(session)}
-  if(notify)showToast('Added to Queue');return true;
+  if(notify)showToast(uiText('chat.addedQueue'));return true;
 }
 function drainChatQueue(session=activeChat()){
   if(!session||chatTurnState(session)!=='idle'||session.askFlow)return;
