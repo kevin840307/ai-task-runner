@@ -599,14 +599,13 @@ function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||moc
 function chatAgentLabel(key){return chatAgentProfile(key).label}
 function chatWorkflowKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).workflow}
 function syncChatAgentControl(){
-  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),reasoning=document.getElementById('chatReasoning'),workflow=document.getElementById('chatWorkflow'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode||!reasoning||!workflow)return;
+  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),reasoning=document.getElementById('chatReasoning'),workflow=document.getElementById('chatWorkflow');if(!session||!agent||!model||!mode||!reasoning||!workflow)return;
   const prefs=projectChatSettingsFor(chatProjectKey(session)),profile=chatAgentProfile(prefs.agent);
   agent.value=prefs.agent;
   model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
   mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
   reasoning.innerHTML=PROJECT_REASONING_LEVELS.map(x=>`<option value="${escapeAttr(x)}" ${x===prefs.reasoning?'selected':''}>${escapeHtml(x)}</option>`).join('');
   model.value=prefs.model;mode.value=prefs.mode;reasoning.value=prefs.reasoning;workflow.value=prefs.workflow;
-  if(ask){ask.disabled=!profile.askQuestions;ask.title=profile.askQuestions?'Force a mock AI clarification flow':'Selected Agent does not expose interactive questions'}
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
 function closeComposerSettings(){
@@ -688,7 +687,7 @@ function processMockChatPrompt(session,text,projectKey){
   else if(agentCommand.matched)mockInvokeAgentCommand(session,agentCommand);
   else if(systemCommand.matched)mockInvokeSystemPrompt(session,systemCommand,projectKey);
   else if(Math.random()<.45)startMockAskFlow(session,text);
-  else session.messages.push(['assistant','MOCK Agent 回覆完成。這次沒有觸發 clarification；重複輸入或按 Ask mock 可測試 AI 反問。']);
+  else session.messages.push(['assistant','MOCK Agent 回覆完成。需要測試 clarification 時可使用 @ask-demo。']);
 }
 function startMockChatTurn(session,text,{fromQueue=false}={}){
   const value=String(text||'').trim();if(!session||!value)return;
@@ -1393,13 +1392,6 @@ document.getElementById('chatReasoning').onchange=e=>{
   const session=activeChat();if(!session)return;
   const key=chatProjectKey(session),prefs=projectChatSettingsFor(key),value=PROJECT_REASONING_LEVELS.includes(e.target.value)?e.target.value:BASE_PROJECT_PREFERENCES.reasoning;
   prefs.reasoning=value;saveProjectChatSettings();syncChatAgentControl();showToast(`${key} · Reasoning · ${value}`);
-};
-document.getElementById('chatAsk').onclick=()=>{
-  const input=document.getElementById('chatInput'),session=activeChat(),profile=chatAgentProfile(chatAgentKey(session));
-  if(!profile.askQuestions){showToast('Selected Agent does not support interactive questions');return}
-  if(chatTurnState(session)!=='idle'){showToast('請先完成目前的 Agent turn / Ask，再啟動另一個 Ask Mock');return}
-  const context=input.value.trim()||[...(session?.messages||[])].reverse().find(x=>x[0]==='user')?.[1]||'Mock clarification';
-  startMockAskFlow(session,context);
 };
 document.addEventListener('click',e=>{if(!e.target.closest('.composerwrap'))hideComposerSuggestions()});
 
