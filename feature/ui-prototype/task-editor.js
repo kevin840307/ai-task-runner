@@ -1622,11 +1622,16 @@ function renderNewTaskListDraftWorkspace(){
     let dragIndex=null;
     host.querySelectorAll('[data-draft-row]').forEach(row=>{
       row.ondblclick=()=>loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'});
-      row.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'})}};
+      row.onkeydown=e=>{
+        const i=+row.dataset.draftRow;
+        if(e.key==='Enter'){e.preventDefault();loadTaskEditor('draft-edit-item',{index:i,returnTarget:'list-draft'});return}
+        if(e.altKey&&e.key==='ArrowUp'&&i>0){e.preventDefault();moveNewTaskListDraftItem(i,i-1);return}
+        if(e.altKey&&e.key==='ArrowDown'&&i<newTaskListDraft.items.length-1){e.preventDefault();moveNewTaskListDraftItem(i,i+1)}
+      };
       row.ondragstart=e=>{if(e.target.closest('button')){e.preventDefault();return}dragIndex=+row.dataset.draftRow;row.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.effectAllowed='move'};
       row.ondragover=e=>{e.preventDefault();row.classList.add('drag-over')};
       row.ondragleave=()=>row.classList.remove('drag-over');
-      row.ondrop=e=>{e.preventDefault();const to=+row.dataset.draftRow;row.classList.remove('drag-over');if(dragIndex!=null)moveNewTaskListDraftItem(dragIndex,to)};
+      row.ondrop=e=>{e.preventDefault();let to=+row.dataset.draftRow;row.classList.remove('drag-over');if(dragIndex==null)return;if(dragIndex<to)to--;moveNewTaskListDraftItem(dragIndex,to)};
       row.ondragend=()=>{dragIndex=null;host.querySelectorAll('[data-draft-row]').forEach(x=>x.classList.remove('dragging','drag-over'))};
     });
     const add=host.querySelector('.plan-add-task-footer');
