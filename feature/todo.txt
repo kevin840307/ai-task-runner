@@ -303,7 +303,18 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Paused / Closed Task 從 Info Reset 回 New 後仍留在 Info Drawer，不再意外跳去 Task List。
 [x] Legacy openTaskListEditor / openFullPlanPage 不再導向不存在的 yaml / plan view；舊 caller redirect 到目前 Task List Drawer。
 [x] Draft reorder 對齊正式 Task List drop 語意；畫面以 drag 為主，Alt+↑/↓ 提供鍵盤 reorder，舊 ↑/↓ row buttons 不顯示。
+[x] Draft row action event 修正：Edit / Remove / keyboard Enter / double-click 不再因 bubble 同時觸發兩次 Editor action。
+[x] Drawer Escape ownership 補 top-layer guard：Task context menu、Project dropdown、Title rename、child modal 先處理 Escape，不得被 Drawer capture handler搶先 Back/Close。
+[x] Programmatic openTaskById / openPlanDialog 也必須經 Task List Draft dirty discard guard，不再 silent discard transient Draft。
+[x] Task Editor → Prompts / Task List → Prompts 統一走 Drawer cleanup；dirty Task Editor 與 dirty Task List Draft 會依層級確認，不再看似切頁但 Drawer 仍蓋住。
+[x] Task Editor 增加 transient dirty snapshot；Back / Cancel / X / Escape / 跨頁導航在有未儲存修改時先確認，成功 Save 後清除 snapshot。
+[x] Drawer 關閉順序改為先保護 child Task Editor dirty，再處理整份 Task List Draft dirty；避免 0-item List Draft 仍有 child 未儲存內容時直接遺失。
+[x] Task Editor / Task List Draft discard modal 的 backdrop 會真正 closeModal，並修正 chained confirmation focus 不得回到已隱藏 modal。
+[x] Ask 主 Chat composer 直接 Submit clarification 的實驗改動已取消；Ask 仍只由 Ask 卡片回答/Submit，主 composer 在 waiting_ask 時維持一般 Queue 行為。
 [ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
+[ ] Browser 測試 Task Editor dirty guard：修改 Title / Project / Prompt / Workflow / Workspace → Back / Cancel / X / Escape / Open Prompts；Keep editing / Discard 都要保持正確 route/focus。
+[ ] Browser 測試 Escape top-layer：Task context menu / Project dropdown / Title rename / discard modal 開啟時 Escape 只關最上層，不得同時 Back/Close Drawer。
+[ ] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
 [ ] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；直接開 List → 底部 Back 關 Drawer；Draft → 底部 Cancel → dirty discard confirmation。
 [ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
