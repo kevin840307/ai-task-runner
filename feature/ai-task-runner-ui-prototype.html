@@ -60,11 +60,11 @@
             <div class="composer-suggest-list" id="composerSuggestList"></div>
           </div>
           <div class="composer-settings-popover" id="composerSettingsPopover" hidden>
-            <div class="composer-settings-head"><div><span>CHAT</span><strong>Run settings</strong></div><button type="button" id="composerSettingsClose" aria-label="Close settings">×</button></div>
+            <div class="composer-settings-head"><div><span>PROJECT</span><strong>Run settings</strong></div><button type="button" id="composerSettingsClose" aria-label="Close settings">×</button></div>
             <div class="composer-settings-body">
               <label class="composer-settings-row workflow-setting"><span><strong>Workflow</strong><small>Used by @goal and new Chat goals</small></span><select id="chatWorkflow"><option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option><option value="mixed.yaml">mixed</option><option value="file.yaml">file</option><option value="dynamic_handoff.yaml">dynamic_handoff</option></select></label>
-              <label class="composer-settings-row"><span><strong>Agent</strong><small>Interactive Chat backend</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
-              <label class="composer-settings-row"><span><strong>Model</strong><small>Model for this Chat session</small></span><select id="chatModel"></select></label>
+              <label class="composer-settings-row"><span><strong>Agent</strong><small>Saved for this Project</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
+              <label class="composer-settings-row"><span><strong>Model</strong><small>Saved for this Project</small></span><select id="chatModel"></select></label>
             </div>
           </div>
           <div class="composer-turn-status" id="composerTurnStatus" hidden>Agent 正在處理；送出訊息會自動加入 Queue</div>
