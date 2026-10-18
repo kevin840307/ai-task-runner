@@ -714,19 +714,19 @@ function startMockChatTurn(session,text,{fromQueue=false}={}){
 function mockAskQuestions(context=''){
   const short=String(context||'').trim().slice(0,80);
   const base=[
-    {header:'Implementation scope',question:short?`針對「${short}」你希望優先採用哪種處理方式？`:'你希望優先採用哪種處理方式？',type:'choice',options:[
-      {label:'最小修改',description:'只改必要範圍，降低 regression'},
-      {label:'完整優化',description:'連同鄰近 UX / code ownership 一起整理'},
-      {label:'先分析',description:'先確認設計與風險，再進行修改'},
-      {label:'先做 UI Mock',description:'先完成可操作 prototype，再接正式 backend'}
+    {header:uiText('chat.ask.scopeHeader'),question:short?uiText('chat.ask.scopeQuestion',{context:short}):uiText('chat.ask.scopeQuestionPlain'),type:'choice',options:[
+      {label:uiText('chat.ask.minimal'),description:uiText('chat.ask.minimalDesc')},
+      {label:uiText('chat.ask.full'),description:uiText('chat.ask.fullDesc')},
+      {label:uiText('chat.ask.analyze'),description:uiText('chat.ask.analyzeDesc')},
+      {label:uiText('chat.ask.mockFirst'),description:uiText('chat.ask.mockFirstDesc')}
     ]},
-    {header:'Verification',question:'這次驗證希望做到什麼程度？',type:'choice',options:[
-      {label:'Focused tests',description:'只跑直接相關測試'},
-      {label:'Regression tests',description:'包含鄰近功能 regression'},
-      {label:'Mock first',description:'先完成 Mock / prototype 驗證'},
-      {label:'Live integration',description:'接真實 Agent / backend 驗證'}
+    {header:uiText('chat.ask.verifyHeader'),question:uiText('chat.ask.verifyQuestion'),type:'choice',options:[
+      {label:uiText('chat.ask.focused'),description:uiText('chat.ask.focusedDesc')},
+      {label:uiText('chat.ask.regression'),description:uiText('chat.ask.regressionDesc')},
+      {label:uiText('chat.ask.mockVerify'),description:uiText('chat.ask.mockVerifyDesc')},
+      {label:uiText('chat.ask.live'),description:uiText('chat.ask.liveDesc')}
     ]},
-    {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[],required:false}
+    {header:uiText('chat.ask.extraHeader'),question:uiText('chat.ask.extraQuestion'),type:'text',options:[],required:false}
   ];
   return Math.random()<.5?[base[0],base[2]]:base;
 }
