@@ -177,51 +177,31 @@ function persistCurrentPresetFromTaskMap(){
   if(!taskPresets[currentPreset])return;
   taskPresets[currentPreset]=productTaskRecords().map(t=>cloneBatch([t])[0]);
 }
-// --- Dialog-first Plan UX + move-only New Task composition ---
+// --- Task composition: Create always uses the canonical Task Editor.
+// The small dialog below is reserved for the secondary "Move existing" operation only.
 let addPlanOwnerId=null;
-let addTaskMode='create';
+let addTaskMode='move';
 let selectedMoveTaskId=null;
 function eligibleMoveTasks(owner){
   return productTaskRecords().filter(t=>t.id!==owner.id&&t.status==='new'&&t.runtime==='idle'&&!isSequenceTask(t)&&t.workspaceKind!=='batch');
 }
-function setAddTaskMode(mode){
-  addTaskMode=mode;selectedMoveTaskId=null;
-  document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.classList.toggle('active',b.dataset.addTaskMode===mode));
-  document.getElementById('addTaskCreatePanel').hidden=mode!=='create';
-  document.getElementById('addTaskMovePanel').hidden=mode!=='move';
-  document.getElementById('confirmAddPlanTask').textContent=mode==='create'?'Add task':'Move here';
+function setAddTaskMode(){
+  addTaskMode='move';selectedMoveTaskId=null;
+  const confirm=document.getElementById('confirmAddPlanTask');if(confirm){confirm.textContent='Move here';confirm.disabled=true}
   renderMoveTaskPicker();
 }
 function renderMoveTaskPicker(){
-  const owner=taskMap[addPlanOwnerId],host=document.getElementById('moveTaskPicker');if(!owner||!host)return;
+  const owner=taskMap[addPlanOwnerId],host=document.getElementById('moveTaskPicker'),confirm=document.getElementById('confirmAddPlanTask');if(!owner||!host)return;
   const items=eligibleMoveTasks(owner);
-  if(!items.length){host.innerHTML='<div class="empty-panel">No eligible New tasks. Only standalone New + Idle tasks can be moved.</div>';document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move';return}
+  if(!items.length){host.innerHTML='<div class="empty-panel">No eligible New tasks. Only standalone New + Idle tasks can be moved.</div>';if(confirm)confirm.disabled=true;return}
   host.innerHTML=items.map(t=>`<button type="button" class="existing-task-option ${selectedMoveTaskId===t.id?'selected':''}" data-move-task-id="${t.id}"><div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(t.id)} · ${escapeHtml(t.project)} · ${escapeHtml(t.workflow)}</small></div><span>New</span></button>`).join('');
   host.querySelectorAll('[data-move-task-id]').forEach(b=>b.onclick=()=>{selectedMoveTaskId=b.dataset.moveTaskId;renderMoveTaskPicker()});
-  document.getElementById('confirmAddPlanTask').disabled=addTaskMode==='move'&&!selectedMoveTaskId;
+  if(confirm)confirm.disabled=!selectedMoveTaskId;
 }
 function openAddTaskDialog(ownerId=currentTaskId){
-  const owner=taskMap[ownerId];if(!owner)return;
-  if(!taskEditable(owner)){showToast(owner.status==='ongoing'?'Pause Task before editing':'Closed Task is read-only');return}
-  addPlanOwnerId=ownerId;addTaskMode='create';selectedMoveTaskId=null;
-  document.getElementById('confirmAddPlanTask').disabled=false;
-  setAddTaskMode('create');openModal('addPlanTaskModal');
+  const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
+  addPlanOwnerId=ownerId;setAddTaskMode();openModal('addPlanTaskModal');
 }
-document.querySelectorAll('[data-add-task-mode]').forEach(b=>b.onclick=()=>setAddTaskMode(b.dataset.addTaskMode));
-document.getElementById('confirmAddPlanTask').onclick=()=>{
-  const owner=taskMap[addPlanOwnerId];if(!owner||!taskEditable(owner))return;
-  if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
-  if(addTaskMode==='create'){return}else{
-    const source=taskMap[selectedMoveTaskId];
-    if(!source||!eligibleMoveTasks(owner).some(t=>t.id===source.id)){showToast('Selected Task is no longer eligible');renderMoveTaskPicker();return}
-    const item=planItemDefaults(taskToListItem(source),owner,batchDraft.length);item.originTaskId=source.id;item.originTaskTitle=source.title;
-    batchDraft.push(item);
-    delete taskMap[source.id];
-    pushTaskHistory(owner,`Moved ${source.id} into execution plan · original Board Task retired`);
-  }
-  sequenceExpandedIndex=batchDraft.length-1;commitPlanDraft(owner,{markDirty:false});persistCurrentPresetFromTaskMap();closeModal('addPlanTaskModal');renderBoardFromMap();renderExecutionPlan(owner);openPlanDialog(owner.id);
-  showToast(addTaskMode==='create'?'Task added':'New Task moved into plan');
-};
 
 function openPlanDialog(id=currentTaskId){
   const t=taskMap[id];if(!t)return;currentTaskId=id;setPlanDraftForTask(t);renderFullPlan(t);openModal('planModal');
@@ -1274,8 +1254,7 @@ renderFullPlan=function(t){
 
 setAddTaskMode=function(){
   addTaskMode='move';selectedMoveTaskId=null;
-  document.getElementById('confirmAddPlanTask').textContent='Move here';
-  document.getElementById('confirmAddPlanTask').disabled=true;renderMoveTaskPicker();
+  const confirm=document.getElementById('confirmAddPlanTask');confirm.textContent='Move here';confirm.disabled=true;renderMoveTaskPicker();
 };
 let addTaskReturnTarget='list';
 function detectAddTaskReturnTarget(){
