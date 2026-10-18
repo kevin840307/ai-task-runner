@@ -530,230 +530,232 @@ Do not allow two integration transactions in the same repository to mutate the s
 
 ---
 
-## 10. Freeze the completed Task result before integration
+## 10. Commit each completed Task result before integration
 
-Runner remains Git-unaware, so Runner completion does not guarantee that all file changes are committed.
+Runner remains Git-unaware, so Runner completion does not guarantee that file changes are committed.
 
-Before a completed Main Task enters integration, Workspace/Integration Manager must freeze the Task worktree into a reproducible local Git result.
-
-Recommended rule:
+Before a completed Task enters integration:
 
 ```text
 Runner Completed
-→ verify Task worktree is not already in unresolved merge/rebase state
+→ verify Task worktree is not in unresolved merge/rebase state
 → git add -A
-→ create a local snapshot commit if there are uncommitted changes
+→ create a local Task snapshot commit for remaining changes
 → record task_snapshot_sha
-→ original Task branch/worktree becomes read-only for integration
+→ Task branch now has a stable mergeable Git result
 ```
 
-The snapshot commit is local-only and may be removed later with the Task branch. It is not the final target-branch commit.
+If Runner/Agent already created commits, keep them; only commit the remaining changes.
 
-If Agent/Runner already created commits, keep them; the snapshot commit only captures the remaining uncommitted changes. Integration uses the total branch diff from the recorded Task base to the final Task branch.
+If the Task has no effective changes versus its base, mark `no_changes` and do not create an empty Project commit.
 
-If the final Task branch has no effective changes versus its base:
+### Why this commit boundary is required
+
+Example with two Tasks created from the same integration commit `C`:
 
 ```text
-Main      → Closed · no_changes / integrated
-Worktree  → Closed · worktree_ready (no changes)
+local/integration:
+A ─ B ─ C
+
+Task T1:
+A ─ B ─ C ─ T1
+
+Task T2:
+A ─ B ─ C ─ T2
 ```
 
-Do not create an empty target commit.
+Merge T1 first:
 
-### Preserve the original completed result
+```text
+local/integration:
+A ─ B ─ C ── M1
+         \   /
+          T1
+```
 
-Do **not** rebase the original completed Task branch/worktree during integration.
+Then merge T2. Git can use `C` as the merge base and compare `C → M1` against `C → T2`. If T1 and T2 changed incompatible lines, Git can produce a real merge conflict.
 
-The original result is the recovery source of truth until delivery succeeds.
+This is why the Task result must become a commit before merging back.
 
-Create a temporary candidate from the latest `local/integration` and apply the Task branch there instead.
+### No extra integration baseline commit
+
+Do not create an empty sync commit merely to mark that `local/integration` was synchronized. The Project commit it already points to is the common ancestor.
 
 ---
 
-## 11. One Task integration transaction
+## 11. One effective-Main integration transaction
 
-For an effective `Main` Task:
+Use a temporary candidate branch/worktree so canonical `local/integration` is never left in a conflicted merge state.
 
 ```text
-Task snapshot ready
+Task snapshot commit ready
   ↓
 acquire repository integration lock
   ↓
-capture latest Project working-state snapshot
+synchronize Project commits missing from local/integration by ancestry
   ↓
-does local/integration contain no undelivered accepted Task result?
-  ├─ yes → update/recreate local/integration from latest Project snapshot
-  └─ no  → finish/recover that earlier delivery first
+create temporary candidate from local/integration HEAD
   ↓
-record integration_base_sha
+git merge --no-ff --no-commit local/task/<task-id>-r<run>
   ↓
-create temporary candidate from local/integration
-  ↓
-merge --squash completed Task-run branch into candidate
-  ↓
-conflict / semantic incompatibility?
-  ├─ no  → candidate validation
+conflict?
+  ├─ no
+  │   ↓
+  │ validate candidate
+  │   ↓
+  │ create candidate merge commit
+  │
   └─ yes
-       ↓
-     record merge failure
-       ↓
-     existing Runner redo/recovery on latest candidate base
-       ↓
-     Review / Validate
-       ↓
-     retry merge
+      ↓
+    abort candidate merge
+      ↓
+    merge_failure_count +1
+      ↓
+    collect original Task intent + base/snapshot SHA + latest integration SHA + conflicting files + Git output
+      ↓
+    existing Runner redo/recovery against latest integration context
+      ↓
+    Review / Validate
+      ↓
+    commit recovered Task result
+      ↓
+    retry candidate merge
   ↓
-candidate accepted
+candidate valid
   ↓
-advance local/integration to candidate result
+advance canonical local/integration to candidate merge commit
   ↓
-update Project working state with only the delta
-introduced after integration_base_sha
+deliver accepted local/integration to captured target_branch
   ↓
-verify Project now represents:
-original Project state + accepted Task delta
+git merge --squash local/integration
   ↓
-mark Task integrated
+git commit with stable Task-run identity
   ↓
-cleanup according to retention policy
+record target_commit_sha
+  ↓
+re-baseline local/integration to new target_branch HEAD
+  ↓
+Closed · integrated
 ```
 
-The repository integration lock remains held across the canonical `local/integration` update and Project-state delivery so another Task cannot overwrite the intermediate state.
-
-### If the Project changes while a Task is being integrated
-
-External user edits are not merge failures by themselves.
-
-If the Project working state changes after `integration_base_sha` was captured but before Task delivery completes:
-
-```text
-detect Project-state mismatch
-→ snapshot latest Project state
-→ rebuild local/integration/candidate from that latest state
-→ re-apply the Task result
-→ only a real Task-vs-latest-state conflict consumes merge failure budget
-```
-
-This makes the user's latest Project files authoritative.
-
+The repository integration lock stays held across canonical integration advancement and Project-branch delivery.
 
 ---
 
-## 12. Project update semantics after local/integration accepts a Task
+## 12. Why normal merge into local/integration, but squash merge into Project branch
 
-The Project working state is the source visible to the user, while `local/integration` is the system-owned integration baseline.
+These are intentionally different operations.
 
-After one Task is successfully merged into `local/integration`, update the Project with the **Task delta only**:
+### Task → local/integration: preserve ancestry
 
-```text
-integration_base_sha
-        ↓ diff
-new local/integration
-        ↓
-Task delivery delta
-        ↓
-apply to current Project working state
+Use a real Git merge on a temporary candidate:
+
+```bash
+git merge --no-ff --no-commit local/task/T-001-r1
+# validate
+git commit
 ```
 
-Why delta-only matters:
+Reason:
 
-- the Project may already contain uncommitted files that were included in the original snapshot;
-- those pre-existing changes are base context, not new Task output;
-- blindly squashing the whole `local/integration` tree into the branch could accidentally commit or duplicate the user's pre-existing dirty changes.
+- Task branches need a shared merge base.
+- Integration history must remember accepted Task commits.
+- Later concurrent Tasks must merge against earlier accepted Task history so Git can detect conflicts.
 
-### Clean Project case
+### local/integration → Project branch: keep Project history clean
 
-If the captured Project state was clean and remains clean/compatible, the system may preserve the original one-Task-one-commit behavior:
+Use:
 
-```text
-local/integration accepted
-→ git merge --squash into captured target_branch
-→ one local Task commit
-→ record target_commit_sha
+```bash
+git merge --squash local/integration
+git commit -m "T-001: ..."
 ```
 
-### Dirty Project case
+This gives the Project branch one clean logical commit instead of temporary Agent/merge history.
 
-If the Project had pre-existing uncommitted changes:
-
-```text
-Project dirty base
-+ Task delta
-→ update working tree with Task delta
-→ keep user's original dirty changes uncommitted
-→ do not silently commit them
-```
-
-A target commit is not required in this case because the Task result may depend on uncommitted Project context that cannot safely be represented as an independent commit.
-
-Record the delivery form:
-
-```yaml
-project_delivery:
-  mode: squash_commit | working_tree_delta
-  delivered_state_sha: <snapshot/result-sha>
-  target_commit_sha: <sha-or-null>
-```
-
-### Re-synchronize after Project update
-
-Once the Project has been successfully updated, `local/integration` may be refreshed from the resulting Project working state before the next Task starts/integrates.
-
-Semantically:
-
-```text
-Project state == accepted local/integration state
-```
-
-even if the Project branch HEAD itself is still behind because some Project changes remain uncommitted.
+Because squash does not preserve ancestry, immediately re-baseline `local/integration` to the new Project commit after successful delivery.
 
 ---
 
-## 13. Main delivery result
+## 13. Project branch synchronization while Tasks are running
 
-For effective Main, successful delivery means:
+The Project branch may receive a new commit while several Tasks are still running.
 
-> The current Project working state contains the accepted Task result on top of the Project state that was authoritative at integration time.
+Example:
 
-That may be represented as:
+```text
+Task T1/T2 base:
+A ─ B ─ C
 
-- one local squash commit when safe; or
-- updated uncommitted Project files when the Project base was already dirty.
+Project later:
+A ─ B ─ C ─ D
 
-Do not equate `integrated` exclusively with “a Git commit exists”.
+local/integration after another accepted Task:
+A ─ B ─ C ─ M1
+```
 
+Before merging the next Task, integration must include `D`. Do not reset `M1` away.
+
+Reconcile the new Project commit into integration while preserving accepted Task history. If that reconciliation conflicts, it is a real integration conflict and follows the same error-context + Runner recovery policy.
+
+Only after missing Project commits are included should the next Task branch be merged.
 
 ---
 
-## 14. Project working-state safety
+## 14. Project delivery + re-baseline
 
-Dirty Project state is valid input and must be included in `local/integration`.
+After a Task is successfully merged into `local/integration`, deliver that accepted result to the captured Project branch.
 
-Safety rules:
+```text
+Project branch:
+A ─ B ─ C
 
-- never auto-stash, reset, discard, or commit the user's pre-existing dirty changes;
-- snapshot staged/unstaged/untracked non-ignored final file contents without mutating user index state;
-- before applying a Task delta back to the Project, verify the Project still matches the expected authoritative snapshot;
-- if the Project changed concurrently, re-snapshot and redo the Task integration against the latest Project state;
-- do not count that external Project-state movement as a merge failure;
-- if re-applying the Task to the new Project state creates a real code conflict, then it follows the normal merge-failure + Runner redo path.
+local/integration:
+A ─ B ─ C ─ M1
+```
 
-### Project branch switched after Task start
+Deliver:
 
-Do not automatically switch the user's checkout back.
+```bash
+git merge --squash local/integration
+git commit -m "T-001: ..."
+```
 
-The Task keeps its captured `target_branch`, but delivery must be fail-safe:
+Project becomes:
 
-1. if the Project checkout is still on that branch, update it normally;
-2. if the Project checkout moved to another branch, do not overwrite that checkout;
-3. use a managed delivery workspace only when the captured target branch can be safely checked out there;
-4. otherwise expose `waiting_target_workspace` and preserve Task/integration artifacts.
+```text
+A ─ B ─ C ─ S1
+```
 
-### Integration queue rule
+`S1` is not an ancestor of the old integration history because squash created a new commit. Therefore, after durable delivery and only when there is no accepted undelivered integration result:
 
-One repository has one canonical `local/integration`, so there is one repository-wide integration transaction at a time.
+```text
+reset/recreate local/integration at S1
+```
 
-Parallel Runner execution continues; only the short canonical merge/delivery section is serialized.
+Result:
+
+```text
+A ─ B ─ C ─ S1
+              ├─ Project branch
+              └─ local/integration
+```
+
+### Dirty Project checkout
+
+Automatic Main delivery must not silently mix with unrelated uncommitted Project files.
+
+If the captured target branch checkout is dirty at delivery time:
+
+```text
+Closed · waiting_target_clean
+```
+
+Do not auto-stash, reset, discard, or commit those user changes. Once the checkout is clean, retry delivery.
+
+### Project checkout moved to another branch
+
+Do not automatically switch the user's checkout back. If the captured target branch can be safely checked out in a managed delivery worktree, use that. Otherwise expose `waiting_target_workspace` and preserve all Task/integration artifacts.
 
 
 ---
@@ -857,39 +859,39 @@ Do not bypass Runner validation by directly accepting AI-edited conflict files f
 
 ## 16. Temporary candidate / recovery worktree
 
-Do not leave canonical `local/integration` or the original completed Task worktree in an unresolved conflict state.
+Do not merge directly into canonical `local/integration` first.
 
 Recommended:
 
 ```text
-latest target HEAD
-      ↓
-system-owned local/integration reset to target
+local/integration HEAD
       ↓
 temporary candidate branch/worktree
       ↓
-git merge --squash completed Task branch
+normal Git merge of Task branch
       ↓
 conflict?
-├─ no  → validate candidate
-└─ yes → existing Runner repair/rework in candidate
-            ↓
-          Review / Validate
-      ↓
-validated candidate commit
-      ↓
-advance local/integration
+├─ no  → validate → commit merge → advance local/integration
+└─ yes → abort merge
+          ↓
+        collect conflict/error/latest-code context
+          ↓
+        existing Runner redo/recovery
+          ↓
+        commit recovered Task result
+          ↓
+        retry
 ```
 
-The original completed Task branch/worktree remains untouched until target delivery succeeds.
+The original completed Task branch/worktree remains untouched until delivery succeeds.
 
-Candidate branch names should include Task run identity and attempt, for example:
+Candidate branch names include Task run + attempt, for example:
 
 ```text
 local/candidate/T-001-r2-a1
 ```
 
-Only update canonical `local/integration` after the candidate result is valid.
+Only advance canonical `local/integration` after the candidate merge is valid.
 
 
 ---
