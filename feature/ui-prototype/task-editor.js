@@ -550,8 +550,19 @@ function initializeProjectChatSettings(key,defaults=globalProjectDefaults){
 function renameProjectChatSettings(oldKey,newKey){
   if(!oldKey||!newKey||oldKey===newKey)return;
   if(projectChatSettings[oldKey]){projectChatSettings[newKey]=projectChatSettings[oldKey];delete projectChatSettings[oldKey];saveProjectChatSettings()}
+  if(typeof projectChats!=='undefined'&&projectChats[oldKey]){
+    projectChats[newKey]=projectChats[oldKey];delete projectChats[oldKey];
+    projectChats[newKey].forEach(session=>session.projectKey=newKey);
+  }
+  if(typeof projectActiveChat!=='undefined'&&projectActiveChat[oldKey]){
+    projectActiveChat[newKey]=projectActiveChat[oldKey];delete projectActiveChat[oldKey];
+  }
 }
-function deleteProjectChatSettings(key){if(projectChatSettings[key]){delete projectChatSettings[key];saveProjectChatSettings()}}
+function deleteProjectChatSettings(key){
+  if(projectChatSettings[key]){delete projectChatSettings[key];saveProjectChatSettings()}
+  if(typeof projectChats!=='undefined')delete projectChats[key];
+  if(typeof projectActiveChat!=='undefined')delete projectActiveChat[key];
+}
 function chatProjectKey(session=activeChat()){return session?.projectKey||currentProjectKey}
 function projectChatSettingsFor(key=currentProjectKey){
   const current=projectChatSettings[key]&&typeof projectChatSettings[key]==='object'?projectChatSettings[key]:BASE_PROJECT_PREFERENCES;
