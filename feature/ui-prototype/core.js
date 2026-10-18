@@ -173,13 +173,13 @@ function autoWorkspacePolicyDescription(){
   return globalExecutionSettings.autoWorkspacePolicy==='always_worktree'
     ?'Auto always creates an isolated Worktree.'
     :globalExecutionSettings.autoWorkspacePolicy==='main_only'
-      ?'Auto always uses Main; if Main is busy, the Run is blocked.'
+      ?(globalExecutionSettings.allowConcurrentMainTasks?'Auto always uses Main; concurrent Main Tasks are allowed.':'Auto always uses Main; if Main is busy, the Run is blocked.')
       :'Auto uses Main when idle and switches to Worktree when the project is busy.';
 }
 function autoWorkspaceStatus(busy,id='Task'){
   const kind=autoWorkspaceKind(!!busy);
   if(kind==='worktree')return globalExecutionSettings.autoWorkspacePolicy==='always_worktree'?`${id} → Worktree`:`${busy?'Main busy → ':''}${id} → Worktree`;
-  return busy?'Main busy → Run blocked':'Main available → Main';
+  return busy?(globalExecutionSettings.allowConcurrentMainTasks?'Main busy · concurrent Main allowed':'Main busy → Run blocked'):'Main available → Main';
 }
 
 const projectMeta={
@@ -444,15 +444,17 @@ function openModal(id){document.getElementById(id)?.classList.add('open')}
 function closeModal(id){document.getElementById(id)?.classList.remove('open')}
 document.querySelectorAll('[data-close-modal]').forEach(b=>b.onclick=()=>closeModal(b.dataset.closeModal));
 function renderGlobalExecutionSettings(){
-  const select=document.getElementById('autoWorkspacePolicy'),hint=document.getElementById('autoWorkspacePolicyHint'),preview=document.getElementById('autoWorkspacePolicyPreview');if(!select)return;
+  const select=document.getElementById('autoWorkspacePolicy'),hint=document.getElementById('autoWorkspacePolicyHint'),preview=document.getElementById('autoWorkspacePolicyPreview'),failureLimit=document.getElementById('globalMergeFailureLimit'),concurrent=document.getElementById('allowConcurrentMainTasks');if(!select)return;
   select.value=globalExecutionSettings.autoWorkspacePolicy;if(hint)hint.textContent=autoWorkspacePolicyDescription();
+  if(failureLimit)failureLimit.value=String(globalExecutionSettings.mergeFailureLimit);
+  if(concurrent)concurrent.checked=globalExecutionSettings.allowConcurrentMainTasks;
   if(preview){
     const rows=globalExecutionSettings.autoWorkspacePolicy==='busy_worktree'
       ?'<strong>Auto</strong> · Idle → Main · Busy → Worktree'
       :globalExecutionSettings.autoWorkspacePolicy==='main_only'
-        ?'<strong>Auto</strong> · Always Main · Busy → Block Run'
+        ?`<strong>Auto</strong> · Always Main · Busy → ${globalExecutionSettings.allowConcurrentMainTasks?'Allowed':'Block Run'}`
         :'<strong>Auto</strong> · Always Worktree';
-    preview.innerHTML=rows+'<br>Task-level Main / Worktree always overrides this setting.';
+    preview.innerHTML=rows+`<br><strong>Merge failures</strong> · > ${globalExecutionSettings.mergeFailureLimit} → Isolated Worktree · Closed<br><strong>Concurrent Main</strong> · ${globalExecutionSettings.allowConcurrentMainTasks?'Allowed':'Blocked when Main is busy'}<br>Task-level Main / Worktree always overrides Auto policy.`;
   }
 }
 function renderGlobalInterfaceSettings(){
@@ -477,9 +479,17 @@ function showGlobalSettingsTab(name='execution'){
 document.querySelectorAll('[data-settings-tab]').forEach(b=>b.addEventListener('click',()=>showGlobalSettingsTab(b.dataset.settingsTab)));
 document.getElementById('globalSettingsButton')?.addEventListener('click',()=>{showGlobalSettingsTab('execution');openModal('globalSettingsModal')});
 document.getElementById('autoWorkspacePolicy')?.addEventListener('change',e=>{
-  globalExecutionSettings.autoWorkspacePolicy=AUTO_WORKSPACE_POLICIES.has(e.target.value)?e.target.value:'busy_worktree';saveAutoWorkspacePolicy();renderGlobalExecutionSettings();
+  globalExecutionSettings.autoWorkspacePolicy=AUTO_WORKSPACE_POLICIES.has(e.target.value)?e.target.value:'busy_worktree';saveExecutionSettings();renderGlobalExecutionSettings();
   if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
   showToast('Auto workspace policy updated');
+});
+document.getElementById('globalMergeFailureLimit')?.addEventListener('change',e=>{
+  globalExecutionSettings.mergeFailureLimit=normalizeMergeFailureLimit(e.target.value);saveExecutionSettings();renderGlobalExecutionSettings();showToast('Merge failure limit updated');
+});
+document.getElementById('allowConcurrentMainTasks')?.addEventListener('change',e=>{
+  globalExecutionSettings.allowConcurrentMainTasks=!!e.target.checked;saveExecutionSettings();renderGlobalExecutionSettings();
+  if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
+  showToast(`Concurrent Main tasks ${globalExecutionSettings.allowConcurrentMainTasks?'enabled':'disabled'}`);
 });
 document.getElementById('globalAppearance')?.addEventListener('change',e=>{
   globalInterfaceSettings.appearance=APPEARANCES.has(e.target.value)?e.target.value:'system';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Appearance updated');
