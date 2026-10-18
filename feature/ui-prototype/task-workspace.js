@@ -93,7 +93,7 @@ function showTaskEditorView(){
   planSubviewMount.hidden=false;
   planModalEl.classList.add('subview-open','open');
   taskEditorHome.classList.add('open');
-  const ctx=taskEditorReturnContext,owner=ctx?.mode==='draft-create-item'?newTaskListDraft:(ctx?.ownerId?taskMap[ctx.ownerId]:null);
+  const ctx=taskEditorReturnContext,owner=(ctx?.mode==='draft-create-item'||ctx?.mode==='draft-edit-item')?newTaskListDraft:(ctx?.ownerId?taskMap[ctx.ownerId]:null);
   const title=document.getElementById('taskFormTitle')?.textContent||'Task';
   const meta=owner
     ? `${owner.id} · ${ctx?.index==null?'Task':`Task ${ctx.index+1} of ${canonicalTaskItems(owner).length}`}`
@@ -109,7 +109,7 @@ function leaveTaskEditorOverlay(){
   const ctx=taskEditorReturnContext;if(!ctx)return;
   taskEditorReturnContext=null;
   hideTaskEditorView();
-  const owner=ctx.mode==='draft-create-item'?newTaskListDraft:(ctx.ownerId?taskMap[ctx.ownerId]:null);
+  const owner=(ctx.mode==='draft-create-item'||ctx.mode==='draft-edit-item')?newTaskListDraft:(ctx.ownerId?taskMap[ctx.ownerId]:null);
   if(owner&&!owner._newListDraft){setPlanDraftForTask(owner);renderFullPlan(owner);renderDrawerPlan(owner)}
   if(ctx.returnTarget==='list-draft'){
     planModalEl.classList.add('open');
@@ -168,7 +168,7 @@ function leavePlanSubview(){
 
 const taskEditorLoadBeforeOverlay=loadTaskEditor;
 loadTaskEditor=function(mode,args={}){
-  const draftMode=mode==='draft-create-item';
+  const draftMode=mode==='draft-create-item'||mode==='draft-edit-item';
   const ownerId=args.ownerId||currentTaskId,owner=mode==='root-create'?null:(draftMode?newTaskListDraft:taskMap[ownerId]);
   if(mode!=='root-create'&&!owner)return;
   const returnTarget=args.returnTarget||(mode==='root-create'?'close':draftMode?'list-draft':detectTaskEditorReturnTarget());
@@ -179,7 +179,8 @@ loadTaskEditor=function(mode,args={}){
   closeModal('addPlanTaskModal');
   taskEditorLoadBeforeOverlay(mode,args);
   taskEditorReturnContext={mode,ownerId:owner?._newListDraft?null:(owner?.id||null),index:args.index??(owner?(owner.items||canonicalTaskItems(owner)).length:null),returnTarget,scrollTop:scrollHost.scrollTop||0};
-  document.getElementById('taskFormTitle').textContent=mode==='edit-item'?'Edit task':mode==='root-create'?'New Task':'New task';
+  const editing=mode==='edit-item'||mode==='draft-edit-item';
+  document.getElementById('taskFormTitle').textContent=editing?'Edit task':mode==='root-create'?'New Task':'New task';
   document.getElementById('taskFormHelp').textContent=returnTarget==='chat'
     ?(mode==='edit-item'?'Edit this Task Draft item. Chat stays behind this workspace.':'Configure this Task Draft item. Chat stays behind this workspace.')
     :(mode==='root-create'?'Create one Task in this workspace.':mode==='edit-item'?'Edit this task only.':'Configure this task only.');
@@ -188,11 +189,12 @@ loadTaskEditor=function(mode,args={}){
   const editorOwner=draftMode?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
   setTaskDrawerShell('editor',{
     title:document.getElementById('taskFormTitle').textContent,
-    meta:editorOwner?`${editorOwner.id} · ${mode==='edit-item'?`Task ${(args.index??0)+1} of ${canonicalTaskItems(editorOwner).length}`:'New child task'}`:'New Task',
+    meta:editorOwner?`${editorOwner.id} · ${editing?`Task ${(args.index??0)+1} of ${(editorOwner.items||canonicalTaskItems(editorOwner)).length}`:'New child task'}`:'New Task',
     showBack:returnTarget!=='close',
     backTitle:taskEditorBackLabel(returnTarget)
   });
   setSurfaceBackBehavior(taskEditorSurface,'task',returnTarget);
+  setTimeout(()=>document.getElementById('newTaskTitle')?.focus({preventScroll:true}),0);
 };
 
 const taskEditorSaveBeforeOverlay=document.getElementById('createTaskConfirm').onclick;
@@ -200,7 +202,8 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   const ctx=taskEditorReturnContext;
   taskEditorSaveBeforeOverlay();
   if(!ctx)return;
-  const draftSaved=ctx.mode==='draft-create-item'&&Array.isArray(newTaskListDraft?.items)&&newTaskListDraft.items.length>(ctx.index??-1);
+  const draftSaved=(ctx.mode==='draft-create-item'&&Array.isArray(newTaskListDraft?.items)&&newTaskListDraft.items.length>(ctx.index??-1))
+    ||(ctx.mode==='draft-edit-item'&&toast.textContent===uiText('taskListDraft.updated'));
   const itemSaved=['Task saved','Saved · current task will restart'].includes(toast.textContent);
   const rootSaved=ctx.mode==='root-create'&&String(toast.textContent).startsWith('Task created');
   if(draftSaved||itemSaved||rootSaved)leaveTaskEditorOverlay();
