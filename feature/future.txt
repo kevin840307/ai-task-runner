@@ -100,6 +100,8 @@ Behavior:
 - File-backed Task inputs (Task Prompt file / File Validator / AI Validator Prompt file) have two distinct sources: a manual path or an uploaded file. Prompt assets remain a separate concept.
 - Manual path is authoritative and is passed through unchanged. It must not trigger upload/copy.
 - Upload file stages bytes + metadata only. On final Task Create/Save, backend copies the file into Runner-managed storage using the final Task/item identity, then returns the canonical managed path.
+- Immediately after file selection, UI computes/reserves the managed target path and writes that path into the same field the Task will use (for example `taskValidatorFile`). The input must never show only the browser filename/fakepath as its canonical value.
+- While the input still equals the staged upload's managed target path, validation/Create/Save treats it as the normal path value and keeps the staged bytes attached. Editing the input to a different path cancels that staged upload and switches to manual-path semantics.
 - The returned managed path becomes the Task field value (`goal_file`, `validator`, or `ai_validator_prompt_file`) and must be written back into the UI input such as `taskValidatorFile`; never display only filename/fakepath as the canonical value.
 - Canonical Task/Workflow state stores only the managed path. Browser File objects, temporary upload tokens and staged bytes are transient UI/backend transfer state and must not enter the canonical Task store.
 - Upload/copy must be fail-closed and atomic from the user's perspective: if copy fails, do not create/save a Task that references a missing managed path; keep the staged upload available for retry.
