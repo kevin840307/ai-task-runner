@@ -112,7 +112,7 @@ effective Main:
 - Above limit => retain the latest current merge source branch/worktree and close as Isolated Worktree / worktree_ready with merge_failure_limit_exceeded.
 
 effective Isolated Worktree:
-- Runner Complete => ownership preflight (registered worktree, expected repo/Task branch, no active Git operation) then commit/snapshot result locally.
+- Runner Complete => ownership preflight (registered worktree, expected repo/Task branch, expected source-base ancestry, no active Git operation) then commit/snapshot result locally.
 - Preserve branch/worktree and Close · worktree_ready.
 - No automatic Project-branch merge.
 
@@ -120,7 +120,8 @@ Safety:
 - Do not auto-switch user's Project checkout branch.
 - Dirty target merge workspace => waiting_target_clean; do not auto-stash/reset/stage/commit user changes.
 - Target in unmanaged/user worktree => waiting_target_workspace.
-- Captured target branch missing/renamed or rewritten with no valid common ancestry => waiting_target_branch / Needs Attention; never guess/recreate/retarget.
+- Captured target branch missing/renamed => waiting_target_branch / Needs Attention; never guess/recreate/retarget.
+- If merge_source_base_sha is no longer an ancestor of current target HEAD after force-reset/divergence => waiting_target_history / Needs Attention; do not merge/recover automatically and do not increment merge_failure_count.
 - Remote push remains separate explicit Publish action.
 - Detailed source of truth: feature/git-worktree-todo.md.
 
