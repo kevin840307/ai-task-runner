@@ -261,6 +261,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
 [x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 直接建立 items=[] 並進 Task List Workspace，不再先經過「New Task → New Task List」的多層 create modal。
 [x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
+[x] planModal / newTaskModal 視覺層級已收斂成單一 Task Workspace Shell：newTaskModal 不再是 fixed overlay，只是 shell 內的 Editor View；List / Editor 切換不改外框位置、寬度、陰影。
+[x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
+[x] Chat Draft 單筆、Task List child Add/Edit、Task Info Edit 都共用同一 Editor View；returnTarget 只控制回 List / Info / Chat / Close。
+[x] YAML 保持同一 Task Workspace Shell 的 subview；長表單不得再開第二個 full-size overlay。
+[ ] 正式 React 將 legacy id planModal/newTaskModal 改為語意元件/route 名稱（TaskWorkspaceShell / list / editor / yaml），避免名稱再次暗示巢狀 modal。
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
 [x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
 [ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
