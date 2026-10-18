@@ -176,6 +176,10 @@ Prototype composition:
 - Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
 - Move existing is a secondary chooser, not a second Create Task path.
 - Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
+- Prototype uses one visual Task Workspace Shell: the legacy planModal id is the shell; newTaskModal is only an Editor View inside it, not another overlay.
+- Standalone Task creation, Chat Draft editing and Task List child editing all enter that same Editor View.
+- Switching List -> Editor -> List must keep the exact same shell geometry so the user perceives navigation, not another modal opening.
+- YAML is another view of the same shell; full-size nested overlays are prohibited.
 
 Future React mapping:
 Shared primitives:
