@@ -1156,6 +1156,8 @@ function editorOwner(){if(taskEditorContext.mode==='draft-create-item'||taskEdit
 function editorItemRef(){
   const owner=editorOwner();
   if(taskEditorContext.mode==='root-create')return `T-${taskSequence+1}`;
+  if(taskEditorContext.mode==='draft-create-item')return `${owner?.id||'DRAFT-LIST'}-I${(owner?.items?.length||0)+1}`;
+  if(taskEditorContext.mode==='draft-edit-item')return `${owner?.id||'DRAFT-LIST'}-I${(taskEditorContext.index??0)+1}`;
   return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
 }
 function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
