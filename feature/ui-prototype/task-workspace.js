@@ -407,7 +407,9 @@ renderDrawerPlan=function(t){
 };
 const taskSelectOpenTask=openTaskById;
 openTaskById=function(id){
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false})
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
+    requestDiscardNewTaskListDraft(()=>openTaskById(id));return;
+  }
   clearTaskSelection();
   planModalEl.classList.remove('open','subview-open');
   planSubviewMount.hidden=true;
@@ -576,7 +578,9 @@ renderFullPlan=function(t){workspaceRenderFull(t);if(!selectedTaskRef||selectedT
 const workspaceOpenPlan=openPlanDialog;
 openPlanDialog=function(id=currentTaskId,options={}){
   const t=taskMap[id];if(!t)return;
-  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false})
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
+    requestDiscardNewTaskListDraft(()=>openPlanDialog(id,options));return;
+  }
   const previousRoute=taskDrawerEl.dataset.route||'info',overlayWasOpen=taskOverlayEl.classList.contains('open');
   taskDrawerListReturnTarget=options.returnTarget||(
     t._chatDraft?'chat':
