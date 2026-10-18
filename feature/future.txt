@@ -178,6 +178,24 @@ Prototype composition:
 - Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
 
 Future React mapping:
+Shared primitives:
+- AppShell
+- SidebarNavigation
+- Drawer / Modal / Popover
+- Tabs
+- Field / Select
+- Button
+- Badge / Pill
+- EmptyState
+- ThemeProvider / theme tokens
+
+Feature components:
+- ProjectSidebar
+- ChatWorkspace
+- ChatComposer
+- QueueList
+- AskFlow
+- TaskBoard
 - TaskCreateMenu
 - TaskEditor
 - TaskListWorkspace
@@ -185,6 +203,9 @@ Future React mapping:
 - WorkspaceSelector
 - TaskRuntimePanel
 - TaskDraftPreview
+- GlobalSettings
+
+Workflow / Prompt workspaces should reuse the same AppShell, navigation and primitives rather than carrying their own visual framework.
 
 React rules:
 - One component implementation per responsibility; no Chat-only or Board-only duplicate Task Editor JSX.
