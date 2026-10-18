@@ -1125,7 +1125,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         method: "POST",
         body: JSON.stringify({
           project: path,
-          draft: structuredClone ? structuredClone(entry.draft) : JSON.parse(JSON.stringify(entry.draft)),
+          draft: globalThis.structuredClone
+            ? globalThis.structuredClone(entry.draft)
+            : JSON.parse(JSON.stringify(entry.draft)),
           request_id: "create-" + entry.draft_id,
         }),
       });
