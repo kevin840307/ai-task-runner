@@ -53,7 +53,7 @@ Workspace Manager
   ↓
 sync local/integration to target branch committed HEAD
   ↓
-git worktree add -b local/task/<task-id> <worktree-path> local/integration
+git worktree add -b local/task/<task-id>-r<run> <worktree-path> local/integration
   ↓
 isolated Task worktree ready
   ↓
@@ -112,8 +112,11 @@ Target branch
 Runner-owned local integration branch
   local/integration
 
-Per-Task temporary branches
-  local/task/<task-id>
+Per-Run Task branches
+  local/task/<task-id>-r<run>
+
+Temporary integration candidate branches
+  local/candidate/<task-id>-r<run>-a<attempt>
 ```
 
 Example:
@@ -121,7 +124,7 @@ Example:
 ```text
 feature/ui
 local/integration
-local/task/T-001
+local/task/T-001-r1
 local/task/T-002
 local/task/T-003
 ```
@@ -138,7 +141,7 @@ because it conflicts with hierarchical refs such as:
 
 ```text
 local/integration
-local/task/T-001
+local/task/T-001-r1
 ```
 
 ---
@@ -151,20 +154,26 @@ Example:
 
 ```text
 .worktrees/
-├─ T-001/
-├─ T-002/
-├─ T-003/
-└─ integration/
+├─ integration/
+├─ T-001-r1/
+├─ T-001-r2/
+├─ T-002-r1/
+├─ candidate/
+│  └─ T-001-r2-a1/
+└─ delivery/
+   └─ T-001-r2/
 ```
 
 Recommended ownership:
 
 ```text
-.worktrees/<task-id>     → Agent / Runner execution
-.worktrees/integration   → Integration Manager only
+.worktrees/<task-id>-r<run>               → Agent / Runner execution
+.worktrees/integration                     → canonical local/integration only
+.worktrees/candidate/<task-run>-a<attempt> → temporary integration/recovery candidate
+.worktrees/delivery/<task-run>             → temporary target delivery worktree when needed
 ```
 
-Do not let two Tasks share the same worktree.
+Do not let two Task runs share the same worktree. Reset/Rerun must create a new run identity so retained Isolated Worktree results never collide with a later run.
 
 ---
 
@@ -179,7 +188,7 @@ Task mode
 └─ Isolated Worktree
 
 Execution for all three
-→ local/task/<task-id>
+→ local/task/<task-id>-r<run>
 → isolated Task worktree
 → Runner(project_root = worktree)
 ```
@@ -213,6 +222,17 @@ Always Worktree
 ```
 
 The exact Global policy remains owned by the existing workspace resolver.
+
+Because every effective mode now executes in an isolated worktree, old “Main busy = filesystem path is occupied” safety logic no longer applies.
+
+Recommended interpretation:
+
+- `Always Main`: multiple Tasks may execute concurrently in separate worktrees; all resolve to Main delivery and later serialize through the Integration Queue.
+- `Always Worktree`: all resolve to Isolated Worktree delivery.
+- `Busy → Worktree`: may remain a product policy where Auto chooses Isolated Worktree when the Project is already busy, but it is no longer required for path-safety.
+- Do not block an explicit Main Task merely because another Main Task is running; integration serialization is the safety boundary.
+
+The existing resolver remains the single owner, but its implementation must be updated to reflect the new all-worktree execution model rather than reused unchanged.
 
 ### Main
 
@@ -248,7 +268,7 @@ When real merge/integration failure exceeds the limit:
 ```text
 mode remains Main
 → stop automatic merge recovery
-→ preserve local/task/<task-id>
+→ preserve local/task/<task-id>-r<run>
 → preserve Task worktree/result
 → Closed · Awaiting merge
 → integration_status = merge_retry_exhausted
@@ -269,7 +289,7 @@ It means:
 run inside isolated Task worktree
 → Runner Completed
 → Closed · Worktree ready
-→ keep local/task/<task-id>
+→ keep local/task/<task-id>-r<run>
 → keep worktree/result
 → do not automatically integrate into target_branch
 ```
@@ -342,12 +362,13 @@ Example:
 git rev-parse feature/ui
 # → TARGET_SHA
 
-# under the Git integration lock
-git switch local/integration
-git reset --hard TARGET_SHA
+# local/integration is checked out only in the system-owned integration worktree.
+git -C <integration-worktree> reset --hard TARGET_SHA
 
-git worktree add -b local/task/T-001 <worktree-path> local/integration
+git worktree add -b local/task/T-001-r1 <worktree-path> local/integration
 ```
+
+Do not `git switch local/integration` inside the user's Project checkout. The canonical integration branch must live in the dedicated system-owned integration worktree.
 
 ### Uncommitted target files must NOT be copied
 
@@ -383,7 +404,7 @@ A Task records its base SHA at creation:
 git:
   target_branch: feature/ui
   base_sha: <sha>
-  task_branch: local/task/T-001
+  task_branch: local/task/T-001-r1
 ```
 
 Once created, the Task worktree is independent.
@@ -445,7 +466,7 @@ If integration later needs code changes, it calls this same Runner contract agai
 
 ---
 
-## 9. Every completed Project-Branch Task enters Integration Queue
+## 9. Every completed effective Main Task enters Integration Queue
 
 Execution may be parallel:
 
@@ -455,7 +476,7 @@ T-002 → Runner ───── Done
 T-003 → Runner ───────────────── Done
 ```
 
-Integration must be serialized per target repository/branch:
+Because this design uses one fixed `local/integration` branch per repository, integration must be serialized **per repository**, not merely per target branch:
 
 ```text
 Done Tasks
@@ -471,49 +492,108 @@ target branch
 
 Core rule:
 
-> **Execution parallel, integration serial.**
+> **Execution parallel, integration serial per repository.**
 
-Do not allow two processes to mutate `local/integration` or the same target branch simultaneously.
+Do not allow two integration transactions in the same repository to mutate the single `local/integration` branch concurrently. Different repositories may integrate independently.
 
 ---
 
-## 10. One Task integration transaction
+## 10. Freeze the completed Task result before integration
 
-For an effective `Main` Task, treat the following as one serialized transaction:
+Runner remains Git-unaware, so Runner completion does not guarantee that all file changes are committed.
+
+Before a completed Main Task enters integration, Workspace/Integration Manager must freeze the Task worktree into a reproducible local Git result.
+
+Recommended rule:
 
 ```text
-Task completed
+Runner Completed
+→ verify Task worktree is not already in unresolved merge/rebase state
+→ git add -A
+→ create a local snapshot commit if there are uncommitted changes
+→ record task_snapshot_sha
+→ original Task branch/worktree becomes read-only for integration
+```
+
+The snapshot commit is local-only and may be removed later with the Task branch. It is not the final target-branch commit.
+
+If Agent/Runner already created commits, keep them; the snapshot commit only captures the remaining uncommitted changes. Integration uses the total branch diff from the recorded Task base to the final Task branch.
+
+If the final Task branch has no effective changes versus its base:
+
+```text
+Main      → Closed · no_changes / integrated
+Worktree  → Closed · worktree_ready (no changes)
+```
+
+Do not create an empty target commit.
+
+### Preserve the original completed result
+
+Do **not** rebase the original completed Task branch/worktree during integration.
+
+The original result is the recovery source of truth until delivery succeeds.
+
+Create a temporary candidate from the latest `local/integration` and apply the Task branch there instead.
+
+---
+
+## 11. One Task integration transaction
+
+For an effective `Main` Task, treat the following as one durable serialized repository transaction:
+
+```text
+Task snapshot ready
   ↓
-verify target branch is safe to update
+acquire repository integration lock
   ↓
-take latest local/integration
+read current target_branch HEAD
   ↓
-replay/rebase Task changes onto latest integration base
+reset system-owned local/integration worktree to that latest committed target HEAD
   ↓
-resolve code conflicts if needed
+create temporary candidate branch/worktree from local/integration
   ↓
-validate
+git merge --squash local/task/<task-id>-r<run> into candidate
   ↓
-advance local/integration
+conflict?
+  ├─ no  → candidate validation
+  └─ yes → existing Runner repairs/reworks candidate worktree
+             ↓
+           Review / Validate
   ↓
-switch target branch
+commit validated candidate locally
+  ↓
+advance local/integration to validated candidate commit
+  ↓
+re-check target_branch HEAD is still the expected SHA
+  ├─ changed → discard/rebuild candidate against latest target; not a merge-failure count
+  └─ same    → continue
+  ↓
+deliver to target branch without switching the user's Project checkout
   ↓
 git merge --squash local/integration
   ↓
-git commit
+git commit (stable Task-run identity trailer)
+  ↓
+record target_commit_sha
   ↓
 reset local/integration to new target HEAD
   ↓
-cleanup Task branch/worktree
+cleanup candidate; cleanup Task worktree/branch according to retention policy
   ↓
-Integrated
+Closed · Integrated
 ```
 
-Do not release the integration lock in the middle of this transaction.
+Do not release the repository integration lock in the middle of this transaction.
+
+The application lock protects AI Task Runner processes. The repeated target-HEAD comparison protects against an external shell/editor making a new commit while the transaction is running.
+
+A target-HEAD movement before delivery is a normal optimistic-concurrency retry, not a merge failure.
+
 
 ---
 
-## 11. Why reset local/integration after every squash
+## 12. Why reset local/integration after every squash
 
 `git merge --squash` copies the final diff but does not record merge ancestry.
 
@@ -544,8 +624,7 @@ A ─ S1
 After that, immediately realign the integration branch:
 
 ```bash
-git switch local/integration
-git reset --hard <target>
+git -C <integration-worktree> reset --hard <target>
 ```
 
 Result:
@@ -560,7 +639,7 @@ This guarantees the next Task starts/integrates against the canonical committed 
 
 ---
 
-## 12. Per-Task local squash commit
+## 13. Per-Task local squash commit
 
 For effective `Main`, each completed Task should normally produce one local commit on the captured target branch.
 
@@ -591,57 +670,68 @@ Target receives one logical Task commit.
 
 ---
 
-## 13. Target branch dirty policy
+## 14. Target branch / delivery workspace safety
 
 ### Task start
 
-Dirty target is allowed.
+Dirty Project checkout is allowed.
 
-Only the target branch committed HEAD is used as the Task base.
+Only the captured target branch committed HEAD is used as the Task base.
 
 ```text
-target dirty
-→ read target HEAD commit
-→ create worktree from committed SHA
+Project checkout dirty
+→ read target_branch HEAD commit
+→ create isolated Task worktree from committed SHA
 → continue
 ```
 
-### Task integration / squash
+### Integration must never switch the user's Project checkout
 
-Dirty target must fail closed.
+Do not run `git switch <target_branch>` merely to deliver a completed Task.
+
+Resolve a safe delivery workspace:
+
+1. If `target_branch` is currently checked out in the managed Project root:
+   - require that checkout to be clean;
+   - perform the final squash/commit there without switching branches.
+2. If `target_branch` is not checked out in any worktree:
+   - create a temporary system-owned delivery worktree for that branch;
+   - squash/commit there;
+   - remove it after the transaction.
+3. If `target_branch` is checked out in another non-managed/user worktree:
+   - fail closed as `waiting_target_workspace`;
+   - do not modify or switch that external worktree automatically.
+
+This lets a Task keep its captured target branch even if the user later switches the main Project checkout to another branch.
+
+### Target movement / dirty delivery workspace delivery workspace
+
+A dirty workspace that currently owns `target_branch` must block delivery.
 
 ```text
-target working tree dirty
+target delivery workspace dirty
 → do NOT run merge --squash
-→ do NOT mix Agent changes with user uncommitted changes
-→ mark Task integration_pending / needs attention
-→ keep artifacts safe
+→ do NOT stash/reset user changes automatically
+→ Closed · waiting_target_clean
+→ keep Task/candidate artifacts safe
 ```
 
-### Important queue rule
+### Queue rule
 
-Because the design wants **one target commit per Task**, do not allow later Tasks to accumulate into canonical `local/integration` while an earlier Task cannot finish its target squash.
-
-Preferred behavior:
+Because one fixed `local/integration` is shared by the repository and the design wants one target commit per Task run:
 
 ```text
-dirty target
-→ current integration transaction waits
-→ integration queue for that target branch pauses
+blocked current integration transaction
+→ repository Integration Queue pauses
 → parallel Runner execution may continue in independent Task worktrees
 ```
 
-This preserves:
+Do not let a later Main Task advance canonical `local/integration` until the current transaction either commits, retries against a new target HEAD, or exits to an explicit blocked/exhausted state.
 
-```text
-1 Task
-→ 1 integration transaction
-→ 1 squash commit
-```
 
 ---
 
-## 14. Conflict handling
+## 15. Conflict handling
 
 A normal Git conflict is not automatically a Task execution failure.
 
@@ -738,31 +828,46 @@ Do not bypass Runner validation by directly accepting AI-edited conflict files f
 
 ---
 
-## 15. Prefer a temporary integration/recovery worktree
+## 16. Temporary candidate / recovery worktree
 
-Do not leave canonical `local/integration` in an unresolved conflict state.
+Do not leave canonical `local/integration` or the original completed Task worktree in an unresolved conflict state.
 
 Recommended:
 
 ```text
-local/integration
+latest target HEAD
       ↓
-temporary integration worktree
+system-owned local/integration reset to target
       ↓
-replay Task
+temporary candidate branch/worktree
+      ↓
+git merge --squash completed Task branch
       ↓
 conflict?
-├─ no  → validate → advance local/integration
-└─ yes → Runner repair/rework → validate → advance local/integration
+├─ no  → validate candidate
+└─ yes → existing Runner repair/rework in candidate
+            ↓
+          Review / Validate
+      ↓
+validated candidate commit
+      ↓
+advance local/integration
+```
+
+The original completed Task branch/worktree remains untouched until target delivery succeeds.
+
+Candidate branch names should include Task run identity and attempt, for example:
+
+```text
+local/candidate/T-001-r2-a1
 ```
 
 Only update canonical `local/integration` after the candidate result is valid.
 
-This protects the integration base if AI recovery fails or is interrupted.
 
 ---
 
-## 16. Remote Git policy
+## 17. Remote Git policy
 
 The entire parallel-Agent system must be usable without modifying remote Git.
 
@@ -788,7 +893,7 @@ This allows many Tasks to run and integrate locally before anything is sent to G
 
 ---
 
-## 17. Do not call local integration "push"
+## 18. Do not call local integration "push"
 
 Internally use names such as:
 
@@ -809,7 +914,7 @@ because `git push` should remain reserved for actual remote publication semantic
 
 ---
 
-## 18. Ownership boundaries
+## 19. Ownership boundaries
 
 ### Task Manager / UI backend
 
@@ -848,10 +953,11 @@ project_root
 
 Owns:
 
-- target HEAD snapshot checks
+- target HEAD snapshot + optimistic re-checks
 - `local/integration`
-- integration lock / queue
-- replay/rebase mechanics
+- repository-wide integration lock / queue for the single `local/integration` branch
+- completed Task snapshot creation
+- candidate branch/worktree apply mechanics
 - conflict collection
 - invoking Runner recovery when semantic repair is required
 - validation before advancing integration
@@ -871,7 +977,7 @@ Do not mix remote publishing into normal local Task integration.
 
 ---
 
-## 19. Merge failure counting / retry exhaustion
+## 20. Merge failure counting / retry exhaustion
 
 Track merge/integration failures explicitly so conflict recovery cannot loop forever and burn Agent time.
 
@@ -924,6 +1030,7 @@ Examples that **do not count**:
 - Task has not reached integration yet
 - temporary worktree creation transiently fails
 - deterministic Git command retry where no code repair/rework is required
+- target branch HEAD changed during integration and the candidate must be rebuilt against the newer commit
 - Runner itself fails before reaching a new merge/integration attempt
 - user cancels or pauses before integration is attempted
 
@@ -1033,7 +1140,7 @@ Do not store only a free-form error string if structured fields are available.
 
 ---
 
-## 19. UI / Task status model
+## 21. UI / Task status model
 
 Do not add another Board lifecycle column just for Git integration.
 
@@ -1059,6 +1166,7 @@ Git integration is a secondary Task projection shown inside the Task card / Info
 | Effective Main: replay/squash transaction running | Closed | integrating |
 | Effective Main: conflict is being repaired/reworked by Runner | Closed | conflict_recovery |
 | Effective Main: target branch dirty | Closed | waiting_target_clean + Needs Attention |
+| Effective Main: target branch is checked out in an unmanaged worktree | Closed | waiting_target_workspace + Needs Attention |
 | Effective Main: validation fails and Runner is redoing/fixing | Closed | recovery |
 | Effective Main: squash commit created successfully | Closed | integrated |
 | Isolated Worktree: Runner Completed; result intentionally retained without auto integration | Closed | worktree_ready / not_required |
@@ -1157,7 +1265,8 @@ Example:
 Integration
 Target branch     feature/ui
 Delivery          Project Branch
-Task branch       local/task/T-001
+Task run          T-001-r1
+Task branch       local/task/T-001-r1
 Base              abc123
 State             Integrating
 Latest target     def456
@@ -1175,16 +1284,24 @@ Action            Commit/stash/revert those changes, then integration can contin
 
 #### Task List / child items
 
-Do not give every child its own integration state if the Board Task is the delivery unit.
+The Git integration unit is the **actual Task run/workspace result**, not automatically the Board parent.
 
-The parent Task owns:
+If a Task List allows child Tasks to resolve different Workspace modes or worktrees, each child run owns its own:
 
-- Task worktree
-- integration transaction
-- target squash commit
-- integration status
+- Task-run branch/worktree
+- snapshot SHA
+- effective mode
+- integration transaction/status
+- target commit or retained worktree result
 
-Child execution progress remains Runner/Task List execution detail.
+The parent Board Task aggregates these results for compact UI, for example:
+
+```text
+Closed
+Integration · 2 integrated · 1 worktree ready · 1 awaiting merge
+```
+
+Do not force all child Tasks into one worktree merely to simplify the UI, and do not duplicate full Git controls on every child row unless expanded.
 
 ### Runtime / projection separation
 
@@ -1199,8 +1316,8 @@ idle / running / recovering / stopped / completed / attention / ...
 
 Git integration
 not_started / pending_merge / integrating / conflict_recovery /
-waiting_target_clean / recovery / merge_retry_exhausted /
-integrated / failed / worktree_ready / not_required
+waiting_target_clean / waiting_target_workspace / recovery / merge_retry_exhausted /
+integrated / no_changes / failed / worktree_ready / not_required
 ```
 
 UI composes these into one readable Task view, but no layer re-derives or replaces another owner's state machine.
@@ -1235,46 +1352,79 @@ This keeps existing Merge / Merge Chat concepts compatible with the future autom
 
 ---
 
-## 20. Suggested Task metadata
+## 22. Suggested Task metadata
 
-Keep metadata minimal and outside generic Runner execution.
+Keep Git orchestration metadata outside generic Runner RunState.
 
-Example:
+For requested `Auto` resolved to effective `Main`:
 
 ```yaml
 git:
-  workspace_mode: main
+  requested_workspace_mode: auto
+  effective_workspace_mode: main
+
   target_branch: feature/ui
-  base_sha: abc123
-  integration_base_sha: def456
-  task_branch: local/task/T-001
-  worktree: .worktrees/T-001
-  integration_status: pending
-  integration_attempt: 0
+  target_sha_at_start: abc123
+  latest_target_sha: def456
+
+  run_id: T-001-r2
+  task_branch: local/task/T-001-r2
+  worktree: .worktrees/T-001-r2
+  task_snapshot_sha: 111aaa
+
+  integration_tx_id: T-001-r2
+  integration_status: pending_merge
+  candidate_sha: null
+  target_commit_sha: null
   integration_attention: null
+
   merge_failure_count: 0
   merge_retry_attempt: 0
   max_merge_failures: 3
   last_merge_failure: null
 ```
 
-For an explicit Keep Worktree outcome:
+For requested `Isolated Worktree`:
 
 ```yaml
 git:
-  workspace_mode: isolated_worktree
+  requested_workspace_mode: isolated_worktree
+  effective_workspace_mode: isolated_worktree
   target_branch: feature/ui
-  base_sha: abc123
-  task_branch: local/task/T-001
-  worktree: .worktrees/T-001
-  integration_status: not_required
+  target_sha_at_start: abc123
+  run_id: T-002-r1
+  task_branch: local/task/T-002-r1
+  worktree: .worktrees/T-002-r1
+  task_snapshot_sha: 222bbb
+  integration_status: worktree_ready
 ```
+
+Persist both requested and effective mode so changing Global Auto policy later does not rewrite historical Task behavior.
+
+### Idempotent target commit
+
+Every automatic Main delivery commit should carry a stable Task-run identity, for example a commit-message trailer:
+
+```text
+AI-Task-Run: T-001-r2
+```
+
+Also persist `target_commit_sha` as soon as the commit succeeds.
+
+On restart after a crash, before creating another squash commit:
+
+1. check the recorded `target_commit_sha` if present;
+2. otherwise search the target branch for the stable Task-run identity;
+3. if already delivered, finalize state instead of committing the same Task again.
+
+This prevents duplicate target commits if the process dies after Git commit succeeds but before Task state persistence finishes.
 
 Do not duplicate Runner RunState inside this metadata.
 
+
 ---
 
-## 21. Skill / prompt policy
+## 23. Skill / prompt policy
 
 Do not make deterministic Git mechanics into AI Skills.
 
@@ -1308,7 +1458,7 @@ Avoid speculative Skill complexity in the first implementation.
 
 ---
 
-## 22. Failure / recovery principles
+## 24. Failure / recovery principles
 
 - Count a merge failure only after a successful Runner execution/recovery reaches a real integration attempt and delivery still fails for a code/semantic/validation reason.
 - Do not count queue waits, dirty target, lock contention, or deterministic transient Git failures as merge failures.
@@ -1325,7 +1475,7 @@ Avoid speculative Skill complexity in the first implementation.
 
 ---
 
-## 23. Example: three Agents in parallel
+## 25. Example: three Agents in parallel
 
 Initial:
 
@@ -1343,7 +1493,7 @@ T-003 finishes first:
 ```text
 T-003 Done
 → Integration Queue
-→ replay T-003 onto latest local/integration
+→ snapshot T-003 → candidate from latest local/integration
 → validate
 → local/integration = C + T-003'
 → feature/ui: merge --squash local/integration
@@ -1362,7 +1512,7 @@ T-001 finishes:
 
 ```text
 T-001 was based on C
-→ replay onto C-S3
+→ snapshot T-001 → candidate from C-S3
 → conflict?
    ├─ no  → continue
    └─ yes → Runner recovery/rework against latest code
@@ -1387,7 +1537,7 @@ T-002 then repeats against the latest committed target.
 
 ---
 
-## 24. Implementation TODO
+## 26. Implementation TODO
 
 ### Phase A — contracts / metadata
 
@@ -1398,23 +1548,25 @@ T-002 then repeats against the latest committed target.
 - [ ] Preserve Task modes Auto / Main / Isolated Worktree. All execute in isolated worktrees; Auto reuses the existing Global resolver, Main auto-integrates to the captured Project branch, Isolated Worktree keeps the result without auto integration.
 - [ ] Resolve `target_branch` from the Project repository's currently checked-out branch when the Task starts; persist it for that Task and never hardcode `main`.
 - [ ] Define minimal Git metadata for Task base SHA, Task branch, worktree path, and integration status.
-- [ ] Define stable local branch naming: `local/integration`, `local/task/<task-id>`.
-- [ ] Define deterministic worktree paths.
+- [ ] Define stable local branch naming: `local/integration`, `local/task/<task-id>-r<run>`, and temporary `local/candidate/<task-run>-a<attempt>`.
+- [ ] Define deterministic worktree paths using Task + Run identity; Reset/Rerun must never collide with retained prior runs.
 
 ### Phase B — Workspace Manager
 
-- [ ] Create the Task branch and Task worktree atomically from the committed target snapshot with `git worktree add -b local/task/<task-id> <worktree-path> local/integration`.
-- [ ] Before Task creation, under a short Git lock, synchronize `local/integration` to target branch committed HEAD.
+- [ ] Create the Task branch and Task worktree atomically from the committed target snapshot with `git worktree add -b local/task/<task-id>-r<run> <worktree-path> local/integration`.
+- [ ] Keep `local/integration` checked out only in a system-owned `.worktrees/integration` path; never switch the user's Project checkout to it.
+- [ ] Before Task creation, under a short repository Git lock, synchronize that integration worktree to target branch committed HEAD.
 - [ ] Explicitly exclude uncommitted target working-tree changes from new Task bases.
 - [ ] Return Task worktree path as the existing Runner `project_root`.
 - [ ] Add safe cleanup without deleting unresolved/failed Task output.
 - [ ] Ensure multiple Task worktrees can execute concurrently.
 
-### Phase C — Integration Queue
+### Phase C — Snapshot + Integration Queue
 
 - [ ] Stop automatic recovery for a Task when merge retry budget is exhausted; remove it from active integration execution without losing its queued/artifact state.
 - [ ] Support Retry merge to start a new retry session while preserving lifetime failure history and original Main mode.
-- [ ] Add one serialized Integration Queue per repository/target branch.
+- [ ] Freeze each completed Task run into a reproducible local snapshot commit before integration; include uncommitted tracked/untracked non-ignored changes.
+- [ ] Add one serialized Integration Queue/lock per repository because the repository has one fixed `local/integration` branch.
 - [ ] Completed Tasks whose effective mode resolves to Main enqueue automatically.
 - [ ] Completed Isolated Worktree Tasks do not auto-enqueue for integration; they close as worktree_ready.
 - [ ] Do not block parallel Runner execution while integration is busy.
@@ -1426,9 +1578,11 @@ T-002 then repeats against the latest committed target.
 - [ ] Fail closed if target working tree is dirty at squash time.
 - [ ] Pause that target's Integration Queue while target is dirty.
 - [ ] Use a temporary integration/recovery worktree for replay/conflict resolution.
-- [ ] Replay/rebase the completed Task changes onto latest `local/integration`.
+- [ ] At integration start, re-read the latest committed target HEAD and reset `local/integration` to it.
+- [ ] Create a temporary candidate from `local/integration` and `merge --squash` the completed Task-run branch there; do not rebase/mutate the original completed Task worktree.
 - [ ] Validate the candidate result before advancing canonical `local/integration`.
-- [ ] Advance `local/integration` only after successful validation.
+- [ ] Advance `local/integration` only after successful candidate validation.
+- [ ] Re-check target HEAD immediately before delivery; if it changed, rebuild candidate against latest target without consuming merge-failure budget.
 
 ### Phase E — Conflict recovery through existing Runner
 
@@ -1442,10 +1596,10 @@ T-002 then repeats against the latest committed target.
 
 ### Phase F — squash to target branch
 
-- [ ] Switch/update the clean local target branch.
+- [ ] Never switch the user's Project checkout automatically. Use the clean Project root only when it already owns target_branch; otherwise use a temporary managed delivery worktree when target_branch is free.
 - [ ] Run `git merge --squash local/integration`.
 - [ ] Create exactly one local target commit for the Task.
-- [ ] Record resulting target commit SHA.
+- [ ] Record resulting target commit SHA and stable Task-run identity trailer for restart idempotency.
 - [ ] Reset `local/integration` hard to the new target branch HEAD immediately after commit.
 - [ ] Release the integration lock only after the entire cycle completes.
 - [ ] Cleanup successful Task/recovery worktrees according to retention policy.
@@ -1463,11 +1617,12 @@ T-002 then repeats against the latest committed target.
 - [ ] Add Integration details to Task Info Drawer (target, delivery, Task branch, base/latest SHA, state, attempt, attention reason).
 - [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
 - [ ] Keep current Workspace choices Auto / Main / Isolated Worktree, while clarifying that every mode executes in an isolated worktree.
+- [ ] Update Global Auto semantics for all-worktree execution: explicit/Always Main must not block merely because another Main Task is running; Integration Queue provides serialization.
 - [ ] Main description: execute in isolated worktree, then auto-integrate/squash into the Project branch captured when the Task starts; `Main` is a mode label, not a literal branch name.
 - [ ] Isolated Worktree description: execute in isolated worktree and keep the result without automatic integration.
 - [ ] Auto remains the default and reuses the existing Global workspace policy resolver; persist the resolved effective mode for the Task run.
 - [ ] Show integration status without creating another Runner state machine.
-- [ ] Show `waiting_target_clean` when user has uncommitted target changes.
+- [ ] Show `waiting_target_clean` for dirty target workspace and `waiting_target_workspace` when target is checked out in an unmanaged worktree.
 - [ ] Expose conflict/recovery details without forcing the user to understand Git internals for normal success paths.
 
 ### Phase H — local-only / publish
@@ -1479,7 +1634,7 @@ T-002 then repeats against the latest committed target.
 
 ---
 
-## 25. Test TODO
+## 27. Test TODO
 
 ### Worktree isolation
 
@@ -1487,6 +1642,8 @@ T-002 then repeats against the latest committed target.
 - [ ] Confirm every Runner receives a unique worktree path.
 - [ ] Confirm no Task edits another Task worktree.
 - [ ] Confirm original checkout dirty files never appear in Task worktrees unless committed.
+- [ ] Complete a Runner run with only uncommitted file changes; confirm snapshot commit captures them before integration.
+- [ ] Reset/Rerun the same Task while an older Isolated Worktree result is retained; confirm run-specific branch/path names do not collide.
 
 ### Integration ordering
 
@@ -1496,14 +1653,17 @@ T-002 then repeats against the latest committed target.
 - [ ] Retry manually and confirm retry-session budget resets while lifetime merge failure count is preserved.
 - [ ] Exhaust Main merge retries and confirm the Task automatically retains its worktree/branch, remains mode=Main, target branch is untouched, and UI shows `Closed · Awaiting merge`.
 - [ ] Finish Tasks out of creation order.
-- [ ] Confirm Integration Queue serializes them safely.
-- [ ] Confirm later Tasks replay against the latest integrated target state.
+- [ ] Confirm one repository-wide Integration Queue serializes them safely even when Tasks target different branches in the same repository.
+- [ ] Confirm later Tasks build candidates against the latest integrated target state without mutating original completed Task worktrees.
 - [ ] Confirm each Project-Branch Task creates one squash commit on target.
 
 ### Dirty target
 
 - [ ] Make uncommitted user edits before Task start; Task must use committed HEAD only.
 - [ ] Make target dirty before Task integration; squash must not run.
+- [ ] Switch the Project root to another branch after Task start; confirm the system does not switch it back automatically and uses a managed delivery worktree when safe.
+- [ ] Check out target_branch in an unmanaged worktree; confirm delivery becomes `waiting_target_workspace`.
+- [ ] Add a new target commit while candidate validation is running; confirm the candidate is rebuilt against the new HEAD and merge-failure count does not increment.
 - [ ] Confirm Task becomes/waits in integration pending state.
 - [ ] Confirm later integrations for the same target do not accumulate behind the dirty target into one squash commit.
 - [ ] Clean/commit user changes and confirm queued integration resumes safely.
@@ -1520,13 +1680,13 @@ T-002 then repeats against the latest committed target.
 - [ ] Confirm failed recovery does not destroy the original Task worktree.
 - [ ] Confirm retry can eventually produce one valid squash commit.
 
-### Restart / unattended behavior
+### Restart / unattended / idempotency
 
 - [ ] Restart UI/backend while Tasks are running.
 - [ ] Restart while integration is queued.
 - [ ] Restart while waiting for target clean.
 - [ ] Restart during conflict recovery.
-- [ ] Recover without duplicate squash commits.
+- [ ] Crash immediately after target `git commit` but before Task state persistence; recover using Task-run identity and do not create a duplicate squash commit.
 - [ ] Recover without deleting unintegrated Agent output.
 
 ### Local-only guarantee
@@ -1538,12 +1698,14 @@ T-002 then repeats against the latest committed target.
 
 ---
 
-## 26. Non-goals for the first implementation
+## 28. Non-goals for the first implementation
 
 - Do not redesign Runner.
 - Do not add a new Workflow Stage for Git integration.
 - Do not add a second retry/recovery engine inside Runner.
 - Do not let browser frontend execute Git directly.
+- Do not rebase/mutate the original completed Task worktree as part of integration.
+- Do not automatically switch the user's Project checkout branch.
 - Do not auto-stash or overwrite user dirty target files.
 - Do not push every Task to remote.
 - Do not create multiple competing canonical integration branches.
@@ -1552,7 +1714,7 @@ T-002 then repeats against the latest committed target.
 
 ---
 
-## 27. Design invariant summary
+## 29. Design invariant summary
 
 ```text
 Task modes:
@@ -1567,7 +1729,7 @@ Auto:
   persist effective Main or Isolated Worktree behavior
 
 Main:
-  Task → local/integration
+  Task-run snapshot → temporary candidate → local/integration
   → captured target_branch merge --squash
   → one local commit
   → local/integration reset to target HEAD
