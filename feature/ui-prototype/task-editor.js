@@ -644,9 +644,11 @@ let chatQueueSequence=0;
 function ensureChatQueue(session=activeChat()){if(!session)return[];if(!Array.isArray(session.queue))session.queue=[];return session.queue}
 function chatTurnState(session=activeChat()){if(!session)return 'idle';if(!session.turnState)session.turnState='idle';return session.turnState}
 function renderChatTurnStatus(session=activeChat()){
-  const el=document.getElementById('composerTurnStatus');if(!el||!session||activeChat()!==session)return;
-  const state=chatTurnState(session);el.hidden=state==='idle';
-  el.textContent=state==='waiting_ask'?uiText('chat.turnWaiting'):uiText('chat.turnRunning');
+  const el=document.getElementById('composerTurnStatus'),input=document.getElementById('chatInput'),send=document.getElementById('chatSend');if(!el||!session||activeChat()!==session)return;
+  const state=chatTurnState(session),waitingAsk=state==='waiting_ask';el.hidden=state==='idle';
+  el.textContent=waitingAsk?uiText('chat.turnWaiting'):uiText('chat.turnRunning');
+  if(input)input.placeholder=waitingAsk?uiText('chat.askComposerPlaceholder'):uiText('chat.inputPlaceholder');
+  if(send)send.textContent=waitingAsk?uiText('chat.askSubmit'):uiText('chat.send');
 }
 function renderChatQueue(session=activeChat()){
   const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
