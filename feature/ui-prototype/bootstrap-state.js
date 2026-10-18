@@ -30,14 +30,17 @@
   root.dataset.appearance=resolvedAppearance;
   root.lang=interfaceSettings.language;
 
+  const startedAt=performance.now();
   let finished=false;
   function finish(){
     if(finished)return;finished=true;
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const reveal=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
       root.classList.add('ui-ready');
       root.classList.remove('ui-booting');
       document.getElementById('appBootstrapLoader')?.setAttribute('aria-hidden','true');
     }));
+    const remaining=Math.max(0,120-(performance.now()-startedAt));
+    remaining?window.setTimeout(reveal,remaining):reveal();
   }
 
   window.UiBootstrap=Object.freeze({
