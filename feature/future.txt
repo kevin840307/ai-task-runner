@@ -64,8 +64,8 @@ Task-level choices remain:
 - Isolated Worktree
 
 Execution invariant:
-- Every Task run executes in its own isolated Git worktree/local Task branch.
-- Runner receives only project_root and remains unaware of Git merge orchestration.
+- Current UI/Task orchestration prepares every Task run in its own isolated Git worktree/local Task branch before triggering Runner.
+- Standalone/CLI Runner remains workspace-independent: caller supplies project_root directly; Runner receives only project_root and remains unaware of Git merge orchestration.
 - Project branch is canonical truth.
 - Main means Runner result must be merged back into captured Project branch before Task is complete.
 
@@ -102,9 +102,9 @@ Auto policy × Concurrent Main:
 effective Main:
 - Runner Complete does not close the Task; Main no_changes is the only normal exception that can close without a Project merge.
 - Commit remaining Task changes to its local Task branch and persist the current merge source.
-- Allocate durable FIFO merge_queue_seq per repository + target branch; restart preserves order.
+- Allocate durable FIFO merge_queue_seq per repository + target branch; restart preserves order, and the queue head keeps its turn during conflict Runner recovery while short Git locks are released.
 - Before direct merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit; otherwise use `git merge --no-ff --no-commit <merge_source_branch>`.
-- Before merge commit, configured merge validation returns PASS / SOURCE_FAIL / TECHNICAL_ERROR.
+- Before merge commit, verdict-only/source-non-mutating merge validation returns PASS / SOURCE_FAIL / TECHNICAL_ERROR; source repair happens only through Runner recovery in a separate workspace.
 - PASS => git commit => Closed / merged.
 - Git conflict or SOURCE_FAIL => abort merge, merge_failure_count += 1, read Global merge_failure_limit.
 - TECHNICAL_ERROR => abort merge without incrementing merge_failure_count; reuse existing technical retry/backoff / Needs Attention.
@@ -112,7 +112,7 @@ effective Main:
 - Above limit => retain the latest current merge source branch/worktree and close as Isolated Worktree / worktree_ready with merge_failure_limit_exceeded.
 
 effective Isolated Worktree:
-- Runner Complete => commit/snapshot result locally.
+- Runner Complete => ownership preflight (registered worktree, expected repo/Task branch, no active Git operation) then commit/snapshot result locally.
 - Preserve branch/worktree and Close · worktree_ready.
 - No automatic Project-branch merge.
 
@@ -120,6 +120,7 @@ Safety:
 - Do not auto-switch user's Project checkout branch.
 - Dirty target merge workspace => waiting_target_clean; do not auto-stash/reset/stage/commit user changes.
 - Target in unmanaged/user worktree => waiting_target_workspace.
+- Captured target branch missing/renamed or rewritten with no valid common ancestry => waiting_target_branch / Needs Attention; never guess/recreate/retarget.
 - Remote push remains separate explicit Publish action.
 - Detailed source of truth: feature/git-worktree-todo.md.
 
