@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - script import compatibility
 
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 4
+STATE_VERSION = 5
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
@@ -369,13 +369,13 @@ class ChatService:
                 "request_status": "queued",
             }
 
-    def recover_processing(self, project: Path, session_id: str) -> None:
+    def recover_dispatching(self, project: Path, session_id: str) -> None:
         with self._lock:
             state = self._load(project)
             session = self._require_session(state, session_id)
             changed = False
             for item in session["queue"]:
-                if item["status"] != "processing":
+                if item["status"] != "dispatching":
                     continue
                 item["status"] = "queued"
                 request = state["turn_requests"].get(item["request_id"])
@@ -392,10 +392,10 @@ class ChatService:
             for item in session["queue"]:
                 if item["status"] != "queued":
                     continue
-                item["status"] = "processing"
+                item["status"] = "dispatching"
                 request = state["turn_requests"].get(item["request_id"])
                 if request is not None:
-                    request["status"] = "processing"
+                    request["status"] = "dispatching"
                 self._write(project, state)
                 return dict(item)
             return None
@@ -406,9 +406,9 @@ class ChatService:
         session_id: str,
         queue_id: str,
         *,
-        outcome: str = "done",
+        outcome: str = "completed",
     ) -> None:
-        if outcome not in {"done", "failed", "cancelled"}:
+        if outcome not in {"completed", "failed", "cancelled"}:
             raise ValueError("Invalid Chat Queue outcome")
         with self._lock:
             state = self._load(project)
@@ -476,11 +476,13 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
-        legacy_v1 = state.get("version") == 1
-        legacy_before_reasoning = state.get("version") in {1, 2}
-        legacy_before_ask = state.get("version") in {1, 2, 3}
+        source_version = int(state.get("version"))
+        legacy_v1 = source_version == 1
+        legacy_before_reasoning = source_version in {1, 2}
+        legacy_before_ask = source_version in {1, 2, 3}
+        legacy_queue_status = source_version <= 4
         sessions = state.get("sessions")
         create_requests = state.get("create_requests")
         turn_requests = {} if legacy_v1 else state.get("turn_requests", {})
@@ -511,12 +513,14 @@ class ChatService:
                 request_id = str(item.get("request_id") or "")
                 content = str(item.get("content") or "")
                 status = str(item.get("status") or "")
+                if legacy_queue_status and status == "processing":
+                    status = "dispatching"
                 if (
                     not _QUEUE_ID.fullmatch(queue_id)
                     or queue_id in queue_seen
                     or not request_id.strip()
                     or not content.strip()
-                    or status not in {"queued", "processing"}
+                    or status not in {"queued", "dispatching"}
                 ):
                     raise ValueError("Chat state contains an invalid Queue item")
                 queue_seen.add(queue_id)
@@ -552,11 +556,13 @@ class ChatService:
             session_id = str(value.get("session_id") or "")
             queue_id = str(value.get("queue_id") or "")
             status = str(value.get("status") or "")
+            if legacy_queue_status:
+                status = {"processing": "dispatching", "done": "completed"}.get(status, status)
             if (
                 str(request_id).strip()
                 and session_id in seen
                 and _QUEUE_ID.fullmatch(queue_id)
-                and status in {"queued", "processing", "done", "failed", "cancelled"}
+                and status in {"queued", "dispatching", "completed", "failed", "cancelled"}
             ):
                 normalized_turn_requests[str(request_id)] = {
                     "session_id": session_id,
@@ -716,7 +722,7 @@ class ChatService:
         for key in list(requests):
             if len(requests) <= TURN_REQUEST_LIMIT:
                 break
-            if requests[key]["status"] in {"done", "failed", "cancelled"}:
+            if requests[key]["status"] in {"completed", "failed", "cancelled"}:
                 del requests[key]
 
 
@@ -754,7 +760,7 @@ class ChatService:
                 for row in session["queue"]
                 if row["status"] == "queued"
             ],
-            "processing": next(
+            "dispatching": next(
                 (
                     {
                         "queue_id": row["queue_id"],
@@ -763,7 +769,7 @@ class ChatService:
                         "status": row["status"],
                     }
                     for row in session["queue"]
-                    if row["status"] == "processing"
+                    if row["status"] == "dispatching"
                 ),
                 None,
             ),
