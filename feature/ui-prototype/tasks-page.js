@@ -213,7 +213,7 @@ document.getElementById('confirmTaskResetToNew').onclick=()=>{
   pendingResetToNewTaskId=null;closeModal('taskResetToNewModal');
   if(!t||!['paused','closed'].includes(t.status))return;
   const wasClosed=t.status==='closed';resetTaskToNew(t);
-  if(fromInfo){document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(t.id)}
+  if(fromInfo)openTaskById(t.id)
   showToast(wasClosed?'Task moved to New · previous run preserved':'Task moved to New · execution reset from start');
 };
 
