@@ -755,7 +755,7 @@ let batchRunTimer=null;
 let batchState={status:'idle',index:0,recovered:false};
 let batchParentTaskId=null;
 let pickerTarget=null;
-const nativeFilePicker=document.getElementById('nativeFilePicker');
+const taskFileUploadPicker=document.getElementById('taskFileUploadPicker');
 const stagedUploadFiles=new Map(),mockManagedFileCopies=new Map();
 let stagedUploadSequence=0;
 function cloneUploadMeta(value={}){
@@ -800,12 +800,12 @@ function rerenderPickerTarget(){
 }
 function openFileUploadPicker(index,field,kind='file',context='batch'){
   pickerTarget=context==='task'?{context:'task',field,kind}:context==='plan'?{context:'plan',index,field,kind}:{context:'batch',index,field,kind};
-  if(!nativeFilePicker){showToast('File upload picker is unavailable');return}
-  nativeFilePicker.accept=kind==='validator'?'.py,.pyw,*/*':'';
-  nativeFilePicker.value='';nativeFilePicker.click();
+  if(!taskFileUploadPicker){showToast('File upload picker is unavailable');return}
+  taskFileUploadPicker.accept=kind==='validator'?'.py,.pyw,*/*':'';
+  taskFileUploadPicker.value='';taskFileUploadPicker.click();
 }
-nativeFilePicker?.addEventListener('change',()=>{
-  const file=nativeFilePicker.files?.[0],target=pickerTargetSource();if(!file||!target||!pickerTarget)return;
+taskFileUploadPicker?.addEventListener('change',()=>{
+  const file=taskFileUploadPicker.files?.[0],target=pickerTargetSource();if(!file||!target||!pickerTarget)return;
   clearStagedUpload(target,pickerTarget.field);
   const token=`U${++stagedUploadSequence}`;
   stagedUploadFiles.set(token,file);
@@ -870,17 +870,17 @@ function assetOptions(value){
   return PROMPT_ASSETS.map(x=>`<option value="${escapeAttr(x)}" ${value===x?'selected':''}>${escapeHtml(x)}</option>`).join('');
 }
 function goalSourceBody(x,i){
-  if(x.goalMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="goalFile" data-pick-kind="goal">Choose</button></div><div class="source-note">Runner contract：使用 <strong>goal_file</strong>。可直接貼絕對/相對路徑，正式版由後端驗證檔案是否存在。</div>`;
+  if(x.goalMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="goalFile" value="${escapeAttr(x.goalFile||'')}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="goalFile" data-pick-kind="goal">Upload file</button></div><div class="source-note">Runner contract：使用 <strong>goal_file</strong>。可直接貼絕對/相對路徑，正式版由後端驗證檔案是否存在。</div>`;
   if(x.goalMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="goalAsset">${assetOptions(x.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選擇既有 Prompt asset；執行時解析成檔案路徑，再走 <strong>goal_file</strong>。</div>`;
   return `<textarea data-item="${i}" data-field="prompt" placeholder="輸入本次 Task Prompt">${escapeHtml(x.prompt||'')}</textarea><div class="source-note">Inline 會先存成受管檔案：<strong>${escapeHtml(managedDraftPath(x,i,'goal'))}</strong><br>Runner 最後仍讀 <strong>goal_file</strong>，不另外發明 inline runtime path。</div>`;
 }
 function validatorSourceBody(x,i){
-  if(x.validatorMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose file</button></div><div class="source-note">File Validator 使用既有 <strong>validator</strong> 欄位。</div>`;
+  if(x.validatorMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Upload file</button></div><div class="source-note">File Validator 使用既有 <strong>validator</strong> 欄位。</div>`;
   if(x.validatorMode==='ai')return `<div class="source-note">使用 <strong>validator: ai</strong>；AI 驗證 Stage 仍由選定 Workflow 決定。</div>`;
   return `<div class="source-note">不額外指定 run-level validator；因為已有明確 <strong>workflow_file</strong>，是否有 File / AI Validator 由 Workflow 本身決定。</div>`;
 }
 function aiSourceBody(x,i){
-  if(x.aiMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="aiFile" data-pick-kind="ai">Choose</button></div><div class="source-note">Runner contract：<strong>ai_validator_prompt_file</strong>。</div>`;
+  if(x.aiMode==='file')return `<div class="pathrow"><input data-item="${i}" data-field="aiFile" value="${escapeAttr(x.aiFile||'')}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="aiFile" data-pick-kind="ai">Upload file</button></div><div class="source-note">Runner contract：<strong>ai_validator_prompt_file</strong>。</div>`;
   if(x.aiMode==='asset')return `<div class="pathrow"><select data-item="${i}" data-field="aiAsset">${assetOptions(x.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts="1">Open Prompts</button></div><div class="source-note">選現有 Prompt asset，解析成 <strong>ai_validator_prompt_file</strong>。</div>`;
   if(x.aiMode==='inline')return `<textarea data-item="${i}" data-field="aiPrompt" placeholder="AI Validator instructions">${escapeHtml(x.aiPrompt||'')}</textarea><div class="source-note">Inline 先存成：<strong>${escapeHtml(managedDraftPath(x,i,'ai'))}</strong>，再用 <strong>ai_validator_prompt_file</strong>。</div>`;
   return `<div class="source-note">Default：不覆寫 AI Validator Prompt，沿用 Workflow / Runner 既有預設。</div>`;
@@ -1139,12 +1139,12 @@ let newTaskDraft={
   validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',_uploads:{}
 };
 function taskGoalBody(){
-  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose</button></div><div class="source-note">執行時使用既有 <strong>goal_file</strong>。</div>`;
+  if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Upload file</button></div><div class="source-note">執行時使用既有 <strong>goal_file</strong>。</div>`;
   if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div><div class="source-note">Prompt Asset 解析成檔案路徑後交給 Runner。</div>`;
   return `<textarea id="taskPromptInline" placeholder="輸入 Task Prompt">${escapeHtml(newTaskDraft.prompt)}</textarea><div class="source-note">Write 模式會存成受管 draft，再以 <strong>goal_file</strong> 執行。</div>`;
 }
 function taskAiBody(){
-  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" id="taskPickAi">Choose</button></div>`;
+  if(newTaskDraft.aiMode==='file')return `<div class="pathrow"><input id="taskAiFile" value="${escapeAttr(newTaskDraft.aiFile)}" placeholder="AI validator prompt path"><button class="mini-btn" type="button" id="taskPickAi">Upload file</button></div>`;
   if(newTaskDraft.aiMode==='asset')return `<div class="pathrow"><select id="taskAiAsset">${assetOptions(newTaskDraft.aiAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
   if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="AI Validator instructions">${escapeHtml(newTaskDraft.aiPrompt)}</textarea><div class="source-note">Write 模式同樣會先存受管 draft，再交給既有 <strong>ai_validator_prompt_file</strong>。</div>`;
   return '<div class="source-note">Default：沿用 Workflow / Runner 的 AI Validator Prompt。</div>';
@@ -1207,7 +1207,7 @@ function renderNewTaskSources(){
   document.getElementById('newTaskWorkflowCaps').innerHTML=workflowCapsHtml(workflow);
   document.getElementById('newTaskPromptSource').innerHTML=`<div class="source-card task-source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']],'data-task-goal-mode')}</div><div class="source-body">${taskGoalBody()}</div></div>`;
   const fields=[];
-  if(caps.file)fields.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Choose file</button></div></div></div>`);
+  if(caps.file)fields.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div></div></div>`);
   if(caps.ai)fields.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']],'data-task-ai-mode')}</div><div class="source-body">${taskAiBody()}</div></div>`);
   document.getElementById('newTaskValidationSource').innerHTML=fields.length?`<div class="validation-grid ${fields.length===1?'one':''}">${fields.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>';
   document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources()});
@@ -1262,7 +1262,7 @@ function renderBatchDraft(){
   }else{
     form.innerHTML=batchDraft.map((x,i)=>{
       const caps=workflowCaps(x.workflow),validation=[];
-      if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Choose file</button></div></div></div>`);
+      if(caps.file)validation.push(`<div class="source-card"><div class="source-head"><div><strong>File Validator</strong><small>validator</small></div><span class="cap-chip">Required</span></div><div class="source-body"><div class="pathrow"><input data-item="${i}" data-field="validator" value="${escapeAttr(x.validator||'')}" placeholder="Python validator path"><button class="mini-btn" type="button" data-pick-index="${i}" data-pick-field="validator" data-pick-kind="validator">Upload file</button></div></div></div>`);
       if(caps.ai)validation.push(`<div class="source-card"><div class="source-head"><div><strong>AI Validator Prompt</strong><small>ai_validator_prompt_file</small></div>${yamlSourceTabs(i,'aiMode',x.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(aiSourceBody(x,i),i)}</div></div>`);
       return `<div class="request" data-req="${i}"><div class="reqhead"><span class="reqnum">${i+1}</span><strong>${escapeHtml(itemTitle(x,i))}</strong><div class="req-actions"><button data-moveup="${i}" title="Move up">↑</button><button data-movedown="${i}" title="Move down">↓</button><button data-remove="${i}" title="Remove">×</button></div></div><div class="request-body"><div class="workflow-row"><div class="field"><label>Project root</label><input data-item="${i}" data-field="project" value="${escapeAttr(x.project)}"></div><div class="field"><label>Workflow</label><select data-item="${i}" data-field="workflow"><option ${x.workflow==='ralphy_ai_validate.yaml'?'selected':''}>ralphy_ai_validate.yaml</option><option ${x.workflow==='mixed.yaml'?'selected':''}>mixed.yaml</option><option ${x.workflow==='file.yaml'?'selected':''}>file.yaml</option><option ${x.workflow==='dynamic_handoff.yaml'?'selected':''}>dynamic_handoff.yaml</option></select></div></div><div class="workflow-caps">${workflowCapsHtml(x.workflow)}</div><div class="source-card"><div class="source-head"><div><strong>Task Prompt</strong><small>goal_file</small></div>${yamlSourceTabs(i,'goalMode',x.goalMode,[['inline','Write'],['file','File'],['asset','Asset']])}</div><div class="source-body">${planizeSourceHtml(goalSourceBody(x,i),i)}</div></div>${validation.length?`<div class="validation-grid ${validation.length===1?'one':''}">${validation.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>'}</div></div>`;
     }).join('')+'<button class="addreq" id="addRequest">+ Add RunRequest</button>';
