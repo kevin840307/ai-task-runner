@@ -12,21 +12,25 @@ function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearT
 const AUTO_WORKSPACE_POLICY_KEY='ai-task-runner.prototype.autoWorkspacePolicy';
 const INTERFACE_SETTINGS_KEY='ai-task-runner.prototype.interfaceSettings';
 const AUTO_WORKSPACE_POLICIES=new Set(['busy_worktree','main_only','always_worktree']);
-const THEMES=new Set(['system','light','dark']);
-const LANGUAGES=new Set(['zh-Hant','en']);
+const THEME_PALETTES=new Set(['teal','blue','violet','amber','rose']);
+const APPEARANCES=new Set(['system','light','dark']);
+const LANGUAGES=new Set(['zh-TW','en']);
 function loadAutoWorkspacePolicy(){
   try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
   return 'busy_worktree';
 }
 function loadInterfaceSettings(){
-  try{const raw=JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY)||'{}');return {theme:THEMES.has(raw.theme)?raw.theme:'system',language:LANGUAGES.has(raw.language)?raw.language:'zh-Hant'}}catch(_){return {theme:'system',language:'zh-Hant'}}
+  try{
+    const raw=JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY)||'{}'),legacyAppearance=APPEARANCES.has(raw.theme)?raw.theme:null;
+    return {theme:THEME_PALETTES.has(raw.theme)?raw.theme:'teal',appearance:APPEARANCES.has(raw.appearance)?raw.appearance:(legacyAppearance||'system'),language:LANGUAGES.has(raw.language)?raw.language:(raw.language==='zh-Hant'?'zh-TW':'zh-TW')};
+  }catch(_){return {theme:'teal',appearance:'system',language:'zh-TW'}}
 }
 const globalExecutionSettings={autoWorkspacePolicy:loadAutoWorkspacePolicy()};
 const globalInterfaceSettings=loadInterfaceSettings();
 function saveAutoWorkspacePolicy(){try{localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
 function saveInterfaceSettings(){try{localStorage.setItem(INTERFACE_SETTINGS_KEY,JSON.stringify(globalInterfaceSettings))}catch(_){}}
-function resolvedTheme(){return globalInterfaceSettings.theme==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):globalInterfaceSettings.theme}
-function applyInterfaceSettings(){document.documentElement.dataset.theme=resolvedTheme();document.documentElement.lang=globalInterfaceSettings.language}
+function resolvedAppearance(){return globalInterfaceSettings.appearance==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):globalInterfaceSettings.appearance}
+function applyInterfaceSettings(){document.documentElement.dataset.theme=globalInterfaceSettings.theme;document.documentElement.dataset.appearancePreference=globalInterfaceSettings.appearance;document.documentElement.dataset.appearance=resolvedAppearance();document.documentElement.lang=globalInterfaceSettings.language}
 applyInterfaceSettings();
 function autoWorkspaceKind(busy){
   if(globalExecutionSettings.autoWorkspacePolicy==='always_worktree')return 'worktree';
@@ -320,9 +324,10 @@ function renderGlobalExecutionSettings(){
   }
 }
 function renderGlobalInterfaceSettings(){
-  const theme=document.getElementById('globalTheme'),language=document.getElementById('globalLanguage'),preview=document.getElementById('interfaceSettingsPreview');
-  if(theme)theme.value=globalInterfaceSettings.theme;if(language)language.value=globalInterfaceSettings.language;
-  if(preview)preview.innerHTML=`<strong>Theme</strong> · ${globalInterfaceSettings.theme==='system'?`System → ${resolvedTheme()}`:globalInterfaceSettings.theme}<br><strong>Language</strong> · ${globalInterfaceSettings.language==='zh-Hant'?'繁體中文':'English'}`;
+  const appearance=document.getElementById('globalAppearance'),language=document.getElementById('globalLanguage'),preview=document.getElementById('interfaceSettingsPreview');
+  if(appearance)appearance.value=globalInterfaceSettings.appearance;if(language)language.value=globalInterfaceSettings.language;
+  document.querySelectorAll('[data-prototype-theme]').forEach(button=>{const active=button.dataset.prototypeTheme===globalInterfaceSettings.theme;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
+  if(preview)preview.innerHTML=`<strong>Appearance</strong> · ${globalInterfaceSettings.appearance==='system'?`System → ${resolvedAppearance()}`:globalInterfaceSettings.appearance}<br><strong>Theme</strong> · ${globalInterfaceSettings.theme}<br><strong>Language</strong> · ${globalInterfaceSettings.language==='zh-TW'?'繁體中文':'English'}`;
 }
 function showGlobalSettingsTab(name='execution'){
   document.querySelectorAll('[data-settings-tab]').forEach(b=>b.classList.toggle('active',b.dataset.settingsTab===name));
@@ -336,13 +341,16 @@ document.getElementById('autoWorkspacePolicy')?.addEventListener('change',e=>{
   if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
   showToast('Auto workspace policy updated');
 });
-document.getElementById('globalTheme')?.addEventListener('change',e=>{
-  globalInterfaceSettings.theme=THEMES.has(e.target.value)?e.target.value:'system';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Theme updated');
+document.getElementById('globalAppearance')?.addEventListener('change',e=>{
+  globalInterfaceSettings.appearance=APPEARANCES.has(e.target.value)?e.target.value:'system';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Appearance updated');
 });
+document.querySelectorAll('[data-prototype-theme]').forEach(button=>button.addEventListener('click',()=>{
+  globalInterfaceSettings.theme=THEME_PALETTES.has(button.dataset.prototypeTheme)?button.dataset.prototypeTheme:'teal';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast(`Theme · ${globalInterfaceSettings.theme}`);
+}));
 document.getElementById('globalLanguage')?.addEventListener('change',e=>{
-  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-Hant';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Language preference updated');
+  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast('Language preference updated');
 });
-window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.theme==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.appearance==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 document.getElementById('newTask').addEventListener('click',()=>{
   document.getElementById('newTaskTitle').value='New Task';
