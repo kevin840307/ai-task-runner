@@ -25,7 +25,7 @@ const UI_TEXT={
     'chat.inputPlaceholder':'傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command',
     'chat.settingsTitle':'Chat 執行設定','chat.modeTitle':'權限 / 核准模式','chat.mode':'Mode',
     'chat.newTask':'+ 新增 Task','chat.newTaskTitle':'在目前 Project 建立 Task 或 Task List',
-    'chat.askMock':'Ask 模擬','chat.askMockTitle':'強制觸發 AI 反問流程','chat.send':'傳送',
+    'chat.send':'傳送',
     'chat.runnerPrompts':'Runner prompts','chat.agentCommands':'{agent} · Skills / Commands',
     'chat.runnerHint':'@ = AI Task Runner','chat.agentHint':'/ = 已選 Agent · MOCK {agent}',
     'chat.queueSave':'儲存','chat.queueCancel':'取消','chat.queueEdit':'編輯','chat.queueDelete':'刪除',
@@ -79,7 +79,7 @@ const UI_TEXT={
     'chat.inputPlaceholder':'Message AI…  @ = Runner command · / = Agent Skill / Command',
     'chat.settingsTitle':'Chat run settings','chat.modeTitle':'Permission / approval mode','chat.mode':'Mode',
     'chat.newTask':'+ New Task','chat.newTaskTitle':'Create a Task or Task List for this Project',
-    'chat.askMock':'Ask mock','chat.askMockTitle':'Force a mock AI clarification flow','chat.send':'Send',
+    'chat.send':'Send',
     'chat.runnerPrompts':'Runner prompts','chat.agentCommands':'{agent} · Skills / Commands',
     'chat.runnerHint':'@ = AI Task Runner','chat.agentHint':'/ = selected Agent · MOCK {agent}',
     'chat.queueSave':'Save','chat.queueCancel':'Cancel','chat.queueEdit':'Edit','chat.queueDelete':'Delete',
@@ -917,7 +917,7 @@ function bindBatchForm(){
   document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];renderBatchDraft()});
   document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];renderBatchDraft()});
 }
-function openPathPicker(index,field,kind,context='batch'){openNativeFilePicker(index,field,kind,context)}
+
 function parseSimpleYamlList(source){
   const lines=String(source||'').split(/\r?\n/),items=[];let current=null;
   for(const raw of lines){
