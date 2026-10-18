@@ -778,25 +778,24 @@ def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
 
     server = UIServer(repo, "127.0.0.1", 0)
     session_id = server.state.chat_service.sessions(project)["active_session_id"]
-    created = server.state.chat_service.create_ask(
-        project,
-        session_id,
-        request_id="http-turn-1",
-        turn_id="turn-http-1",
-        questions=[{
-            "question_id": "confirm",
-            "header": "Confirm",
-            "prompt": "Continue?",
-            "kind": "choice",
-            "options": ["yes", "no"],
-        }],
-    )
-    ask_id = created["ask"]["ask_id"]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.port}"
     project_query = urllib.parse.quote(str(project))
     try:
+        created = _json_request(
+            f"{base}/api/chat/ask/demo",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "request_id": "http-turn-1",
+            },
+        )
+        ask_id = created["ask"]["ask_id"]
+        assert len(created["ask"]["questions"]) == 2
+        assert created["ask"]["questions"][0]["kind"] == "choice"
+
         pending = _json_request(
             f"{base}/api/chat/ask?project={project_query}&session_id={session_id}"
         )
