@@ -66,9 +66,9 @@ function restoreTaskInfoShell(t){
   taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
 }
-function closeTaskDrawerShell({force=false,restoreFocus=true}={}){
-  if(!force&&!(typeof newTaskListDraft!=='undefined'&&newTaskListDraft)&&taskEditorReturnContext&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
-    requestDiscardTaskEditorChanges(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
+function closeTaskDrawerShell({force=false,restoreFocus=true,skipEditorGuard=false}={}){
+  if(!force&&!skipEditorGuard&&taskEditorReturnContext&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
+    requestDiscardTaskEditorChanges(()=>closeTaskDrawerShell({restoreFocus,skipEditorGuard:true}));return;
   }
   if(!force&&typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
     requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
