@@ -43,7 +43,7 @@
       <section class="plan-side-card workspace-help-card"><h3>Quick use</h3><p><strong>Click</strong> selects a task · <strong>Double-click</strong> edits it.</p><p>Drag the grip to reorder. Right-click or <strong>⋯</strong> for Info / Workflow / Remove.</p></section>
     </aside>
   </div>
-  <div class="plan-page-foot" id="planPageFoot"><button class="btn" id="planPageBack" type="button" data-i18n="taskList.back">Back</button></div>
+  <div class="plan-page-foot" id="planPageFoot"><button class="btn" id="planPageInfo" type="button" data-i18n="taskList.backInfo" hidden>Back to Info</button><button class="btn" id="planPageBack" type="button" data-i18n="taskList.back">Back</button></div>
   <div class="plan-subview-mount" id="planSubviewMount" hidden></div>
 </section>`;
 
