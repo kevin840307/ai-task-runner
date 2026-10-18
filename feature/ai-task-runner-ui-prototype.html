@@ -162,10 +162,25 @@
 
 <div class="overlay" id="taskOverlay">
   <aside class="drawer">
-    <div class="drawerhead">
-      <div class="drawerheadtop"><div><span class="pill run" id="drawerRuntime">Running</span></div><h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2><button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button><button class="close" id="closeDrawer">×</button></div>
-      <p>#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
+    <div class="drawerhead" id="taskDrawerHeader">
+      <div class="drawerheadtop">
+        <button class="drawer-back" id="planBackToTask" type="button" title="Back" hidden>←</button>
+        <div id="drawerRuntimeSlot"><span class="pill run" id="drawerRuntime">Running</span></div>
+        <h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2>
+        <button class="plan-title-edit" id="planRenameList" type="button" title="Rename list" hidden>✎</button>
+        <div class="drawer-shell-actions" id="drawerWorkspaceActions" hidden>
+          <button class="btn" id="planOpenWorkflow" type="button" hidden>Open Workflow</button>
+          <button class="btn" id="planAddTask" type="button">+ Add task</button>
+          <button class="btn ghost" id="planAddExisting" type="button">Move existing</button>
+          <button class="btn" id="planEditYaml" type="button">Edit YAML</button>
+        </div>
+        <button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button>
+        <button class="close" id="closeDrawer">×</button>
+      </div>
+      <p id="drawerInfoMeta">#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
+      <p id="drawerRouteMeta" hidden></p>
     </div>
+    <div id="taskListWorkspaceRoot" data-ui-module="TaskListWorkspace"></div>
     <div class="drawer-worktree-banner" id="drawerWorktreeBanner" hidden><strong>WORKTREE</strong><span id="drawerWorktreeBannerDetail">Isolated development · changes are not in Main until merged.</span></div>
     <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
@@ -267,7 +282,6 @@
   </div>
 </div>
 
-<div id="taskListWorkspaceRoot" data-ui-module="TaskListWorkspace"></div>
 
 <div class="project-action-menu" id="projectActionMenu" hidden>
   <button type="button" data-project-action="rename"><span>Rename</span><span>✎</span></button>
