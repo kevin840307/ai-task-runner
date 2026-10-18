@@ -141,3 +141,101 @@ def test_project_preferences_http_api_persists_per_project(tmp_path: Path) -> No
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+def test_new_project_copies_global_defaults_once_via_http_api(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project_a = repo / "existing"
+    project_b = repo / "new-project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    project_a.mkdir()
+    project_b.mkdir()
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    try:
+        _request_json(
+            f"{base}/api/projects/add",
+            method="POST",
+            body={"path": str(project_a)},
+        )
+        server.state.project_preferences.update(
+            project_a,
+            {
+                "agent": "qwen",
+                "model": "qwen/existing",
+                "mode": "auto",
+                "reasoning": "medium",
+                "workflow": "existing.yaml",
+            },
+        )
+
+        _request_json(
+            f"{base}/api/settings",
+            method="POST",
+            body={
+                "defaults": {
+                    "agent": "opencode",
+                    "model": "openai/gpt-5.2",
+                    "mode": "read",
+                    "reasoning": "high",
+                    "workflow": "new-default.yaml",
+                }
+            },
+        )
+        _request_json(
+            f"{base}/api/projects/add",
+            method="POST",
+            body={"path": str(project_b)},
+        )
+
+        old_project = _request_json(
+            f"{base}/api/project/preferences?project={urllib.parse.quote(str(project_a))}"
+        )
+        new_project = _request_json(
+            f"{base}/api/project/preferences?project={urllib.parse.quote(str(project_b))}"
+        )
+        assert (
+            old_project["agent"],
+            old_project["model"],
+            old_project["mode"],
+            old_project["reasoning"],
+            old_project["workflow"],
+        ) == ("qwen", "qwen/existing", "auto", "medium", "existing.yaml")
+        assert (
+            new_project["agent"],
+            new_project["model"],
+            new_project["mode"],
+            new_project["reasoning"],
+            new_project["workflow"],
+        ) == (
+            "opencode",
+            "openai/gpt-5.2",
+            "read",
+            "high",
+            "new-default.yaml",
+        )
+
+        # Later Global Default changes never rewrite either existing Project.
+        _request_json(
+            f"{base}/api/settings",
+            method="POST",
+            body={
+                "defaults": {
+                    "agent": "qwen",
+                    "model": "qwen/new-default",
+                    "mode": "yolo",
+                    "reasoning": "max",
+                    "workflow": "later.yaml",
+                }
+            },
+        )
+        assert server.state.project_preferences.get(project_a)["model"] == "qwen/existing"
+        assert server.state.project_preferences.get(project_b)["model"] == "openai/gpt-5.2"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
