@@ -295,7 +295,16 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] List → Editor / YAML → Back 只切 content route 與 header state，不關閉再重開 Drawer。
 [x] Move existing / Add task 回 List 不再 remove/reopen taskOverlay，避免 Drawer 抽動。
 [x] Header Back handler 由 route shell 重設，避免 Editor / YAML callback 殘留到 List。
+[x] Task List plan-page-body 底部新增固定 Back footer；正式 List 與 Header Back 共用 handleTaskDrawerBack，Draft footer 走同一 discard guard，不建立第二套 navigation。
+[x] Task List Draft 正式 Create 時重新以 final T-xxx-Ix 計算每個 child 的 itemId / Workspace / Worktree branch / executionRoot；preflight 失敗會 rollback Task ID 與 submitting lock。
+[x] Draft create/edit 的 editorItemRef 不再誤讀正式 batchDraft.length；Draft workspace preview 使用自己的 transient item index。
+[x] TaskUi.openList facade 保留 options / returnTarget；Chat Draft 等 caller 不再因 facade 吃掉第二參數而依賴隱含 _chatDraft fallback。
+[x] New Task Cancel、Task List → Chat Back、Open Workflow、Merge Chat、Delete 等 active 路徑改走共用 Drawer close/cleanup；跨頁導航可關閉 focus restore，避免 focus 回隱藏頁。
+[x] Paused / Closed Task 從 Info Reset 回 New 後仍留在 Info Drawer，不再意外跳去 Task List。
+[x] Legacy openTaskListEditor / openFullPlanPage 不再導向不存在的 yaml / plan view；舊 caller redirect 到目前 Task List Drawer。
+[x] Draft reorder 對齊正式 Task List drop 語意；畫面以 drag 為主，Alt+↑/↓ 提供鍵盤 reorder，舊 ↑/↓ row buttons 不顯示。
 [ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
+[ ] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；直接開 List → 底部 Back 關 Drawer；Draft → 底部 Cancel → dirty discard confirmation。
 [ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
 [x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
