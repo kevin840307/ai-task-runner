@@ -1614,7 +1614,7 @@ function renderNewTaskListDraftWorkspace(){
     host.querySelectorAll('[data-draft-row]').forEach(row=>{
       row.ondblclick=()=>loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'});
       row.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();loadTaskEditor('draft-edit-item',{index:+row.dataset.draftRow,returnTarget:'list-draft'})}};
-      row.ondragstart=e=>{dragIndex=+row.dataset.draftRow;row.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.effectAllowed='move'};
+      row.ondragstart=e=>{if(e.target.closest('button')){e.preventDefault();return}dragIndex=+row.dataset.draftRow;row.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.effectAllowed='move'};
       row.ondragover=e=>{e.preventDefault();row.classList.add('drag-over')};
       row.ondragleave=()=>row.classList.remove('drag-over');
       row.ondrop=e=>{e.preventDefault();const to=+row.dataset.draftRow;row.classList.remove('drag-over');if(dragIndex!=null)moveNewTaskListDraftItem(dragIndex,to)};
