@@ -454,8 +454,10 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 /* Task Drawer routes: List / Editor / YAML share the one drawerhead above. */
 #taskListWorkspaceRoot{display:contents}
 #planModal{display:none;min-width:0;min-height:0;height:100%;background:var(--bg)}
-#planModal.open{display:grid;grid-template-rows:minmax(0,1fr)}
+#planModal.open{display:grid;grid-template-rows:minmax(0,1fr) auto}
 #planModal .plan-page-body{min-height:0;height:100%;overflow:hidden}
+#planModal .plan-page-foot{display:flex;justify-content:flex-start;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2)}
+#planModal.subview-open>.plan-page-foot{display:none}
 #planModal .plan-main{min-height:0;overflow:auto}
 #planModal .plan-side{min-height:0;overflow:auto}
 #planModal>.plan-subview-mount{position:relative!important;width:100%!important;height:100%!important;max-height:none!important;overflow:hidden}
