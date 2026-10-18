@@ -15,7 +15,6 @@ from typing import Any
 PREFERENCES_FILE = ".ai-task-runner/ui/project-preferences.json"
 PREFERENCES_VERSION = 1
 VALID_MODES = {"read", "auto", "yolo"}
-VALID_REASONING = {"low", "medium", "high", "xhigh", "max"}
 
 
 class ProjectPreferences:
@@ -56,10 +55,9 @@ class ProjectPreferences:
                     raise ValueError("Mode must be read, auto, or yolo")
                 value["mode"] = mode
             if "reasoning" in patch:
-                reasoning = str(patch["reasoning"] or "").strip().lower()
-                if reasoning not in VALID_REASONING:
-                    raise ValueError("Unsupported reasoning level")
-                value["reasoning"] = reasoning
+                value["reasoning"] = self._text(
+                    patch["reasoning"], "Reasoning", 120
+                )
             if "validators" in patch:
                 value["validators"] = self._string_map(
                     patch["validators"], "Validator", value_limit=4096
@@ -83,9 +81,9 @@ class ProjectPreferences:
         value["model"] = self._text(raw.get("model", ""), "Model", 240)
         value["workflow"] = self._text(raw.get("workflow", ""), "Workflow", 4096)
         mode = str(raw.get("mode", "auto") or "").strip().lower()
-        reasoning = str(raw.get("reasoning", "medium") or "").strip().lower()
-        if mode not in VALID_MODES or reasoning not in VALID_REASONING:
-            raise ValueError("Project preferences contain an unsupported mode or reasoning level")
+        reasoning = self._text(raw.get("reasoning", "medium"), "Reasoning", 120)
+        if mode not in VALID_MODES:
+            raise ValueError("Project preferences contain an unsupported mode")
         value["mode"] = mode
         value["reasoning"] = reasoning
         value["validators"] = self._string_map(raw.get("validators", {}), "Validator", 4096)

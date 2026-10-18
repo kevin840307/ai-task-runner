@@ -19,7 +19,6 @@ THEMES = {"teal", "blue", "violet", "amber", "rose"}
 MOTIONS = {"full", "system", "reduced"}
 LANGUAGES = {"zh-TW", "en"}
 MODES = {"read", "auto", "yolo"}
-REASONING_LEVELS = {"low", "medium", "high", "xhigh", "max"}
 
 
 def default_global_settings() -> dict[str, Any]:
@@ -168,11 +167,9 @@ class GlobalSettingsStore:
         value["language"] = language
 
         mode = str(defaults.get("mode") or "").strip()
-        reasoning = str(defaults.get("reasoning") or "").strip()
+        reasoning = cls._text(defaults.get("reasoning"), "Default Reasoning", 120)
         if mode not in MODES:
             raise ValueError("Invalid default mode")
-        if reasoning not in REASONING_LEVELS:
-            raise ValueError("Invalid default reasoning")
         value["defaults"] = {
             "agent": cls._text(defaults.get("agent"), "Default Agent", 120),
             "model": cls._text(defaults.get("model"), "Default Model", 240),

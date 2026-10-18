@@ -65,6 +65,8 @@ def test_global_settings_validates_and_migrates_preversioned_file(tmp_path: Path
         store.update({"other": True})
     with pytest.raises(ValueError, match="Invalid default mode"):
         store.update({"defaults": {"mode": "magic"}})
+    variant = store.update({"defaults": {"reasoning": "deep"}})
+    assert variant["defaults"]["reasoning"] == "deep"
 
 
 def test_global_settings_rejects_unknown_future_version(tmp_path: Path) -> None:

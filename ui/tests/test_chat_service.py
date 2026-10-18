@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from ui.agent_capability_service import AgentCapabilityService
+from ui.agent_settings_service import AgentSettingsService
 from ui.chat_agent_service import ChatAgentService
 from ui.chat_service import ChatService
 from ui.server import UIServer
@@ -592,3 +593,37 @@ def test_project_chat_delete_is_guarded_while_turn_is_active(tmp_path: Path) -> 
     release.set()
     worker.join(timeout=4)
     assert not worker.is_alive()
+
+
+
+def test_agent_settings_service_preserves_native_reasoning_ids(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    class Completed:
+        returncode = 0
+        stderr = ""
+        stdout = json.dumps({
+            "agent": "opencode",
+            "models": ["openai/gpt-5.2"],
+            "modes": [{
+                "id": "auto", "native": "--auto", "description": "safe",
+                "supported": True, "unsafe": False,
+            }],
+            "reasoning": [{
+                "id": "deep", "label": "Deep",
+                "native": "openai/gpt-5.2#deep",
+                "description": "variant", "default": False,
+            }],
+        })
+
+    monkeypatch.setattr(
+        "ui.agent_settings_service.subprocess.run",
+        lambda *args, **kwargs: Completed(),
+    )
+    service = AgentSettingsService(repo, ttl_seconds=60)
+    value = service.get(project, "opencode", "openai/gpt-5.2")
+    assert value["reasoning"][0]["id"] == "deep"
+    assert value["models"] == ["openai/gpt-5.2"]
+    assert service.get(project, "opencode", "openai/gpt-5.2")["cached"] is True
