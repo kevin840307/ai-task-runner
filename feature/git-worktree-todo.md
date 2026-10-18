@@ -1255,6 +1255,8 @@ Integrated · feature/ui
 
 Do not add Git controls directly to every card.
 
+Do not add a separate top-level “Git Worktree” page. Daily operations stay Task-centric. Project-level Workspace Results may provide the secondary management view for retained/orphaned worktrees, Awaiting Merge items, paths, branches and cleanup.
+
 #### Task Info Drawer
 
 Add an `Integration` section only when the Task uses Git worktree delivery metadata.
@@ -1263,8 +1265,9 @@ Example:
 
 ```text
 Integration
+Requested mode    Auto
+Effective mode    Main
 Target branch     feature/ui
-Delivery          Project Branch
 Task run          T-001-r1
 Task branch       local/task/T-001-r1
 Base              abc123
@@ -1458,6 +1461,19 @@ Avoid speculative Skill complexity in the first implementation.
 
 ---
 
+### Cleanup / retention default
+
+Use a fail-safe retention policy:
+
+- temporary candidate/recovery worktrees: remove after the transaction attempt is durably finalized; stale candidates from a crash may be reconciled on startup;
+- temporary delivery worktrees: remove after target commit is durably recorded;
+- effective Main + `integrated` / `no_changes`: Task-run worktree/branch may be removed after target result is durably recorded and no retry needs it;
+- effective Isolated Worktree + `worktree_ready`: retain until explicit user cleanup/delete;
+- Main + `merge_retry_exhausted`, `failed`, `waiting_target_clean`, or `waiting_target_workspace`: retain Task-run worktree/branch;
+- never delete an unknown/unowned worktree path merely because its directory name resembles a Task ID.
+
+Workspace Manager must verify Git worktree registration + Task/run ownership metadata before destructive cleanup.
+
 ## 24. Failure / recovery principles
 
 - Count a merge failure only after a successful Runner execution/recovery reaches a real integration attempt and delivery still fails for a code/semantic/validation reason.
@@ -1558,7 +1574,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Before Task creation, under a short repository Git lock, synchronize that integration worktree to target branch committed HEAD.
 - [ ] Explicitly exclude uncommitted target working-tree changes from new Task bases.
 - [ ] Return Task worktree path as the existing Runner `project_root`.
-- [ ] Add safe cleanup without deleting unresolved/failed Task output.
+- [ ] Add ownership-verified cleanup: integrated/no_changes Main results may clean Task worktree after durable target commit; Isolated/Awaiting Merge/blocked/failed results must be retained.
 - [ ] Ensure multiple Task worktrees can execute concurrently.
 
 ### Phase C — Snapshot + Integration Queue
@@ -1614,7 +1630,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Isolated Worktree closes as worktree_ready when Runner completes and does not auto-integrate.
 - [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / waiting_target_clean / recovery / integrated / failed / not_required.
 - [ ] Keep Paused reserved for unfinished resumable Runner execution; all post-execution Git delivery states stay under Closed.
-- [ ] Add Integration details to Task Info Drawer (target, delivery, Task branch, base/latest SHA, state, attempt, attention reason).
+- [ ] Add Integration details to Task Info Drawer (requested mode, effective mode, target branch, Task run/branch, base/latest SHA, state, attempt, attention reason).
 - [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
 - [ ] Keep current Workspace choices Auto / Main / Isolated Worktree, while clarifying that every mode executes in an isolated worktree.
 - [ ] Update Global Auto semantics for all-worktree execution: explicit/Always Main must not block merely because another Main Task is running; Integration Queue provides serialization.
@@ -1624,6 +1640,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Show integration status without creating another Runner state machine.
 - [ ] Show `waiting_target_clean` for dirty target workspace and `waiting_target_workspace` when target is checked out in an unmanaged worktree.
 - [ ] Expose conflict/recovery details without forcing the user to understand Git internals for normal success paths.
+- [ ] Do not add a top-level Git Worktree page; reuse Task Info and Project Workspace Results as the normal/secondary surfaces.
 
 ### Phase H — local-only / publish
 
