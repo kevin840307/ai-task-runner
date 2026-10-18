@@ -852,17 +852,17 @@ count within automatic budget?
        ↓
      stop automatic integration recovery
        ↓
-     Paused · Awaiting merge
+     Closed · Awaiting merge
 ```
 
 ### Retry exhaustion state
 
-For `delivery: main`, do **not** move the Task to `Closed` when merge retries are exhausted.
+For `delivery: main`, keep the Task in `Closed` when automatic merge retries are exhausted.
 
 Recommended Board projection:
 
 ```text
-Board:       Paused
+Board:       Closed
 Reason:      Awaiting merge
 Integration: merge_retry_exhausted
 Failures:    4 / max 3
@@ -870,20 +870,20 @@ Failures:    4 / max 3
 
 Rationale:
 
-- the requested Main delivery is not complete
-- automatic progression has intentionally stopped
+- the Runner execution itself is already finished
+- existing product semantics already allow Closed Tasks to have unmerged Worktree results
+- merge/integration is a post-execution delivery state, not a resumable execution pause
 - Task artifacts/worktree must remain available
-- the state is resumable after user action
-- marking Closed would falsely imply the target branch contains the result
+- the UI must show clearly that delivery to the target branch is still pending
 
-This is the one deliberate integration-related exception to the normal rule that `Paused` means user-stopped execution: retry exhaustion means **automation itself has paused and requires user intervention**. The UI must show the reason explicitly so it is not confused with a normal execution pause.
+`Closed` therefore means **execution finished**, not necessarily **merged/integrated into the target branch**.
 
 ### User actions after exhaustion
 
 Recommended actions:
 
 ```text
-Retry merge / Resume
+Retry merge
 Open worktree
 Open conflict details
 Open Task Info
@@ -891,9 +891,9 @@ Keep as Worktree
 Delete (only with explicit confirmation)
 ```
 
-`Retry merge / Resume`:
+`Retry merge`:
 
-- starts a new automatic retry session
+- starts a new automatic merge-retry session
 - resets `merge_retry_attempt = 0`
 - preserves lifetime `merge_failure_count`
 - re-syncs against the latest committed target/integration base
@@ -953,64 +953,65 @@ Git integration is a secondary Task projection shown inside the Task card / Info
 | Task created, Runner not started | New | preparing / not_started |
 | Runner executing | Ongoing | execution_running |
 | Runner Review / Validate | Ongoing | execution_validating |
-| Main delivery: Runner Completed, waiting in Integration Queue | Ongoing | pending |
-| Main delivery: replay/squash transaction running | Ongoing | integrating |
-| Main delivery: conflict is being repaired by Runner | Ongoing | conflict_recovery |
-| Main delivery: target branch dirty | Ongoing | waiting_target_clean + Needs Attention |
-| Main delivery: validation fails and Runner is redoing/fixing | Ongoing | recovery |
+| Main delivery: Runner Completed, waiting in Integration Queue | Closed | pending_merge |
+| Main delivery: replay/squash transaction running | Closed | integrating |
+| Main delivery: conflict is being repaired/reworked by Runner | Closed | conflict_recovery |
+| Main delivery: target branch dirty | Closed | waiting_target_clean + Needs Attention |
+| Main delivery: validation fails and Runner is redoing/fixing | Closed | recovery |
 | Main delivery: squash commit created successfully | Closed | integrated |
 | Worktree delivery: Runner Completed and isolated result is intentionally kept | Closed | worktree_ready / not_required |
-| User explicitly stops a resumable running Task | Paused | integration must not start until execution is completed/resumed |
-| Automatic merge retry budget exhausted | Paused | merge_retry_exhausted · Awaiting merge |
-| Integration irrecoverable for another reason / requires user action | Ongoing | failed / Needs Attention; do not mark Closed |
+| User explicitly stops a resumable running Task before execution completes | Paused | integration must not start until execution is completed/resumed |
+| Automatic merge retry budget exhausted | Closed | merge_retry_exhausted · Awaiting merge |
+| Integration irrecoverable for another reason / requires user action | Closed | failed / Needs Attention |
 
 ### Important completion rule
 
+Board lifecycle and delivery state are separate.
+
+For both `delivery: main` and `delivery: worktree`:
+
+> **Runner execution Completed → Task Closed.**
+
+Then Git delivery continues as a secondary state.
+
 For `delivery: main`:
-
-> **Runner Completed is not Task Closed.**
-
-The Task remains `Ongoing` until the integration transaction successfully creates the target-branch squash commit.
 
 ```text
 Runner Completed
-→ Integration pending/integrating/recovery
-→ target squash commit succeeds
-→ Closed
+→ Closed · pending_merge
+→ Closed · integrating / conflict_recovery / waiting_target_clean / recovery
+→ Closed · integrated
 ```
-
-This prevents a false “Completed/Closed” UI while the requested result has not yet reached the selected Project branch.
 
 For `delivery: worktree`:
 
 ```text
 Runner Completed
-→ worktree result intentionally retained
-→ Closed
+→ Closed · worktree_ready
 ```
 
-because retaining the isolated worktree is the requested delivery result.
+This preserves the existing product meaning that Closed means the Task execution has finished, while merge/integration remains a separate post-execution operation.
 
-### Paused is not a normal integration waiting bucket
+### Paused remains execution-only
 
-Do not use `Paused` for ordinary:
+Do not use `Paused` for Git delivery states.
 
-- waiting in Integration Queue
-- waiting for target branch to become clean
-- Git conflict recovery while automatic retry budget remains
-- automatic integration retry
+`Paused` means the Runner execution itself was stopped before completion and can be resumed/reset.
 
-Those remain `Ongoing` with a secondary integration status.
-
-One explicit exception is allowed:
+After Runner execution completes, the Task is `Closed`; all merge/integration states remain secondary states under Closed:
 
 ```text
-automatic merge retry budget exhausted
-→ Paused
-→ Awaiting merge / merge_retry_exhausted
+Closed · pending_merge
+Closed · integrating
+Closed · conflict_recovery
+Closed · waiting_target_clean
+Closed · recovery
+Closed · merge_retry_exhausted / Awaiting merge
+Closed · integrated
+Closed · worktree_ready
 ```
 
-That exception means automation has intentionally stopped and requires user intervention. The UI must show the reason prominently so it is not confused with a normal user-stopped execution pause.
+This matches the existing product behavior where a Closed Worktree Task may still be waiting for Merge.
 
 ### Suggested UI placement
 
@@ -1019,16 +1020,16 @@ That exception means automation has intentionally stopped and requires user inte
 Keep the normal lifecycle column and add one compact secondary line/badge when relevant:
 
 ```text
-T-001  Ongoing
+T-001  Closed
 Integrating · feature/ui
 
-T-002  Ongoing
+T-002  Closed
 Needs Attention · target has uncommitted changes
 
-T-003  Ongoing
+T-003  Closed
 Conflict recovery · Runner retry 2
 
-T-004  Paused
+T-004  Closed
 Awaiting merge · 4 failures
 
 T-005  Closed
@@ -1088,8 +1089,9 @@ Runner runtime
 idle / running / recovering / stopped / completed / attention / ...
 
 Git integration
-not_started / pending / integrating / conflict_recovery /
-waiting_target_clean / recovery / integrated / failed / not_required
+not_started / pending_merge / integrating / conflict_recovery /
+waiting_target_clean / recovery / merge_retry_exhausted /
+integrated / failed / worktree_ready / not_required
 ```
 
 UI composes these into one readable Task view, but no layer re-derives or replaces another owner's state machine.
@@ -1098,7 +1100,7 @@ UI composes these into one readable Task view, but no layer re-derives or replac
 
 Initial policy:
 
-- While `pending/integrating/conflict_recovery/recovery`: disable destructive Reset/Rerun/Delete that could invalidate the integration transaction.
+- While `pending_merge/integrating/conflict_recovery/recovery`: the Task is Closed but disable destructive Reset/Rerun/Delete that could invalidate the integration transaction.
 - `Open Info`, logs, worktree path, target branch and conflict details remain available.
 - While `waiting_target_clean`: show the blocking reason; execution remains finished and integration waits.
 - After `integrated`: normal Closed actions apply.
@@ -1106,6 +1108,21 @@ Initial policy:
 
 Exact action guards must come from one backend-owned Task projection, not duplicated button logic.
 
+
+---
+
+### Compatibility with existing Closed + Merge behavior
+
+The current product already has Closed Worktree Tasks whose execution is done while the result is still waiting for Merge. Preserve that model.
+
+Therefore this design must not redefine Closed as “already merged”. Instead:
+
+```text
+Closed = execution finished
+Integration status = delivery progress/result
+```
+
+This keeps existing Merge / Merge Chat concepts compatible with the future automatic local integration flow.
 
 ---
 
@@ -1327,13 +1344,13 @@ T-002 then repeats against the latest committed target.
 ### Phase G — UI
 
 - [ ] Show merge failure count and retry budget in Task Info and compactly on the Board when nonzero.
-- [ ] On retry exhaustion, project the Task as `Paused · Awaiting merge` with `merge_retry_exhausted`; do not mark Main delivery Closed.
+- [ ] On retry exhaustion, keep the Task `Closed · Awaiting merge` with `merge_retry_exhausted`; Closed means execution finished, not necessarily merged.
 - [ ] Provide Retry merge / Resume and Keep as Worktree actions after exhaustion; never silently change delivery mode.
 - [ ] Keep Board columns as New / Ongoing / Paused / Closed; do not add an Integration column.
-- [ ] Main-delivery Task stays Ongoing after Runner Completed until target squash commit succeeds; only then move to Closed.
+- [ ] Runner execution Completed moves the Task to Closed immediately; Main delivery then uses Closed secondary states until merge/integration succeeds or needs attention.
 - [ ] Worktree-delivery Task may move to Closed when Runner Completed because the retained worktree is the requested output.
 - [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / waiting_target_clean / recovery / integrated / failed / not_required.
-- [ ] Keep Paused reserved for explicit user-stopped/resumable execution; do not use Paused for Git waiting/recovery.
+- [ ] Keep Paused reserved for unfinished resumable Runner execution; all post-execution Git delivery states stay under Closed.
 - [ ] Add Integration details to Task Info Drawer (target, delivery, Task branch, base/latest SHA, state, attempt, attention reason).
 - [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
 - [ ] Clarify Workspace wording: every mode uses an isolated worktree.
@@ -1366,7 +1383,7 @@ T-002 then repeats against the latest committed target.
 
 - [ ] Verify queue wait / target dirty / lock contention do not increment merge failure counters.
 - [ ] Force repeated Runner-complete → merge-fail cycles and verify each real failed delivery attempt increments exactly once.
-- [ ] Verify retry exhaustion stops automatic Runner recovery and projects `Paused · Awaiting merge`.
+- [ ] Verify retry exhaustion stops automatic Runner recovery and projects `Closed · Awaiting merge`.
 - [ ] Retry manually and confirm retry-session budget resets while lifetime merge failure count is preserved.
 - [ ] Choose Keep as Worktree after exhaustion and confirm target branch is untouched and Task may close as worktree_ready.
 - [ ] Finish Tasks out of creation order.
