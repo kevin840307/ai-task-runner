@@ -20,9 +20,11 @@ function loadAutoWorkspacePolicy(){
   return 'busy_worktree';
 }
 function loadInterfaceSettings(){
+  const boot=window.UiBootstrap?.state?.interfaceSettings;
+  if(boot)return {...boot};
   try{
     const raw=JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY)||'{}'),legacyAppearance=APPEARANCES.has(raw.theme)?raw.theme:null;
-    return {theme:THEME_PALETTES.has(raw.theme)?raw.theme:'teal',appearance:APPEARANCES.has(raw.appearance)?raw.appearance:(legacyAppearance||'system'),language:LANGUAGES.has(raw.language)?raw.language:(raw.language==='zh-Hant'?'zh-TW':'zh-TW')};
+    return {theme:THEME_PALETTES.has(raw.theme)?raw.theme:'teal',appearance:APPEARANCES.has(raw.appearance)?raw.appearance:(legacyAppearance||'system'),language:LANGUAGES.has(raw.language)?raw.language:'zh-TW'};
   }catch(_){return {theme:'teal',appearance:'system',language:'zh-TW'}}
 }
 const globalExecutionSettings={autoWorkspacePolicy:loadAutoWorkspacePolicy()};
@@ -1160,10 +1162,11 @@ function previewSummary(x,i){
 }
 
 renderNewTaskSources();
-let currentProjectKey='ai-task-runner';
+let currentProjectKey=projectMeta[window.UiBootstrap?.state?.currentProjectKey]?window.UiBootstrap.state.currentProjectKey:'ai-task-runner';
 function selectProject(key){
   if(!projectMeta[key])return;
   currentProjectKey=key;
+  try{localStorage.setItem(window.UiBootstrap?.keys?.currentProject||'ai-task-runner.prototype.currentProject',key)}catch(_){};
   const meta=projectMeta[key];
   document.querySelectorAll('.project[data-project]').forEach(x=>x.classList.toggle('active',x.dataset.project===key));
   document.getElementById('projectSwitcherPath').textContent=meta.path;
