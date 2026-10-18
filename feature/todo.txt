@@ -299,6 +299,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Queue / Ask / command suggestions / Chat TaskDraft / Task List Draft 等動態文字改走 uiText，不只靜態 HTML 翻譯。
 [ ] Browser 測試 Light / Dark × Teal / Blue / Violet / Amber / Rose：Chat composer、Ask、Queue、settings popover、Task Draft 不得出現亮白殘留。
 [ ] Browser 測試 zh-TW / en 即時切換：Composer 靜態文案、Queue / Ask / command suggestions / Task Draft / Task List Draft 應同步更新。
+[x] UI review：移除已被 Drawer / inline inspector 取代的 taskInfoModal、dead renderer 與 task-context-info / wide-menu CSS，避免第二套 Info ownership。
+[x] UI review：Task context menu 定位改讀實際 DOM 尺寸，不再使用舊雙欄 menu 的 454px hardcode。
+[x] UI review：edit scope / move note / delete note / status card / board column / pill / YAML parent hint 等 active surfaces 改用 semantic theme tokens，減少 Dark 靠 late override 修補。
+[x] 正式 Task / Task List 建立後保持 items >= 1；只有 transient Task List Draft 允許 0 task。所有 Remove 路徑都不可刪掉最後一個 child。
+[ ] Prototype 仍有多層 function wrapper / reassignment（例如 openTaskById / renderFullPlan）；正式 React/production migration 時應收斂成單一 controller/service owner，不把 monkey-patch 結構帶進正式版。
 [x] YAML 保持同一 Task Workspace Shell 的 subview；長表單不得再開第二個 full-size overlay。
 [ ] 正式 React 將 legacy id planModal/newTaskModal 改為語意元件/route 名稱（TaskWorkspaceShell / list / editor / yaml），避免名稱再次暗示巢狀 modal。
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
