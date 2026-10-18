@@ -89,7 +89,6 @@
                 <button class="composer-settings-trigger" id="chatSettings" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="chat.settingsTitle" title="Chat run settings">⚙</button>
                 <label class="composer-mode-quick" data-i18n-title="chat.modeTitle" title="Permission / approval mode"><span data-i18n="chat.mode">Mode</span><select id="chatMode"></select></label>
                 <button class="composer-mini-action composer-new-task" id="chatNewTask" type="button" data-i18n="chat.newTask" data-i18n-title="chat.newTaskTitle" title="Create a Task or Task List for this Project">+ New Task</button>
-                <button class="composer-mini-action" id="chatAsk" type="button" data-i18n="chat.askMock" data-i18n-title="chat.askMockTitle" title="Force a mock AI clarification flow">Ask mock</button>
               </div>
               <button class="btn primary" id="chatSend" data-i18n="chat.send">傳送</button>
             </div>
@@ -255,15 +254,7 @@
   </div>
 </div>
 
-<input type="file" id="validatorNativeFilePicker" hidden>
-
-<div class="modal-overlay" id="pathPickerModal">
-  <div class="modal-card" style="width:min(520px,94vw)">
-    <div class="modal-head"><div><h2 id="pathPickerTitle">Choose file</h2><p id="pathPickerHelp">Mock file picker</p></div><button class="close" data-close-modal="pathPickerModal">×</button></div>
-    <div class="modal-body"><div class="picker-options" id="pathPickerOptions"></div></div>
-    <div class="modal-foot"><button class="btn" data-close-modal="pathPickerModal">Cancel</button></div>
-  </div>
-</div>
+<input type="file" id="nativeFilePicker" hidden>
 
 <div class="modal-overlay" id="yamlPlanModal">
   <div class="modal-card yaml-plan-modal">
