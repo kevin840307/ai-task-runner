@@ -4,7 +4,7 @@
 >
 > Scope: add parallel Task worktree + local Git integration around the existing Runner. **Do not redesign Runner execution.**
 >
-> Core rule: **all Tasks execute in isolated Git worktrees.** `Main` / `Worktree` decides the delivery target after execution, not where the Agent edits files.
+> Core rule: **all Tasks execute in isolated Git worktrees.** Normal delivery automatically integrates the finished Task back into the Project branch captured when that Task starts. Keeping the Worktree without integration is an explicit fallback/advanced outcome, not the normal execution mode.
 
 ---
 
@@ -65,28 +65,27 @@ Review / Validate
   ↓
 Execution Completed
   ↓
-Delivery policy
-  ├─ Worktree
-  │    ↓
-  │  keep Task branch/worktree
-  │    ↓
-  │  Completed
-  │
-  └─ Main
-       ↓
-     Integration Queue
-       ↓
-     integrate one Task at a time
-       ↓
-     local/integration
-       ↓
-     target branch: git merge --squash local/integration
-       ↓
-     commit locally
-       ↓
-     reset local/integration = target branch HEAD
-       ↓
-     Integrated / Completed
+Closed · pending_merge
+  ↓
+Integration Queue
+  ↓
+integrate one Task at a time
+  ↓
+local/integration
+  ↓
+Project target branch: git merge --squash local/integration
+  ↓
+commit locally
+  ↓
+reset local/integration = target branch HEAD
+  ↓
+Closed · integrated
+
+If automatic merge recovery is exhausted:
+  ↓
+Closed · Awaiting merge
+  ├─ Retry merge
+  └─ Keep Worktree (explicit fallback; target branch remains unchanged)
 ```
 
 No remote push is required by this flow.
@@ -169,60 +168,113 @@ Do not let two Tasks share the same worktree.
 
 ---
 
-## 5. Meaning of Main / Worktree / Auto
+## 5. Delivery model: Project Branch by default
 
-All modes develop inside a worktree.
+All Tasks execute in isolated worktrees. There is no “run directly on Main checkout” mode in this design.
 
-### Main
-
-```text
-isolated Task worktree
-→ Runner
-→ completed
-→ integrate locally
-→ squash commit into the Project target branch
-```
-
-`Main` therefore means **delivery target = Project target branch**, not “edit directly inside the main checkout”.
-
-### Worktree
+Normal behavior:
 
 ```text
-isolated Task worktree
-→ Runner
-→ completed
-→ keep Task branch/worktree
-→ do not modify target branch
+Project current branch at Task start
+  ↓
+capture as target_branch
+  ↓
+sync local/integration to target_branch committed HEAD
+  ↓
+create Task worktree
+  ↓
+Runner
+  ↓
+Review / Validate
+  ↓
+Closed · pending_merge
+  ↓
+auto-integrate
+  ↓
+git merge --squash local/integration → target_branch
+  ↓
+Closed · integrated
 ```
 
-### Auto
-
-Keep the existing UI policy concept, but resolve it to a **delivery policy**. It must not disable worktree isolation.
-
----
-
-## 6. Target branch
-
-Each Project / Task must know its target branch.
-
-Examples:
+The UI should describe this as **Project Branch**, **Target Branch**, or simply **Auto integrate**, not “Main”, because the actual branch may be:
 
 ```text
 main
 feature/ui
 release/v4
+hotfix/xxx
+...
 ```
 
-Store/derive at Task creation:
+### Keep Worktree
+
+`Keep Worktree` means:
+
+```text
+do not integrate this Task result into target_branch
+→ keep local/task/<task-id>
+→ keep the Task worktree/result available
+→ target branch remains unchanged
+```
+
+This is not the normal path.
+
+Recommended uses:
+
+- automatic merge retry budget is exhausted
+- user explicitly wants to inspect/keep the isolated result
+- user intentionally decides not to deliver this Task into the Project branch
+
+Do not present Keep Worktree as if it means the Task runs differently. Execution was already isolated in a worktree either way.
+
+---
+
+## 6. Target branch = Project current branch at Task start
+
+Do not hardcode `main`.
+
+When a Task is about to start, resolve the Project repository's currently checked-out branch and persist it as that Task's `target_branch`.
+
+Examples:
+
+```text
+Project currently on feature/ui
+→ Task target_branch = feature/ui
+
+Project currently on release/v4
+→ Task target_branch = release/v4
+
+Project currently on main
+→ Task target_branch = main
+```
+
+Recommended metadata:
 
 ```yaml
 git:
   target_branch: feature/ui
+  target_sha_at_start: <sha>
 ```
 
-The target is the Project's original/selected local branch.
+### Capture once per Task
 
-Do not hardcode `main`.
+`target_branch` is captured when the Task starts and then remains stable for that Task.
+
+Example:
+
+```text
+Task T-001 starts while Project = feature/ui
+later the user switches the Project checkout to release/v4
+
+T-001 still targets feature/ui
+new Task T-002 would capture release/v4
+```
+
+Do not silently retarget an existing Task based on whatever branch happens to be checked out later.
+
+### Detached HEAD
+
+If the Project is in detached HEAD state at Task start, fail closed or require an explicit target branch. Do not invent `main`.
 
 ---
 
@@ -344,7 +396,7 @@ If integration later needs code changes, it calls this same Runner contract agai
 
 ---
 
-## 9. Every completed Main Task enters Integration Queue
+## 9. Every completed Project-Branch Task enters Integration Queue
 
 Execution may be parallel:
 
@@ -378,7 +430,7 @@ Do not allow two processes to mutate `local/integration` or the same target bran
 
 ## 10. One Task integration transaction
 
-For a Main-delivery Task, treat the following as one serialized transaction:
+For a Project-Branch delivery Task, treat the following as one serialized transaction:
 
 ```text
 Task completed
@@ -461,7 +513,7 @@ This guarantees the next Task starts/integrates against the canonical committed 
 
 ## 12. Per-Task local squash commit
 
-For Main delivery, each completed Task should normally produce one local commit on the target branch.
+For Project-Branch delivery, each completed Task should normally produce one local commit on the target branch.
 
 Example:
 
@@ -857,7 +909,7 @@ count within automatic budget?
 
 ### Retry exhaustion state
 
-For `delivery: main`, keep the Task in `Closed` when automatic merge retries are exhausted.
+For `delivery: project_branch`, keep the Task in `Closed` when automatic merge retries are exhausted.
 
 Recommended Board projection:
 
@@ -953,13 +1005,13 @@ Git integration is a secondary Task projection shown inside the Task card / Info
 | Task created, Runner not started | New | preparing / not_started |
 | Runner executing | Ongoing | execution_running |
 | Runner Review / Validate | Ongoing | execution_validating |
-| Main delivery: Runner Completed, waiting in Integration Queue | Closed | pending_merge |
-| Main delivery: replay/squash transaction running | Closed | integrating |
-| Main delivery: conflict is being repaired/reworked by Runner | Closed | conflict_recovery |
-| Main delivery: target branch dirty | Closed | waiting_target_clean + Needs Attention |
-| Main delivery: validation fails and Runner is redoing/fixing | Closed | recovery |
-| Main delivery: squash commit created successfully | Closed | integrated |
-| Worktree delivery: Runner Completed and isolated result is intentionally kept | Closed | worktree_ready / not_required |
+| Project-Branch delivery: Runner Completed, waiting in Integration Queue | Closed | pending_merge |
+| Project-Branch delivery: replay/squash transaction running | Closed | integrating |
+| Project-Branch delivery: conflict is being repaired/reworked by Runner | Closed | conflict_recovery |
+| Project-Branch delivery: target branch dirty | Closed | waiting_target_clean + Needs Attention |
+| Project-Branch delivery: validation fails and Runner is redoing/fixing | Closed | recovery |
+| Project-Branch delivery: squash commit created successfully | Closed | integrated |
+| Explicit Keep Worktree outcome: isolated result intentionally retained instead of integrating | Closed | worktree_ready / not_required |
 | User explicitly stops a resumable running Task before execution completes | Paused | integration must not start until execution is completed/resumed |
 | Automatic merge retry budget exhausted | Closed | merge_retry_exhausted · Awaiting merge |
 | Integration irrecoverable for another reason / requires user action | Closed | failed / Needs Attention |
@@ -968,13 +1020,13 @@ Git integration is a secondary Task projection shown inside the Task card / Info
 
 Board lifecycle and delivery state are separate.
 
-For both `delivery: main` and `delivery: worktree`:
+For both `delivery: project_branch` and `delivery: keep_worktree`:
 
 > **Runner execution Completed → Task Closed.**
 
 Then Git delivery continues as a secondary state.
 
-For `delivery: main`:
+For `delivery: project_branch`:
 
 ```text
 Runner Completed
@@ -983,7 +1035,7 @@ Runner Completed
 → Closed · integrated
 ```
 
-For `delivery: worktree`:
+For `delivery: keep_worktree`:
 
 ```text
 Runner Completed
@@ -1047,7 +1099,7 @@ Example:
 ```text
 Integration
 Target branch     feature/ui
-Delivery          Main
+Delivery          Project Branch
 Task branch       local/task/T-001
 Base              abc123
 State             Integrating
@@ -1134,7 +1186,7 @@ Example:
 
 ```yaml
 git:
-  delivery: main
+  delivery: project_branch
   target_branch: feature/ui
   base_sha: abc123
   integration_base_sha: def456
@@ -1149,11 +1201,11 @@ git:
   last_merge_failure: null
 ```
 
-For Worktree delivery:
+For an explicit Keep Worktree outcome:
 
 ```yaml
 git:
-  delivery: worktree
+  delivery: keep_worktree
   target_branch: feature/ui
   base_sha: abc123
   task_branch: local/task/T-001
@@ -1286,8 +1338,8 @@ T-002 then repeats against the latest committed target.
 - [ ] Define exact counter semantics so only a Runner-complete → real integration-failure cycle consumes the merge retry budget.
 - [ ] Lock the architecture invariant: Git worktree/integration orchestration must not modify Runner / FlowEngine / StageExecutor / Supervisor execution structure.
 - [ ] Define that any integration failure requiring source-code changes re-enters the existing Runner using a recovery worktree; Integration Manager itself never repairs application code.
-- [ ] Define delivery semantics: all Tasks execute in worktrees; Main means auto-integrate to target, Worktree means keep isolated output.
-- [ ] Add/derive `target_branch` from the Project's current/original selected branch; do not hardcode main.
+- [ ] Define delivery semantics: all Tasks execute in worktrees; all Tasks run in worktrees; normal delivery auto-integrates to the captured Project target branch; Keep Worktree is an explicit fallback/advanced outcome.
+- [ ] Resolve `target_branch` from the Project repository's currently checked-out branch when the Task starts; persist it for that Task and never hardcode `main`.
 - [ ] Define minimal Git metadata for Task base SHA, Task branch, worktree path, and integration status.
 - [ ] Define stable local branch naming: `local/integration`, `local/task/<task-id>`.
 - [ ] Define deterministic worktree paths.
@@ -1306,8 +1358,8 @@ T-002 then repeats against the latest committed target.
 - [ ] Stop automatic recovery for a Task when merge retry budget is exhausted; remove it from active integration execution without losing its queued/artifact state.
 - [ ] Support explicit Retry merge / Resume to start a new retry session while preserving lifetime failure history.
 - [ ] Add one serialized Integration Queue per repository/target branch.
-- [ ] Completed Main-delivery Tasks enqueue automatically.
-- [ ] Worktree-delivery Tasks do not enqueue.
+- [ ] Completed Project-Branch-delivery Tasks enqueue automatically.
+- [ ] Normal completed Tasks enqueue for Project-Branch delivery; only an explicit Keep Worktree outcome skips/finalizes without target integration.
 - [ ] Do not block parallel Runner execution while integration is busy.
 - [ ] Persist enough queue/integration state to recover after UI/backend restart.
 
@@ -1354,7 +1406,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Add Integration details to Task Info Drawer (target, delivery, Task branch, base/latest SHA, state, attempt, attention reason).
 - [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
 - [ ] Clarify Workspace wording: every mode uses an isolated worktree.
-- [ ] Main description: develop in worktree, then auto-integrate/squash into selected target branch.
+- [ ] Project Branch description: develop in an isolated worktree, then auto-integrate/squash into the target branch captured when the Task starts.
 - [ ] Worktree description: develop in worktree and keep isolated result.
 - [ ] Auto resolves delivery behavior only.
 - [ ] Show integration status without creating another Runner state machine.
@@ -1389,7 +1441,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Finish Tasks out of creation order.
 - [ ] Confirm Integration Queue serializes them safely.
 - [ ] Confirm later Tasks replay against the latest integrated target state.
-- [ ] Confirm each Main Task creates one squash commit on target.
+- [ ] Confirm each Project-Branch Task creates one squash commit on target.
 
 ### Dirty target
 
@@ -1465,7 +1517,7 @@ Integration:
   latest code wins
   conflict → existing Runner repair/rework
 
-Main delivery:
+Project-Branch delivery:
   Task → local/integration
   → target merge --squash
   → one local commit
