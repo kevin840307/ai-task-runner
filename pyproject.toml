@@ -27,6 +27,7 @@ packages = [
 py-modules = [
     "ai_task_runner",
     "ai_task_runner_validator",
+    "product_settings",
 ]
 
 [tool.setuptools.dynamic]

@@ -8,6 +8,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from product_settings import GlobalSettingsStore
+
 
 try:
     from .agent_capability_service import AgentCapabilityService
@@ -36,6 +38,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.static_root = self.ui_root / "static"
         self.projects_file = self.ui_root / "data" / "projects.json"
         self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
+        self.global_settings = GlobalSettingsStore(self.ui_root / "data" / "settings.json")
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
         self._projects_lock = threading.RLock()
@@ -73,6 +76,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/settings":
+                return self._json(self.state.global_settings.get())
             if parsed.path == "/api/projects":
                 query = parse_qs(parsed.query)
                 return self._json(
@@ -166,6 +171,8 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._body()
+            if parsed.path == "/api/settings":
+                return self._json(self.state.global_settings.update(body))
             if parsed.path == "/api/projects/add":
                 return self._json(self.state.add_project(str(body.get("path", ""))))
             if parsed.path == "/api/projects/remove":
