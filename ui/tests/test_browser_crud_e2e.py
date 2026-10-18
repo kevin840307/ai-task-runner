@@ -141,6 +141,28 @@ def _bridge_for(state: UIState):
                     }
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
+                elif path == "/api/chat/capabilities":
+                    data = {
+                        "agent": query.get("agent", ["qwen"])[0] or "qwen",
+                        "capabilities": [
+                            {
+                                "token": "/btw", "name": "btw", "description": "Side question",
+                                "kind": "command", "source": "builtin", "user_invocable": True,
+                                "enabled": True, "permission": "available", "availability": "available",
+                            },
+                            {
+                                "token": "/review", "name": "review", "description": "Review code",
+                                "kind": "skill", "source": "project", "user_invocable": True,
+                                "enabled": True, "permission": "ask", "availability": "available",
+                            },
+                            {
+                                "token": "/hidden", "name": "hidden", "description": "Hidden skill",
+                                "kind": "skill", "source": "user", "user_invocable": False,
+                                "enabled": False, "permission": "deny", "availability": "disabled",
+                            },
+                        ],
+                        "cached": False,
+                    }
                 elif path == "/api/chat/sessions":
                     data = state.chat_service.sessions(project)
                 elif path == "/api/chat/messages":
@@ -553,6 +575,19 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.fill("#projectChatInput", "/re")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            assert page.locator("#projectChatSuggestList .project-chat-suggest-item").count() == 1
+            page.keyboard.press("Tab")
+            assert page.locator("#projectChatInput").input_value() == "/review "
+            assert page.locator("#projectChatSuggest").is_hidden()
+
+            page.fill("#projectChatInput", "/")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            page.keyboard.press("ArrowDown")
+            page.keyboard.press("Escape")
+            assert page.locator("#projectChatSuggest").is_hidden()
+
             page.fill("#projectChatInput", "hello from normal chat")
             page.click("#projectChatSendButton")
             page.wait_for_function(

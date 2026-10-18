@@ -8,11 +8,128 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let sessions = [];
   let activeSessionId = "";
   let preferences = {};
+  let agentCapabilities = [];
+  let capabilitiesError = "";
+  let suggestionIndex = 0;
 
   const byId = (id) => document.getElementById(id);
 
   function projectPath() {
     return String(project?.path || "");
+  }
+
+  async function refreshAgentCapabilities({ refresh = false } = {}) {
+    const path = projectPath();
+    const agent = String(preferences.backend || preferences.agent || "");
+    if (!path) {
+      agentCapabilities = [];
+      capabilitiesError = "";
+      renderSuggestions();
+      return;
+    }
+    capabilitiesError = "";
+    try {
+      const query = new URLSearchParams({ project: path });
+      if (agent) query.set("agent", agent);
+      if (refresh) query.set("refresh", "1");
+      const data = await api("/api/chat/capabilities?" + query.toString(), { timeoutMs: 35000 });
+      if (projectPath() !== path) return;
+      agentCapabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    } catch (error) {
+      if (projectPath() !== path) return;
+      agentCapabilities = [];
+      capabilitiesError = String(error?.message || "Capability discovery failed");
+    }
+    suggestionIndex = 0;
+    renderSuggestions();
+  }
+
+  function suggestionQuery() {
+    const value = String(byId("projectChatInput")?.value || "");
+    if (!value.startsWith("/") || /\s/.test(value)) return null;
+    return value.slice(1).toLowerCase();
+  }
+
+  function visibleSuggestions() {
+    const query = suggestionQuery();
+    if (query === null) return [];
+    return agentCapabilities.filter((item) => {
+      const haystack = [item.token, item.name, item.description, item.source, item.kind]
+        .map((value) => String(value || "").toLowerCase()).join(" ");
+      return haystack.includes(query);
+    });
+  }
+
+  function renderSuggestions() {
+    const panel = byId("projectChatSuggest");
+    const list = byId("projectChatSuggestList");
+    const retry = byId("projectChatSuggestRetry");
+    if (!panel || !list) return;
+    const query = suggestionQuery();
+    if (query === null) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    if (retry) retry.hidden = !capabilitiesError;
+    list.innerHTML = "";
+    if (capabilitiesError) {
+      const empty = document.createElement("div");
+      empty.className = "project-chat-suggest-empty";
+      empty.textContent = capabilitiesError;
+      list.appendChild(empty);
+      return;
+    }
+    const values = visibleSuggestions();
+    if (!values.length) {
+      const empty = document.createElement("div");
+      empty.className = "project-chat-suggest-empty";
+      empty.textContent = "No Agent Skill / Command matches.";
+      list.appendChild(empty);
+      return;
+    }
+    suggestionIndex = Math.max(0, Math.min(suggestionIndex, values.length - 1));
+    values.forEach((item, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "project-chat-suggest-item";
+      button.disabled = !item.enabled || !item.user_invocable;
+      button.classList.toggle("active", index === suggestionIndex);
+      const copy = document.createElement("span");
+      copy.className = "project-chat-suggest-copy";
+      const token = document.createElement("span");
+      token.className = "project-chat-suggest-token";
+      token.textContent = item.token;
+      const description = document.createElement("span");
+      description.className = "project-chat-suggest-description";
+      description.textContent = item.description || (item.kind === "skill" ? "Agent Skill" : "Agent command");
+      copy.append(token, description);
+      const meta = document.createElement("span");
+      meta.className = "project-chat-suggest-meta";
+      meta.textContent = [item.kind, item.source, item.enabled ? item.permission || "available" : item.availability || "disabled"]
+        .filter(Boolean).join(" · ");
+      button.append(copy, meta);
+      button.onmouseenter = () => { suggestionIndex = index; renderSuggestions(); };
+      button.onmousedown = (event) => event.preventDefault();
+      button.onclick = () => acceptSuggestion(item);
+      list.appendChild(button);
+    });
+    list.querySelector(".project-chat-suggest-item.active")?.scrollIntoView({ block: "nearest" });
+  }
+
+  function acceptSuggestion(item) {
+    if (!item?.enabled || !item?.user_invocable) return;
+    const input = byId("projectChatInput");
+    if (!input) return;
+    input.value = String(item.token || "") + " ";
+    panelHideSuggestions();
+    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    input.focus();
+  }
+
+  function panelHideSuggestions() {
+    const panel = byId("projectChatSuggest");
+    if (panel) panel.hidden = true;
   }
 
   function renderPreferences(next = preferences) {
@@ -269,6 +386,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (name) name.textContent = project?.name || "Select a project";
     if (path) path.textContent = project?.path || "Open a local project folder to begin.";
     renderPreferences();
+    void refreshAgentCapabilities();
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
     setSending(false);
@@ -290,13 +408,40 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
   byId("projectChatInput")?.addEventListener("input", (event) => {
     autosizeTextarea?.(event.currentTarget, { minHeight: 46, maxHeight: 180 });
+    suggestionIndex = 0;
+    renderSuggestions();
   });
   byId("projectChatInput")?.addEventListener("keydown", (event) => {
+    const panel = byId("projectChatSuggest");
+    const values = visibleSuggestions();
+    if (panel && !panel.hidden && values.length) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        suggestionIndex = (suggestionIndex + delta + values.length) % values.length;
+        renderSuggestions();
+        return;
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && !event.isComposing) {
+        const item = values[suggestionIndex];
+        if (item?.enabled && item?.user_invocable) {
+          event.preventDefault();
+          acceptSuggestion(item);
+          return;
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        panelHideSuggestions();
+        return;
+      }
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       void sendMessage();
     }
   });
+  byId("projectChatSuggestRetry")?.addEventListener("click", () => void refreshAgentCapabilities({ refresh: true }));
 
   return {
     openProject,
