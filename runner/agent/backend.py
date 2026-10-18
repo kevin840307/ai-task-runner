@@ -35,6 +35,19 @@ class InteractionModeSpec:
     unsafe: bool = False
 
 
+@dataclass(frozen=True)
+class CapabilitySpec:
+    token: str
+    name: str
+    description: str
+    kind: str
+    source: str
+    user_invocable: bool
+    enabled: bool
+    permission: str = ""
+    availability: str = "available"
+
+
 class BackendError(RunnerError):
     def __init__(
         self,
@@ -221,6 +234,10 @@ class BaseBackend(ABC):
         if mode not in supported:
             raise BackendError(f"{self.name} does not support Chat mode: {mode}")
         self.interaction_mode = mode
+
+    @classmethod
+    def discover_capabilities(cls, root: Path) -> list[CapabilitySpec]:
+        raise BackendError(f"{cls.name} does not provide capability discovery")
 
     def prepare_project(self) -> list[Path]:
         return []
@@ -497,6 +514,10 @@ def interaction_modes(name: str) -> tuple[InteractionModeSpec, ...]:
     return _backend_type(name).interaction_modes()
 
 
+def discover_capabilities(name: str, root: Path) -> list[CapabilitySpec]:
+    return _backend_type(name).discover_capabilities(root)
+
+
 def configure_interaction_args(
     name: str,
     mode: InteractionMode,
@@ -544,6 +565,7 @@ __all__ = [
     "BackendError",
     "BackendMode",
     "BackendResult",
+    "CapabilitySpec",
     "InteractionMode",
     "InteractionModeSpec",
     "BaseBackend",
@@ -555,6 +577,7 @@ __all__ = [
     "configure_sandbox_args",
     "create_backend",
     "default_command",
+    "discover_capabilities",
     "interaction_modes",
     "model_from_args",
     "register_backend",

@@ -17,6 +17,7 @@ from runner.agent import (
     configure_interaction_args,
     create_ai_client,
     create_backend,
+    discover_capabilities,
     is_session_invalid_error,
     is_transient_service_error,
     interaction_modes,
@@ -1075,3 +1076,84 @@ def test_opencode_chat_modes_map_to_auto_and_permission_profiles(tmp_path):
     yolo_backend.configure_interaction("yolo")
     yolo_policy = json.loads(yolo_backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
     assert yolo_policy == {"*": "allow"}
+
+
+
+def test_qwen_capabilities_use_native_daemon_projection(monkeypatch, tmp_path):
+    from runner.agent.backend import CapabilitySpec
+    from runner.agent import qwen as qwen_module
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_daemon_snapshot",
+        lambda root: (
+            {
+                "availableCommands": [
+                    {"name": "btw", "description": "Side question", "_meta": {"source": "builtin"}},
+                ],
+                "availableSkills": ["review"],
+            },
+            {
+                "skills": {
+                    "skills": [
+                        {
+                            "name": "review",
+                            "description": "Review code",
+                            "level": "project",
+                            "status": "ok",
+                            "userInvocable": True,
+                        },
+                        {
+                            "name": "hidden",
+                            "description": "Hidden",
+                            "level": "user",
+                            "status": "ok",
+                            "userInvocable": False,
+                        },
+                    ]
+                }
+            },
+        ),
+    )
+    values = discover_capabilities("qwen", tmp_path)
+    assert all(isinstance(item, CapabilitySpec) for item in values)
+    assert [(item.token, item.kind, item.enabled) for item in values] == [
+        ("/btw", "command", True),
+        ("/hidden", "skill", False),
+        ("/review", "skill", True),
+    ]
+    assert values[-1].source == "project"
+
+
+def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
+    from runner.agent import opencode as opencode_module
+
+    def fake_api(root, operation):
+        if operation == "command.list":
+            return [
+                {"name": "review", "description": "Review changes", "source": "project"},
+                {"name": "help", "description": "Help", "source": "builtin"},
+            ]
+        assert operation == "skill.list"
+        return [
+            {
+                "name": "deploy",
+                "description": "Deploy app",
+                "metadata": {"opencode/slash": "true"},
+                "permission": "ask",
+            },
+            {
+                "name": "private",
+                "description": "Private skill",
+                "metadata": {},
+                "permission": "allow",
+            },
+        ]
+
+    monkeypatch.setattr(opencode_module, "_opencode_api_payload", fake_api)
+    values = discover_capabilities("opencode", tmp_path)
+    by_token = {(item.token, item.kind): item for item in values}
+    assert by_token[("/review", "command")].source == "project"
+    assert by_token[("/deploy", "skill")].user_invocable is True
+    assert by_token[("/deploy", "skill")].permission == "ask"
+    assert by_token[("/private", "skill")].enabled is False

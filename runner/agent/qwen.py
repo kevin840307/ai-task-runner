@@ -3,8 +3,15 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
+import shutil
+import subprocess
 import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -13,7 +20,7 @@ from ..config.defaults import DEFAULT_QWEN_COMMAND
 from ..runtime.process_runner import run_process
 from ..utils import io_path
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, InteractionMode, InteractionModeSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
 _QWEN_AUTH_TYPES = {
@@ -398,6 +405,218 @@ def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
         if tool_name not in args:
             args.extend(["--exclude-tools", tool_name])
 
+
+
+def _qwen_serve_command(root: Path) -> list[str]:
+    executable = shutil.which(DEFAULT_QWEN_COMMAND) or DEFAULT_QWEN_COMMAND
+    args = [
+        executable,
+        "serve",
+        "--no-web",
+        "--workspace",
+        str(root),
+        "--port",
+        "0",
+    ]
+    if os.name == "nt" and Path(executable).suffix.lower() in {".cmd", ".bat"}:
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", *args]
+    return args
+
+
+def _qwen_http_json(
+    base_url: str,
+    path: str,
+    *,
+    method: str = "GET",
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(
+        base_url + path,
+        data=payload,
+        method=method,
+        headers={"Content-Type": "application/json"} if payload is not None else {},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            raw = response.read().decode("utf-8")
+    except (OSError, urllib.error.URLError) as exc:
+        raise BackendError(f"Qwen capability discovery request failed: {exc}") from exc
+    if not raw.strip():
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise BackendError("Qwen capability discovery returned invalid JSON") from exc
+    if not isinstance(value, dict):
+        raise BackendError("Qwen capability discovery returned invalid payload")
+    return value
+
+
+def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    command = _qwen_serve_command(root)
+    options: dict[str, Any] = {
+        "cwd": root,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    try:
+        process = subprocess.Popen(command, **options)
+    except OSError as exc:
+        raise BackendError(f"Qwen capability discovery failed to start: {exc}") from exc
+
+    lines: queue.Queue[str] = queue.Queue()
+
+    def reader() -> None:
+        stream = process.stdout
+        if stream is None:
+            return
+        for line in stream:
+            lines.put(line)
+
+    thread = threading.Thread(target=reader, daemon=True)
+    thread.start()
+    base_url = ""
+    session_id = ""
+    startup: list[str] = []
+    try:
+        deadline = time.monotonic() + 12
+        pattern = re.compile(r"listening on (http://127\.0\.0\.1:(\d+))")
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            try:
+                line = lines.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            startup.append(line.rstrip())
+            match = pattern.search(line)
+            if match:
+                base_url = match.group(1)
+                break
+        if not base_url:
+            detail = "\n".join(startup[-20:]) or f"exit {process.poll()}"
+            raise BackendError(f"Qwen capability daemon did not become ready: {detail}")
+
+        caps = _qwen_http_json(base_url, "/capabilities")
+        features = set(caps.get("features") or [])
+        required = {"session_create", "session_supported_commands", "session_resources"}
+        missing = sorted(required - features)
+        if missing:
+            raise BackendError(
+                "Qwen capability daemon is missing: " + ", ".join(missing)
+            )
+        create_body: dict[str, Any] = {"cwd": str(root)}
+        if "session_scope_override" in features:
+            create_body["sessionScope"] = "thread"
+        created = _qwen_http_json(base_url, "/session", method="POST", body=create_body)
+        session_id = str(created.get("sessionId") or "")
+        if not session_id:
+            raise BackendError("Qwen capability daemon did not return sessionId")
+        commands = _qwen_http_json(
+            base_url,
+            f"/session/{session_id}/supported-commands",
+        )
+        resources = _qwen_http_json(base_url, f"/session/{session_id}/resources")
+        return commands, resources
+    finally:
+        if base_url and session_id:
+            try:
+                _qwen_http_json(base_url, f"/session/{session_id}", method="DELETE")
+            except BackendError:
+                pass
+        try:
+            process.terminate()
+            process.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+            except OSError:
+                pass
+
+
+def _qwen_capability_specs(
+    commands: dict[str, Any],
+    resources: dict[str, Any],
+) -> list[CapabilitySpec]:
+    result: list[CapabilitySpec] = []
+    seen: set[tuple[str, str]] = set()
+    for item in commands.get("availableCommands") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip().lstrip("/")
+        if not name:
+            continue
+        meta = item.get("_meta") if isinstance(item.get("_meta"), dict) else {}
+        key = ("command", name)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(CapabilitySpec(
+            token=f"/{name}",
+            name=name,
+            description=str(item.get("description") or "").strip(),
+            kind="command",
+            source=str(meta.get("source") or "qwen"),
+            user_invocable=True,
+            enabled=True,
+            permission="available",
+        ))
+
+    skills_payload = resources.get("skills")
+    skills = skills_payload.get("skills") if isinstance(skills_payload, dict) else []
+    for item in skills or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        user_invocable = item.get("userInvocable") is not False
+        status = str(item.get("status") or "ok").strip()
+        enabled = status == "ok" and user_invocable
+        key = ("skill", name)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(CapabilitySpec(
+            token=f"/{name}",
+            name=name,
+            description=str(item.get("description") or "").strip(),
+            kind="skill",
+            source=str(item.get("level") or "qwen"),
+            user_invocable=user_invocable,
+            enabled=enabled,
+            permission="available" if enabled else "disabled",
+            availability=status,
+        ))
+
+    known_skill_names = {
+        item.name for item in result if item.kind == "skill"
+    }
+    for raw_name in commands.get("availableSkills") or []:
+        name = str(raw_name or "").strip()
+        if not name or name in known_skill_names:
+            continue
+        result.append(CapabilitySpec(
+            token=f"/{name}",
+            name=name,
+            description="",
+            kind="skill",
+            source="qwen",
+            user_invocable=True,
+            enabled=True,
+            permission="available",
+        ))
+    return sorted(result, key=lambda item: (item.token.lower(), item.kind))
+
+
 class QwenBackend(BaseBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
@@ -439,6 +658,11 @@ class QwenBackend(BaseBackend):
             index += 1
         result.extend(["--approval-mode", supported[mode].native])
         return result
+
+    @classmethod
+    def discover_capabilities(cls, root: Path) -> list[CapabilitySpec]:
+        commands, resources = _qwen_daemon_snapshot(root)
+        return _qwen_capability_specs(commands, resources)
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:

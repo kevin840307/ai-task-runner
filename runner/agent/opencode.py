@@ -10,7 +10,7 @@ from typing import Any
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
 from ..runtime.process_runner import run_process
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, InteractionMode, InteractionModeSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
 _PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
@@ -78,6 +78,95 @@ def _configured_opencode_models(root: Path) -> set[str]:
     return values
 
 
+
+
+def _opencode_api_payload(root: Path, operation: str) -> list[dict[str, Any]]:
+    try:
+        result = run_process(
+            [DEFAULT_OPENCODE_COMMAND, "api", operation],
+            root,
+            15,
+        )
+    except Exception as exc:
+        raise BackendError(
+            f"OpenCode capability discovery failed: {exc}"
+        ) from exc
+    if result.return_code or result.timed_out:
+        detail = result.output.strip() or f"exit {result.return_code}"
+        raise BackendError(
+            f"OpenCode capability discovery {operation} failed: {detail[-2000:]}"
+        )
+    raw = result.output.strip()
+    value: Any = None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        for line in reversed(raw.splitlines()):
+            try:
+                value = json.loads(line)
+                break
+            except json.JSONDecodeError:
+                continue
+    if not isinstance(value, dict) or not isinstance(value.get("data"), list):
+        raise BackendError(
+            f"OpenCode capability discovery {operation} returned invalid JSON"
+        )
+    return [item for item in value["data"] if isinstance(item, dict)]
+
+
+def _opencode_capability_specs(
+    commands: Sequence[dict[str, Any]],
+    skills: Sequence[dict[str, Any]],
+) -> list[CapabilitySpec]:
+    result: list[CapabilitySpec] = []
+    for item in commands:
+        name = str(item.get("name") or "").strip().lstrip("/")
+        if not name:
+            continue
+        source = item.get("source")
+        if isinstance(source, dict):
+            source = source.get("type") or source.get("name")
+        result.append(CapabilitySpec(
+            token=f"/{name}",
+            name=name,
+            description=str(item.get("description") or "").strip(),
+            kind="command",
+            source=str(source or "opencode"),
+            user_invocable=True,
+            enabled=True,
+            permission="available",
+        ))
+
+    for item in skills:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        slash = item.get("userInvocable")
+        if slash is None:
+            slash = str(metadata.get("opencode/slash") or "").lower() == "true"
+        permission = str(item.get("permission") or "unknown").strip().lower()
+        enabled = bool(slash) and permission != "deny"
+        source = item.get("source")
+        if isinstance(source, dict):
+            source = source.get("type") or source.get("name")
+        result.append(CapabilitySpec(
+            token=f"/{name}",
+            name=name,
+            description=str(item.get("description") or "").strip(),
+            kind="skill",
+            source=str(source or "opencode"),
+            user_invocable=bool(slash),
+            enabled=enabled,
+            permission=permission,
+            availability="available" if enabled else "not_user_invocable",
+        ))
+    unique: dict[tuple[str, str], CapabilitySpec] = {}
+    for item in result:
+        unique.setdefault((item.kind, item.name), item)
+    return sorted(unique.values(), key=lambda item: (item.token.lower(), item.kind))
+
+
 class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = DEFAULT_OPENCODE_COMMAND
@@ -104,6 +193,13 @@ class OpenCodeBackend(BaseBackend):
         if mode in {"auto", "yolo"}:
             result.append("--auto")
         return result
+
+    @classmethod
+    def discover_capabilities(cls, root: Path) -> list[CapabilitySpec]:
+        return _opencode_capability_specs(
+            _opencode_api_payload(root, "command.list"),
+            _opencode_api_payload(root, "skill.list"),
+        )
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
