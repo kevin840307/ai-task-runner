@@ -268,7 +268,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
-[x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 直接建立 items=[] 並進 Task List Workspace，不再先經過「New Task → New Task List」的多層 create modal。
+[x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
+[x] New Task List Draft 直接重用 TaskListWorkspace 的 List body / List info / DrawerHeader actions；已移除專用 task-list-create-draft markup。
+[x] Chat AI TaskDraft 產生時不再 eager 寫入 taskMap；未 Create 前保持 transient，Edit 才暫掛到共用 Editor surface，Create 才轉正式 Task。
+[x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 先進 transient Draft，不分配正式 Task ID、不寫 taskMap/Board；按 Create Task List 後才建立 items=[] 的正式 Task。
 [x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
 [x] planModal / newTaskModal 視覺層級已收斂成單一 Task Workspace Shell：newTaskModal 不再是 fixed overlay，只是 shell 內的 Editor View；List / Editor 切換不改外框位置、寬度、陰影。
 [x] Task Info / Task List / Task Editor / YAML 再收斂成同一個 #taskOverlay Drawer；只保留一份 drawerhead。
