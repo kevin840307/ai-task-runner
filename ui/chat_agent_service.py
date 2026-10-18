@@ -59,14 +59,23 @@ class ChatAgentService:
         )
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
+        metadata = {
+            "agent": agent,
+            "model": str(model or "").strip(),
+            "mode": mode,
+        }
         if not lock.acquire(blocking=False):
             return {
                 **queued,
+                **metadata,
                 "status": "queued",
                 "busy": True,
             }
         try:
-            return self._drain_locked(project, chat, session_id)
+            return {
+                **self._drain_locked(project, chat, session_id),
+                **metadata,
+            }
         finally:
             lock.release()
 
