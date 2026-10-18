@@ -291,6 +291,14 @@
   <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
 </div>
 
+<div class="modal-overlay" id="taskEditorDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskEditorDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="taskEditorDiscardTitle" data-i18n="taskEditor.discardTitle">Discard task changes?</h2><p data-i18n="taskEditor.discardHelp">Unsaved changes in this Task Editor will be lost.</p></div><button class="close" data-close-modal="taskEditorDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="taskEditor.discardBody">Discard the unsaved changes and leave this editor?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskEditorDiscardModal" type="button" data-i18n="taskEditor.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardTaskEditor" type="button" data-i18n="taskEditor.discard">Discard changes</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="taskListDraftDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskListDraftDiscardTitle">
   <div class="modal-card project-manage-modal">
     <div class="modal-head"><div><h2 id="taskListDraftDiscardTitle" data-i18n="taskListDraft.discardTitle">Discard Task List draft?</h2><p data-i18n="taskListDraft.discardHelp">This draft has not been created and will not appear on the Board if discarded.</p></div><button class="close" data-close-modal="taskListDraftDiscardModal" type="button" aria-label="Close">×</button></div>
