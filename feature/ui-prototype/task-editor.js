@@ -856,7 +856,7 @@ function renderChatTaskDraft(session,box){
 }
 function runChatGoal(spec,targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
   const session=targetSession,source=String(spec||'').trim();if(!session)return;
-  if(!source){session.messages.push(['assistant','Usage: @goal <需求>']);showToast('Usage: @run <需求>');return}
+  if(!source){session.messages.push(['assistant','Usage: @goal <需求>']);showToast('Usage: @goal <需求>');return}
   const workflow=chatWorkflowKey(session),caps=workflowCaps(workflow);
   if(caps.file){
     session.messages.push(['assistant',`Goal 未啟動：${workflow} 需要 File Validator。請用 @task 建立後補齊設定，或在 ⚙ 切換可直接執行的 Workflow。`]);
