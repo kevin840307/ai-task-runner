@@ -327,10 +327,6 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .ai-override-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ai-override-actions .simple-source-select{min-width:100px}
 
-#newTaskModal{z-index:400;place-items:stretch end;padding:0;background:rgba(14,23,38,.24);backdrop-filter:blur(1px)}
-#newTaskModal>.task-create-modal{width:min(720px,94vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
-#newTaskModal>.task-create-modal>.modal-body{min-height:0;overflow:auto}
-
 
 
 
@@ -361,6 +357,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal.subview-open>.plan-modal-card{display:none}
 #planModal.subview-open{align-items:center;justify-content:center}
 #planModal.subview-open .task-create-modal,#planModal.subview-open .yaml-plan-modal{box-shadow:none}
+.task-workspace-view{display:none}
+.task-workspace-view.open{display:grid}
 .task-context-menu{position:fixed;z-index:320;width:205px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--popover-bg);box-shadow:var(--shadow-pop)}
 .task-context-menu-wide{display:grid;grid-template-columns:172px 270px;width:454px;padding:0;overflow:hidden}
 .task-context-menu[hidden]{display:none}.task-context-actions{padding:5px}.task-context-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:var(--text);font-size:8.5px;text-align:left;cursor:pointer}
@@ -408,8 +406,12 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal .plan-main{min-height:0;overflow:auto}
 #planModal .plan-side{min-height:0;overflow:auto}
 #planModal>.plan-subview-mount{position:relative!important;overflow:hidden}
-#planModal>.plan-subview-mount>.modal-card{width:100%!important;height:100vh!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;display:grid!important;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden!important}
-#planModal>.plan-subview-mount>.modal-card>.modal-body{min-height:0;overflow:auto}
+#planModal>.plan-subview-mount>.modal-card,
+#planModal>.plan-subview-mount>.task-workspace-view{width:100%!important;height:100vh!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden!important;background:var(--panel)}
+#planModal>.plan-subview-mount>.modal-card{display:grid!important}
+#planModal>.plan-subview-mount>.task-workspace-view.open{display:grid!important}
+#planModal>.plan-subview-mount>.modal-card>.modal-body,
+#planModal>.plan-subview-mount>.task-workspace-view>.modal-body{min-height:0;overflow:auto}
 #planModal.subview-open{align-items:stretch!important;justify-content:flex-end!important}
 #planModal.subview-open>.plan-modal-card{display:none!important}
 #planModal .modal-head .close[title="Back"]{font-size:17px}
@@ -492,12 +494,11 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 }
 .plan-add-task-plus{font-size:13px;line-height:1}
 
-/* Chat-origin Task editing must be a true viewport overlay: never resize the Chat grid. */
+
+/* One Task Workspace overlay owns List / Editor / YAML without nested large modals. */
 html{scrollbar-gutter:stable}
-#planModal,#newTaskModal{position:fixed!important;inset:0!important;isolation:isolate}
-#planModal{z-index:900!important}
-#newTaskModal{z-index:920!important}
-#planModal>.plan-modal-card,#planModal>.plan-subview-mount,#newTaskModal>.task-create-modal{flex:none}
+#planModal{position:fixed!important;inset:0!important;isolation:isolate;z-index:900!important}
+#planModal>.plan-modal-card,#planModal>.plan-subview-mount{flex:none}
 
 /* Validation/error feedback must remain visible above the right-side editor. */
 .toast{z-index:1200!important}
@@ -732,7 +733,8 @@ html[data-appearance] #taskOverlay .console{
 /* Task List / Task Editor opened from the Task workspace. */
 html[data-appearance] #planModal>.plan-modal-card,
 html[data-appearance] #planModal>.plan-subview-mount,
-html[data-appearance] #planModal>.plan-subview-mount>.modal-card{
+html[data-appearance] #planModal>.plan-subview-mount>.modal-card,
+html[data-appearance] #planModal>.plan-subview-mount>.task-workspace-view{
   background:var(--panel)!important;color:var(--text);border-color:var(--line)!important;
   box-shadow:-18px 0 50px color-mix(in srgb,#000 32%,transparent)!important
 }
