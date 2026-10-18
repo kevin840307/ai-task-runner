@@ -7,6 +7,50 @@
   --r-sm:6px;--r-md:8px;--r-lg:11px;--r-xl:14px;--rail:252px;
   --font:Inter,"Segoe UI",Arial,sans-serif;
 }
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0f141b;--panel:#161d27;--panel-2:#111821;--line:#2a3442;--text:#e7edf4;--muted:#97a4b5;
+  --accent:#2aa198;--accent-dark:#5fc7bf;--accent-soft:#173532;--warning-soft:#3a2d13;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.20);--shadow-md:0 8px 22px rgba(0,0,0,.22);--shadow-pop:0 22px 58px rgba(0,0,0,.38);
+}
+html[data-theme="dark"] body{background:var(--bg);color:var(--text)}
+html[data-theme="dark"] .sidebar{background:radial-gradient(circle at 0 0,rgba(42,161,152,.12),transparent 34%),linear-gradient(180deg,#151d26,#10161e)}
+html[data-theme="dark"] .header,
+html[data-theme="dark"] .composer,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .taskcard,
+html[data-theme="dark"] .col,
+html[data-theme="dark"] .existing-sidebar,
+html[data-theme="dark"] .yamlleft,
+html[data-theme="dark"] .request,
+html[data-theme="dark"] .previewitem,
+html[data-theme="dark"] .composer-settings-popover,
+html[data-theme="dark"] .composer-queue-item,
+html[data-theme="dark"] .composer-ask-option,
+html[data-theme="dark"] .source-card,
+html[data-theme="dark"] .settings-field{background:var(--panel);color:var(--text)}
+html[data-theme="dark"] .board,
+html[data-theme="dark"] .boardtools,
+html[data-theme="dark"] .modal-foot,
+html[data-theme="dark"] .settings-sections,
+html[data-theme="dark"] .composer-settings-head,
+html[data-theme="dark"] .composer-queue-head,
+html[data-theme="dark"] .composer-ask-head{background:var(--panel-2)}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select,
+html[data-theme="dark"] .btn,
+html[data-theme="dark"] .chip,
+html[data-theme="dark"] .composer-mini-action,
+html[data-theme="dark"] .composer-settings-trigger,
+html[data-theme="dark"] .composer-mode-quick{background:#111821;color:var(--text);border-color:var(--line)}
+html[data-theme="dark"] .nav.nav-compact .navbtn:hover,
+html[data-theme="dark"] .nav.nav-compact .navbtn.active,
+html[data-theme="dark"] .sidebar-settings-btn:hover,
+html[data-theme="dark"] .settings-sections button:hover:not(:disabled),
+html[data-theme="dark"] .settings-sections button.active{background:#1a292a;color:#72d6cd}
+html[data-theme="dark"] .settings-policy-preview{background:#122523;border-color:#28504c;color:#a9c7c3}
+html[data-theme="dark"] .settings-field:hover{background:#19212c}
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:rgba(100,116,139,.4) transparent}
 *::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-thumb{background:rgba(100,116,139,.34);border:3px solid transparent;background-clip:content-box;border-radius:999px}
 html,body{height:100%;margin:0}body{font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden}
