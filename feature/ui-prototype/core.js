@@ -888,7 +888,7 @@ function openPathPicker(index,field,kind){
   const item=batchDraft[index]||{};
   const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
   const options=kind==='validator'
-    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    ?[]
     :kind==='ai'
       ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai-validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
       :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
@@ -1195,13 +1195,39 @@ function openPathPicker(index,field,kind,context='batch'){
   const item=context==='task'?{project:projectMeta[document.getElementById('newTaskProject').value]?.path||'C:\\project'}:(batchDraft[index]||{});
   const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
   const options=kind==='validator'
-    ?[`${root}\\ai_task_runner_validator.py`,`${root}\\validation.py`,'D:\\shared\\validators\\release_gate.py']
+    ?[]
     :kind==='ai'
       ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai_validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
       :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
   document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
-  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以直接貼絕對或相對路徑。';
-  document.getElementById('pathPickerOptions').innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
+  document.getElementById('pathPickerHelp').textContent=kind==='validator'
+    ?'Choose a validator file path. No built-in validator file is provided; you can also type the path directly in the Task Editor.'
+    :'Mock picker：也可以直接貼絕對或相對路徑。';
+  const pickerOptions=document.getElementById('pathPickerOptions');
+  if(kind==='validator'){
+    const current=pickerTarget?.context==='task'
+      ?newTaskDraft[pickerTarget.field]
+      :(batchDraft[pickerTarget?.index]?.[pickerTarget?.field]||'');
+    pickerOptions.innerHTML=`<div class="picker-path-only"><label for="pathPickerManual">Validator file path</label><div class="pathrow"><input id="pathPickerManual" value="${escapeAttr(current||'')}" placeholder="C:\\path\\to\\validator.py"><button class="mini-btn" id="pathPickerUsePath" type="button">Use path</button></div><small>No built-in validator file is provided. Formal UI opens the platform file picker and writes the selected path here.</small></div>`;
+    const manual=document.getElementById('pathPickerManual'),use=document.getElementById('pathPickerUsePath');
+    const applyManual=()=>{
+      const value=manual.value.trim();if(!value){showToast('請選擇或輸入 Validator 路徑');return}
+      if(pickerTarget?.context==='task'){
+        newTaskDraft[pickerTarget.field]=value;renderNewTaskSources();
+      }else if(pickerTarget?.context==='plan'&&batchDraft[pickerTarget.index]){
+        batchDraft[pickerTarget.index][pickerTarget.field]=value;
+        const t=taskMap[currentTaskId];
+        if(t){commitPlanDraft(t,{markDirty:t.status==='paused'&&pickerTarget.index===batchState.index});renderBoardFromMap();renderExecutionPlan(t);}
+      }else if(pickerTarget&&batchDraft[pickerTarget.index]){
+        batchDraft[pickerTarget.index][pickerTarget.field]=value;renderBatchDraft();
+      }
+      closeModal('pathPickerModal');showToast('Validator path updated');
+    };
+    use.onclick=applyManual;
+    manual.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();applyManual()}};
+    openModal('pathPickerModal');setTimeout(()=>manual.focus(),0);return;
+  }
+  pickerOptions.innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
   document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
     if(pickerTarget?.context==='task'){
       newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources();
