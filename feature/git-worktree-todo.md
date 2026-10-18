@@ -321,6 +321,8 @@ Main              → Closed · no_changes
 Isolated Worktree → Closed · worktree_ready · no_changes
 ```
 
+This is the one normal Main completion exception that does not require a Project-branch merge: there is nothing to deliver.
+
 Do not create empty commits just to advance state.
 
 ---
@@ -339,6 +341,26 @@ Core rule:
 
 > **Execution parallel; merge serialized per repository + target branch.**
 
+Queue order is deterministic FIFO by durable `merge_queue_seq`.
+
+When an effective Main Task reaches Runner Complete and has a deliverable commit:
+
+```text
+atomically allocate next merge_queue_seq for repository + target_branch
+↓
+persist merge_queue_seq on the Task
+↓
+enqueue pending merge
+```
+
+Rules:
+
+- lower `merge_queue_seq` merges first;
+- restart/process recovery must preserve the persisted order;
+- a later Task finishing earlier must not jump ahead of an already-enqueued lower sequence;
+- waiting/restart does not consume merge failure count;
+- this is a serialized Git-delivery queue, not a second Runner scheduler.
+
 Different repositories are independent.
 
 Different target branches may have independent merge queues, while short repository-wide ref/worktree mutation still uses the repository Git lock.
@@ -347,10 +369,14 @@ Different target branches may have independent merge queues, while short reposit
 
 ## 10. Direct Main merge transaction
 
+The merge must remain abortable until required merge validation has passed.
+
 ```text
-Task snapshot commit ready
+merge source commit ready
 ↓
 Task stays Ongoing · pending_merge
+↓
+wait for lowest merge_queue_seq
 ↓
 acquire target-branch merge lock
 ↓
@@ -358,29 +384,48 @@ resolve safe worktree for target_branch
 ↓
 read latest target HEAD
 ↓
-normal Git merge local Task branch → target_branch
+git merge --no-ff --no-commit <merge_source_branch>
 ↓
-success?
+Git conflict?
 ├─ Yes
 │   ↓
-│ record merged_target_head_sha
+│ git merge --abort
 │   ↓
-│ Closed · merged
+│ real merge failure handling
 │
 └─ No
     ↓
-  git merge --abort
+  run required merge validation, if configured
     ↓
-  merge_failure_count += 1
-    ↓
-  fail handling
+  validation PASS?
+  ├─ Yes
+  │   ↓
+  │ git commit
+  │   ↓
+  │ record merge commit / merged_target_head_sha
+  │   ↓
+  │ Closed · merged
+  │
+  └─ No
+      ↓
+    git merge --abort
+      ↓
+    real merge failure handling
 ```
 
 Conceptual merge:
 
 ```bash
-git merge local/task/T-001-r1
+git merge --no-ff --no-commit local/task/T-001-r1
+# run configured merge validation while merge is still uncommitted
+git commit
 ```
+
+If no separate merge validation is configured, a conflict-free merge may proceed directly to `git commit`.
+
+Do not create another validation engine. Reuse the existing configured deterministic/project validation hooks where applicable; source-code correction still belongs to the existing Runner recovery path.
+
+`--no-ff` gives one consistent Task-delivery merge boundary even when fast-forward would otherwise be possible. `--no-commit` keeps the merge abortable before acceptance.
 
 Normal merge preserves ancestry so later Tasks based on older Project commits can conflict correctly.
 
@@ -391,9 +436,9 @@ Normal merge preserves ancestry so later Tasks based on older Project commits ca
 Every **real merge failure** follows exactly one path:
 
 ```text
-normal merge attempted
+git merge --no-ff --no-commit attempted
 ↓
-conflict / incompatible merge result
+Git conflict OR required merge validation fails and source changes are needed
 ↓
 git merge --abort
 ↓
@@ -432,11 +477,12 @@ Count only a real merge attempt that fails because the Task result cannot be mer
 Examples:
 
 - Git source conflict;
-- merge/recovery result remains incompatible with latest Project code;
-- a deterministic merge validation tied directly to the merge result requires source changes.
+- conflict-free merge enters uncommitted merge state but required merge validation fails and source changes are needed;
+- recovered source still cannot merge/validate against the latest Project code.
 
 Do not count:
 
+- configured merge validation is unavailable because of an infrastructure/transient error before it can judge the merged code;
 - waiting in merge queue;
 - merge lock busy;
 - dirty target checkout;
@@ -489,14 +535,24 @@ Do not merely remove conflict markers.
 Run normal Workflow / Review / Validate.
 ```
 
-### Recovery worktree
+### Recovery worktree and merge source
 
-Recovery may use a temporary system-owned recovery branch/worktree based on latest target HEAD.
+The Task has exactly one **current merge source**.
+
+Initially after Runner Complete:
+
+```text
+merge_source_branch   = local/task/T-001-r1
+merge_source_sha      = task_snapshot_sha
+merge_source_worktree = .worktrees/T-001-r1
+```
+
+After a real merge failure that requires source redo, create a system-owned recovery branch/worktree from latest target HEAD:
 
 ```text
 latest target branch
 ↓
-temporary recovery worktree
+local/recovery/T-001-r1-f1
 ↓
 existing Runner redoes original Task
 ↓
@@ -504,12 +560,29 @@ Runner Complete
 ↓
 commit recovered result
 ↓
-recovered branch becomes new merge source
+atomically update:
+  merge_source_branch
+  merge_source_sha
+  merge_source_worktree
 ↓
-normal merge → captured Project branch
+next merge attempt uses ONLY this latest merge source
 ```
 
-This recovery branch exists only after a real merge failure. It is not a permanent integration layer.
+Do not merge the original Task branch again after a recovery result has become the current merge source.
+
+If another real merge failure occurs, create the next recovery identity, for example:
+
+```text
+local/recovery/T-001-r1-f2
+```
+
+and replace the current merge source only after the new recovery result is durably committed.
+
+If the Global failure limit is exceeded, `worktree_ready` must point to/retain the **latest current merge source**, not the stale original Task result.
+
+Original Task/recovery artifacts may be cleaned only after the latest source pointer and final merge/fallback state are durable.
+
+Recovery branches exist only after real merge failures; they are not a normal integration layer.
 
 ---
 
@@ -593,7 +666,7 @@ Retain the Task result.
 
 ## 15. Main completion rule
 
-> **Effective Main is not complete at Runner Complete. It is complete only after the Task/recovery source branch has been successfully merged into the captured Project branch.**
+> **Effective Main is not complete at Runner Complete. It is complete only after the current merge source has been successfully merged into the captured Project branch. The only normal exception is `no_changes`, where there is nothing to deliver.**
 
 | Situation | Board | Merge detail |
 | --- | --- | --- |
@@ -604,8 +677,9 @@ Retain the Task result.
 | Conflict Runner recovery | Ongoing | conflict_recovery |
 | Target checkout dirty | Ongoing | waiting_target_clean |
 | Target workspace unavailable | Ongoing | waiting_target_workspace |
+| Main has no effective changes | Closed | no_changes |
 | Merge success | Closed | merged |
-| Merge failures exceed limit | Closed | worktree_ready · Main fallback |
+| Merge failures exceed limit | Closed | worktree_ready · Main fallback · merge_failure_limit_exceeded |
 | Isolated Worktree Runner Complete + commit | Closed | worktree_ready |
 
 Paused remains execution-only.
@@ -631,7 +705,12 @@ git:
   task_snapshot_sha: def456
 
   merge_status: pending_merge
+  merge_queue_seq: 42
+
   merge_source_branch: local/task/T-001-r2
+  merge_source_sha: def456
+  merge_source_worktree: .worktrees/T-001-r2
+
   merge_failure_count: 0
   last_merge_failure: null
 
@@ -663,7 +742,11 @@ Global `merge_failure_limit` is not duplicated into Task metadata.
 
 Normal merge preserves ancestry, so restart detection is simple.
 
-After restart, if `task_snapshot_sha` or the final recovery-source commit is already an ancestor of the captured target branch:
+After restart:
+
+1. restore pending Main Tasks ordered by persisted `merge_queue_seq`;
+2. restore the persisted current `merge_source_branch / merge_source_sha / merge_source_worktree`;
+3. if `merge_source_sha` is already an ancestor of the captured target branch:
 
 ```text
 already merged
@@ -671,7 +754,9 @@ already merged
 → do not merge again
 ```
 
-Otherwise continue from the persisted merge state.
+4. otherwise continue the pending merge/recovery state without changing queue order.
+
+If a crash happens while the target worktree is in an unfinished merge state, Integration Manager must first reconcile ownership and either finalize the already-durable merge or safely abort its own incomplete merge before retrying.
 
 Do not create duplicate merge commits after a crash.
 
@@ -728,7 +813,7 @@ Fail-safe defaults:
 
 - successful Main Task branch/worktree may be removed only after merged state is durable;
 - recovery worktree may be removed after merge transaction is durably finalized;
-- Main fallback-to-Isolated result is retained;
+- Main fallback-to-Isolated retains the latest current merge source branch/worktree;
 - Isolated Worktree `worktree_ready` is retained until explicit cleanup/delete;
 - failed/blocked Task output is retained;
 - never delete unknown/unowned paths by name alone.
@@ -788,7 +873,8 @@ B Runner Complete
    └─ yes → merge_failure_count +1
             → Runner redo against latest feature/ui
             → commit recovery result
-            → retry merge
+            → update current merge source
+            → retry merge with --no-ff --no-commit
 ```
 
 Therefore concurrent Tasks still get real Git conflict detection while keeping the merge path direct.
@@ -818,28 +904,30 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] `git add -A` + commit remaining Task changes.
 - [ ] Preserve Agent-created commits.
 - [ ] Record task_snapshot_sha.
-- [ ] Handle no_changes without empty commits.
+- [ ] Handle no_changes without empty commits; Main no_changes is the only normal completion path that skips Project merge.
 
 ### Phase D — Main merge
 
-- [ ] Serialize merge per repository + target branch.
+- [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order.
 - [ ] Resolve safe worktree for captured target branch.
-- [ ] Normal `git merge <Task/recovery source branch>` directly into target branch.
+- [ ] Use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
+- [ ] Run required configured merge validation before commit; validation that requires source changes aborts merge and counts as one real merge failure.
+- [ ] Commit merge only after acceptance and record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
 
 ### Phase E — fail merge / recovery
 
 - [ ] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
 - [ ] Read current Global `merge_failure_limit` after each real failure.
-- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, retry merge.
-- [ ] If count > limit: stop automatic Main merge and close as Isolated Worktree / worktree_ready.
+- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, atomically replace merge_source_branch/SHA/worktree, then retry merge.
+- [ ] If count > limit: stop automatic Main merge, retain latest merge source, and close as Isolated Worktree / worktree_ready with reason merge_failure_limit_exceeded.
 - [ ] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
 
 ### Phase F — UI
 
 - [ ] Effective Main remains Ongoing from Runner Complete until merge succeeds or fallback closes it.
 - [ ] Show pending_merge / merging / conflict_recovery / waiting_target_clean / waiting_target_workspace / merged / worktree_ready.
-- [ ] Main fallback visibly indicates original Main + merge_retry_exhausted reason.
+- [ ] Main fallback visibly indicates original Main + merge_failure_limit_exceeded reason.
 - [ ] No top-level Git Worktree page; Task Info + Project Workspace Results remain enough.
 
 ### Phase G — remote
@@ -854,6 +942,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 ### Isolation / concurrency
 
 - [ ] Start 2 / 5 / 10 Tasks from one target branch concurrently.
+- [ ] Confirm durable merge_queue_seq FIFO is preserved across process restart.
 - [ ] Every Runner uses a unique Task worktree.
 - [ ] Concurrent Main Off blocks a second Main; On allows it.
 - [ ] Busy→Worktree Auto remains Worktree while busy even when Concurrent Main is On.
@@ -861,8 +950,11 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 ### Merge success
 
 - [ ] Runner Complete does not close Main before merge.
-- [ ] Task commit merges directly into target branch.
-- [ ] Merge success closes Main.
+- [ ] Task source merges directly into target branch with --no-ff --no-commit.
+- [ ] Conflict-free merge remains uncommitted until configured merge validation passes.
+- [ ] Validation requiring source changes aborts cleanly and counts exactly one real merge failure.
+- [ ] Merge success commits and closes Main.
+- [ ] Main no_changes closes without a Project merge.
 - [ ] Restart after merge recognizes ancestry and does not duplicate merge.
 
 ### Merge conflict
@@ -872,7 +964,9 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Merge B into latest target and confirm real Git conflict.
 - [ ] Confirm merge abort + `merge_failure_count += 1` exactly once.
 - [ ] Confirm existing Runner redoes B against latest target.
+- [ ] Confirm recovery updates merge_source_branch/SHA/worktree and stale original Task source is not merged again.
 - [ ] Confirm recovery branch merges successfully when fixed.
+- [ ] Confirm fallback retains latest recovery source after repeated failures.
 
 ### Merge failure limit
 
@@ -918,9 +1012,17 @@ Runner Complete
 ↓
 commit Task result locally
 ↓
-normal merge Task → Project branch
-├─ success → Closed / finish
-└─ fail    → merge_failure_count +1
+git merge --no-ff --no-commit current merge source → Project branch
+├─ conflict / merge validation fail requiring source changes
+│   → git merge --abort
+│   → merge_failure_count +1
+├─ accepted
+│   → git commit
+│   → Closed / finish
+└─ no_changes
+    → Closed / finish
+
+real merge fail
              ↓
            read Global merge_failure_limit
              ↓
