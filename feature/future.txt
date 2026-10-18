@@ -178,6 +178,11 @@ Prototype composition:
   - TaskSourceCard
   - TaskListEmptyState
   - TaskListAddFooter
+- Task List creation stays transient until Create and must reuse TaskListWorkspace + TaskEditor; Draft rows support the same core edit/remove/reorder vocabulary as a formal Task List.
+- Dirty transient Task List drafts require an explicit discard decision before closing; empty untouched drafts may close immediately.
+- Prototype Create buttons may use local submitting locks for UX, but production correctness comes from backend idempotency / request IDs.
+- TaskDrawerShell is the only owner of Drawer Close / backdrop / Escape / focus return. Do not reintroduce page-level close handlers.
+- After these mock/template interactions are stable, feature/ui should freeze structurally; remaining prototype changes should be browser-regression bug fixes rather than new IA layers.
 - Main HTML keeps mount points instead of duplicating those surfaces.
 - window.TaskUi is the shared navigation/controller facade.
 - Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
