@@ -10,11 +10,13 @@ from urllib.parse import parse_qs, urlparse
 
 
 try:
+    from .chat_service import ChatService
     from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
+    from chat_service import ChatService
     from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
@@ -38,6 +40,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
         self._workflow_catalog_cache: dict | None = None
+        self.chat_service = ChatService()
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
@@ -68,6 +71,17 @@ class Handler(SimpleHTTPRequestHandler):
                         exclude_runtime_path=query.get("exclude_runtime", [""])[0]
                     )
                 )
+            if parsed.path == "/api/chat/sessions":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.chat_service.sessions(project))
+            if parsed.path == "/api/chat/messages":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.chat_service.messages(
+                    project,
+                    query.get("session_id", [""])[0],
+                ))
             if parsed.path == "/api/backends":
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])
@@ -139,6 +153,28 @@ class Handler(SimpleHTTPRequestHandler):
                     project=str(body.get("project", "")),
                     current=str(body.get("current", "")),
                 )
+            if parsed.path == "/api/chat/session/create":
+                return self._json(self.state.chat_service.create_session(
+                    self._project(body),
+                    title=str(body.get("title", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/chat/session/select":
+                return self._json(self.state.chat_service.select_session(
+                    self._project(body),
+                    str(body.get("session_id", "")),
+                ))
+            if parsed.path == "/api/chat/session/rename":
+                return self._json(self.state.chat_service.rename_session(
+                    self._project(body),
+                    str(body.get("session_id", "")),
+                    str(body.get("title", "")),
+                ))
+            if parsed.path == "/api/chat/session/delete":
+                return self._json(self.state.chat_service.delete_session(
+                    self._project(body),
+                    str(body.get("session_id", "")),
+                ))
             if parsed.path == "/api/project/message":
                 project = self._project(body)
                 text = str(body.get("message", "")).strip()

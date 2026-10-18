@@ -456,7 +456,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 12. 共用 Chat Backend 與 API
 ---------------------------
 
-[ ] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
+[x] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
+    - Production foundation: Project Chat session/message persistence is owned by `ui/chat_service.py` and exposed through the existing `UIServer`; Runner task history remains separate.
 [ ] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
 [ ] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
 [ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
