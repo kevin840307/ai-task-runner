@@ -169,6 +169,7 @@ When moving beyond the prototype:
 - Browser-test Global Settings -> Execution / Interface / Language.
 - Verify System / Light / Dark appearance and persistence.
 - Verify all five palettes in both Light and Dark, especially Tasks, Worktree cards, selected/hover borders, modals, inputs, and sidebar boundaries.
+- Task Details is one theme surface: Drawer header/tabs/body/footer, Overview cards, Runtime timeline/output, History, Worktree results, Steps, full Task List and nested Task Editor must never fall back to hard-coded light surfaces.
 - Verify language preference persistence and document language projection.
 - Verify each Project independently remembers Agent / Model / Mode / Workflow.
 - Verify same-Project Chat sessions share those settings.
