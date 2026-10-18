@@ -369,6 +369,14 @@
             <option value="always_worktree">Always Worktree</option>
           </select>
         </label>
+        <label class="settings-field">
+          <span><strong>Merge failure limit</strong><small>Global automatic merge/recovery budget. When failures exceed this value, keep the result as an Isolated Worktree and close it.</small></span>
+          <input id="globalMergeFailureLimit" class="settings-number" type="number" min="0" max="99" step="1" value="3">
+        </label>
+        <label class="settings-field">
+          <span><strong>Allow concurrent Main tasks</strong><small>Off keeps the current Main-busy restriction. On allows multiple Main Tasks to run in isolated worktrees and merge later through the integration queue.</small></span>
+          <span class="settings-switch-wrap"><input id="allowConcurrentMainTasks" class="settings-switch" type="checkbox"><span>Allow</span></span>
+        </label>
         <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
       </section>
       <section class="settings-panel" data-settings-panel="defaults" hidden>
