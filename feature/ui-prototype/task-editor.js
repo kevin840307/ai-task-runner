@@ -716,18 +716,13 @@ function mockAskQuestions(context=''){
       {label:'最小修改',description:'只改必要範圍，降低 regression'},
       {label:'完整優化',description:'連同鄰近 UX / code ownership 一起整理'},
       {label:'先分析',description:'先確認設計與風險，再進行修改'},
-      {label:'先做 UI Mock',description:'先完成可操作 prototype，再接正式 backend'},
-      {label:'先做 Backend',description:'先定義 API、資料結構與 Runner contract'},
-      {label:'測試優先',description:'先補測試與失敗情境，再修改實作'},
-      {label:'維護性優先',description:'整理責任邊界，避免再增加 wrapper / duplicate logic'},
-      {label:'效能優先',description:'優先減少延遲、資源用量與不必要操作'}
+      {label:'先做 UI Mock',description:'先完成可操作 prototype，再接正式 backend'}
     ]},
     {header:'Verification',question:'這次驗證希望做到什麼程度？',type:'choice',options:[
       {label:'Focused tests',description:'只跑直接相關測試'},
       {label:'Regression tests',description:'包含鄰近功能 regression'},
       {label:'Mock first',description:'先完成 Mock / prototype 驗證'},
-      {label:'Live integration',description:'接真實 Agent / backend 驗證'},
-      {label:'長時間可靠性',description:'補 retry、resume、timeout 與 soak 測試'}
+      {label:'Live integration',description:'接真實 Agent / backend 驗證'}
     ]},
     {header:'Extra context',question:'還有沒有需要 Agent 特別注意的限制或補充？',type:'text',options:[],required:false}
   ];
@@ -754,7 +749,9 @@ function renderAskFlow(session=activeChat(),{preserveScroll=false}={}){
   const options=panel.querySelector('#composerAskOptions'),textInput=panel.querySelector('#composerAskText'),next=panel.querySelector('#composerAskNext');
   const key=String(flow.index),answer=flow.answers[key]||'',selected=flow.selected[key]||'';
   if(q.type==='choice'){
-    const rows=[...(q.options||[]),{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
+    const MAX_ASK_VISIBLE_OPTIONS=5;
+    const fixed=(q.options||[]).slice(0,MAX_ASK_VISIBLE_OPTIONS-1);
+    const rows=[...fixed,{label:'其他（自行輸入）',description:'輸入自己的答案',custom:true}];
     options.hidden=false;options.innerHTML=rows.map((x,i)=>`<button class='composer-ask-option ${selected===(x.custom?'__other__':x.label)?'selected':''}' type='button' data-ask-option='${i}'><span class='composer-ask-radio'></span><span><strong>${escapeHtml(x.label)}</strong><small>${escapeHtml(x.description||'')}</small></span></button>`).join('');
     options.querySelectorAll('[data-ask-option]').forEach((btn,i)=>btn.onclick=()=>{const scrollTop=options.scrollTop,item=rows[i],wasOther=flow.selected[key]==='__other__';flow.selected[key]=item.custom?'__other__':item.label;if(!item.custom)flow.answers[key]=item.label;else if(!wasOther)flow.answers[key]='';renderAskFlow(session,{preserveScroll:true});const nextOptions=document.getElementById('composerAskOptions');if(nextOptions)nextOptions.scrollTop=scrollTop;if(item.custom)setTimeout(()=>document.getElementById('composerAskText')?.focus({preventScroll:true}),0)});
     textInput.hidden=selected!=='__other__';textInput.value=selected==='__other__'?answer:'';textInput.placeholder='輸入自訂答案…';
