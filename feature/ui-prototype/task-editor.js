@@ -515,7 +515,8 @@ const mockAgentCapabilities={
 const PROJECT_CHAT_SETTINGS_KEY='ai-task-runner.prototype.projectChatSettings';
 const GLOBAL_DEFAULTS_KEY='ai-task-runner.prototype.globalDefaults';
 const PROJECT_CHAT_WORKFLOWS=new Set(['ralphy_ai_validate.yaml','mixed.yaml','file.yaml','dynamic_handoff.yaml']);
-const BASE_PROJECT_PREFERENCES=Object.freeze({agent:'qwen',model:'qwen3-coder-plus',mode:'auto',workflow:'ralphy_ai_validate.yaml'});
+const PROJECT_REASONING_LEVELS=Object.freeze(['low','medium','high','xhigh','max']);
+const BASE_PROJECT_PREFERENCES=Object.freeze({agent:'qwen',model:'qwen3-coder-plus',mode:'auto',reasoning:'medium',workflow:'ralphy_ai_validate.yaml'});
 
 function normalizeProjectPreferences(value={},fallback=BASE_PROJECT_PREFERENCES){
   const fallbackAgent=mockAgentProfiles[fallback.agent]?fallback.agent:BASE_PROJECT_PREFERENCES.agent;
@@ -526,6 +527,7 @@ function normalizeProjectPreferences(value={},fallback=BASE_PROJECT_PREFERENCES)
     agent,
     model:profile.models.some(x=>x.id===value.model)?value.model:fallbackModel,
     mode:profile.modes.some(x=>x.id===value.mode)?value.mode:fallbackMode,
+    reasoning:PROJECT_REASONING_LEVELS.includes(value.reasoning)?value.reasoning:(PROJECT_REASONING_LEVELS.includes(fallback.reasoning)?fallback.reasoning:BASE_PROJECT_PREFERENCES.reasoning),
     workflow:PROJECT_CHAT_WORKFLOWS.has(value.workflow)?value.workflow:(PROJECT_CHAT_WORKFLOWS.has(fallback.workflow)?fallback.workflow:BASE_PROJECT_PREFERENCES.workflow)
   };
 }
@@ -569,15 +571,16 @@ function projectChatSettingsFor(key=currentProjectKey){
 }
 
 function renderGlobalDefaultSettings(){
-  const agent=document.getElementById('globalDefaultAgent'),model=document.getElementById('globalDefaultModel'),mode=document.getElementById('globalDefaultMode'),workflow=document.getElementById('globalDefaultWorkflow'),preview=document.getElementById('globalDefaultsPreview');
-  if(!agent||!model||!mode||!workflow)return;
+  const agent=document.getElementById('globalDefaultAgent'),model=document.getElementById('globalDefaultModel'),mode=document.getElementById('globalDefaultMode'),reasoning=document.getElementById('globalDefaultReasoning'),workflow=document.getElementById('globalDefaultWorkflow'),preview=document.getElementById('globalDefaultsPreview');
+  if(!agent||!model||!mode||!reasoning||!workflow)return;
   agent.innerHTML=Object.entries(mockAgentProfiles).map(([key,profile])=>`<option value="${escapeAttr(key)}">${escapeHtml(profile.label)}</option>`).join('');
   agent.value=globalProjectDefaults.agent;
   const profile=mockAgentProfiles[globalProjectDefaults.agent]||mockAgentProfiles.qwen;
   model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.label)}</option>`).join('');
   mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.label)}</option>`).join('');
-  model.value=globalProjectDefaults.model;mode.value=globalProjectDefaults.mode;workflow.value=globalProjectDefaults.workflow;
-  if(preview)preview.innerHTML=`<strong>New Project</strong> · ${escapeHtml(profile.label)} · ${escapeHtml(profile.models.find(x=>x.id===globalProjectDefaults.model)?.label||globalProjectDefaults.model)} · ${escapeHtml(profile.modes.find(x=>x.id===globalProjectDefaults.mode)?.label||globalProjectDefaults.mode)}<br><strong>Workflow</strong> · ${escapeHtml(globalProjectDefaults.workflow)}<br>Existing Projects are unchanged.`;
+  reasoning.innerHTML=PROJECT_REASONING_LEVELS.map(x=>`<option value="${escapeAttr(x)}">${escapeHtml(x)}</option>`).join('');
+  model.value=globalProjectDefaults.model;mode.value=globalProjectDefaults.mode;reasoning.value=globalProjectDefaults.reasoning;workflow.value=globalProjectDefaults.workflow;
+  if(preview)preview.innerHTML=`<strong>New Project</strong> · ${escapeHtml(profile.label)} · ${escapeHtml(profile.models.find(x=>x.id===globalProjectDefaults.model)?.label||globalProjectDefaults.model)} · ${escapeHtml(profile.modes.find(x=>x.id===globalProjectDefaults.mode)?.label||globalProjectDefaults.mode)} · reasoning ${escapeHtml(globalProjectDefaults.reasoning)}<br><strong>Workflow</strong> · ${escapeHtml(globalProjectDefaults.workflow)}<br>Existing Projects are unchanged.`;
 }
 function updateGlobalDefaultSettings(patch){
   const next=normalizeProjectPreferences({...globalProjectDefaults,...patch},globalProjectDefaults);
@@ -589,18 +592,20 @@ document.getElementById('globalDefaultAgent')?.addEventListener('change',e=>{
 });
 document.getElementById('globalDefaultModel')?.addEventListener('change',e=>{updateGlobalDefaultSettings({model:e.target.value});showToast('Default Model updated')});
 document.getElementById('globalDefaultMode')?.addEventListener('change',e=>{updateGlobalDefaultSettings({mode:e.target.value});showToast('Default Mode updated')});
+document.getElementById('globalDefaultReasoning')?.addEventListener('change',e=>{updateGlobalDefaultSettings({reasoning:e.target.value});showToast('Default Reasoning updated')});
 document.getElementById('globalDefaultWorkflow')?.addEventListener('change',e=>{updateGlobalDefaultSettings({workflow:e.target.value});showToast('Default Workflow updated')});
 function chatAgentKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).agent}
 function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||mockAgentProfiles.qwen}
 function chatAgentLabel(key){return chatAgentProfile(key).label}
 function chatWorkflowKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).workflow}
 function syncChatAgentControl(){
-  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),workflow=document.getElementById('chatWorkflow'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode||!workflow)return;
+  const session=activeChat(),agent=document.getElementById('chatAgent'),model=document.getElementById('chatModel'),mode=document.getElementById('chatMode'),reasoning=document.getElementById('chatReasoning'),workflow=document.getElementById('chatWorkflow'),ask=document.getElementById('chatAsk');if(!session||!agent||!model||!mode||!reasoning||!workflow)return;
   const prefs=projectChatSettingsFor(chatProjectKey(session)),profile=chatAgentProfile(prefs.agent);
   agent.value=prefs.agent;
   model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.model?'selected':''}>${escapeHtml(x.label)}</option>`).join('');
   mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}" ${x.id===prefs.mode?'selected':''} title="${escapeAttr(x.description)}">${escapeHtml(x.label)}</option>`).join('');
-  model.value=prefs.model;mode.value=prefs.mode;workflow.value=prefs.workflow;
+  reasoning.innerHTML=PROJECT_REASONING_LEVELS.map(x=>`<option value="${escapeAttr(x)}" ${x===prefs.reasoning?'selected':''}>${escapeHtml(x)}</option>`).join('');
+  model.value=prefs.model;mode.value=prefs.mode;reasoning.value=prefs.reasoning;workflow.value=prefs.workflow;
   if(ask){ask.disabled=!profile.askQuestions;ask.title=profile.askQuestions?'Force a mock AI clarification flow':'Selected Agent does not expose interactive questions'}
 }
 function agentCapabilityItems(){return mockAgentCapabilities[chatAgentKey()]||[]}
@@ -1383,6 +1388,11 @@ document.getElementById('chatMode').onchange=e=>{
   const key=chatProjectKey(session),prefs=projectChatSettingsFor(key);prefs.mode=e.target.value;saveProjectChatSettings();syncChatAgentControl();
   const native=chatAgentProfile(prefs.agent).modes.find(x=>x.id===prefs.mode)?.native||prefs.mode;
   showToast(`${key} · Mode · ${e.target.options[e.target.selectedIndex]?.text||e.target.value} → ${native}`);
+};
+document.getElementById('chatReasoning').onchange=e=>{
+  const session=activeChat();if(!session)return;
+  const key=chatProjectKey(session),prefs=projectChatSettingsFor(key),value=PROJECT_REASONING_LEVELS.includes(e.target.value)?e.target.value:BASE_PROJECT_PREFERENCES.reasoning;
+  prefs.reasoning=value;saveProjectChatSettings();syncChatAgentControl();showToast(`${key} · Reasoning · ${value}`);
 };
 document.getElementById('chatAsk').onclick=()=>{
   const input=document.getElementById('chatInput'),session=activeChat(),profile=chatAgentProfile(chatAgentKey(session));
