@@ -1227,7 +1227,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     if(!newTaskListDraft)return;
     const index=newTaskListDraft.items.length,item=buildEditorItem(newTaskListDraft,index);if(!item)return;
     newTaskListDraft.items.push(item);newTaskListDraft.listItems=newTaskListDraft.items;
-    showToast('Draft task added');return;
+    showToast(uiText('taskListDraft.added'));return;
   }
   if(ctx.mode==='root-create'){
     const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
@@ -1545,14 +1545,14 @@ function syncTaskListDraftActions(active){
 function renderNewTaskListDraftWorkspace(){
   if(!newTaskListDraft)return;
   const host=document.getElementById('planFormList'),summary=document.getElementById('planTaskSummary'),items=newTaskListDraft.items||[];
-  document.getElementById('planStatePill').textContent='Draft';
-  document.getElementById('planInfoHeading').textContent='Draft info';
+  document.getElementById('planStatePill').textContent=uiText('taskListDraft.draft');
+  document.getElementById('planInfoHeading').textContent=uiText('taskListDraft.info');
   if(!items.length){
     host.innerHTML=TaskUiTemplates.emptyTaskList({large:true,id:'taskListDraftEmpty'});
     const empty=host.querySelector('#taskListDraftEmpty');
     if(empty){
-      empty.querySelector('strong').textContent='No tasks yet';
-      empty.querySelector('span').textContent='+ Add first task';
+      empty.querySelector('strong').textContent=uiText('taskList.empty');
+      empty.querySelector('span').textContent=uiText('taskList.addFirst');
       empty.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
     }
   }else{
@@ -1560,28 +1560,28 @@ function renderNewTaskListDraftWorkspace(){
     const add=host.querySelector('.plan-add-task-footer');
     if(add)add.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
   }
-  summary.innerHTML=`<span>Title</span><label class="task-list-draft-control"><input id="taskListDraftTitle" value="${escapeAttr(newTaskListDraft.title)}" autocomplete="off"></label><span>Project</span><label class="task-list-draft-control"><select id="taskListDraftProject">${Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('')}</select></label><span>Tasks</span><strong>${items.length}</strong><span>State</span><strong>Not created</strong>`;
+  summary.innerHTML=`<span>${escapeHtml(uiText('taskListDraft.title'))}</span><label class="task-list-draft-control"><input id="taskListDraftTitle" value="${escapeAttr(newTaskListDraft.title)}" autocomplete="off"></label><span>${escapeHtml(uiText('taskListDraft.project'))}</span><label class="task-list-draft-control"><select id="taskListDraftProject">${Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('')}</select></label><span>${escapeHtml(uiText('taskListDraft.tasks'))}</span><strong>${items.length}</strong><span>${escapeHtml(uiText('taskListDraft.state'))}</span><strong>${escapeHtml(uiText('taskListDraft.notCreated'))}</strong>`;
   const title=document.getElementById('taskListDraftTitle'),project=document.getElementById('taskListDraftProject'),create=document.getElementById('confirmTaskListDraft');
   project.value=projectMeta[newTaskListDraft.project]?newTaskListDraft.project:currentProjectKey;
   title.oninput=e=>{
     if(!newTaskListDraft)return;
     newTaskListDraft.title=e.target.value;
-    document.getElementById('drawerTitle').textContent=e.target.value.trim()||'New Task List';
+    document.getElementById('drawerTitle').textContent=e.target.value.trim()||uiText('taskListDraft.defaultTitle');
   };
   project.onchange=e=>{if(newTaskListDraft)newTaskListDraft.project=e.target.value};
   syncTaskListDraftActions(true);
-  if(create){create.disabled=items.length===0;create.title=items.length?'Create Task List':'Add at least one task before creating the Task List'}
+  if(create){create.disabled=items.length===0;create.title=items.length?uiText('taskListDraft.create'):uiText('taskListDraft.needTask')}
 }
 function discardNewTaskListDraft({close=true}={}){
   newTaskListDraft=null;syncTaskListDraftActions(false);
-  document.getElementById('planInfoHeading').textContent='List info';
+  document.getElementById('planInfoHeading').textContent=uiText('taskListDraft.listInfo');
   if(close&&typeof closeTaskDrawerShell==='function')closeTaskDrawerShell();
 }
 function createEmptyTaskListAndOpen(initialProjectKey=currentProjectKey){
   const projectKey=projectMeta[initialProjectKey]?initialProjectKey:currentProjectKey;
-  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:'New Task List',project:projectKey,projectContext:projectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
+  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:uiText('taskListDraft.defaultTitle'),project:projectKey,projectContext:projectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
   planModalEl.classList.remove('subview-open');planModalEl.classList.add('open');
-  setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:'Draft · not created yet',showBack:false});
+  setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:uiText('taskListDraft.meta'),showBack:false});
   renderNewTaskListDraftWorkspace();
   setTimeout(()=>{const input=document.getElementById('taskListDraftTitle');input?.focus();input?.select()},0);
 }
@@ -1590,15 +1590,15 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
   if(!newTaskListDraft)return;
   const title=String(document.getElementById('taskListDraftTitle')?.value||newTaskListDraft.title||'').trim();
   const project=document.getElementById('taskListDraftProject')?.value||newTaskListDraft.project||currentProjectKey;
-  if(!title){showToast('Task List title cannot be empty');return}
+  if(!title){showToast(uiText('taskListDraft.titleRequired'));return}
   const items=(newTaskListDraft.items||[]).map(x=>({...x}));
-  if(!items.length){showToast('Add at least one task before creating the Task List');renderNewTaskListDraftWorkspace();return}
+  if(!items.length){showToast(uiText('taskListDraft.needTask'));renderNewTaskListDraftWorkspace();return}
   const id='T-'+(++taskSequence),first=items[0];
   const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:items.length===1?'1 task':`${items.length} ordered tasks`,tags:[`${items.length} task${items.length===1?'':'s'}`],workflow:items.length===1?first.workflow:'Tasks',projectContext:project,project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'—',goal:items.length===1?first.prompt:`${items.length} ordered tasks`,items,listItems:items,workspacePolicy:items.length===1?first.workspacePolicy:'per_item',workspaceKind:items.length===1?first.workspaceKind:'per_item',branch:items.length===1?first.branch:'—',executionRoot:items.length===1?first.executionRoot:'Per-task workspaces'};
   newTaskListDraft=null;syncTaskListDraftActions(false);
-  document.getElementById('planInfoHeading').textContent='List info';
+  document.getElementById('planInfoHeading').textContent=uiText('taskListDraft.listInfo');
   taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
-  openPlanDialog(id,{returnTarget:'close'});showToast('Task List created · add tasks when ready');
+  openPlanDialog(id,{returnTarget:'close'});showToast(uiText('taskListDraft.created'));
 });
 function handleCreateEntryClick(e){
   e.preventDefault();e.stopImmediatePropagation();
