@@ -4,7 +4,7 @@
 >
 > Scope: add isolated Task worktrees + automatic local merge around the existing Runner. **Do not redesign Runner execution.**
 >
-> Core rule: the captured Project branch is the canonical truth. Every Task runs in its own local worktree/branch. Effective Main is complete only after the Task result is successfully merged back into the captured Project branch.
+> Core rule: the captured Project branch is the canonical truth. In the current UI/Task orchestration flow, every Task run is prepared in its own local worktree/branch before Runner is triggered. Standalone/CLI Runner is independent of this and simply runs against the caller-supplied `project_root`. Effective Main is complete only after the Task result is successfully merged back into the captured Project branch.
 >
 > **Hard invariant:** worktree/Git merge support is a removable backend adapter in a new top-level `workspace/` package. It must not live under Runner or UI, and Runner/UI must not own Git worktree/merge behavior.
 
@@ -33,12 +33,24 @@ Exact file names may follow the repository's existing naming conventions, but th
 
 ### Removable adapter invariant
 
+Current UI/Task product flow:
+
 ```text
-Task Backend / Orchestrator
+UI / Task Backend
 ↓
 workspace.prepare(...)
 ↓
-project_root
+Task worktree project_root
+↓
+Runner(project_root)
+```
+
+Standalone/CLI Runner flow:
+
+```text
+CLI / other caller
+↓
+caller-supplied project_root
 ↓
 Runner(project_root)
 ```
@@ -49,15 +61,7 @@ Runner does not know whether `project_root` is:
 - a Git worktree;
 - a future alternate workspace implementation.
 
-If worktree support is disabled or removed later:
-
-```text
-workspace resolution
-→ project_root = original Project path
-→ Runner(project_root)
-```
-
-Runner contract does not change.
+"Removable" is a module-boundary requirement, not a current product runtime toggle. The current UI Task flow still uses worktrees. If `workspace/` is removed or replaced in a future version, Runner/CLI contracts must remain unchanged; only the outer Task/workspace orchestration may change.
 
 ### Dependency direction
 
@@ -207,6 +211,8 @@ validate(project_root, validation_config)
 ```
 
 The API accepts a `project_root` and validation configuration only. It must not accept or interpret worktree/branch/merge concepts.
+
+This validation entry point is verdict-only for source integration: it must not intentionally edit Project source files or run an Agent repair step. If source changes are required, return `SOURCE_FAIL`; the orchestrator aborts the pending merge and starts the normal Runner recovery flow in a separate recovery workspace.
 
 Task Backend / Orchestrator owns sequencing:
 
@@ -415,7 +421,11 @@ Before automatic Main merge or Isolated close:
 ```text
 Runner Complete
 ↓
-verify Task worktree is not in unresolved merge/rebase state
+workspace ownership preflight:
+  registered worktree still matches this Task/Run
+  repository identity is expected
+  current branch is the expected Task branch
+  no merge/rebase/cherry-pick/revert/bisect operation is active
 ↓
 git add -A
 ↓
@@ -425,6 +435,8 @@ record task_snapshot_sha
 ```
 
 If Agent already created commits, keep them and commit only remaining changes.
+
+If ownership/branch/operation preflight fails, fail closed and retain the workspace for diagnosis. Do not guess the branch, switch it automatically, or commit to an unexpected ref.
 
 If there is no effective diff:
 
@@ -470,6 +482,8 @@ Rules:
 - lower `merge_queue_seq` merges first;
 - restart/process recovery must preserve the persisted order;
 - a later Task finishing earlier must not jump ahead of an already-enqueued lower sequence;
+- the queue-head Task keeps its delivery turn while it is in merge conflict recovery; later same-target Tasks do not overtake it;
+- long Runner recovery does **not** hold the short repository/target Git lock; release that lock after abort/cleanup, keep only queue ownership, then reacquire the Git lock for the next merge attempt;
 - waiting/restart does not consume merge failure count;
 - this is a serialized Git-delivery queue, not a second Runner scheduler.
 
@@ -599,6 +613,8 @@ Validation result semantics:
 - `PASS`: merged code is acceptable; commit it.
 - `SOURCE_FAIL`: merged code requires source changes; abort and count exactly one real merge failure.
 - `TECHNICAL_ERROR`: validation could not produce a trustworthy code verdict because of infrastructure/tooling failure; abort the uncommitted merge, do not increment `merge_failure_count`, and reuse the existing technical retry/backoff / Needs Attention owner.
+
+The validation-only path must not repair/edit source inside the pending target merge. All source edits happen through Runner recovery in a separate recovery workspace.
 
 Do not create another validation or technical-retry engine. Reuse existing configured deterministic/project validation and existing technical retry/backoff ownership where applicable; source-code correction still belongs to the existing Runner recovery path.
 
@@ -841,6 +857,19 @@ Needs Attention
 
 Retain the Task result.
 
+### Captured target branch no longer exists
+
+If the captured branch was deleted/renamed and the exact captured target ref no longer resolves:
+
+```text
+Ongoing · waiting_target_branch
+Needs Attention
+```
+
+Do not recreate it automatically, retarget to `main`, or guess a replacement branch.
+
+If the branch still exists but was rewritten and there is no valid common ancestry with the current merge source, fail closed into the same attention path (or an equivalent structured target-history error) before attempting source recovery. Explicit user/backend reconciliation is required.
+
 ---
 
 ## 15. Main completion rule
@@ -856,6 +885,7 @@ Retain the Task result.
 | Conflict Runner recovery | Ongoing | conflict_recovery |
 | Target checkout dirty | Ongoing | waiting_target_clean |
 | Target workspace unavailable | Ongoing | waiting_target_workspace |
+| Captured target branch missing/history invalid | Ongoing | waiting_target_branch |
 | Main has no effective changes | Closed | no_changes |
 | Merge success | Closed | merged |
 | Merge failures exceed limit | Closed | worktree_ready · Main fallback · merge_failure_limit_exceeded |
@@ -965,6 +995,7 @@ Owns:
 - Task branch/worktree create/remove;
 - optional recovery branch/worktree create/remove;
 - resolving `project_root`;
+- Task/Run worktree ownership + expected-branch preflight before snapshot/destructive operations;
 - ownership-safe cleanup;
 - workspace metadata.
 
@@ -992,7 +1023,9 @@ Owns only:
 
 - run against `project_root`;
 - existing Workflow / Agent / Review / Validate behavior;
-- optional thin `validate(project_root, validation_config)` public API.
+- optional thin verdict-only `validate(project_root, validation_config)` public API.
+
+The validation-only API must not perform source repair/editing; required source changes return `SOURCE_FAIL` and go through normal Runner recovery in another workspace.
 
 Runner owns no Git/worktree state.
 
@@ -1098,8 +1131,9 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] Keep all Git worktree/branch creation/removal in top-level workspace package.
 - [ ] Create Task branch/worktree directly from captured target HEAD.
-- [ ] Pass Task worktree to Runner as project_root.
+- [ ] Pass Task worktree to Runner as project_root in the current UI/Task flow; standalone/CLI Runner remains caller-project_root driven and workspace-independent.
 - [ ] Support unique Task + Run identity.
+- [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch and absence of active Git operation; fail closed on mismatch.
 - [ ] Create recovery worktree only after a merge failure that needs source redo.
 - [ ] Ownership-safe cleanup.
 
@@ -1113,12 +1147,12 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 ### Phase D — workspace/ direct merge
 
 - [ ] Keep direct merge implementation inside top-level workspace package, not Runner/UI.
-- [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order.
+- [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order; queue head retains its turn during Runner recovery while short Git locks are released.
 - [ ] Resolve safe worktree for captured target branch.
 - [ ] Before merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
 - [ ] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
 - [ ] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
-- [ ] Reuse an existing public validation entry point or add only a thin Git-unaware `validate(project_root, validation_config)` API; no worktree/branch/merge args.
+- [ ] Reuse an existing public validation entry point or add only a thin Git-unaware, source-non-mutating `validate(project_root, validation_config)` API; no worktree/branch/merge args.
 - [ ] Run required post-merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
 - [ ] Commit merge only after acceptance and record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
@@ -1149,10 +1183,12 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Isolation / concurrency
 
-- [ ] Verify Runner receives only project_root and works unchanged when worktree support is disabled/replaced.
+- [ ] Verify current UI/Task flow prepares a worktree before triggering Runner, while direct CLI Runner still works from caller-supplied project_root with no workspace dependency.
+- [ ] Verify replacing/removing the workspace module would not require changes to Runner/CLI public contracts.
 - [ ] Verify UI has no direct Git/worktree execution path.
 - [ ] Start 2 / 5 / 10 Tasks from one target branch concurrently.
 - [ ] Confirm durable merge_queue_seq FIFO is preserved across process restart.
+- [ ] Confirm queue-head Task remains head during conflict Runner recovery while repository Git lock is released; later same-target Tasks cannot overtake it.
 - [ ] Every Runner uses a unique Task worktree.
 - [ ] Concurrent Main Off blocks a second Main; On allows it.
 - [ ] Busy→Worktree Auto remains Worktree while busy even when Concurrent Main is On.
@@ -1163,6 +1199,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Task source merges directly into target branch with --no-ff --no-commit.
 - [ ] target HEAD == merge_source_base_sha: conflict-free merge may commit without redundant post-merge validation.
 - [ ] target HEAD != merge_source_base_sha: conflict-free merge remains uncommitted until post-merge validation passes.
+- [ ] Validation-only API does not intentionally modify Project source; required edits return SOURCE_FAIL and happen only in recovery workspace.
 - [ ] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
 - [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
 - [ ] Merge success commits and closes Main.
@@ -1190,6 +1227,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] Dirty target => waiting_target_clean; do not mutate user changes.
 - [ ] Target in unmanaged worktree => waiting_target_workspace.
+- [ ] Captured target branch deleted/renamed or target history has no valid common ancestry => waiting_target_branch / structured Needs Attention; never guess/recreate/retarget.
 - [ ] User branch switch after Task start never retargets old Task.
 
 ### Local-only
@@ -1201,6 +1239,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ## 24. Non-goals
 
+- Do not reinterpret "removable workspace adapter" as a current UI runtime bypass; current UI Task execution still prepares worktrees before Runner.
 - Do not place worktree/merge code under Runner or UI.
 - Do not make Runner understand workspace mode, worktrees, branches, merge queues or merge failures.
 - Do not let workspace/ import Runner internals; Task Backend/Orchestrator coordinates public APIs.
