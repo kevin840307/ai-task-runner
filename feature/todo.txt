@@ -429,7 +429,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 11. Workspace Results / Integration / Merge
 -------------------------------------------
 
-[ ] 詳細 Git integration source of truth 使用 feature/git-worktree-todo.md；移除 local/integration、Awaiting merge、Main Runner Completed 即 Closed 等舊契約，不再維護相容流程。
+[ ] 詳細 Git integration source of truth 使用 feature/git-worktree-todo.md；只保留目前 Project branch → Task worktree → candidate → Project branch delivery 契約，不維護舊相容流程。
 [ ] effective Main：Runner Completed 後先 git add -A + Task snapshot commit；此時 Task 仍 Ongoing，不是 Closed。
 [ ] Integration Queue 以 repository + captured target branch 序列化 delivery；Runner execution 可平行。
 [ ] Main integration 從 latest target HEAD 建 temporary candidate，再 normal Git merge committed Task branch 進 candidate；不可直接先改 target checkout。
