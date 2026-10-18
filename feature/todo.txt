@@ -258,7 +258,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
-[ ] UI 不得在不同入口建立重複的 Task Editor / Task List renderer。
+[x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
+[x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 直接建立 items=[] 並進 Task List Workspace，不再先經過「New Task → New Task List」的多層 create modal。
+[x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
+[x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
+[x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
+[ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
+[ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
+[ ] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
 
 
 11. Workspace / Worktree
@@ -384,6 +391,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
 [x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
 [ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
+[ ] Browser 測試：Chat Draft 與 Tasks 頁開出的 Task Editor / Task List Workspace DOM 結構與欄位一致，驗證來源只差 return context。
 [ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
