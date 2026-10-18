@@ -103,13 +103,13 @@ effective Main:
 - Runner Complete does not close the Task; Main no_changes is the only normal exception that can close without a Project merge.
 - Commit remaining Task changes to its local Task branch and persist the current merge source.
 - Allocate durable FIFO merge_queue_seq per repository + target branch; restart preserves order.
-- Direct merge uses `git merge --no-ff --no-commit <merge_source_branch>`.
+- Before direct merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit; otherwise use `git merge --no-ff --no-commit <merge_source_branch>`.
 - Before merge commit, configured merge validation returns PASS / SOURCE_FAIL / TECHNICAL_ERROR.
 - PASS => git commit => Closed / merged.
 - Git conflict or SOURCE_FAIL => abort merge, merge_failure_count += 1, read Global merge_failure_limit.
 - TECHNICAL_ERROR => abort merge without incrementing merge_failure_count; reuse existing technical retry/backoff / Needs Attention.
 - Within merge failure limit => existing Runner redoes Task against latest Project branch in a recovery worktree, commits result, atomically replaces merge_source branch/SHA/worktree, retries merge.
-- Above limit => retain the latest merge source and close as Isolated Worktree / worktree_ready with merge_failure_limit_exceeded.
+- Above limit => retain the latest current merge source branch/worktree and close as Isolated Worktree / worktree_ready with merge_failure_limit_exceeded.
 
 effective Isolated Worktree:
 - Runner Complete => commit/snapshot result locally.
