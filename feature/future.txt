@@ -182,6 +182,9 @@ Prototype composition:
 - window.TaskUi is the shared navigation/controller facade.
 - Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
 - + New and Chat TaskDraft must render the same TaskEditor / TaskListWorkspace components; source differences belong in draft data and return context only.
+- Chat Composer may expose New Task as another entry point, but it must call the same create menu/controller as Tasks.
+- Chat New Task seeds the shared create flow from the active Chat's Project; it must not own a second Project selector/default model.
+- Do not show redundant fixed Project chips in the Composer when Project context is already owned by the active Project Chat.
 - Task / Task List drafts stay transient until Create; opening a creation surface must not allocate a durable Task ID or write the canonical Task store.
 - Chat may render a lightweight TaskDraftPreview card, but Edit/Create must hand off to the same shared Task surfaces used by Tasks.
 - Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
