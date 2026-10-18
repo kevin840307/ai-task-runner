@@ -32,7 +32,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 下列項目在 feature/ui prototype 中已有 Mock 實作；仍需實際開啟 HTML 操作驗證，不能視為正式功能完成。
 
-[x] Chat 控制已收斂：Mode 保留在 Composer 快速切換；Workflow / Agent / Model 收進 Chat 設定；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
+[x] Chat 控制已收斂：Mode 保留在 Composer 快速切換；Workflow / Agent / Model / Reasoning 收進 Chat 設定；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
 [x] 輸入框以 @ 顯示 Runner 系統指令，以 / 顯示目前 Agent 的 Mock Skills / Commands。
 [x] @task 隨機產生單筆 Task 或多筆 Task List；@task-single 強制單筆；@task-list 至少兩筆。
 [x] Chat 顯示精簡 TaskDraft 預覽，提供 Edit / Create Task / Dismiss。
@@ -58,7 +58,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
 [x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
 [x] Settings 拆分為 Interface 與 Language：Interface 收納 Appearance / Theme palette；Language 獨立管理語言。移除左上獨立 themeBtn；三者皆為全域偏好。
-[x] Agent / Model / Mode / Workflow 改為 Project-level preference；同 Project 的多個 Chat session 共用，切換 Project 載入各自設定並在 Prototype 以 localStorage 保存。
+[x] Agent / Model / Mode / Reasoning / Workflow 改為 Project-level preference；同 Project 的多個 Chat session 共用，切換 Project 載入各自設定並在 Prototype 以 localStorage 保存。
 
 
 2. Project 與 Chat 導覽
@@ -67,7 +67,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
 [ ] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
 [ ] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
-[ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
+[ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
 [ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
@@ -110,23 +110,26 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Chat Composer 提供 Ask mock 明確入口，方便測試多問題流程。
 
 
-4. Project Chat Settings：Agent / Model / Mode / Workflow
+4. Project Chat Settings：Agent / Model / Mode / Reasoning / Workflow
 ------------------------------
 
-[ ] Agent / Model / Mode / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
-[x] Settings 的 Agents(Later) 改為 Global Defaults，提供 Default Agent / Model / Mode / Workflow。
+[ ] Agent / Model / Mode / Reasoning / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
+[x] Settings 的 Agents(Later) 改為 Global Defaults，提供 Default Agent / Model / Mode / Reasoning / Workflow。
 [x] Global Defaults 只在建立新 Project 時 copy 一份；修改 Global Defaults 不得回寫既有 Project。
 [x] 既有 Project 無設定時維持 legacy base defaults，不因之後修改 Global Defaults 而改變。
-[x] New Project prototype 已可真正建立；建立後立即初始化 Project-level Agent / Model / Mode / Workflow 並進入該 Project Chat。
+[x] New Project prototype 已可真正建立；建立後立即初始化 Project-level Agent / Model / Mode / Reasoning / Workflow 並進入該 Project Chat。
 [x] 透過 Task Project 欄位新增的新 Project 也使用同一 initializeProjectChatSettings 路徑，不得另造 default 邏輯。
-[x] Project rename / delete 同步搬移或清除 Project-level Agent / Model / Mode / Workflow 與 Project Chat scope。
-[x] New Chat 不持有 default；永遠使用目前 Project 的 Agent / Model / Mode / Workflow。
+[x] Project rename / delete 同步搬移或清除 Project-level Agent / Model / Mode / Reasoning / Workflow 與 Project Chat scope。
+[x] New Chat 不持有 default；永遠使用目前 Project 的 Agent / Model / Mode / Reasoning / Workflow。
 [x] Standalone New Task 的初始 Workflow 改讀目前 Project preference，而不是固定 ralphy_ai_validate.yaml。
 [ ] Browser 測試：Global Defaults 改成 OpenCode 後，新 Project 使用 OpenCode defaults；舊 Project 保持原設定；New Chat 繼承目前 Project；reload 後仍一致。
-[x] Prototype 將 Workflow / Agent / Model 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
+[x] Prototype 將 Workflow / Agent / Model / Reasoning 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
+[x] Project-level Reasoning prototype 支援固定五種：low / medium / high / xhigh / max；預設 medium，跟 Project localStorage 一起保存。
+[x] Global Defaults 增加 Default Reasoning；新 Project copy 一次，既有 Project 缺欄位時使用 legacy base medium，不受之後 Global Defaults 改動影響。
+[x] Agent 切換只重設相依的 Model / Mode；Reasoning 保留 Project 原值。正式版再由 AgentAdapter / Backend 回報各 Agent / Model 支援的 reasoning levels。
 [ ] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
-[ ] Agent / Model / Mode / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
-[ ] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Workflow，Slash / Ask capability 也同步刷新。
+[ ] Agent / Model / Mode / Reasoning / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
+[ ] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Reasoning / Workflow，Slash / Ask capability 也同步刷新。
 [ ] Chat Settings 使用 viewport 定位；不可因為打開設定而撐開、縮窄或重新排版 Chat。
 [ ] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
 [ ] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
@@ -416,7 +419,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
     - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
     - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
-    - Project-level Agent / Model / Mode / Workflow capability 與目前選擇
+    - Project-level Agent / Model / Mode / Reasoning / Workflow capability 與目前選擇
     - 取得 Agent commands / Skills / permission / Ask capability
     - Queue list / enqueue / edit / delete / reorder（若產品允許排序）
     - Ask request event / answer submit / cancel
@@ -485,7 +488,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
 [ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
-[ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Workflow；切換同 Project 的 Chat session 不改變這四項設定。
+[ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
 [ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Appearance / Theme palette / Language persistence、Auto workspace policy 三種模式。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
