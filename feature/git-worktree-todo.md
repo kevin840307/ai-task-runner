@@ -1,44 +1,104 @@
-# Git Worktree Parallel Task Integration TODO
+# Git Worktree Parallel Task Merge TODO
 
 > Status: design / implementation TODO
 >
-> Scope: add parallel Task worktree + local Git integration around the existing Runner. **Do not redesign Runner execution.**
+> Scope: add isolated Task worktrees + automatic local merge around the existing Runner. **Do not redesign Runner execution.**
 >
-> Final direction: the captured Project branch is the canonical truth. Task worktrees are isolated execution results; temporary candidate worktrees are disposable merge/recovery sandboxes.
+> Core rule: the captured Project branch is the canonical truth. Every Task runs in its own local worktree/branch. Effective Main is complete only after the Task result is successfully merged back into the captured Project branch.
 
 ---
 
-## 1. Current AS-IS
+## 1. Final architecture
 
-The current execution boundary remains:
+Effective `Main`:
 
 ```text
-UI
-  ↓
-Create / Run Task
-  ↓
-Runner(project_root)
-  ↓
-Workflow / Agent
-  ↓
-Review / Validate
-  ↓
-Completed
+Project branch = canonical truth
+↓
+Task isolated worktree / local Task branch
+↓
+Runner
+↓
+Runner Complete
+↓
+git add -A + commit remaining Task changes
+↓
+local Task branch owns the completed result
+↓
+normal Git merge Task branch → captured Project branch
+├─ merge success
+│   ↓
+│ record merged target HEAD
+│   ↓
+│ Closed · merged
+│
+└─ merge fail
+    ↓
+  git merge --abort
+    ↓
+  merge_failure_count += 1
+    ↓
+  read Global Settings.merge_failure_limit
+    ↓
+  merge_failure_count > limit ?
+  ├─ No
+  │   ↓
+  │ existing Runner redo/recovery against latest Project branch
+  │   ↓
+  │ Runner Complete
+  │   ↓
+  │ commit recovered local branch
+  │   ↓
+  │ retry normal merge → Project branch
+  │
+  └─ Yes
+      ↓
+    stop automatic Main merge
+      ↓
+    retain Task branch/worktree
+      ↓
+    delivery_fallback = isolated_worktree
+      ↓
+    Closed · worktree_ready
 ```
 
-Runner only receives `project_root`.
+Effective `Isolated Worktree`:
 
-### Hard invariant: Runner architecture stays unchanged
+```text
+Project branch
+↓
+Task isolated worktree / local Task branch
+↓
+Runner
+↓
+Runner Complete
+↓
+git add -A + commit remaining Task changes
+↓
+Closed · worktree_ready
+↓
+no automatic Project-branch merge
+```
 
-Do not add Git/worktree integration ownership into:
+### Important: no local push step
 
-- FlowEngine
-- StageExecutor
-- Supervisor
-- normal Workflow Stage routing
-- Runner retry/recovery state
+The Task worktree is attached to a local Git branch in the same repository.
 
-The existing Runner contract remains conceptually:
+After committing in the worktree:
+
+```text
+local/task/T-001-r1
+```
+
+already points to the new commit locally.
+
+Do not add a fake/local `git push` step. Use `git push` only for explicit remote publication.
+
+---
+
+## 2. Runner contract stays unchanged
+
+Runner continues to own only normal task execution:
 
 ```text
 Runner(project_root, task/workflow input)
@@ -47,62 +107,23 @@ Runner(project_root, task/workflow input)
 → Completed
 ```
 
-If Git integration later requires source-code changes, call the **same existing Runner** again against a temporary recovery/candidate worktree.
+Do not add Git merge ownership into:
+
+- FlowEngine
+- StageExecutor
+- Supervisor
+- normal Workflow Stage routing
+- Runner retry/recovery state
+
+Git orchestration stays outside Runner.
+
+If a merge conflict requires source changes, Integration Manager calls the **same existing Runner** again with the latest Project code and merge-conflict context.
 
 ---
 
-## 2. Simplified target architecture
+## 3. Modes: Auto / Main / Isolated Worktree
 
-Use the Project branch directly as the canonical integration source.
-
-```text
-                    captured Project branch
-                           canonical
-                              │
-             ┌────────────────┼────────────────┐
-             ↓                ↓                ↓
-       Task T1 worktree  Task T2 worktree  Task T3 worktree
-             ↓                ↓                ↓
-           Runner           Runner           Runner
-             ↓                ↓                ↓
-        Task commit       Task commit       Task commit
-             │                │                │
-             └────────────────┼────────────────┘
-                              ↓
-                      Integration Queue
-                              ↓
-                    latest target branch HEAD
-                              ↓
-                    temporary candidate
-                              ↓
-                    normal Git merge Task
-                              ↓
-                         conflict?
-                       ┌──────┴──────┐
-                      yes            no
-                       ↓              ↓
-                existing Runner     Validate
-                redo / recovery       ↓
-                       ↓        target merge --squash
-                     retry            ↓
-                                one Project commit
-```
-
-### User-owned feature branches remain user-owned
-
-If the user wants work isolated from `main`, they can create/switch to a Project branch first:
-
-```bash
-git switch -c feature/ui
-```
-
-A Task started there captures `feature/ui` as its target. The system does not need to invent another permanent integration branch.
-
----
-
-## 3. Preserve existing modes: Auto / Main / Isolated Worktree
-
-All modes execute inside isolated Task worktrees.
+All modes execute in isolated Task worktrees.
 
 ```text
 Task mode
@@ -110,112 +131,106 @@ Task mode
 ├─ Main
 └─ Isolated Worktree
 
-Execution for all three
+Execution
 → local/task/<task-id>-r<run>
 → isolated worktree
 → Runner(project_root = worktree)
 ```
 
-The mode decides **delivery after Runner completes**, not where Agent edits files.
-
-### Auto
-
-`Auto` remains the default and reuses the existing Global workspace resolver.
-
-```text
-Auto
-↓
-Global policy
-├─ effective Main
-└─ effective Isolated Worktree
-```
-
-Keep one resolver owner. Do not duplicate busy/worktree logic inside Integration Manager.
-
-Because every mode now runs in a worktree:
-
-- `Always Main` resolves Auto to Main;
-- by default, the existing Main-busy restriction remains enabled;
-- Global Settings → Execution → `Allow concurrent Main tasks` can explicitly remove that restriction;
-- when enabled, multiple Main Tasks may execute concurrently in isolated worktrees and later serialize delivery to the same target branch;
-- safety comes from isolated worktrees + serialized delivery to the same target branch;
-- `Busy → Worktree` may remain a product policy, not a filesystem-safety requirement.
-
-Persist both requested mode and resolved effective mode per Task run.
-
-### Auto policy × Concurrent Main
-
-`Allow concurrent Main tasks` only decides whether a Task that resolves/selects **Main** may start while another Main Task is already running. It does not rewrite the Auto policy.
-
-| Auto workspace policy | Project has running Main | Concurrent Main = Off | Concurrent Main = On |
-| --- | --- | --- | --- |
-| Busy project → Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
-| Always Main | Auto Task | Block Main start | Main |
-| Always Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
-| Explicit Main | Main selected directly | Block Main start | Main |
-
-So `Busy project → Worktree` remains Worktree while busy even when concurrent Main is enabled.
+The mode controls what happens after Runner Complete.
 
 ### Main
 
-`Main` is a product mode name. It does **not** mean the Git branch must literally be named `main`.
-
-Effective Main means:
-
 ```text
-captured Project branch
-→ isolated Task worktree
-→ Runner
-→ Task result commit
-→ candidate merge against latest captured target branch
-→ validate
-→ merge --squash candidate
-→ Project branch one local commit
-→ Task Closed · integrated
+Runner Complete
+→ commit local Task branch
+→ automatic normal merge into captured Project branch
+→ merge success
+→ Closed
 ```
 
-**Main completion invariant:** Runner completion alone is not Task completion. A Main Task remains Ongoing through queueing, candidate integration, conflict recovery and target delivery. It becomes Closed only after the validated candidate is committed back to the captured Project branch, or after merge failure exceeds the Global limit and the result explicitly falls back to an Isolated Worktree close.
+Runner Complete alone is **not** Main completion.
+
+Main stays Ongoing while waiting for merge, merging, or recovering from a merge conflict.
 
 ### Isolated Worktree
 
-Effective Isolated Worktree means:
-
 ```text
-captured Project branch
-→ isolated Task worktree
-→ Runner
-→ Task result commit/snapshot
-→ Closed · Worktree ready
-→ keep branch/worktree
-→ no automatic target modification
+Runner Complete
+→ commit local Task branch
+→ retain branch/worktree
+→ Closed · worktree_ready
 ```
 
-Existing Merge / Merge Chat actions may still integrate that retained result later.
+No automatic Project-branch merge.
+
+### Auto
+
+Auto uses the existing single Global workspace resolver.
+
+Do not add a second resolver inside Git integration.
 
 ---
 
-## 4. Target branch semantics
+## 4. Auto policy × Concurrent Main
 
-At Task run start, capture the Project repository's currently checked-out branch as `target_branch`.
+Global Settings → Execution owns:
+
+- Auto workspace policy
+- Merge failure limit
+- Allow concurrent Main tasks
+
+`Allow concurrent Main tasks` only controls whether a Task that resolves/selects **Main** may start while another Main Task is already running.
+
+It does not rewrite Auto policy.
+
+| Auto policy / selection | Main already running | Concurrent Main = Off | Concurrent Main = On |
+| --- | --- | --- | --- |
+| Busy project → Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Always Main / Auto | yes | Block Main start | Main |
+| Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Explicit Main | yes | Block Main start | Main |
+
+Therefore:
+
+```text
+Busy project → Worktree
++ Concurrent Main = On
++ another Main already running
++ new Task uses Auto
+→ Isolated Worktree
+```
+
+When Concurrent Main is On, multiple Main Tasks may run in parallel worktrees, but merges into the same captured Project branch are serialized.
+
+---
+
+## 5. Capture target branch at Task run start
+
+Do not hardcode `main`.
+
+At Task run start capture:
+
+```text
+target_branch
+target_head_sha_at_start
+```
 
 Examples:
 
 ```text
-Project currently on feature/ui
-→ target_branch = feature/ui
-
-Project currently on release/v4
-→ target_branch = release/v4
-
-Project currently on main
-→ target_branch = main
+Project on feature/ui → target_branch = feature/ui
+Project on release/v4 → target_branch = release/v4
+Project on main       → target_branch = main
 ```
 
-`target_branch` remains fixed for that Task run even if the user later switches the Project checkout.
+The captured target remains fixed for that Task run.
 
-### Task base is committed Git history
+If the user switches Project branch afterward, do not silently retarget the old Task.
 
-Create the Task branch from the captured target branch HEAD at Task start.
+### Task base
+
+Create the Task branch from captured target HEAD.
 
 ```text
 feature/ui:
@@ -224,52 +239,25 @@ A ─ B ─ C
       Task base
 ```
 
-Uncommitted Project working-tree changes are **not** part of this base.
+Uncommitted Project working-tree changes are not part of the Task base.
 
-Reason:
-
-- Git conflict detection requires a stable merge base;
-- uncommitted files have no commit identity;
-- importing ad-hoc working-tree state creates ambiguous ancestry and recovery semantics.
-
-If the user wants current uncommitted Project changes to become part of new Main Task bases, commit them first.
-
-Dirty Project state does not need to block Runner execution; it only must not be silently imported into the Task base.
+If they should be visible to new Tasks, commit them first.
 
 ### Detached HEAD
 
-If the Project is detached HEAD at Task start, fail closed or require an explicit target branch. Do not invent `main`.
+If Project is detached HEAD, fail closed or require an explicit target branch.
 
 ---
 
-## 5. Branch and worktree naming
+## 6. Task branch / worktree identity
 
-Use predictable Runner-owned local refs.
-
-```text
-Project branches
-  main
-  feature/ui
-  release/v4
-  ...
-
-Task-run branches
-  local/task/<task-id>-r<run>
-
-Temporary candidate branches
-  local/candidate/<task-id>-r<run>-a<attempt>
-```
-
-Examples:
+Use Task + Run identity.
 
 ```text
 local/task/T-001-r1
 local/task/T-001-r2
 local/task/T-002-r1
-local/candidate/T-001-r2-a1
 ```
-
-Do not create a branch named exactly `local`; hierarchical refs such as `local/task/...` would conflict with it.
 
 Recommended worktree paths:
 
@@ -277,302 +265,212 @@ Recommended worktree paths:
 .worktrees/
 ├─ T-001-r1/
 ├─ T-001-r2/
-├─ T-002-r1/
-└─ candidate/
-   └─ T-001-r2-a1/
+└─ T-002-r1/
 ```
 
-Task + Run identity is required so Reset/Rerun never collides with retained prior results.
+Do not create a branch named exactly `local`; it conflicts with hierarchical refs such as `local/task/...`.
+
+Reset/Rerun must create a new Run identity so retained prior results never collide.
 
 ---
 
-## 6. Task start
+## 7. Task start
 
 For every Task run:
 
 1. resolve requested/effective workspace mode;
-2. capture `target_branch`;
-3. read `target_head_sha_at_start`;
-4. create Task-run branch from that commit;
-5. create Task worktree for the Task-run branch;
-6. pass only that worktree path to Runner.
+2. capture target branch + HEAD;
+3. create local Task branch from captured HEAD;
+4. create Task worktree;
+5. pass worktree path to Runner.
 
 Conceptually:
 
 ```bash
-git rev-parse feature/ui
-# → C
-
-git worktree add -b local/task/T-001-r1 <path> C
+git worktree add -b local/task/T-001-r1 <worktree-path> <target-head-sha>
 ```
 
-Use a short repository Git lock for ref/worktree creation and cleanup. Runner execution itself does not hold that lock.
+Use a short repository Git lock only for ref/worktree mutation.
 
-Once created, Task worktrees are independent and may run in parallel.
+Do not hold it during Runner execution.
 
 ---
 
-## 7. Commit the completed Task result
+## 8. Runner Complete → local Task commit
 
-Runner remains Git-unaware. Runner completion does not guarantee that Agent changes are committed.
-
-Before integration:
+Before automatic Main merge or Isolated close:
 
 ```text
-Runner Completed
-→ verify Task worktree is not already in unresolved merge/rebase state
-→ git add -A
-→ commit any remaining changes locally
-→ record task_snapshot_sha
-→ original Task result becomes a stable mergeable Git branch
+Runner Complete
+↓
+verify Task worktree is not in unresolved merge/rebase state
+↓
+git add -A
+↓
+commit remaining Task changes
+↓
+record task_snapshot_sha
 ```
 
-If Runner/Agent already created commits, keep them and only commit the remaining changes.
+If Agent already created commits, keep them and commit only remaining changes.
 
-If there is no effective diff versus the Task base:
+If there is no effective diff:
 
 ```text
-Main              → Closed · no_changes / integrated
-Isolated Worktree → Closed · worktree_ready (no changes)
+Main              → Closed · no_changes
+Isolated Worktree → Closed · worktree_ready · no_changes
 ```
 
-Do not create an empty target commit.
-
-### Why Task result must be committed
-
-Example:
-
-```text
-target branch:
-A ─ B ─ C
-
-T1:
-A ─ B ─ C ─ T1
-
-T2:
-A ─ B ─ C ─ T2
-```
-
-After T1 is delivered as target commit `S1`:
-
-```text
-target branch:
-A ─ B ─ C ─ S1
-
-T2 still:
-A ─ B ─ C ─ T2
-```
-
-When T2 is merged into a candidate based on `S1`, Git can use `C` as the merge base and compare:
-
-```text
-C → S1
-C → T2
-```
-
-Therefore incompatible edits from T1 and T2 can produce a real merge conflict without any persistent integration branch.
+Do not create empty commits just to advance state.
 
 ---
 
-## 8. Integration Queue and locking
+## 9. Main merge queue
 
-Execution is parallel. Delivery to the same target branch is serialized.
+Tasks may execute in parallel, but merges into the same target branch must be serialized.
 
 ```text
-T1 Runner ───── Done ─┐
-T2 Runner ─ Done ─────┼→ target-branch Integration Queue
-T3 Runner ─────── Done ┘
+A Runner ───── Complete ─┐
+B Runner ─ Complete ─────┼→ target_branch merge queue
+C Runner ─────── Complete ┘
 ```
 
 Core rule:
 
-> **Execution parallel; integration serialized per repository + target branch.**
+> **Execution parallel; merge serialized per repository + target branch.**
 
 Different repositories are independent.
 
-Different target branches in the same repository may have independent delivery queues, but short Git ref/worktree mutations still use the repository Git lock.
-
-Do not serialize all Runner execution behind Git integration.
+Different target branches may have independent merge queues, while short repository-wide ref/worktree mutation still uses the repository Git lock.
 
 ---
 
-## 9. Temporary candidate integration transaction
+## 10. Direct Main merge transaction
 
-Never test a Task merge by mutating the user's target checkout first.
-
-For an effective Main Task:
+There is no permanent integration branch and no normal-path candidate branch.
 
 ```text
 Task snapshot commit ready
-  ↓
-Task remains Ongoing · pending_merge
-  ↓
-take target-branch integration lock
-  ↓
-read latest target_branch HEAD = L
-  ↓
-create temporary candidate branch/worktree from L
-  ↓
-normal Git merge Task branch into candidate
-  ↓
-conflict?
-  ├─ no
-  │   ↓
-  │ validate candidate
-  │   ↓
-  │ commit temporary candidate merge result
-  │
-  └─ yes
-      ↓
-    abort/contain candidate merge
-      ↓
-    merge failure +1
-      ↓
-    existing Runner recovery / redo
-      ↓
-    commit recovered Task result
-      ↓
-    retry against latest target
-  ↓
-candidate valid
-  ↓
-re-read target branch HEAD
-  ├─ changed → discard/rebuild candidate against newer HEAD
-  └─ same    → continue
-  ↓
-git merge --squash candidate into target branch
-  ↓
-create exactly one Project-branch commit
-  ↓
-record target_commit_sha
-  ↓
-cleanup candidate and successful Task result by retention policy
-  ↓
-Closed · integrated
+↓
+Task stays Ongoing · pending_merge
+↓
+acquire target-branch merge lock
+↓
+resolve safe worktree for target_branch
+↓
+read latest target HEAD
+↓
+normal Git merge local Task branch → target_branch
+↓
+success?
+├─ Yes
+│   ↓
+│ record merged_target_head_sha
+│   ↓
+│ Closed · merged
+│
+└─ No
+    ↓
+  git merge --abort
+    ↓
+  merge_failure_count += 1
+    ↓
+  fail handling
 ```
 
-A target HEAD movement by itself is not a merge failure. Rebuild the candidate first; only a real code/semantic/validation conflict consumes the merge-failure budget.
-
-### Candidate merge operation
-
-Candidate uses a normal merge so Git preserves the Task branch's original merge base during conflict detection:
+Conceptual merge:
 
 ```bash
-git merge --no-ff --no-commit local/task/T-001-r1
-# inspect / validate
-git commit -m "candidate: T-001-r1"
+git merge local/task/T-001-r1
 ```
 
-The candidate commit is temporary orchestration history only. It exists so the validated candidate branch has a stable ref that can be squash-delivered to the Project branch; it is deleted with the candidate after delivery.
+Do not use `merge --squash`.
 
-The candidate branch is disposable. The original completed Task branch/worktree remains untouched until delivery succeeds.
+Do not create a candidate branch for the normal merge path.
+
+Normal merge preserves ancestry so later Tasks based on older Project commits can conflict correctly.
 
 ---
 
-## 10. Final delivery to Project branch
+## 11. Merge conflict / fail handling
 
-After candidate validation, deliver exactly the validated candidate to the captured target branch. This delivery is part of Main Task completion, not post-completion cleanup.
-
-Normal case:
+Every **real merge failure** follows exactly one path:
 
 ```text
-target HEAD = S1
-candidate  = S1 + merged T2 result
+normal merge attempted
+↓
+conflict / incompatible merge result
+↓
+git merge --abort
+↓
+merge_failure_count += 1
+↓
+read Global Settings.merge_failure_limit
+↓
+merge_failure_count > merge_failure_limit ?
+├─ No
+│   ↓
+│ collect merge error + latest Project context
+│   ↓
+│ existing Runner redo/recovery
+│   ↓
+│ Runner Complete
+│   ↓
+│ commit recovered result to local recovery/source branch
+│   ↓
+│ retry normal merge → captured Project branch
+│
+└─ Yes
+    ↓
+  stop automatic Main merge
+    ↓
+  retain Task branch/worktree
+    ↓
+  delivery_fallback = isolated_worktree
+    ↓
+  Closed · worktree_ready
 ```
 
-Delivery:
+### What counts as merge fail
 
-```bash
-git merge --squash local/candidate/T-002-r1-a1
-git commit -m "T-002: ..."
-```
+Count only a real merge attempt that fails because the Task result cannot be merged/accepted without source-code redo.
 
-Target becomes:
+Examples:
 
-```text
-... ─ S1 ─ S2
-```
+- Git source conflict;
+- merge/recovery result remains incompatible with latest Project code;
+- a deterministic merge validation tied directly to the merge result requires source changes.
 
-This keeps Project history to one clean logical commit per successfully delivered Task.
+Do not count:
 
-### No re-baseline step
-
-There is no persistent integration branch, so nothing needs to be reset/recreated after squash delivery.
-
-The next completed Task simply creates a fresh candidate from the then-latest target branch HEAD.
+- waiting in merge queue;
+- merge lock busy;
+- dirty target checkout;
+- target branch unavailable;
+- transient Git lock/file-system error;
+- Runner failure before a new merge attempt.
 
 ---
 
-## 11. Target branch movement and dirty checkout
+## 12. Conflict recovery uses existing Runner
 
-### New Project commit while Task is running
+Integration Manager owns deterministic Git mechanics only:
 
-Suppose T2 started from `C`, but target is now `C-S1`.
-
-Do not modify T2's original branch.
-
-Create its candidate from latest `C-S1` and merge T2 there. Git uses their common ancestor `C` and can detect conflicts against S1.
-
-### Target changes while candidate is validating
-
-Re-read target HEAD immediately before delivery.
-
-If it changed:
-
-```text
-candidate based on old HEAD
-→ discard candidate
-→ create new candidate from new HEAD
-→ merge/recover/validate again
-```
-
-This rebuild itself does not increment merge failure count.
-
-### Dirty target checkout
-
-Automatic squash delivery must never mix with unrelated uncommitted user files.
-
-If the worktree that owns the captured target branch is dirty:
-
-```text
-Closed · waiting_target_clean
-```
-
-Do not auto-stash, reset, discard, stage, or commit those changes.
-
-### User switched the Project checkout
-
-Do not switch it back automatically.
-
-If the captured target branch is free, create/use a temporary managed delivery worktree.
-
-If the captured target branch is already checked out in an unmanaged/user worktree and cannot be safely used:
-
-```text
-Closed · waiting_target_workspace
-```
-
-Preserve Task/candidate artifacts.
-
----
-
-## 12. Conflict and semantic recovery
-
-Integration Manager owns deterministic Git operations only:
-
-- candidate creation/removal;
-- normal merge invocation;
+- target-branch merge lock;
+- target worktree selection;
+- merge invocation;
 - conflict detection;
-- target HEAD checks;
-- lock/queue handling;
-- squash delivery;
+- `git merge --abort`;
+- merge failure counting;
+- context collection;
+- fallback decision;
 - safe cleanup.
 
-It does **not** become a second code-repair agent.
+It does not become another code-repair engine.
 
 ### Recovery context
 
-When merge/code validation needs source edits, provide existing Runner with:
+Provide existing Runner with:
 
 ```text
 Original Task prompt / intent
@@ -583,200 +481,148 @@ Latest target HEAD
 Task branch / commits
 Conflicting files
 Git conflict/error output
-Validation/test errors
 Relevant project development rules
 ```
 
 Recovery intent:
 
 ```text
-Latest target code is authoritative.
+Latest Project branch is authoritative.
 
-Re-evaluate the original Task against the latest code.
+Redo the original Task against the latest Project code.
 Preserve compatible newer changes.
-Redo affected implementation if the old patch no longer fits.
 Do not merely remove conflict markers.
-Run normal verification.
+Run normal Workflow / Review / Validate.
 ```
 
-Then:
+### Recovery worktree
+
+Recovery may use a temporary system-owned recovery branch/worktree based on latest target HEAD.
 
 ```text
-Runner(project_root = recovery_candidate)
-→ Workflow / Agent
-→ Review / Validate
-→ Completed
-→ commit recovered result
-→ retry candidate integration
+latest target branch
+↓
+temporary recovery worktree
+↓
+existing Runner redoes original Task
+↓
+Runner Complete
+↓
+commit recovered result
+↓
+recovered branch becomes new merge source
+↓
+normal merge → captured Project branch
 ```
 
-Do not bypass normal Runner Review / Validate by directly accepting AI-edited conflict files from Integration Manager.
+This recovery branch exists only after a real merge failure. It is not a permanent integration layer.
 
 ---
 
-## 13. Merge failure counting and retry exhaustion
+## 13. Merge failure limit
 
-Recommended metadata:
+Keep exactly two concepts.
 
-```yaml
-git:
-  merge_failure_count: 0
-  last_merge_failure: null
-  delivery_fallback: null
-```
-
-`merge_failure_limit` lives only in Global Settings → Execution (default `3`). `merge_failure_count` lives on the Task and is the actual real integration-failure count. After every real failure, Integration Manager reads the current Global `merge_failure_limit`; when `merge_failure_count > merge_failure_limit`, automatic Main delivery stops. With limit `3`, the 4th real failed integration attempt falls back.
-
-Semantics:
-
-- `merge_failure_count`: actual real integration-failure count for this Task delivery;
-- `merge_failure_limit`: Global Settings value read by Integration Manager; do not duplicate/copy it into Task Git metadata;
-- `last_merge_failure`: structured latest failure detail.
-
-### Count exactly once per real failed integration attempt
-
-Increment only when:
+### Global Settings
 
 ```text
-Runner / recovery completed
-→ real candidate merge / validation attempted
-→ result cannot be accepted due to code / semantic / validation incompatibility
-→ merge_failure_count += 1
+merge_failure_limit
 ```
 
-Examples that count:
+Default: `3`.
 
-- normal Git merge produces a source conflict requiring code changes;
-- Runner recovery completes but the next candidate merge still conflicts;
-- merge succeeds textually but candidate validation requires code changes;
-- latest target architecture makes the previous implementation semantically invalid.
+This value belongs only to the single Global Settings owner.
 
-Examples that do **not** count:
-
-- waiting in Integration Queue;
-- target branch dirty;
-- target branch HEAD moved;
-- target branch is unavailable because another worktree owns it;
-- repository/target lock contention;
-- temporary candidate creation failure;
-- retryable Git command failure requiring no code change;
-- Runner itself fails before reaching a new real integration attempt.
-
-### Exhaustion behavior for Main
-
-When `merge_failure_count > Global Settings.merge_failure_limit`, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
+### Task
 
 ```text
-requested/effective origin = Main
-delivery_fallback           = isolated_worktree
-Board                       = Closed
-Integration                 = worktree_ready
-Reason                      = Merge retry exhausted
-Task branch                 = retained
-Task worktree               = retained
+merge_failure_count
 ```
 
-Preserve the original requested/effective mode for history/diagnostics, but the **delivery outcome** is now Isolated Worktree. Do not continue automatic merge recovery.
+This is the actual count of real merge failures for the Task.
 
-The retained result may still expose manual Merge / Merge Chat later.
+Do not add `merge_retry_attempt`.
+
+Do not copy another merge-limit field into Task metadata.
+
+### Limit rule
+
+```text
+real merge fail
+↓
+merge_failure_count += 1
+↓
+read Global Settings.merge_failure_limit
+↓
+merge_failure_count > merge_failure_limit ?
+├─ No  → automatic Runner recovery + retry merge
+└─ Yes → Isolated Worktree fallback · Closed · worktree_ready
+```
+
+With limit `3`, failures 1/2/3 retry automatically; failure 4 falls back.
 
 ---
 
-## 14. UI / Task status model
+## 14. Safe Project-branch merge workspace
 
-Do not add another Board lifecycle column.
+Do not automatically switch the user's Project checkout branch.
 
-Keep:
+### Captured target is checked out in managed Project root
+
+Require it to be safe for merge.
+
+If unrelated uncommitted changes exist:
 
 ```text
-New
-Ongoing
-Paused
-Closed
+Ongoing · waiting_target_clean
+Needs Attention
 ```
 
-Git delivery is a secondary Task state.
+Do not auto-stash, reset, discard, stage, or commit user changes.
 
-### Lifecycle mapping
+### Captured target is not checked out anywhere
 
-| Situation | Board | Delivery detail |
+The system may create a temporary managed delivery worktree for that target branch and run the normal merge there.
+
+The merge still updates the real target branch directly.
+
+### Captured target is checked out in an unmanaged/user worktree
+
+Do not switch or mutate that worktree automatically.
+
+```text
+Ongoing · waiting_target_workspace
+Needs Attention
+```
+
+Retain the Task result.
+
+---
+
+## 15. Main completion rule
+
+> **Effective Main is not complete at Runner Complete. It is complete only after the Task/recovery source branch has been successfully merged into the captured Project branch.**
+
+| Situation | Board | Merge detail |
 | --- | --- | --- |
-| Created, Runner not started | New | not_started |
-| Runner executing | Ongoing | execution_running |
-| Runner Review / Validate | Ongoing | execution_validating |
-| Main Runner completed, queued | Ongoing | pending_merge |
-| Candidate merge/validation | Ongoing | integrating |
-| Runner repairing conflict | Ongoing | conflict_recovery |
-| Target HEAD changed; rebuilding candidate | Ongoing | target_resync |
-| Target checkout dirty | Ongoing | waiting_target_clean · Needs Attention |
-| Captured target branch unavailable | Ongoing | waiting_target_workspace · Needs Attention |
-| Main merge failures exceed Global limit | Closed | worktree_ready · fallback from Main |
-| Main delivered to Project branch | Closed | integrated |
-| Isolated result retained | Closed | worktree_ready |
+| Created | New | not_started |
+| Runner executing/reviewing | Ongoing | execution_running |
+| Runner Complete, waiting to merge | Ongoing | pending_merge |
+| Project merge running | Ongoing | merging |
+| Conflict Runner recovery | Ongoing | conflict_recovery |
+| Target checkout dirty | Ongoing | waiting_target_clean |
+| Target workspace unavailable | Ongoing | waiting_target_workspace |
+| Merge success | Closed | merged |
+| Merge failures exceed limit | Closed | worktree_ready · Main fallback |
+| Isolated Worktree Runner Complete + commit | Closed | worktree_ready |
 
-`Paused` remains execution-only: Runner stopped before completion and may resume/reset.
-
-### Board card examples
-
-```text
-T-001  Closed
-Integrated · feature/ui
-
-T-002  Closed
-Worktree ready · Main fallback · 4 failures
-
-T-003  Closed
-Conflict recovery · retry 2
-
-T-004  Closed
-Worktree ready
-```
-
-### Task Info Drawer
-
-```text
-Integration
-Requested mode    Auto
-Effective mode    Main
-Target branch     feature/ui
-Task run          T-001-r2
-Task branch       local/task/T-001-r2
-Task base         abc123
-Task snapshot     def456
-Latest target     789xyz
-State             Integrating
-Failures          1
-Attention         —
-```
-
-Do not add a top-level Git Worktree page.
-
-Daily operations stay Task-centric. Project-level Workspace Results may be the secondary view for retained/orphaned worktrees, Main→Isolated fallbacks, branches, paths and cleanup.
-
-### Task List / child Tasks
-
-The integration unit is the actual Task-run/workspace result.
-
-If child Tasks resolve to separate worktrees, each child run owns:
-
-- its Task branch/worktree;
-- Task base/snapshot SHA;
-- effective mode;
-- delivery state;
-- target commit or retained result.
-
-The Board parent may aggregate:
-
-```text
-Closed
-Integration · 2 integrated · 2 worktree ready
-```
+Paused remains execution-only.
 
 ---
 
-## 15. Suggested Task metadata
+## 16. Suggested Task Git metadata
 
-For requested Auto resolved to Main:
+Effective Main:
 
 ```yaml
 git:
@@ -792,18 +638,16 @@ git:
   worktree: .worktrees/T-001-r2
   task_snapshot_sha: def456
 
-  integration_status: pending_merge
-  integration_attempt: 0
-  candidate_branch: null
-  candidate_base_sha: null
-  target_commit_sha: null
-  integration_attention: null
-
+  merge_status: pending_merge
+  merge_source_branch: local/task/T-001-r2
   merge_failure_count: 0
   last_merge_failure: null
+
+  delivery_fallback: null
+  merged_target_head_sha: null
 ```
 
-For Isolated Worktree:
+Effective Isolated Worktree:
 
 ```yaml
 git:
@@ -816,362 +660,288 @@ git:
   task_branch: local/task/T-002-r1
   worktree: .worktrees/T-002-r1
   task_snapshot_sha: fed321
-  integration_status: worktree_ready
+  merge_status: worktree_ready
 ```
 
-Do not duplicate Runner RunState in Git metadata.
-
-### Idempotent Project delivery
-
-Automatic Main commits should carry a stable Task-run identity:
-
-```text
-AI-Task-Run: T-001-r2
-```
-
-Persist `target_commit_sha` immediately after commit succeeds.
-
-After a crash, check the recorded SHA or search the captured target branch for the stable Task-run identity before creating another target commit.
+Global `merge_failure_limit` is not duplicated into Task metadata.
 
 ---
 
-## 16. Ownership boundaries
+## 17. Restart / idempotency
+
+Normal merge preserves ancestry, so restart detection is simple.
+
+After restart, if `task_snapshot_sha` or the final recovery-source commit is already an ancestor of the captured target branch:
+
+```text
+already merged
+→ finalize Task as Closed · merged
+→ do not merge again
+```
+
+Otherwise continue from the persisted merge state.
+
+Do not create duplicate merge commits after a crash.
+
+---
+
+## 18. Ownership boundaries
 
 ### Task Manager / UI backend
 
 Owns:
 
 - Task lifecycle;
-- selected Project;
-- requested/effective workspace mode;
+- requested/effective mode;
 - captured target branch;
-- enqueueing Main delivery;
-- exposing delivery status/actions.
+- enqueueing effective Main merge;
+- exposing merge status/actions.
 
 ### Workspace Manager
 
 Owns:
 
-- Task-run branch naming;
-- Task worktree create/remove;
-- candidate/recovery worktree create/remove;
+- Task branch/worktree create/remove;
+- optional recovery worktree create/remove;
 - ownership-safe cleanup;
 - returning `project_root` to Runner.
 
 ### Runner
 
-Owns only:
-
-```text
-project_root
-→ Workflow
-→ Agent
-→ Review
-→ Validate
-→ Completed
-```
+Owns normal task/recovery execution only.
 
 ### Integration Manager
 
 Owns:
 
-- target-branch queue/lock;
-- latest target HEAD checks;
-- Task snapshot commit boundary;
-- candidate normal merge;
-- conflict/error context;
-- invoking existing Runner for code recovery;
-- candidate validation;
-- squash delivery;
-- target commit identity/idempotency;
+- merge queue/lock;
+- safe target worktree resolution;
+- direct normal merge;
+- merge abort/conflict detection;
+- merge failure counting;
+- invoking existing Runner for recovery;
+- fallback decision;
+- merged target SHA/idempotency;
 - cleanup coordination.
 
 ### Publish
 
-Owns only explicit remote publication/reconciliation.
-
-Do not mix `git push` into normal local Task delivery.
+Owns explicit remote push/reconciliation only.
 
 ---
 
-## 17. Cleanup / retention
+## 19. Cleanup / retention
 
 Fail-safe defaults:
 
-- temporary candidate/recovery worktrees: remove after the attempt is durably finalized;
-- successful Main Task branch/worktree: may remove after target commit is durably recorded;
-- Main fallback-to-Isolated / failed / blocked result: retain;
-- Isolated Worktree `worktree_ready`: retain until explicit cleanup/delete;
-- never delete an unknown/unowned path merely because its name resembles a Task ID.
+- successful Main Task branch/worktree may be removed only after merged state is durable;
+- recovery worktree may be removed after merge transaction is durably finalized;
+- Main fallback-to-Isolated result is retained;
+- Isolated Worktree `worktree_ready` is retained until explicit cleanup/delete;
+- failed/blocked Task output is retained;
+- never delete unknown/unowned paths by name alone.
 
-Workspace Manager must verify Git worktree registration + Task/run ownership metadata before destructive cleanup.
+Workspace Manager must verify Git worktree registration + Task/run ownership before destructive cleanup.
 
 ---
 
-## 18. Remote Git policy
+## 20. Remote Git policy
 
-Normal lifecycle is completely local:
+Normal lifecycle is local:
 
 ```text
 Project branch
-→ local Task worktrees/branches
-→ temporary local candidates
-→ local Project branch commits
+→ local Task branch/worktree
+→ local commit
+→ normal local merge back to Project branch
 ```
 
 No automatic remote push.
 
-Publishing is a separate explicit action/policy:
-
-```bash
-git push origin feature/ui
-```
-
-Do not call local integration `push`; reserve push terminology for remote publication.
+Remote publication is a separate explicit action.
 
 ---
 
-## 19. Example: three Agents in parallel
+## 21. Example: A / B concurrent Main
 
 Initial:
 
 ```text
 feature/ui = C
 
-T1 branch = C
-T2 branch = C
-T3 branch = C
+A = branch from C
+B = branch from C
 ```
 
-T3 finishes first:
+A finishes first:
 
 ```text
-T3 → commit T3
-→ candidate from feature/ui=C
-→ merge T3
-→ validate
-→ feature/ui merge --squash candidate
-→ commit S3
+A Runner Complete
+→ commit TA
+→ normal merge TA into feature/ui
+→ success
+→ feature/ui now contains A
+→ A Closed
 ```
 
-Now:
+B then merges:
 
 ```text
-feature/ui = C-S3
-```
-
-T1 finishes:
-
-```text
-T1 was based on C
-→ candidate from latest feature/ui=C-S3
-→ normal merge T1
-→ Git merge base = C
+B Runner Complete
+→ commit TB
+→ normal merge TB into latest feature/ui
+→ Git uses original common ancestor C
 → conflict?
-   ├─ no  → validate
-   └─ yes → existing Runner redo/recovery against C-S3
-→ feature/ui merge --squash validated candidate
-→ commit S1
+   ├─ no  → merge success → B Closed
+   └─ yes → merge_failure_count +1
+            → Runner redo against latest feature/ui
+            → commit recovery result
+            → retry merge
 ```
 
-Now:
-
-```text
-feature/ui
-C
-└─ S3
-   └─ S1
-```
-
-T2 repeats against the latest target and may conflict with either S3 or S1 through their shared ancestry.
+Therefore concurrent Tasks still get real Git conflict detection without candidate/squash/integration branches.
 
 ---
 
-## 20. Implementation TODO
+## 22. Implementation TODO
 
-### Phase A — contracts / metadata
+### Phase A — settings / contracts
 
-- [ ] Preserve Auto / Main / Isolated Worktree semantics.
-- [ ] Add Global Execution settings: `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
-- [ ] Capture `target_branch` + `target_head_sha_at_start` per Task run.
-- [ ] Define Task + Run branch/path identity.
-- [ ] Define Git delivery metadata without duplicating Runner RunState.
-- [ ] Keep Runner / FlowEngine / StageExecutor / Supervisor unchanged for Git orchestration.
+- [ ] Preserve Auto / Main / Isolated Worktree.
+- [ ] Global Settings owns `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
+- [ ] Task persists only actual `merge_failure_count`; do not add another retry counter or Task-local limit copy.
+- [ ] Capture target branch + HEAD per Task run.
+- [ ] Keep Runner architecture unchanged.
 
 ### Phase B — Workspace Manager
 
-- [ ] Create Task branch/worktree directly from captured target branch HEAD.
-- [ ] Return Task worktree as Runner `project_root`.
-- [ ] Create/remove temporary candidate/recovery worktrees.
-- [ ] Use ownership-verified cleanup.
-- [ ] Support Reset/Rerun without branch/path collisions.
-- [ ] Use short repository Git lock for ref/worktree mutations only.
+- [ ] Create Task branch/worktree directly from captured target HEAD.
+- [ ] Pass Task worktree to Runner as project_root.
+- [ ] Support unique Task + Run identity.
+- [ ] Create recovery worktree only after a merge failure that needs source redo.
+- [ ] Ownership-safe cleanup.
 
-### Phase C — Task result snapshot
+### Phase C — Runner Complete snapshot
 
-- [ ] On Runner Completed, `git add -A` + commit remaining Task changes locally.
-- [ ] Preserve existing Agent commits.
-- [ ] Record `task_snapshot_sha`.
-- [ ] Handle no-change result without an empty target commit.
+- [ ] `git add -A` + commit remaining Task changes.
+- [ ] Preserve Agent-created commits.
+- [ ] Record task_snapshot_sha.
+- [ ] Handle no_changes without empty commits.
 
-### Phase D — Integration Queue
+### Phase D — Main merge
 
-- [ ] Serialize delivery per repository + captured target branch.
-- [ ] If `allow_concurrent_main_tasks=false`, preserve current Main-busy selection/run guard; if true, allow parallel Main execution and rely on isolated worktrees + target delivery queue.
-- [ ] Allow parallel Runner execution.
-- [ ] Persist queue state for restart recovery.
-- [ ] Re-read latest target HEAD when a queued Task begins integration.
+- [ ] Serialize merge per repository + target branch.
+- [ ] Resolve safe worktree for captured target branch.
+- [ ] Normal `git merge <Task/recovery source branch>` directly into target branch.
+- [ ] Do not use `merge --squash`.
+- [ ] Do not create normal-path candidate/integration branches.
+- [ ] Merge success is the effective Main completion boundary.
 
-### Phase E — Candidate integration
+### Phase E — fail merge / recovery
 
-- [ ] Create candidate from latest target HEAD.
-- [ ] Normal-merge committed Task branch into candidate.
-- [ ] Do not mutate/rebase original completed Task branch.
-- [ ] Validate candidate before target delivery, then create a temporary candidate merge commit so the candidate branch/ref exactly represents the validated tree.
-- [ ] Re-check target HEAD immediately before delivery.
-- [ ] Rebuild candidate if target HEAD changed.
+- [ ] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
+- [ ] Read current Global `merge_failure_limit` after each real failure.
+- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, retry merge.
+- [ ] If count > limit: stop automatic Main merge and close as Isolated Worktree / worktree_ready.
+- [ ] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
 
-### Phase F — Conflict recovery
+### Phase F — UI
 
-- [ ] Detect Git conflict deterministically.
-- [ ] Build recovery context with Task intent, base/snapshot/latest target SHA, conflict files and Git output.
-- [ ] Call existing Runner against recovery candidate.
-- [ ] Require normal Runner Review / Validate.
-- [ ] Commit recovered result and retry candidate merge.
-- [ ] Count only real code/semantic/validation integration failures.
-- [ ] Read `merge_failure_limit` directly from the single Global Settings owner (default 3); persist only Task `merge_failure_count`. When count > current Global limit, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
+- [ ] Effective Main remains Ongoing from Runner Complete until merge succeeds or fallback closes it.
+- [ ] Show pending_merge / merging / conflict_recovery / waiting_target_clean / waiting_target_workspace / merged / worktree_ready.
+- [ ] Main fallback visibly indicates original Main + merge_retry_exhausted reason.
+- [ ] No top-level Git Worktree page; Task Info + Project Workspace Results remain enough.
 
-### Phase G — Project delivery
+### Phase G — remote
 
-- [ ] Require a safe/clean target delivery worktree.
-- [ ] `git merge --squash <validated-candidate>` into captured target branch.
-- [ ] Create exactly one local target commit per delivered Task.
-- [ ] Add stable Task-run commit trailer and persist `target_commit_sha`.
-
-### Phase H — UI
-
-- [ ] Keep Board New / Ongoing / Paused / Closed; effective Main stays Ongoing after Runner Completed until Project-branch squash delivery succeeds or fallback closes it.
-- [ ] Show Git delivery as secondary state.
-- [ ] Show requested/effective mode, target branch, Task run/branch, base/snapshot/latest target SHA, merge failures and attention reason.
-- [ ] Keep Paused execution-only.
-- [ ] Main merge failures > Global limit => Closed · worktree_ready with fallback reason `merge_retry_exhausted`.
-- [ ] Isolated Worktree => Closed · worktree_ready.
-- [ ] Do not add top-level Git Worktree page; use Task Info + Project Workspace Results.
-- [ ] Backend owns allowed actions; UI disabled state is UX only.
-
-### Phase I — local-only / publish
-
-- [ ] Normal Task delivery never runs `git push origin`.
-- [ ] Keep Publish separate and explicit.
+- [ ] Normal lifecycle never executes `git push origin`.
+- [ ] Keep Publish explicit and separate.
 
 ---
 
-## 21. Test TODO
+## 23. Test TODO
 
-### Worktree isolation
+### Isolation / concurrency
 
-- [ ] Start 2, 5 and 10 Tasks from one target branch concurrently.
-- [ ] Every Runner gets a unique worktree.
-- [ ] No Task edits another Task worktree.
-- [ ] Reset/Rerun cannot collide with retained old run branches/worktrees.
-- [ ] Uncommitted Project files are not silently imported into Task base.
+- [ ] Start 2 / 5 / 10 Tasks from one target branch concurrently.
+- [ ] Every Runner uses a unique Task worktree.
+- [ ] Concurrent Main Off blocks a second Main; On allows it.
+- [ ] Busy→Worktree Auto remains Worktree while busy even when Concurrent Main is On.
 
-### Conflict detection
+### Merge success
 
-- [ ] Start T1 and T2 from the same target commit.
-- [ ] Make incompatible edits to the same lines.
-- [ ] Deliver T1 first.
-- [ ] Candidate-merge T2 against latest target and confirm Git produces a real conflict using original common ancestor.
-- [ ] Confirm conflict invokes existing Runner recovery, not Integration Manager code editing.
+- [ ] Runner Complete does not close Main before merge.
+- [ ] Task commit merges directly into target branch.
+- [ ] Merge success closes Main.
+- [ ] Restart after merge recognizes ancestry and does not duplicate merge.
 
-### Ordering / target movement
+### Merge conflict
 
-- [ ] Finish Tasks out of creation order.
-- [ ] Confirm same-target delivery is serialized.
-- [ ] Add a new target commit while another Task runs; candidate must start from latest target.
-- [ ] Move target HEAD while candidate validates; candidate must rebuild before delivery.
-- [ ] Target movement alone must not increment merge failure count.
+- [ ] Start A/B from same target commit and edit incompatible same lines.
+- [ ] Merge A first.
+- [ ] Merge B into latest target and confirm real Git conflict.
+- [ ] Confirm merge abort + `merge_failure_count += 1` exactly once.
+- [ ] Confirm existing Runner redoes B against latest target.
+- [ ] Confirm recovery branch merges successfully when fixed.
 
-### Dirty / unavailable target
+### Merge failure limit
 
-- [ ] Dirty target delivery worktree => waiting_target_clean.
-- [ ] Confirm no auto-stash/reset/stage/commit of user changes.
-- [ ] User switches Project checkout after Task start; do not switch it back automatically.
-- [ ] Target owned by unmanaged worktree => waiting_target_workspace.
+- [ ] Global limit=3: failures 1/2/3 recover, failure 4 falls back.
+- [ ] Fallback retains Task branch/worktree and closes as worktree_ready.
+- [ ] Task does not store a duplicate merge limit or retry-attempt counter.
 
-### Retry exhaustion
+### Target safety
 
-- [ ] Repeated real merge/validation failures increment `merge_failure_count` exactly once per failed attempt.
-- [ ] Queue wait / lock contention / target movement / dirty target do not increment.
-- [ ] Exceed Global merge failure limit => fallback to Isolated Worktree close, retain Task branch/worktree, and stop automatic retries.
+- [ ] Dirty target => waiting_target_clean; do not mutate user changes.
+- [ ] Target in unmanaged worktree => waiting_target_workspace.
+- [ ] User branch switch after Task start never retargets old Task.
 
-### Restart / idempotency
+### Local-only
 
-- [ ] Restart while Runner runs.
-- [ ] Restart while Task waits in Integration Queue.
-- [ ] Restart during conflict recovery.
-- [ ] Crash after target commit but before Task state persistence; stable Task-run identity prevents duplicate commit.
-- [ ] Never lose unintegrated Task output.
-
-### Local-only guarantee
-
-- [ ] Run without remote credentials.
-- [ ] Task execution + local delivery still work.
+- [ ] No remote credentials required.
 - [ ] No automatic `git push` occurs.
 
 ---
 
-## 22. Non-goals
+## 24. Non-goals
 
 - Do not redesign Runner.
 - Do not add a Git Workflow Stage.
 - Do not add a second retry/recovery engine.
-- Do not let frontend execute Git directly.
-- Do not mutate/rebase original completed Task worktree during integration.
+- Do not use normal-path candidate branches.
+- Do not use `merge --squash` for Task delivery.
+- Do not create a permanent integration branch.
 - Do not auto-switch user Project checkout branch.
 - Do not auto-stash/reset/discard/commit unrelated dirty Project files.
-- Do not push every Task to remote.
-- Do not add an AI Skill for deterministic Git commands.
+- Do not auto-push every Task to remote.
 
 ---
 
-## 23. Design invariant summary
+## 25. Final invariant summary
 
 ```text
-Canonical truth:
-  captured Project branch
+Project branch = canonical truth
+↓
+Task isolated worktree / local branch
+↓
+Runner
+↓
+Runner Complete
+↓
+commit Task result locally
+↓
+normal merge Task → Project branch
+├─ success → Closed / finish
+└─ fail    → merge_failure_count +1
+             ↓
+           read Global merge_failure_limit
+             ↓
+           count <= limit
+           → existing Runner redo against latest Project
+           → commit recovery result
+           → retry normal merge
 
-Task modes:
-  Auto / Main / Isolated Worktree
-
-Execution:
-  every Task run uses isolated Task worktree
-  Runner(project_root) unchanged
-
-Task result:
-  Runner Completed
-  → commit remaining Task changes
-  → stable local/task/<task>-r<run> branch
-
-Main delivery:
-  Runner Completed does NOT close the Task
-  → latest target branch HEAD
-  → disposable candidate
-  → normal Git merge Task branch
-  → conflict => existing Runner redo/recovery
-  → validate
-  → git merge --squash candidate
-  → exactly one Project-branch commit
-  → Closed · integrated
-
-Isolated Worktree:
-  keep Task branch/worktree
-  no automatic target modification
-
-Concurrency:
-  Runner execution parallel
-  delivery serialized per target branch
-
-Remote:
-  untouched until explicit Publish
+           count > limit
+           → Isolated Worktree fallback
+           → Closed · worktree_ready
 ```
