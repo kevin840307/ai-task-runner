@@ -565,7 +565,8 @@ openPlanDialog=function(id=currentTaskId,options={}){
   const previousRoute=taskDrawerEl.dataset.route||'info',overlayWasOpen=taskOverlayEl.classList.contains('open');
   taskDrawerListReturnTarget=options.returnTarget||(
     t._chatDraft?'chat':
-    (overlayWasOpen&&previousRoute==='info'?'info':'close')
+    (overlayWasOpen&&previousRoute==='info'?'info':
+      overlayWasOpen&&previousRoute==='list'?taskDrawerListReturnTarget:'close')
   );
   if(taskEditorReturnContext){taskEditorReturnContext=null;hideTaskEditorView()}
   if(planSubviewType)leavePlanSubview();
