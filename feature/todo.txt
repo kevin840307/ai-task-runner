@@ -333,6 +333,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 移除 Drawer 的舊 Steps tab / drawer-items pane；child Tasks 編排只保留 Overview 的 Tasks 摘要 + Task List Workspace，Runtime / Output / History 改為四欄固定位置。
 [x] Task List 底部 Back footer 改靠右，仍共用 TaskDrawerShell 的同一 Back / discard handler。
 [x] Task Editor footer 明確保留 Back/Cancel 按鈕；從 Task Info 編輯單一 Task 時顯示 Back to Info，多 Task 則進 Task List 並可 Back to Info。
+[x] New 狀態 Task 從 Board 直接開 Task List 時，footer 同時保留原 Back（關閉 Drawer）與 Back to Info（回同一 Task Info）；從 Info/Chat/Draft 進 List 時不重複顯示第二顆 Info 返回鍵。
 [x] Task Info 的 Edit Task：單一 Task 直接開 canonical Task Editor；多 Task 開 Task List Workspace；兩者 returnTarget 均明確為 info。
 [ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
 [ ] Browser 測試 Project Chat Delete：刪中間 Chat / active running mock Chat / 含 TaskDraft Chat / 最後一個 Chat；確認只影響目前 Project，刪最後一個會建立空 Chat。
@@ -365,7 +366,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
 [x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
 [x] New Task / Edit Task 共用 Editor 排版收斂：Project + Workflow + optional Title 同列；Task Prompt 為主視覺；Workflow-required File Validator / AI validation 與 Prompt 並排，Upload file 提升辨識度；Workspace 降為次要 compact 區塊；窄畫面自動改回單欄。
-[x] Task Prompt / AI source mode 視覺穩定：Write / File / Asset（AI 另含 Default）使用固定等寬 segmented tabs；mode body 使用固定尺寸槽位，File / Asset / Default 在槽位內置中，切換模式不得造成卡片寬高跳動。
+[x] Task Prompt / AI source mode 排版收斂：Write / File / Asset（AI 另含 Default）保持等寬 segmented tabs 與 100% 內容寬度；高度依模式自然變化。Mixed workflow 時 Task Prompt 先佔完整一列，File Validator + AI Validation 下一列並排，避免 Prompt 下方大片留白。
 [ ] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
 [x] Regression 修正：compact New Task layout 移除 state-hint 後，同步移除舊 startup writer，並把 newTaskListDraft 初始化移到 task-editor.js 最前面，避免 Task Editor 載入中止後 Task Workspace 出現 TDZ ReferenceError。
 [x] Tasks header 移除 tasksProjectLine；HTML 與 task-editor / tasks-page / project-sidebar 所有 writer 一併刪除，不留下 null.textContent 路徑。
