@@ -1281,7 +1281,7 @@ renderNewTaskWorkspace=function(){
   const worktree=resolved.ok&&resolved.kind==='worktree';
   host.innerHTML=`<div class="workspace-options">
     ${option('auto','Auto',autoWorkspacePolicyDescription(),autoWorkspaceStatus(busy,ref))}
-    ${option('main','Main workspace','Use the project working tree directly.',busy?`Busy · ${busy.id}`:'Available',!!busy)}
+    ${option('main','Main','Run in an isolated worktree, then integrate back to the Project branch.',busy?(globalExecutionSettings.allowConcurrentMainTasks?`Busy · ${busy.id} · concurrent allowed`:`Busy · ${busy.id}`):'Available',!!busy&&!globalExecutionSettings.allowConcurrentMainTasks)}
     ${option('worktree','Isolated worktree','Create an isolated branch/path for this task.',`task/${ref}`)}
   </div><div class="workspace-preview ${worktree?'worktree-active':''}"><strong>${worktree?'WORKTREE · ISOLATED DEVELOPMENT':'Execution preview'}</strong><br>${resolved.ok?(worktree?`Branch · ${resolved.branch}<br>Path · ${resolved.root}<br>Changes stay isolated until merged.`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
   host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
