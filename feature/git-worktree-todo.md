@@ -767,7 +767,7 @@ A normal Git conflict is not automatically a Task execution failure.
 Integration Manager owns deterministic Git operations:
 
 - inspect latest target/integration SHA
-- Task snapshot + candidate `merge --squash` mechanics
+- Task snapshot + candidate normal Git merge mechanics
 - conflict detection
 - integration worktree lifecycle
 - retry after branch movement
@@ -843,7 +843,7 @@ cleanup retry
 Examples that must call the existing Runner again:
 
 ```text
-candidate `merge --squash` conflict requiring source edits
+candidate normal Git merge conflict requiring source edits
 latest target changed architecture and old patch no longer applies
 validation/test failure after applying the Task snapshot to the latest candidate
 review failure caused by integration result
@@ -1046,9 +1046,9 @@ merge_retry_attempt += 1
 
 Examples that **count**:
 
-- candidate `merge --squash` produces a source conflict that requires Runner repair/rework
+- candidate normal Git merge produces a source conflict that requires Runner repair/rework
 - recovery Runner completes, but the next candidate merge attempt still conflicts
-- candidate apply succeeds textually, but integration validation/test fails and requires Runner code changes
+- candidate merge succeeds textually, but integration validation/test fails and requires Runner code changes
 - semantic incompatibility with latest target requires Runner to redo part of the implementation
 
 Examples that **do not count**:
