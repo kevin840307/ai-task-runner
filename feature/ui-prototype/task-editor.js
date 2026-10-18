@@ -885,6 +885,7 @@ function createTaskFromChatDraft(session,button=null){
     const item=items[i],projectKey=projectKeyFromPath(item.project,model.projectContext||currentProjectKey),resolved=resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,item.workspacePolicy||'auto');
     if(!resolved.ok){taskSequence--;if(button){delete button.dataset.submitting;button.disabled=false}showToast(resolved.reason);return}
     item.workspaceKind=resolved.kind;item.branch=resolved.branch;item.executionRoot=resolved.root;item.itemId=`${id}-I${i+1}`;
+    materializeItemUploads(item,item.itemId);
   }
   delete taskMap[oldId];model.id=id;delete model._chatDraft;model.status='new';model.runtime='idle';model.stage='Idle';model.progress=[0,items.length];
   model.tags=[`${items.length} task${items.length===1?'':'s'}`];model.desc=items.length===1?'1 task':`${items.length} ordered tasks`;
@@ -1286,6 +1287,15 @@ renderNewTaskWorkspace=function(){
   host.querySelectorAll('input[name="workspaceMode"]').forEach(r=>r.onchange=()=>{newTaskWorkspaceMode=r.value;renderNewTaskWorkspace()});
 };
 
+function reflectManagedPathsInTaskEditor(item){
+  const fields=[['goalFile','taskGoalFile'],['validator','taskValidatorFile'],['aiFile','taskAiFile']];
+  for(const [field,id] of fields){
+    if(!stagedUploadMeta(newTaskDraft,field))continue;
+    newTaskDraft[field]=item[field]||'';
+    clearStagedUpload(newTaskDraft,field);
+    const input=document.getElementById(id);if(input)input.value=newTaskDraft[field];
+  }
+}
 function buildEditorItem(owner,index){
   captureNewTaskSources();
   const rawProject=document.getElementById('newTaskProject').value.trim(),workflow=document.getElementById('newTaskWorkflow').value,caps=workflowCaps(workflow);
@@ -1329,6 +1339,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
     const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
     if(!lockTaskEditorSubmit()){taskSequence--;return}
+    materializeItemUploads(item,`${id}-I1`);reflectManagedPathsInTaskEditor(item);
     const boardTitle=document.getElementById('newTaskTitle').value.trim()||planTitle(item,0).slice(0,72)||'New Task';
     const projectKey=projectKeyFromPath(item.project,currentProjectKey);
     const t={id,kind:'task_list',status:'new',title:boardTitle,runtime:'idle',desc:'1 task',tags:['1 task'],workflow:item.workflow,project:projectKey,progress:[0,1],elapsed:'—',stage:'Idle',session:'—',goal:item.prompt,
@@ -1340,6 +1351,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);
   const targetIndex=ctx.mode==='create-item'?batchDraft.length:ctx.index;
   const item=buildEditorItem(owner,targetIndex);if(!item||!lockTaskEditorSubmit())return;
+  if(!owner._chatDraft){materializeItemUploads(item,`${owner.id}-I${targetIndex+1}`);reflectManagedPathsInTaskEditor(item)}
   const markDirty=ctx.mode==='edit-item'&&owner.status==='paused'&&targetIndex===batchState.index;
   if(ctx.mode==='create-item'){batchDraft.push(item);sequenceExpandedIndex=-1;pushTaskHistory(owner,'Task added');}
   else{batchDraft[targetIndex]={...batchDraft[targetIndex],...item,itemId:batchDraft[targetIndex].itemId};pushTaskHistory(owner,`Task ${targetIndex+1} edited`)}
@@ -1750,7 +1762,7 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
   const title=String(document.getElementById('taskListDraftTitle')?.value||newTaskListDraft.title||'').trim();
   const project=document.getElementById('taskListDraftProject')?.value||newTaskListDraft.project||currentProjectKey;
   if(!title){showToast(uiText('taskListDraft.titleRequired'));return}
-  const items=(newTaskListDraft.items||[]).map(x=>({...x}));
+  const items=(newTaskListDraft.items||[]).map(x=>({...x,_uploads:cloneUploadMeta(x._uploads)}));
   if(!items.length){showToast(uiText('taskListDraft.needTask'));renderNewTaskListDraftWorkspace();return}
   if(createButton){createButton.dataset.submitting='true';createButton.disabled=true;createButton.textContent=uiText('taskListDraft.creating')}
   const id='T-'+(++taskSequence);
@@ -1762,6 +1774,7 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
       showToast(resolved.reason);return;
     }
     item.workspaceKind=resolved.kind;item.branch=resolved.branch;item.executionRoot=resolved.root;item.itemId=`${id}-I${i+1}`;
+    materializeItemUploads(item,item.itemId);
   }
   const first=items[0];
   const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:items.length===1?'1 task':`${items.length} ordered tasks`,tags:[`${items.length} task${items.length===1?'':'s'}`],workflow:items.length===1?first.workflow:'Tasks',projectContext:project,project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'—',goal:items.length===1?first.prompt:`${items.length} ordered tasks`,items,listItems:items,workspacePolicy:items.length===1?first.workspacePolicy:'per_item',workspaceKind:items.length===1?first.workspaceKind:'per_item',branch:items.length===1?first.branch:'—',executionRoot:items.length===1?first.executionRoot:'Per-task workspaces'};
