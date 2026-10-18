@@ -211,7 +211,7 @@ function deleteTaskConfirmed(id){
   if(!taskCanDelete(t)){showToast('Ongoing Task 不能直接刪除，請先 Pause / Stop');return}
   if(id===batchParentTaskId){clearInterval(batchRunTimer);batchRunTimer=null;batchParentTaskId=null;batchState={status:'idle',index:0,recovered:false,currentDirty:false}}
   delete taskMap[id];persistCurrentPresetFromTaskMap();
-  if(typeof closeTaskDrawerShell==='function')closeTaskDrawerShell({force:true});else document.getElementById('taskOverlay').classList.remove('open');
+  if(typeof closeTaskDrawerShell==='function')closeTaskDrawerShell({force:true,restoreFocus:false});else document.getElementById('taskOverlay').classList.remove('open');
   renderBoardFromMap();showToast('Task deleted');
 }
 function requestTaskDelete(id=currentTaskId){
