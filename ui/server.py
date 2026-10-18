@@ -17,6 +17,7 @@ try:
     from .chat_agent_service import ChatAgentService
     from .chat_service import ChatService
     from .project_preferences import ProjectPreferences
+    from .runner_capability_service import runner_capabilities
     from .task_draft_service import TaskDraftService
     from .task_service import TaskService
     from .project_runtime_state import ProjectRuntimeMixin
@@ -29,6 +30,7 @@ except ImportError:
     from chat_agent_service import ChatAgentService
     from chat_service import ChatService
     from project_preferences import ProjectPreferences
+    from runner_capability_service import runner_capabilities
     from task_draft_service import TaskDraftService
     from task_service import TaskService
     from project_runtime_state import ProjectRuntimeMixin
@@ -98,6 +100,10 @@ class Handler(SimpleHTTPRequestHandler):
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
                 return self._json(self.state.project_preferences.get(project))
+            if parsed.path == "/api/chat/system-capabilities":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(runner_capabilities(self.state.studio_files(project)))
             if parsed.path == "/api/chat/settings-catalog":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
