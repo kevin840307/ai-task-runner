@@ -139,7 +139,7 @@ html.ui-ready .app-bootstrap-card{
 /* Existing-page placeholders */
 .assetbody{min-height:0;display:grid;place-items:center;padding:30px}.assetcard{width:min(760px,90%);padding:28px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;box-shadow:var(--shadow-sm)}.assetcard h2{margin:0 0 8px;font-size:16px}.assetcard p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
 /* Drawer */
-.overlay{position:fixed;inset:0;z-index:80;background:rgba(14,23,38,.28);backdrop-filter:blur(2px);display:none}.overlay.open{display:block}.drawer{position:absolute;top:0;right:0;width:clamp(620px,46vw,720px);max-width:92vw;height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:var(--panel);border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(15,23,42,.16);transform:translateX(100%);transition:transform .18s ease,width .16s ease}.overlay.open .drawer{transform:translateX(0)}.drawerhead{padding:15px 16px 12px;border-bottom:1px solid var(--line)}.drawerheadtop{display:flex;gap:10px;align-items:start}.drawerhead h2{flex:1;margin:0;font-size:15px;line-height:1.35}.close{width:30px;height:30px;border:0;background:transparent;color:var(--muted);font-size:22px}.drawerhead p{margin:5px 0 0;color:var(--muted);font-size:10px}.drawertabs{display:flex;gap:3px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}.drawertab{height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:850}.drawertab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.drawerbody{min-height:0;overflow:auto;padding:14px 16px}.section{margin-bottom:14px}.section h3{margin:0 0 8px;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;font-size:10px}.kv span{color:var(--muted)}.kv strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.runtimebox{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:11px;background:#f7fcfb}.runtop{display:flex;align-items:center;justify-content:space-between}.runtop strong{font-size:11px}.stagerow{display:flex;gap:8px;align-items:center;margin-top:9px}.stagebar{flex:1;height:6px;background:#e7edf1;border-radius:999px;overflow:hidden}.stagebar i{display:block;width:64%;height:100%;background:var(--accent);border-radius:999px}.timeline{display:grid;gap:0;margin-top:8px}.event{position:relative;padding:7px 0 7px 22px;font-size:10px}.event:before{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid #d9e0e7}.event:after{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;background:#cbd5e1;border:2px solid #fff}.event.done:after{background:#16a34a}.event.now:after{background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent)}.event small{display:block;color:var(--muted);margin-top:2px}.console{max-height:230px;overflow:auto;padding:11px;border:1px solid #d9e2ec;border-radius:10px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.drawerfoot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2)}
+.overlay{position:fixed;inset:0;z-index:80;background:rgba(14,23,38,.28);backdrop-filter:blur(2px);display:none}.overlay.open{display:block}.drawer{position:absolute;top:0;right:0;width:clamp(620px,46vw,720px);max-width:92vw;height:100%;display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr) auto;background:var(--panel);border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(15,23,42,.16);transform:translateX(100%);transition:transform .18s ease,width .16s ease}.drawer.workspace-route{width:min(920px,94vw);max-width:94vw;grid-template-rows:auto minmax(0,1fr)}.overlay.open .drawer{transform:translateX(0)}.drawerhead{padding:15px 16px 12px;border-bottom:1px solid var(--line)}.drawerheadtop{display:flex;gap:8px;align-items:center;min-width:0}.drawerhead h2{flex:1;min-width:0;margin:0;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.drawer-back{display:grid;place-items:center;width:30px;height:30px;flex:0 0 30px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:18px;font-weight:800}.drawer-back:hover{background:var(--accent-soft);color:var(--accent-dark)}.drawer-shell-actions{display:flex;align-items:center;gap:5px;flex:0 0 auto}.drawer-shell-actions .btn{min-height:30px;height:30px;padding:0 8px;font-size:9px}.close{width:30px;height:30px;flex:0 0 30px;border:0;background:transparent;color:var(--muted);font-size:22px}.drawerhead p{margin:5px 0 0;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.drawer>.drawer-worktree-banner[hidden],.drawer>.drawertabs[hidden],.drawer>.drawerbody[hidden],.drawer>.drawerfoot[hidden]{display:none!important}.drawertabs{display:flex;gap:3px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}.drawertab{height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:850}.drawertab.active{color:var(--accent-dark);border-bottom-color:var(--accent)}.drawerbody{min-height:0;overflow:auto;padding:14px 16px}.section{margin-bottom:14px}.section h3{margin:0 0 8px;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.05em}.kv{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fbfdff;font-size:10px}.kv span{color:var(--muted)}.kv strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.runtimebox{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:11px;background:#f7fcfb}.runtop{display:flex;align-items:center;justify-content:space-between}.runtop strong{font-size:11px}.stagerow{display:flex;gap:8px;align-items:center;margin-top:9px}.stagebar{flex:1;height:6px;background:#e7edf1;border-radius:999px;overflow:hidden}.stagebar i{display:block;width:64%;height:100%;background:var(--accent);border-radius:999px}.timeline{display:grid;gap:0;margin-top:8px}.event{position:relative;padding:7px 0 7px 22px;font-size:10px}.event:before{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid #d9e0e7}.event:after{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;background:#cbd5e1;border:2px solid #fff}.event.done:after{background:#16a34a}.event.now:after{background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent)}.event small{display:block;color:var(--muted);margin-top:2px}.console{max-height:230px;overflow:auto;padding:11px;border:1px solid #d9e2ec;border-radius:10px;background:#111827;color:#e5e7eb;white-space:pre-wrap;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.drawerfoot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2)}
 /* toast */
 .toast{position:fixed;left:50%;bottom:18px;z-index:500;transform:translate(-50%,12px);opacity:0;pointer-events:none;padding:9px 12px;border-radius:999px;background:#17202c;color:#fff;font-size:10px;font-weight:800;box-shadow:var(--shadow-pop);transition:.18s}.toast.show{opacity:1;transform:translate(-50%,0)}
 .proto{position:fixed;left:12px;bottom:10px;z-index:20;padding:4px 7px;border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:999px;background:rgba(255,255,255,.88);color:var(--accent-dark);font-size:8px;font-weight:900;backdrop-filter:blur(6px)}
@@ -454,25 +454,22 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .project-dropdown-option strong{display:block;font-size:9px}.project-dropdown-option small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .project-dropdown-empty{padding:9px;color:var(--muted);font-size:8px}
 
-/* Task Workspace: one right-side surface, not nested large dialogs. */
-#planModal{place-items:stretch!important;align-items:stretch!important;justify-content:flex-end!important;padding:0!important;background:rgba(14,23,38,.22)!important;backdrop-filter:blur(1px)!important}
-#planModal.open{display:flex!important}
-#planModal>.plan-modal-card,#planModal>.plan-subview-mount{width:min(920px,94vw)!important;height:100vh!important;max-height:none!important;margin:0!important;border-radius:0!important;border-top:0!important;border-right:0!important;border-bottom:0!important;box-shadow:-18px 0 50px color-mix(in srgb,#000 32%,transparent)!important;background:var(--panel)}
-#planModal>.plan-modal-card{display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden!important}
-#planModal .plan-page-body{min-height:0;height:auto;overflow:hidden}
+/* Task Drawer routes: List / Editor / YAML share the one drawerhead above. */
+#taskListWorkspaceRoot{display:contents}
+#planModal{display:none;min-width:0;min-height:0;height:100%;background:var(--bg)}
+#planModal.open{display:grid;grid-template-rows:minmax(0,1fr)}
+#planModal .plan-page-body{min-height:0;height:100%;overflow:hidden}
 #planModal .plan-main{min-height:0;overflow:auto}
 #planModal .plan-side{min-height:0;overflow:auto}
-#planModal>.plan-subview-mount{position:relative!important;overflow:hidden}
+#planModal>.plan-subview-mount{position:relative!important;width:100%!important;height:100%!important;max-height:none!important;overflow:hidden}
+#planModal.subview-open>.plan-page-body{display:none}
 #planModal>.plan-subview-mount>.modal-card,
-#planModal>.plan-subview-mount>.task-workspace-view{width:100%!important;height:100vh!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden!important;background:var(--panel)}
-#planModal>.plan-subview-mount>.modal-card{display:grid!important}
-#planModal>.plan-subview-mount>.task-workspace-view.open{display:grid!important}
+#planModal>.plan-subview-mount>.task-workspace-view{width:100%!important;height:100%!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important;background:var(--panel)}
+#planModal>.plan-subview-mount>.modal-card{display:grid!important;grid-template-rows:minmax(0,1fr) auto}
+#planModal>.plan-subview-mount>.task-workspace-view.open{display:grid!important;grid-template-rows:minmax(0,1fr) auto}
+#planModal>.plan-subview-mount>.modal-card>.modal-head{display:none!important}
 #planModal>.plan-subview-mount>.modal-card>.modal-body,
 #planModal>.plan-subview-mount>.task-workspace-view>.modal-body{min-height:0;overflow:auto}
-#planModal.subview-open{align-items:stretch!important;justify-content:flex-end!important}
-#planModal.subview-open>.plan-modal-card{display:none!important}
-#planModal .modal-head .close[title="Back"]{font-size:17px}
-#planModal .plan-modal-head{background:var(--panel)}
 #planModal .plan-side-card h3{display:flex;align-items:center;justify-content:space-between}
 #planModal .plan-side-card.info-active{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-softer)}
 #planModal .plan-side-card.info-active h3{color:var(--accent-dark)}
@@ -496,7 +493,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .taskrow-title{min-width:0}.taskrow-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.taskrow-title small{display:block;margin-top:2px;color:var(--muted);font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .taskrow-project{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}.taskrow-count{font-weight:800;color:var(--text)}.taskrow-progress{color:var(--muted);font-variant-numeric:tabular-nums}
 .task-list-empty{padding:26px;border:1px dashed var(--line-strong);border-radius:10px;background:var(--panel);text-align:center;color:var(--muted);font-size:9px}
-@media(max-width:900px){#planModal>.plan-modal-card,#planModal>.plan-subview-mount{width:100vw!important}.plan-page-body{grid-template-columns:minmax(0,1fr)!important}.plan-side{display:none!important}}
+@media(max-width:900px){#taskOverlay .drawer.workspace-route{width:100vw!important;max-width:100vw!important}.plan-page-body{grid-template-columns:minmax(0,1fr)!important}.plan-side{display:none!important}.drawer-shell-actions .btn.ghost{display:none}}
 
 /* Task List row alignment + one stable Add task footer */
 .plan-row-compact .plan-row-head{
@@ -552,10 +549,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .plan-add-task-plus{font-size:13px;line-height:1}
 
 
-/* One Task Workspace overlay owns List / Editor / YAML without nested large modals. */
+/* One Task Drawer owns List / Editor / YAML without nested large overlays. */
 html{scrollbar-gutter:stable}
-#planModal{position:fixed!important;inset:0!important;isolation:isolate;z-index:900!important}
-#planModal>.plan-modal-card,#planModal>.plan-subview-mount{flex:none}
 
 /* Validation/error feedback must remain visible above the right-side editor. */
 .toast{z-index:1200!important}
@@ -788,15 +783,13 @@ html[data-appearance] #taskOverlay .console{
 }
 
 /* Task List / Task Editor opened from the Task workspace. */
-html[data-appearance] #planModal>.plan-modal-card,
+html[data-appearance] #planModal,
 html[data-appearance] #planModal>.plan-subview-mount,
 html[data-appearance] #planModal>.plan-subview-mount>.modal-card,
 html[data-appearance] #planModal>.plan-subview-mount>.task-workspace-view{
-  background:var(--panel)!important;color:var(--text);border-color:var(--line)!important;
-  box-shadow:-18px 0 50px color-mix(in srgb,#000 32%,transparent)!important
+  background:var(--panel)!important;color:var(--text);border-color:var(--line)!important
 }
-html[data-appearance] #planModal .plan-modal-head,
-html[data-appearance] #planModal .modal-head{background:var(--panel)!important;color:var(--text);border-color:var(--line)}
+html[data-appearance] #taskDrawerHeader{background:var(--panel)!important;color:var(--text);border-color:var(--line)}
 html[data-appearance] #planModal .plan-page-body{background:var(--bg)}
 html[data-appearance] #planModal .plan-main,
 html[data-appearance] #planModal .plan-side-card,
