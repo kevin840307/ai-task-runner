@@ -872,6 +872,9 @@ def test_waiting_ask_blocks_new_turns_into_session_queue_until_resolved(tmp_path
         assert result["busy"] is True
 
     assert calls == []
+    status = service.status(project, chat, session_id=session_id)
+    assert status["busy"] is True
+    assert status["status"] == "waiting_ask"
     assert [row["content"] for row in chat.queue(project, session_id)["items"]] == [
         "one", "two", "three",
     ]
