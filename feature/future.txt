@@ -186,6 +186,7 @@ Prototype composition:
 - Chat New Task seeds the shared create flow from the active Chat's Project; it must not own a second Project selector/default model.
 - Do not show redundant fixed Project chips in the Composer when Project context is already owned by the active Project Chat.
 - Task / Task List drafts stay transient until Create; opening a creation surface must not allocate a durable Task ID or write the canonical Task store.
+- A transient Task List Draft may temporarily contain zero items, but a created canonical Task / Task List must always contain at least one item; Create and every Remove path enforce this invariant.
 - Chat may render a lightweight TaskDraftPreview card, but Edit/Create must hand off to the same shared Task surfaces used by Tasks.
 - Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
 - Move existing is a secondary chooser, not a second Create Task path.
@@ -245,6 +246,7 @@ React rules:
 - Entry points pass mode / ownerId / itemIndex / returnTarget / project context as props or router state.
 - Canonical items[] remains the data source for Task List rows, YAML, Chat Draft editing and execution.
 - UI composition must not create another state machine or another Task model.
+- Prototype-era function wrapping/reassignment is migration debt only; production/React should expose one controller/service owner per behavior rather than layering monkey patches.
 - Shared components use theme tokens and the same validation / capability rules.
 - User-visible text in shared components must come from the shared i18n owner (zh-TW / en); Chat-only or Task-only duplicated translations are not allowed.
 - Dynamic UI such as Queue, Ask, command suggestions and TaskDraft must use the same uiText/i18n source as static labels.
