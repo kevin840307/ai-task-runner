@@ -11,9 +11,28 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from runner.agent import available_models, backend_names, interaction_modes
+from runner.agent import BackendError, available_models, backend_names, interaction_modes
 from runner.config.defaults import DEFAULT_BACKEND
 from runner.plugins.registry import discover_plugins
+
+
+def _interaction_mode_rows(name: str) -> list[dict[str, object]]:
+    try:
+        values = interaction_modes(name)
+    except BackendError:
+        # Backward-compatible plugin boundary: an installed backend may provide
+        # execution/model support without declaring Project Chat interaction modes.
+        return []
+    return [
+        {
+            "id": item.id,
+            "native": item.native,
+            "description": item.description,
+            "supported": item.supported,
+            "unsafe": item.unsafe,
+        }
+        for item in values
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,19 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.models
             else {}
         ),
-        "modes": {
-            name: [
-                {
-                    "id": item.id,
-                    "native": item.native,
-                    "description": item.description,
-                    "supported": item.supported,
-                    "unsafe": item.unsafe,
-                }
-                for item in interaction_modes(name)
-            ]
-            for name in names
-        },
+        "modes": {name: _interaction_mode_rows(name) for name in names},
     }
     print(json.dumps(payload, ensure_ascii=True))
     return 0

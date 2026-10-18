@@ -908,6 +908,7 @@ def test_backend_catalog_discovers_plugin_backends_before_listing_models(tmp_pat
         "qwen": ["qwen/model-a"],
         "plugin-backend": ["plugin-backend/model-a"],
     }
+    assert payload["modes"]["plugin-backend"] == []
 
 
 def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatch):
