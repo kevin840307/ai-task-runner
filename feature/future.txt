@@ -208,7 +208,8 @@ Prototype composition:
 - Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
 - + New and Chat TaskDraft must render the same TaskEditor / TaskListWorkspace components; source differences belong in draft data and return context only.
 - TaskEditor layout hierarchy is input-first: compact Project / Workflow / optional Title in one basics row; Task Prompt is the primary visual surface; workflow-required File Validator / optional AI validation sit beside it when space allows; Workspace remains a secondary section below. Responsive fallback stacks these groups without changing the field model.
-- Task Prompt and AI prompt-source selectors use stable geometry: Write / File / Asset (plus AI Default) keep equal-width mode tabs and a fixed-size content slot so changing source mode never shifts the surrounding Editor layout. Upload/path/asset controls remain the same canonical field model inside that slot.
+- When a New-status Task opens directly into Task List, the footer exposes both the normal Back/close action and a separate Back to Info action. The extra Info action is contextual only; Info-origin, Chat Draft and Task List Draft routes keep their existing return semantics.
+- Task Prompt and AI prompt-source selectors keep stable horizontal geometry: Write / File / Asset (plus AI Default) use equal-width mode tabs and 100% body width, while content height may vary naturally by mode. For mixed File + AI validation, Task Prompt spans the primary row and the two validation cards share the row below to avoid dead space.
 - Chat Composer may expose New Task as another entry point, but it must call the same create menu/controller as Tasks.
 - Chat New Task seeds the shared create flow from the active Chat's Project; it must not own a second Project selector/default model.
 - Do not show redundant fixed Project chips in the Composer when Project context is already owned by the active Project Chat.
