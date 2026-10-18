@@ -296,7 +296,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 @media(max-width:960px){.plan-page-body{grid-template-columns:1fr}.plan-side{grid-template-columns:1fr 1fr}}
 
 /* Dialog-first task composition */
-.add-plan-task-modal{width:min(720px,94vw)}.add-task-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;padding:3px;border:1px solid var(--line);border-radius:9px;background:#f6f8fa}.add-task-tabs button{height:31px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:9px;font-weight:850}.add-task-tabs button.active{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(15,23,42,.08)}
+
 .move-task-note{display:grid;gap:3px;margin-bottom:9px;padding:9px 10px;border:1px solid #f0cf9d;border-radius:9px;background:#fff8ed}.move-task-note strong{font-size:9px;color:#7a4800}.move-task-note span{font-size:8px;color:#8a5500}
 .existing-task-option.selected{border-color:var(--accent);background:var(--accent-softer);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 7%,transparent)}
 .plan-modal-card{width:min(1120px,96vw);height:min(780px,92vh);max-height:92vh;display:flex;flex-direction:column}.plan-modal-head{flex:0 0 auto}.plan-modal-head-actions{display:flex;align-items:center;gap:6px}.plan-modal-card .plan-page-body{flex:1 1 auto;min-height:0;border-radius:0 0 12px 12px}.plan-modal-card .plan-main,.plan-modal-card .plan-side-card{box-shadow:none}
@@ -331,9 +331,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #newTaskModal>.task-create-modal{width:min(720px,94vw)!important;height:100vh;max-height:100vh;margin:0;border-radius:16px 0 0 16px;box-shadow:-18px 0 48px rgba(15,23,42,.18);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
 #newTaskModal>.task-create-modal>.modal-body{min-height:0;overflow:auto}
 
-.task-editor-handoff{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel);text-align:left;color:var(--text);cursor:pointer}
-.task-editor-handoff:hover{border-color:var(--accent);background:var(--accent-softer)}.task-editor-handoff-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#e9f6f4;color:var(--accent);font-size:18px;font-weight:800}
-.task-editor-handoff strong{display:block;font-size:10px}.task-editor-handoff small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.task-editor-handoff b{color:var(--accent);font-size:8px}
+
+
+
 .plan-row-compact{border:1px solid var(--line);border-radius:10px;background:var(--panel)}.plan-row-compact.current{border-color:color-mix(in srgb,var(--accent) 44%,var(--line));background:var(--accent-softer)}.plan-row-compact.done{opacity:.68}
 .plan-row-compact .plan-row-head{min-height:54px}.plan-workspace-chip{padding:3px 6px;border-radius:999px;background:#eef6f5;color:var(--accent);font-size:7px;font-weight:850}
 
@@ -341,9 +341,9 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .simple-source-head .source-tabs{flex:0 0 auto}
 .simple-source-head .source-tabs button{min-width:46px}
 
-.new-work-modal{width:min(590px,94vw)}.new-work-modal .modal-body{display:grid;gap:8px}
-.create-choice{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel);text-align:left;color:var(--text);cursor:pointer}
-.create-choice:hover{border-color:var(--accent);background:var(--accent-softer)}.create-choice-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:#eef6f5;color:var(--accent);font-size:17px;font-weight:900}.create-choice strong{display:block;font-size:10px}.create-choice small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.45}.create-choice b{color:var(--accent);font-size:8px}
+
+
+
 .empty-list-explain{margin-top:10px;padding:9px 10px;border:1px solid #e1e7ee;border-radius:9px;background:#f8fafc;color:var(--muted);font-size:8px;line-height:1.5}
 
 .empty-plan-cta{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px dashed #b9c7d4;border-radius:10px;background:#fbfcfd;color:var(--text);text-align:left;cursor:pointer}.empty-plan-cta:hover{border-color:var(--accent);background:#f7fcfb}.empty-plan-cta strong{font-size:9px}.empty-plan-cta span{color:var(--accent);font-size:8px;font-weight:850}.empty-plan-cta.large{min-height:86px;justify-content:center;flex-direction:column}
@@ -416,8 +416,8 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal .plan-side-card.info-active{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-softer)}
 #planModal .plan-side-card.info-active h3{color:var(--accent-dark)}
 
-#addPlanTaskModal [data-add-task-mode="create"],#addTaskCreatePanel{display:none!important}
-#addPlanTaskModal .add-task-tabs{display:none!important}
+
+
 
 /* Practical Task Workspace polish */
 .plan-title-block{min-width:0}.plan-title-row{display:flex;align-items:center;gap:5px;min-width:0}.plan-title-row h2{min-width:0;max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -655,8 +655,6 @@ html[data-appearance] #taskOverlay .sequence-item .request-body,
 html[data-appearance] #taskOverlay .steps-summary,
 html[data-appearance] #taskOverlay .workspace-merge-row,
 html[data-appearance] #taskOverlay .compact-default-value,
-html[data-appearance] #taskOverlay .task-editor-handoff,
-html[data-appearance] #taskOverlay .create-choice,
 html[data-appearance] #taskOverlay .empty-list-explain,
 html[data-appearance] #taskOverlay .empty-plan-cta,
 html[data-appearance] #taskOverlay .task-list-table,
@@ -743,8 +741,6 @@ html[data-appearance] #planModal .plan-main,
 html[data-appearance] #planModal .plan-side-card,
 html[data-appearance] #planModal .plan-row,
 html[data-appearance] #planModal .plan-row-compact,
-html[data-appearance] #planModal .task-editor-handoff,
-html[data-appearance] #planModal .create-choice,
 html[data-appearance] #planModal .existing-task-option,
 html[data-appearance] #planModal .single-plan-strip{
   background:var(--panel);color:var(--text);border-color:var(--line)
