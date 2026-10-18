@@ -667,19 +667,7 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
   }
   renderBoardFromMap();openTaskById(t.id);
 };
-document.getElementById('taskResetDemo').onclick=()=>{
-  const t=taskMap[currentTaskId];if(!t)return;
-  if(t.workspaceKind==='batch'&&t.id===batchParentTaskId&&batchState.status==='stopped'){document.getElementById('resetBatch').click();openTaskById(t.id);return}
-  t.runtime='idle';t.stage='Idle';t.session='—';t.progress=[0,t.progress[1]||4];t.elapsed='—';t.desc='Runtime 已 Reset；Board 狀態不自動改寫。';
-  pushTaskHistory(t,'Runtime reset · board status preserved');
-  renderBoardFromMap();openTaskById(t.id);showToast('Mock Reset');
-};
-document.getElementById('taskSecondaryDemo').onclick=()=>{
-  const t=taskMap[currentTaskId];if(!t)return;
-  t.runtime='running';t.status='ongoing';t.stage='planning';t.session='fresh';t.progress=[0,t.progress[1]||4];t.elapsed='0m';t.desc='Rerun started from a new run; previous history remains visible.';
-  pushTaskHistory(t,'Rerun started · new run identity');
-  renderBoardFromMap();openTaskById(t.id);showToast('Mock Rerun');
-};
+// Reset / Rerun lifecycle actions are owned by tasks-page.js so every destructive restart path uses the same confirmation policy.
 document.getElementById('deleteTaskDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
   if(['running','recover'].includes(t.runtime)){showToast('執行中的 Task 不能直接刪除，請先 Stop');return}
