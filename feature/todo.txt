@@ -401,7 +401,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 三種模式執行時一律建立獨立 Task Run worktree；Main 不再直接讓 Runner 寫 Project checkout。
 [ ] Branch / path 必須包含 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2；Reset/Rerun 不可撞到舊 retained worktree。
 [ ] Task Run 啟動時讀取 Project 當下 checkout branch 為 target_branch 並固定保存；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
-[ ] Task Run base 只取 target_branch committed HEAD；Project 未 commit 修改不得帶入 Agent worktree。
+[ ] Task Run base 必須包含 Project 當下完整 working state：target branch HEAD + staged + unstaged + tracked deletions + untracked non-ignored；ignored 檔案排除。snapshot 不可改使用者 index / stash / working tree / branch history。
 [ ] local/integration 固定只 checkout 在系統管理的 .worktrees/integration，不可在使用者 Project checkout 執行 git switch local/integration。
 [ ] Global Auto policy：
     - Busy project → Isolated Worktree：保留現有產品 policy，但它不再是 path-safety 必需。
@@ -425,22 +425,22 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 一個 repository 固定只有一條 canonical local/integration，因此 Integration Queue / lock 必須 per repository，不是 per target branch。
 [ ] Runner Completed 後，Integration Manager 要先把該 Task Run worktree 未 commit 變更 snapshot 成 local commit；Runner 本身不需要負責 git commit。
 [ ] 原始 completed Task worktree 不可被 rebase/改寫；Integration 要從最新 local/integration 建 temporary candidate，再把 Task branch 以 merge --squash 套進 candidate。
-[ ] integration 開始時必須重新讀取 latest target HEAD 並同步 local/integration；不可只相信 Task start 時的 base。
-[ ] candidate 驗證完成、真正 delivery 前再次比對 target HEAD；若期間有新 commit，重新 build candidate，不算 merge failure。
+[ ] Task start 與每次 Main integration 前，在沒有前一筆 undelivered integration result 的前提下，都要從最新 Project working-state snapshot 建立/更新 local/integration；不可只相信 Task start 時的 base。
+[ ] candidate 驗證完成、真正 delivery 前再次比對整個 Project working-state snapshot；若期間有新 commit 或未 commit 檔案變動，重新 snapshot / build candidate，本身不算 merge failure。
 [ ] conflict / semantic incompatibility / candidate validation failure 若需要改 Code，一律重新呼叫既有 Runner 在 candidate/recovery worktree 修復或重做；不可在 Integration Manager 另造 code-repair engine。
 [ ] merge failure 只有「Runner 已完成 → 真正進 integration/merge → 因 Code/semantic/validation 無法接受」才 +1；queue wait、target dirty、lock busy、target HEAD moved、暫時 Git error 都不計。
 [ ] merge_failure_count 保留 lifetime history；merge_retry_attempt 是目前自動 retry session budget；超過 configured N 才停止 Main 自動 recovery。
 [ ] Main 超過 N 次後：mode 仍是 Main，自動保留 Task branch/worktree，Closed · Awaiting merge / merge_retry_exhausted，可 Retry merge；不可偷偷改成 Isolated Worktree。
-[ ] 最終 Main delivery：git merge --squash local/integration → captured target_branch → 一個 local commit → reset local/integration 到新 target HEAD。
+[ ] 最終 Main delivery：accepted local/integration 必須更新回 Project working state。Project base clean 時可 merge --squash → 一個 local commit；Project base 原本 dirty 時只套 Task delta，不可把使用者既有 dirty 修改偷偷一起 commit。
 [ ] 不得自動 git switch 使用者 Project checkout：
     - target_branch 正在 managed Project root 且 clean → 可在原 root delivery。
     - target_branch 沒有被任何 worktree checkout → 建 temporary managed delivery worktree。
     - target_branch 被其他 unmanaged/user worktree checkout → Closed · waiting_target_workspace，不自動碰該 worktree。
-[ ] target delivery workspace dirty → Closed · waiting_target_clean；不可 auto-stash / reset / 覆蓋使用者修改。
-[ ] automatic target commit 必須寫 stable Task-run identity（例如 commit trailer AI-Task-Run: T-001-r2）並立刻記 target_commit_sha，避免 crash 後重複 squash commit。
+[ ] Project dirty 不是阻擋條件，而是合法 base；但 delivery 前要確認 Project 仍符合預期 snapshot。若期間又變動則重新同步/重做整合，不可 auto-stash / reset / 覆蓋或偷偷 commit 使用者既有修改。
+[ ] clean Project 使用 automatic target commit 時，必須寫 stable Task-run identity（例如 commit trailer AI-Task-Run: T-001-r2）並立刻記 target_commit_sha；dirty Project delivery 則記 delivered_state_sha + project_delivery_mode=working_tree_delta，避免 crash 後重複套 patch。
 [ ] Workspace Results 依 Project / Task Run 聚合顯示 Branch、Path、target branch、requested/effective mode、integration state、merge failure count、conflict summary。
 [ ] Board 不新增 Waiting Merge / Merged / Cleanup 欄位；仍維持 New / Ongoing / Paused / Closed，Git delivery 用 secondary state。
-[ ] Closed 可呈現 pending_merge / integrating / conflict_recovery / waiting_target_clean / waiting_target_workspace / Awaiting merge / integrated / worktree_ready。
+[ ] Closed 可呈現 pending_merge / integrating / conflict_recovery / project_resync / waiting_target_workspace / Awaiting merge / integrated / worktree_ready。
 [ ] Isolated Worktree 或 Main Awaiting merge 仍可提供 Merge / Merge Chat / Retry merge 等後續操作，但 UI 不另造獨立 Git Worktree 主頁。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染目前 Chat；預填來源 Task Run/worktree/branch、captured target branch、latest target SHA、conflict/error context，且不自動送出。
 [ ] Merge / Retry merge / Delete 等 backend action 必須再次做 branch/path/clean/lock/ownership preflight，不能只靠 UI disabled。
