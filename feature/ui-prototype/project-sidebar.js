@@ -101,7 +101,6 @@ function deleteProject(key){
       document.getElementById('projectSwitcherPath').textContent='No Project';
       document.getElementById('chatProjectTitle').textContent='No Project';
       document.getElementById('chatProjectLine').textContent='Add a Project to continue.';
-      document.getElementById('tasksProjectLine').textContent='No Project selected';
     }
   }
   renderProjectOptions(currentProjectKey);renderBoardFromMap();closeModal('projectManageModal');showToast(`Project removed · ${key}`);
