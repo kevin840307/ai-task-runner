@@ -1152,7 +1152,7 @@ commitPlanDraft=function(t,{markDirty=false}={}){
 };
 
 function projectKeyFromPath(path, fallback=currentProjectKey){const found=Object.keys(projectMeta).find(k=>projectMeta[k].path===path);return found||(projectMeta[path]?path:fallback)}
-function editorOwner(){return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
+function editorOwner(){if(taskEditorContext.mode==='draft-create-item')return newTaskListDraft;return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
 function editorItemRef(){
   const owner=editorOwner();
   if(taskEditorContext.mode==='root-create')return `T-${taskSequence+1}`;
@@ -1165,9 +1165,9 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
     document.getElementById('createTaskConfirm').disabled=false;
   }
   taskEditorContext={mode,ownerId,index};
-  const owner=ownerId?taskMap[ownerId]:null;
+  const owner=mode==='draft-create-item'?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
   let item=null;
-  if(owner&&index!=null){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
+  if(owner&&index!=null&&mode!=='draft-create-item'){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
   if(mode==='edit-item'&&!item)return;
   newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
   if(fromChat)newTaskDraft.prompt=fromChat;
@@ -1177,8 +1177,8 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
   const projectPrefs=projectChatSettingsFor(projectKey);
   document.getElementById('newTaskWorkflow').value=item?.workflow||projectPrefs.workflow;
   document.getElementById('newTaskTitle').value=item?.title||'';
-  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='create-item'?'New task':'Edit task';
-  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
+  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='edit-item'?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='draft-create-item'?'Add a task to this Task List Draft using the same editor.':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
   document.getElementById('createTaskConfirm').textContent=mode==='edit-item'?'Save changes':'Create task';
   document.getElementById('editTaskScopeNote').hidden=true;
   document.getElementById('newTaskWorkflowField').hidden=false;document.getElementById('newTaskWorkflowCaps').hidden=false;
@@ -1223,6 +1223,12 @@ function buildEditorItem(owner,index){
 
 document.getElementById('createTaskConfirm').onclick=()=>{
   const ctx=taskEditorContext;
+  if(ctx.mode==='draft-create-item'){
+    if(!newTaskListDraft)return;
+    const index=newTaskListDraft.items.length,item=buildEditorItem(newTaskListDraft,index);if(!item)return;
+    newTaskListDraft.items.push(item);newTaskListDraft.listItems=newTaskListDraft.items;
+    showToast('Draft task added');return;
+  }
   if(ctx.mode==='root-create'){
     const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
     const item=buildEditorItem(placeholder,0);if(!item){taskSequence--;return}
