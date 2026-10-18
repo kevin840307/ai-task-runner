@@ -10,6 +10,7 @@ const toast=document.getElementById('toast');
 let toastTimer;
 function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1900)}
 const AUTO_WORKSPACE_POLICY_KEY='ai-task-runner.prototype.autoWorkspacePolicy';
+const EXECUTION_SETTINGS_KEY='ai-task-runner.prototype.executionSettings';
 const INTERFACE_SETTINGS_KEY='ai-task-runner.prototype.interfaceSettings';
 const AUTO_WORKSPACE_POLICIES=new Set(['busy_worktree','main_only','always_worktree']);
 const THEME_PALETTES=new Set(['teal','blue','violet','amber','rose']);
@@ -138,9 +139,14 @@ function applyUiTranslations(root=document){
 }
 window.uiText=uiText;
 window.applyUiTranslations=applyUiTranslations;
-function loadAutoWorkspacePolicy(){
-  try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
-  return 'busy_worktree';
+function normalizeMergeFailureLimit(value){
+  const n=Number.parseInt(value,10);return Number.isFinite(n)?Math.max(0,Math.min(99,n)):3;
+}
+function loadExecutionSettings(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(EXECUTION_SETTINGS_KEY)||'{}'),legacy=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);
+    return {autoWorkspacePolicy:AUTO_WORKSPACE_POLICIES.has(raw.autoWorkspacePolicy)?raw.autoWorkspacePolicy:(AUTO_WORKSPACE_POLICIES.has(legacy)?legacy:'busy_worktree'),mergeFailureLimit:normalizeMergeFailureLimit(raw.mergeFailureLimit),allowConcurrentMainTasks:raw.allowConcurrentMainTasks===true};
+  }catch(_){return {autoWorkspacePolicy:'busy_worktree',mergeFailureLimit:3,allowConcurrentMainTasks:false}}
 }
 function loadInterfaceSettings(){
   const boot=window.UiBootstrap?.state?.interfaceSettings;
@@ -150,9 +156,10 @@ function loadInterfaceSettings(){
     return {theme:THEME_PALETTES.has(raw.theme)?raw.theme:'teal',appearance:APPEARANCES.has(raw.appearance)?raw.appearance:(legacyAppearance||'system'),language:LANGUAGES.has(raw.language)?raw.language:'zh-TW'};
   }catch(_){return {theme:'teal',appearance:'system',language:'zh-TW'}}
 }
-const globalExecutionSettings={autoWorkspacePolicy:loadAutoWorkspacePolicy()};
+const globalExecutionSettings=loadExecutionSettings();
+window.globalExecutionSettings=globalExecutionSettings;
 const globalInterfaceSettings=loadInterfaceSettings();
-function saveAutoWorkspacePolicy(){try{localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
+function saveExecutionSettings(){try{localStorage.setItem(EXECUTION_SETTINGS_KEY,JSON.stringify(globalExecutionSettings));localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
 function saveInterfaceSettings(){try{localStorage.setItem(INTERFACE_SETTINGS_KEY,JSON.stringify(globalInterfaceSettings))}catch(_){}}
 function resolvedAppearance(){return globalInterfaceSettings.appearance==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):globalInterfaceSettings.appearance}
 function applyInterfaceSettings(){document.documentElement.dataset.theme=globalInterfaceSettings.theme;document.documentElement.dataset.appearancePreference=globalInterfaceSettings.appearance;document.documentElement.dataset.appearance=resolvedAppearance();document.documentElement.lang=globalInterfaceSettings.language;applyUiTranslations()}
