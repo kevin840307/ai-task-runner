@@ -11,7 +11,6 @@
   <aside class="sidebar">
     <div class="brandrow">
       <div class="brand"><span class="brandmark">A</span><span>Agent Workflow</span></div>
-      <button class="iconbtn" id="themeBtn" title="外觀">◐</button>
     </div>
     <button class="new-project-fixed" id="newProjectDemo" type="button"><span>＋</span><strong>New Project</strong></button>
     <div class="sidebar-scroll">
@@ -379,11 +378,11 @@
     <div class="modal-head"><div><h2>Settings</h2><p>Global preferences shared by Chat, Tasks and Runner entry points.</p></div><button class="close" data-close-modal="globalSettingsModal">×</button></div>
     <div class="modal-body global-settings-body">
       <aside class="settings-sections">
-        <button type="button" class="active"><span>↯</span><strong>Execution</strong></button>
+        <button type="button" class="active" data-settings-tab="execution"><span>↯</span><strong>Execution</strong></button>
         <button type="button" disabled><span>◉</span><strong>Agents</strong><small>Later</small></button>
-        <button type="button" disabled><span>◫</span><strong>Interface</strong><small>Later</small></button>
+        <button type="button" data-settings-tab="interface"><span>◫</span><strong>Interface</strong></button>
       </aside>
-      <section class="settings-panel">
+      <section class="settings-panel" data-settings-panel="execution">
         <div class="settings-panel-head"><span>EXECUTION</span><h3>Workspace behavior</h3><p>Controls how Task-level <strong>Auto</strong> resolves. Explicit Main / Worktree overrides are unchanged.</p></div>
         <label class="settings-field">
           <span><strong>Auto workspace policy</strong><small id="autoWorkspacePolicyHint">Use Main when idle; switch to Worktree when the project is busy.</small></span>
@@ -394,6 +393,25 @@
           </select>
         </label>
         <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="interface" hidden>
+        <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & language</h3><p>Global interface preferences. These settings are not tied to a Project or Chat.</p></div>
+        <label class="settings-field">
+          <span><strong>Theme</strong><small>Follow the system theme or force a light / dark appearance.</small></span>
+          <select id="globalTheme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Language</strong><small>Global UI language preference.</small></span>
+          <select id="globalLanguage">
+            <option value="zh-Hant">繁體中文</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <div class="settings-policy-preview" id="interfaceSettingsPreview"></div>
       </section>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="globalSettingsModal">Close</button></div>
