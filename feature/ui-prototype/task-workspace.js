@@ -3,6 +3,7 @@ const taskOverlayEl=document.getElementById('taskOverlay');
 const taskDrawerEl=taskOverlayEl.querySelector('.drawer');
 const taskDrawerBack=document.getElementById('planBackToTask');
 const planPageBack=document.getElementById('planPageBack');
+const planPageInfo=document.getElementById('planPageInfo');
 const taskDrawerInfoMeta=document.getElementById('drawerInfoMeta');
 const taskDrawerRouteMeta=document.getElementById('drawerRouteMeta');
 const taskDrawerRuntimeSlot=document.getElementById('drawerRuntimeSlot');
@@ -77,6 +78,13 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
   taskDrawerBack.title=backTitle;
   taskDrawerBack.textContent='←';
   if(route==='list')taskDrawerBack.onclick=handleTaskDrawerBack;
+  if(planPageInfo){
+    const current=taskMap[currentTaskId];
+    const showInfo=route==='list'&&taskDrawerListReturnTarget==='close'&&current?.status==='new'&&!current?._chatDraft;
+    planPageInfo.hidden=!showInfo;
+    planPageInfo.textContent=uiText('taskList.backInfo');
+    planPageInfo.onclick=showInfo?()=>openTaskById(currentTaskId):null;
+  }
   if(planPageBack){
     planPageBack.hidden=!(route==='list'||route==='list-draft');
     planPageBack.textContent=route==='list-draft'?uiText('taskListDraft.cancel'):uiText('taskList.back');
@@ -94,6 +102,7 @@ function restoreTaskInfoShell(t){
   setTaskDrawerShell('info',{title:t.title});
   taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
+  if(planPageInfo)planPageInfo.hidden=true;
 }
 function closeTaskDrawerShell({force=false,restoreFocus=true,skipEditorGuard=false}={}){
   if(!force&&!skipEditorGuard&&taskEditorReturnContext&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
