@@ -54,7 +54,18 @@ const UI_TEXT={
     'chat.cmd.list.title':'建立 Task List','chat.cmd.list.desc':'強制產生的 TaskDraft 包含兩個以上有序 Tasks。',
     'chat.cmd.workflow.title':'產生 Workflow','chat.cmd.workflow.desc':'模擬既有 Generate Workflow 類型的 system prompt。',
     'chat.cmd.project.title':'Project context','chat.cmd.project.desc':'顯示綁定到此 Chat 的 Project context。',
-    'chat.cmd.ask.title':'Mock AI 反問','chat.cmd.ask.desc':'強制觸發多題 AI clarification 流程。'
+    'chat.cmd.ask.title':'Mock AI 反問','chat.cmd.ask.desc':'強制觸發多題 AI clarification 流程。',
+    'chat.ask.scopeHeader':'實作範圍','chat.ask.scopeQuestion':'針對「{context}」你希望優先採用哪種處理方式？','chat.ask.scopeQuestionPlain':'你希望優先採用哪種處理方式？',
+    'chat.ask.minimal':'最小修改','chat.ask.minimalDesc':'只改必要範圍，降低 regression',
+    'chat.ask.full':'完整優化','chat.ask.fullDesc':'連同鄰近 UX / code ownership 一起整理',
+    'chat.ask.analyze':'先分析','chat.ask.analyzeDesc':'先確認設計與風險，再進行修改',
+    'chat.ask.mockFirst':'先做 UI Mock','chat.ask.mockFirstDesc':'先完成可操作 prototype，再接正式 backend',
+    'chat.ask.verifyHeader':'驗證','chat.ask.verifyQuestion':'這次驗證希望做到什麼程度？',
+    'chat.ask.focused':'Focused tests','chat.ask.focusedDesc':'只跑直接相關測試',
+    'chat.ask.regression':'Regression tests','chat.ask.regressionDesc':'包含鄰近功能 regression',
+    'chat.ask.mockVerify':'Mock first','chat.ask.mockVerifyDesc':'先完成 Mock / prototype 驗證',
+    'chat.ask.live':'Live integration','chat.ask.liveDesc':'接真實 Agent / backend 驗證',
+    'chat.ask.extraHeader':'補充資訊','chat.ask.extraQuestion':'還有沒有需要 Agent 特別注意的限制或補充？'
   },
   en:{
     'chat.rename':'Rename','chat.newChat':'+ New Chat','chat.commands':'Commands','chat.typeToFilter':'Type to filter',
@@ -94,7 +105,18 @@ const UI_TEXT={
     'chat.cmd.list.title':'Create Task List','chat.cmd.list.desc':'Force the generated TaskDraft to contain two or more ordered Tasks.',
     'chat.cmd.workflow.title':'Generate Workflow','chat.cmd.workflow.desc':'Mock the existing Generate Workflow-style system prompt.',
     'chat.cmd.project.title':'Project context','chat.cmd.project.desc':'Show the Project context bound to this Chat.',
-    'chat.cmd.ask.title':'Mock AI clarification','chat.cmd.ask.desc':'Force a multi-question AI clarification flow.'
+    'chat.cmd.ask.title':'Mock AI clarification','chat.cmd.ask.desc':'Force a multi-question AI clarification flow.',
+    'chat.ask.scopeHeader':'Implementation scope','chat.ask.scopeQuestion':'For “{context}”, which approach should be prioritized?','chat.ask.scopeQuestionPlain':'Which approach should be prioritized?',
+    'chat.ask.minimal':'Minimal change','chat.ask.minimalDesc':'Change only what is necessary to reduce regression risk',
+    'chat.ask.full':'Full optimization','chat.ask.fullDesc':'Also clean up nearby UX and code ownership',
+    'chat.ask.analyze':'Analyze first','chat.ask.analyzeDesc':'Confirm design and risks before making changes',
+    'chat.ask.mockFirst':'UI Mock first','chat.ask.mockFirstDesc':'Finish an interactive prototype before wiring the real backend',
+    'chat.ask.verifyHeader':'Verification','chat.ask.verifyQuestion':'How much verification should this change receive?',
+    'chat.ask.focused':'Focused tests','chat.ask.focusedDesc':'Run only directly related tests',
+    'chat.ask.regression':'Regression tests','chat.ask.regressionDesc':'Include nearby regression coverage',
+    'chat.ask.mockVerify':'Mock first','chat.ask.mockVerifyDesc':'Validate the Mock / prototype first',
+    'chat.ask.live':'Live integration','chat.ask.liveDesc':'Verify against the real Agent / backend',
+    'chat.ask.extraHeader':'Extra context','chat.ask.extraQuestion':'Any constraints or extra context the Agent should pay special attention to?'
   }
 };
 function uiText(key,vars={}){
