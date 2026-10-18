@@ -74,6 +74,7 @@
               <label class="composer-settings-row"><span><strong data-i18n="chat.workflow">Workflow</strong><small data-i18n="chat.workflowHelp">Used by @goal and new Chat goals</small></span><select id="chatWorkflow"><option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option><option value="mixed.yaml">mixed</option><option value="file.yaml">file</option><option value="dynamic_handoff.yaml">dynamic_handoff</option></select></label>
               <label class="composer-settings-row"><span><strong data-i18n="chat.agent">Agent</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
               <label class="composer-settings-row"><span><strong data-i18n="chat.model">Model</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatModel"></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.reasoning">Reasoning</strong><small data-i18n="chat.reasoningHelp">Reasoning effort saved for this Project</small></span><select id="chatReasoning"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></label>
             </div>
           </div>
           <div class="composer-turn-status" id="composerTurnStatus" hidden data-i18n="chat.turnRunning">Agent 正在處理；送出訊息會自動加入 Queue</div>
@@ -378,7 +379,7 @@
         <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
       </section>
       <section class="settings-panel" data-settings-panel="defaults" hidden>
-        <div class="settings-panel-head"><span>DEFAULTS</span><h3>New Project defaults</h3><p>Used only when creating a new Project. Existing Projects keep their own Agent / Model / Mode / Workflow.</p></div>
+        <div class="settings-panel-head"><span>DEFAULTS</span><h3>New Project defaults</h3><p>Used only when creating a new Project. Existing Projects keep their own Agent / Model / Mode / Reasoning / Workflow.</p></div>
         <label class="settings-field">
           <span><strong>Default Agent</strong><small>Agent assigned to newly created Projects.</small></span>
           <select id="globalDefaultAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select>
@@ -390,6 +391,10 @@
         <label class="settings-field">
           <span><strong>Default Mode</strong><small>Permission / approval mode for new Projects.</small></span>
           <select id="globalDefaultMode"></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Reasoning</strong><small>Reasoning effort copied into newly created Projects.</small></span>
+          <select id="globalDefaultReasoning"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select>
         </label>
         <label class="settings-field">
           <span><strong>Default Workflow</strong><small>Workflow initially selected for new Projects.</small></span>
