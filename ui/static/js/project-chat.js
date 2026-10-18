@@ -9,8 +9,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let activeSessionId = "";
   let preferences = {};
   let agentCapabilities = [];
+  let runnerCapabilities = [];
   let capabilitiesError = "";
+  let runnerCapabilitiesError = "";
   let suggestionIndex = 0;
+  const taskDraftsBySession = new Map();
   let queueItems = [];
   let queueBusy = false;
   let queuePollTimer = 0;
@@ -47,6 +50,31 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       if (projectPath() !== path) return;
       agentCapabilities = [];
       capabilitiesError = String(error?.message || "Capability discovery failed");
+    }
+    suggestionIndex = 0;
+    renderSuggestions();
+  }
+
+  async function refreshRunnerCapabilities() {
+    const path = projectPath();
+    if (!path) {
+      runnerCapabilities = [];
+      runnerCapabilitiesError = "";
+      renderSuggestions();
+      return;
+    }
+    runnerCapabilitiesError = "";
+    try {
+      const data = await api(
+        "/api/chat/system-capabilities?project=" + encodeURIComponent(path),
+        { timeoutMs: 15000 },
+      );
+      if (projectPath() !== path) return;
+      runnerCapabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    } catch (error) {
+      if (projectPath() !== path) return;
+      runnerCapabilities = [];
+      runnerCapabilitiesError = String(error?.message || "Runner capability discovery failed");
     }
     suggestionIndex = 0;
     renderSuggestions();
@@ -294,17 +322,20 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   function suggestionQuery() {
     const value = String(byId("projectChatInput")?.value || "");
-    if (!value.startsWith("/") || /\s/.test(value)) return null;
-    return value.slice(1).toLowerCase();
+    if (!value || /\s/.test(value)) return null;
+    const prefix = value[0];
+    if (prefix !== "/" && prefix !== "@") return null;
+    return { prefix, query: value.slice(1).toLowerCase() };
   }
 
   function visibleSuggestions() {
-    const query = suggestionQuery();
-    if (query === null) return [];
-    return agentCapabilities.filter((item) => {
+    const context = suggestionQuery();
+    if (context === null) return [];
+    const source = context.prefix === "@" ? runnerCapabilities : agentCapabilities;
+    return source.filter((item) => {
       const haystack = [item.token, item.name, item.description, item.source, item.kind]
         .map((value) => String(value || "").toLowerCase()).join(" ");
-      return haystack.includes(query);
+      return haystack.includes(context.query);
     });
   }
 
@@ -313,18 +344,27 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const list = byId("projectChatSuggestList");
     const retry = byId("projectChatSuggestRetry");
     if (!panel || !list) return;
-    const query = suggestionQuery();
-    if (query === null) {
+    const context = suggestionQuery();
+    if (context === null) {
       panel.hidden = true;
       return;
     }
+    const isRunner = context.prefix === "@";
+    const title = byId("projectChatSuggestTitle");
+    const hint = title?.parentElement?.querySelector("small");
+    if (title) title.textContent = isRunner ? "Runner Commands / Prompts" : "Agent Skills / Commands";
+    if (hint) hint.textContent = isRunner ? "@ = AI Task Runner" : "/ = selected Agent";
+    const error = isRunner ? runnerCapabilitiesError : capabilitiesError;
     panel.hidden = false;
-    if (retry) retry.hidden = !capabilitiesError;
+    if (retry) {
+      retry.hidden = !error || isRunner;
+      retry.textContent = "Retry";
+    }
     list.innerHTML = "";
-    if (capabilitiesError) {
+    if (error) {
       const empty = document.createElement("div");
       empty.className = "project-chat-suggest-empty";
-      empty.textContent = capabilitiesError;
+      empty.textContent = error;
       list.appendChild(empty);
       return;
     }
@@ -332,7 +372,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (!values.length) {
       const empty = document.createElement("div");
       empty.className = "project-chat-suggest-empty";
-      empty.textContent = "No Agent Skill / Command matches.";
+      empty.textContent = suggestionQuery()?.prefix === "@"
+        ? "No Runner Command / Prompt matches."
+        : "No Agent Skill / Command matches.";
       list.appendChild(empty);
       return;
     }
@@ -350,7 +392,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       token.textContent = item.token;
       const description = document.createElement("span");
       description.className = "project-chat-suggest-description";
-      description.textContent = item.description || (item.kind === "skill" ? "Agent Skill" : "Agent command");
+      description.textContent = item.description || (
+        item.kind === "skill" ? "Agent Skill"
+          : item.kind === "runner_command" ? "Runner command"
+          : item.kind === "prompt" ? "Prompt asset"
+          : "Agent command"
+      );
       copy.append(token, description);
       const meta = document.createElement("span");
       meta.className = "project-chat-suggest-meta";
@@ -660,12 +707,62 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
+  function activeDrafts() {
+    return taskDraftsBySession.get(activeSessionId) || [];
+  }
+
+  function renderTaskDraftCard(entry, root) {
+    const card = document.createElement("article");
+    card.className = "message project-chat-message assistant project-chat-task-draft";
+    card.dataset.draftId = entry.draft_id;
+    const draft = entry.draft || {};
+    const head = document.createElement("div");
+    head.className = "project-chat-task-draft-head";
+    const title = document.createElement("div");
+    title.innerHTML = "<small>TASK DRAFT</small>";
+    const strong = document.createElement("strong");
+    strong.textContent = String(draft.title || "TaskDraft");
+    title.appendChild(strong);
+    const meta = document.createElement("span");
+    meta.textContent = (Array.isArray(draft.items) ? draft.items.length : 0) + " item(s)";
+    head.append(title, meta);
+
+    const items = document.createElement("div");
+    items.className = "project-chat-task-draft-items";
+    for (const [index, row] of (Array.isArray(draft.items) ? draft.items : []).entries()) {
+      const item = document.createElement("div");
+      item.className = "project-chat-task-draft-item";
+      const label = document.createElement("strong");
+      label.textContent = (index + 1) + ". " + String(row.title || "Task");
+      const prompt = document.createElement("p");
+      prompt.textContent = String(row.prompt || "");
+      item.append(label, prompt);
+      items.appendChild(item);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "project-chat-task-draft-actions";
+    const create = document.createElement("button");
+    create.type = "button";
+    create.className = "primary";
+    create.textContent = "Create Task";
+    create.onclick = () => void createTaskFromDraft(entry);
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.textContent = "Dismiss";
+    dismiss.onclick = () => dismissTaskDraft(entry.draft_id);
+    actions.append(create, dismiss);
+    card.append(head, items, actions);
+    root.appendChild(card);
+  }
+
   function renderMessages(rows = []) {
     const root = byId("projectChatMessages");
     const empty = byId("projectChatEmptyMessages");
     if (!root || !empty) return;
     root.querySelectorAll(".project-chat-message").forEach((node) => node.remove());
-    empty.hidden = rows.length > 0;
+    const drafts = activeDrafts();
+    empty.hidden = rows.length > 0 || drafts.length > 0;
     for (const message of rows) {
       const item = document.createElement("article");
       const role = ["user", "assistant", "system"].includes(message.role) ? message.role : "assistant";
@@ -676,6 +773,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       item.appendChild(body);
       root.appendChild(item);
     }
+    for (const draft of drafts) renderTaskDraftCard(draft, root);
     requestAnimationFrame(() => { root.scrollTop = root.scrollHeight; });
   }
 
@@ -720,12 +818,97 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     requestAnimationFrame(() => { root.scrollTop = root.scrollHeight; });
   }
 
+  function taskCommand(text) {
+    const match = String(text || "").match(/^@(task|task-single|task-list)(?:\s+([\s\S]*))?$/i);
+    if (!match) return null;
+    const mode = match[1].toLowerCase() === "task-single"
+      ? "single"
+      : match[1].toLowerCase() === "task-list"
+        ? "list"
+        : "auto";
+    return { mode, spec: String(match[2] || "").trim(), token: "@" + match[1].toLowerCase() };
+  }
+
+  function dismissTaskDraft(draftId) {
+    const rows = activeDrafts().filter((row) => row.draft_id !== draftId);
+    taskDraftsBySession.set(activeSessionId, rows);
+    void refreshMessages();
+  }
+
+  async function createTaskFromDraft(entry) {
+    const path = projectPath();
+    const session = activeSessionId;
+    if (!path || !session) return;
+    try {
+      const task = await api("/api/tasks/create", {
+        method: "POST",
+        body: JSON.stringify({
+          project: path,
+          draft: entry.draft,
+          request_id: "create-" + entry.draft_id,
+        }),
+      });
+      if (projectPath() !== path || activeSessionId !== session) return;
+      taskDraftsBySession.set(
+        session,
+        activeDrafts().filter((row) => row.draft_id !== entry.draft_id),
+      );
+      await refreshMessages();
+      showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
+    } catch (error) {
+      showError?.(error.message, "Create Task failed");
+    }
+  }
+
+  async function generateTaskDraft(command) {
+    if (!command.spec) {
+      showError?.("Usage: " + command.token + " <spec>", "TaskDraft spec required");
+      return;
+    }
+    const path = projectPath();
+    const session = activeSessionId;
+    const data = await api("/api/chat/task-draft", {
+      method: "POST",
+      body: JSON.stringify({
+        project: path,
+        session_id: session,
+        mode: command.mode,
+        spec: command.spec,
+        request_id: requestId(),
+      }),
+    });
+    if (projectPath() !== path || activeSessionId !== session) return;
+    const rows = [...activeDrafts(), data];
+    taskDraftsBySession.set(session, rows);
+    await refreshMessages();
+  }
+
   async function sendMessage() {
     const input = byId("projectChatInput");
     const text = String(input?.value || "").trim();
     if (!project || !activeSessionId || !text) return;
+    const command = taskCommand(text);
+    if (/^@goal(?:\s|$)/i.test(text)) {
+      showError?.(
+        "@goal is reserved for the atomic Task create+run path and is not enabled until the Workspace phase is installed.",
+        "@goal unavailable",
+      );
+      return;
+    }
     input.value = "";
     autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    panelHideSuggestions();
+    if (command) {
+      try {
+        await generateTaskDraft(command);
+      } catch (error) {
+        showError?.(error.message, "TaskDraft generation failed");
+      } finally {
+        input?.focus();
+      }
+      return;
+    }
+
     const expectedProject = projectPath();
     const expectedSession = activeSessionId;
     renderPendingUser(text);
@@ -854,6 +1037,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     void Promise.all([
       refreshSettingsCatalog(),
       refreshAgentCapabilities(),
+      refreshRunnerCapabilities(),
     ]);
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
