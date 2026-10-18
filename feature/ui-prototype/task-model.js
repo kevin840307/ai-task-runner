@@ -408,7 +408,8 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
     if(['stopped','attention','failed'].includes(t.runtime)){document.getElementById('resumeBatch').click();openTaskById(t.id);return}
   }
   if(t.runtime==='idle'){
-    if(t.workspaceKind==='main'){const busy=mainBusyTask(t.project);if(busy&&busy.id!==t.id){if(t.workspacePolicy==='auto'){t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id)}else{showToast(`Main workspace 正被 ${busy.id} 使用`);return}}}
+    const workspace=prepareTaskWorkspaceForRun(t);if(!workspace.ok){showToast(workspace.reason);return}
+    if(workspace.changed)pushTaskHistory(t,`Auto workspace resolved → ${workspace.kind}`);
     t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';if(t.status==='new')t.status='ongoing';pushTaskHistory(t,'Run started');showToast('Mock Run started');
   }else if(['running','recover'].includes(t.runtime)){t.runtime='stopped';t.status='paused';pushTaskHistory(t,'Paused by user');showToast('Mock Pause')}
   else if(['stopped','attention','failed'].includes(t.runtime)){t.runtime='running';t.status='ongoing';pushTaskHistory(t,'Resume accepted');showToast('Mock Resume')}
