@@ -2,6 +2,7 @@
 const taskOverlayEl=document.getElementById('taskOverlay');
 const taskDrawerEl=taskOverlayEl.querySelector('.drawer');
 const taskDrawerBack=document.getElementById('planBackToTask');
+const planPageBack=document.getElementById('planPageBack');
 const taskDrawerInfoMeta=document.getElementById('drawerInfoMeta');
 const taskDrawerRouteMeta=document.getElementById('drawerRouteMeta');
 const taskDrawerRuntimeSlot=document.getElementById('drawerRuntimeSlot');
@@ -47,6 +48,13 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
   taskDrawerBack.title=backTitle;
   taskDrawerBack.textContent='←';
   if(route==='list')taskDrawerBack.onclick=handleTaskDrawerBack;
+  if(planPageBack){
+    planPageBack.hidden=!(route==='list'||route==='list-draft');
+    planPageBack.textContent=route==='list-draft'?uiText('taskListDraft.cancel'):uiText('taskList.back');
+    planPageBack.onclick=route==='list-draft'
+      ?()=>requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true}))
+      :handleTaskDrawerBack;
+  }
   if(title)document.getElementById('drawerTitle').textContent=title;
   if(workspace)taskDrawerRouteMeta.textContent=meta||'';
   taskOverlayEl.classList.add('open');
