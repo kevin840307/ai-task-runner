@@ -412,6 +412,8 @@ conflict?
   ├─ no
   │   ↓
   │ validate candidate
+  │   ↓
+  │ commit temporary candidate merge result
   │
   └─ yes
       ↓
@@ -451,7 +453,10 @@ Candidate uses a normal merge so Git preserves the Task branch's original merge 
 ```bash
 git merge --no-ff --no-commit local/task/T-001-r1
 # inspect / validate
+git commit -m "candidate: T-001-r1"
 ```
+
+The candidate commit is temporary orchestration history only. It exists so the validated candidate branch has a stable ref that can be squash-delivered to the Project branch; it is deleted with the candidate after delivery.
 
 The candidate branch is disposable. The original completed Task branch/worktree remains untouched until delivery succeeds.
 
@@ -1021,7 +1026,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] Create candidate from latest target HEAD.
 - [ ] Normal-merge committed Task branch into candidate.
 - [ ] Do not mutate/rebase original completed Task branch.
-- [ ] Validate candidate before target delivery.
+- [ ] Validate candidate before target delivery, then create a temporary candidate merge commit so the candidate branch/ref exactly represents the validated tree.
 - [ ] Re-check target HEAD immediately before delivery.
 - [ ] Rebuild candidate if target HEAD changed.
 
