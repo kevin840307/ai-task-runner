@@ -778,6 +778,8 @@ function materializeItemUploads(item,itemRef){
   if(!item?._uploads)return item;
   for(const field of ['goalFile','validator','aiFile']){
     const meta=stagedUploadMeta(item,field);if(!meta)continue;
+    const active=field==='goalFile'?item.goalMode==='file':field==='aiFile'?item.aiMode==='file':item.validatorMode==='file';
+    if(!active){if(meta.token)stagedUploadFiles.delete(meta.token);delete item._uploads[field];continue}
     const path=managedUploadPath(item,itemRef,field,meta),file=stagedUploadFiles.get(meta.token)||null;
     mockManagedFileCopies.set(path,{...meta,file,copiedAt:new Date().toISOString()});
     if(meta.token)stagedUploadFiles.delete(meta.token);item[field]=path;delete item._uploads[field];
@@ -1134,7 +1136,7 @@ function sourceTabs(value,modes,attrs=''){
 
 let newTaskDraft={
   goalMode:'inline',prompt:'Implement the requested change and run focused verification.',goalFile:'',goalAsset:'common/review.md',
-  validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'
+  validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',_uploads:{}
 };
 function taskGoalBody(){
   if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose</button></div><div class="source-note">執行時使用既有 <strong>goal_file</strong>。</div>`;
@@ -1147,13 +1149,19 @@ function taskAiBody(){
   if(newTaskDraft.aiMode==='inline')return `<textarea id="taskAiInline" placeholder="AI Validator instructions">${escapeHtml(newTaskDraft.aiPrompt)}</textarea><div class="source-note">Write 模式同樣會先存受管 draft，再交給既有 <strong>ai_validator_prompt_file</strong>。</div>`;
   return '<div class="source-note">Default：沿用 Workflow / Runner 的 AI Validator Prompt。</div>';
 }
+function captureTaskFileInput(id,field){
+  const input=document.getElementById(id);if(!input)return;
+  const value=String(input.value||'').trim();
+  if(value){clearStagedUpload(newTaskDraft,field);newTaskDraft[field]=value}
+  else if(!stagedUploadMeta(newTaskDraft,field))newTaskDraft[field]='';
+}
 function captureNewTaskSources(){
   if(document.getElementById('taskPromptInline'))newTaskDraft.prompt=document.getElementById('taskPromptInline').value;
-  if(document.getElementById('taskGoalFile'))newTaskDraft.goalFile=document.getElementById('taskGoalFile').value;
+  captureTaskFileInput('taskGoalFile','goalFile');
   if(document.getElementById('taskGoalAsset'))newTaskDraft.goalAsset=document.getElementById('taskGoalAsset').value;
-  if(document.getElementById('taskValidatorFile'))newTaskDraft.validator=document.getElementById('taskValidatorFile').value;
+  captureTaskFileInput('taskValidatorFile','validator');
   if(document.getElementById('taskAiInline'))newTaskDraft.aiPrompt=document.getElementById('taskAiInline').value;
-  if(document.getElementById('taskAiFile'))newTaskDraft.aiFile=document.getElementById('taskAiFile').value;
+  captureTaskFileInput('taskAiFile','aiFile');
   if(document.getElementById('taskAiAsset'))newTaskDraft.aiAsset=document.getElementById('taskAiAsset').value;
 }
 let newTaskWorkspaceMode='auto';
