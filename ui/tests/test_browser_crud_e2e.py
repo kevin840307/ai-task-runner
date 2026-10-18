@@ -1116,6 +1116,138 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_global_settings_and_project_chat_composer_browser_contract() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        second = root / "second-project"
+        second.mkdir()
+        state._write_projects([
+            {"name": "Fixture Project", "path": str(root)},
+            {"name": "Second Project", "path": str(second)},
+        ])
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        def install(page) -> None:
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.emulate_media(color_scheme="dark")
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            install(page)
+
+            assert page.locator("html").get_attribute("data-appearance-preference") == "system"
+            assert page.locator("html").get_attribute("data-appearance") == "dark"
+            page.click("#themeButton")
+            assert page.locator("#themePanel").is_visible()
+
+            for appearance in ("light", "dark"):
+                page.locator(f"[data-appearance-option='{appearance}']").click()
+                page.wait_for_function(
+                    "(value) => document.documentElement.dataset.appearance === value",
+                    appearance,
+                )
+                for palette in ("teal", "blue", "violet", "amber", "rose"):
+                    page.locator(f"[data-theme-option='{palette}']").click()
+                    page.wait_for_function(
+                        "(value) => document.documentElement.dataset.theme === value",
+                        palette,
+                    )
+                    tokens = page.evaluate(
+                        """() => {
+                            const style = getComputedStyle(document.documentElement);
+                            return [
+                                style.getPropertyValue('--text').trim(),
+                                style.getPropertyValue('--panel').trim(),
+                                style.getPropertyValue('--accent').trim()
+                            ];
+                        }"""
+                    )
+                    assert all(tokens)
+                    assert len(set(tokens)) == 3
+
+            page.locator("[data-appearance-option='system']").click()
+            page.locator("[data-theme-option='violet']").click()
+            page.locator("[data-language-option='en']").click()
+            page.wait_for_function("document.documentElement.dataset.appearancePreference === 'system'")
+            page.wait_for_function("document.documentElement.dataset.theme === 'violet'")
+            page.wait_for_function("document.documentElement.lang === 'en'")
+            saved = state.global_settings.get()
+            assert saved["interface"]["appearance"] == "system"
+            assert saved["interface"]["theme"] == "violet"
+            assert saved["language"] == "en"
+
+            page.locator("#projectList .project-root").filter(has_text="Second Project").click()
+            page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
+            assert page.locator("html").get_attribute("data-theme") == "violet"
+            assert page.locator("html").get_attribute("data-appearance-preference") == "system"
+
+            input_box = page.locator("#projectChatInput")
+            input_box.fill("short")
+            compact_height = input_box.evaluate("(node) => node.getBoundingClientRect().height")
+            assert 45 <= compact_height <= 48
+            input_box.fill("\n".join(f"line {index}" for index in range(40)))
+            long_metrics = input_box.evaluate(
+                """node => ({
+                    height: node.getBoundingClientRect().height,
+                    scrollHeight: node.scrollHeight,
+                    overflowY: getComputedStyle(node).overflowY
+                })"""
+            )
+            assert long_metrics["height"] <= 181
+            assert long_metrics["scrollHeight"] > long_metrics["height"]
+            assert long_metrics["overflowY"] == "auto"
+
+            input_box.fill("composer overlap check")
+            page.click("#projectChatSendButton")
+            page.wait_for_function(
+                "document.querySelector('#projectChatMessages')?.textContent.includes('Browser Chat reply')"
+            )
+            messages_box = page.locator("#projectChatMessages").bounding_box()
+            compose_box = page.locator("#projectChatComposePanel").bounding_box()
+            last_message = page.locator("#projectChatMessages .project-chat-message").last.bounding_box()
+            assert messages_box and compose_box and last_message
+            assert messages_box["y"] + messages_box["height"] <= compose_box["y"] + 1
+            assert last_message["y"] + last_message["height"] <= messages_box["y"] + messages_box["height"] + 1
+
+            page.reload(wait_until="domcontentloaded")
+            install(page)
+            assert page.locator("html").get_attribute("data-theme") == "violet"
+            assert page.locator("html").get_attribute("data-appearance-preference") == "system"
+            assert page.locator("html").get_attribute("data-appearance") == "dark"
+            assert page.locator("html").get_attribute("lang") == "en"
+            assert not errors
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
