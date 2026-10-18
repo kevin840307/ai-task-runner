@@ -195,8 +195,14 @@ def test_chat_agent_turn_is_separate_from_runner_history_and_reuses_agent_sessio
     service = ChatAgentService(repo, runner=fake_runner)
     session_id = chat.sessions(project)["active_session_id"]
 
-    service.turn(project, chat, session_id=session_id, message="hello", backend="qwen", model="model-a", mode="auto")
-    service.turn(project, chat, session_id=session_id, message="again", backend="qwen", model="model-a", mode="auto")
+    service.turn(
+        project, chat, session_id=session_id, message="hello",
+        backend="qwen", model="model-a", mode="auto", reasoning="high",
+    )
+    service.turn(
+        project, chat, session_id=session_id, message="again",
+        backend="qwen", model="model-a", mode="auto", reasoning="high",
+    )
 
     assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
         "hello", "reply-1", "again", "reply-2"
