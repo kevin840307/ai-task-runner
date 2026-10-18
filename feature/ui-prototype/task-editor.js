@@ -954,6 +954,24 @@ document.getElementById('newChat').onclick=()=>{
   const sessions=ensureProjectChats(currentProjectKey),id=`${currentProjectKey}-chat-${++chatSequence}`;
   sessions.unshift({id,name:`New Chat ${chatSequence}`,projectKey:currentProjectKey,messages:[]});projectActiveChat[currentProjectKey]=id;renderChatSession();document.getElementById('chatInput').focus();showToast('New Project Chat');
 };
+document.getElementById('deleteChat').onclick=()=>{
+  const session=activeChat();if(!session)return;
+  document.getElementById('deleteChatMeta').textContent=`${currentProjectKey} · ${session.name}`;
+  openModal('deleteChatModal');
+};
+document.getElementById('confirmDeleteChat').onclick=()=>{
+  const sessions=ensureProjectChats(currentProjectKey),session=activeChat();if(!session)return;
+  if(session._mockTurnTimer){clearTimeout(session._mockTurnTimer);session._mockTurnTimer=null}
+  if(session.taskDraft)discardChatTaskDraft(session,{render:false});
+  const index=sessions.indexOf(session);if(index>=0)sessions.splice(index,1);
+  if(!sessions.length){
+    const id=`${currentProjectKey}-chat-${++chatSequence}`;
+    sessions.push({id,name:`New Chat ${chatSequence}`,projectKey:currentProjectKey,messages:[]});
+  }
+  const next=sessions[Math.min(Math.max(index,0),sessions.length-1)]||sessions[0];
+  projectActiveChat[currentProjectKey]=next.id;
+  closeModal('deleteChatModal');renderChatSession();document.getElementById('chatInput').focus();showToast('Chat deleted');
+};
 document.getElementById('renameChatConfirm').onclick=()=>{
   const value=document.getElementById('renameChatInput').value.trim();if(!value){showToast('Chat name 不可空白');return}
   activeChat().name=value;closeModal('renameChatModal');renderChatSession();showToast('Chat renamed');
