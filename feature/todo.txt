@@ -5,7 +5,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 目標分支：feature/ui
 範圍：產品 UI、Chat API、Agent Adapter、TaskDraft、Runner 整合、Worktree、Merge、測試與 24H 穩定性。
 
-本檔是「實作待辦」，與根目錄 future.txt 的產品方向同步；不複製 release/v4 舊版規格。
+本檔是 feature/ui 打樣期的「實作待辦」，與 feature/future.txt 同步；打樣階段只改 feature/。正式化時再同步根目錄 future.txt 與正式契約。
 [ ] 完成項目需在同一變更中補測試、更新必要文件，並清除已被取代的舊路徑。
 [ ] Prototype 的 Mock 行為不能被當成正式 Backend / Runner 功能已完成。
 [ ] 未完成真實 Browser / API / Live 測試前，不得宣稱整體完成或已證明 24H 穩定。
