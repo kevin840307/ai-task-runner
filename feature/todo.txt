@@ -274,6 +274,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Workflow / Prompt 保留既有 workspace，但未來 React 只接同一套 AppShell / Sidebar / shared primitives，不另做第二套 layout/theme。
 [ ] Component 不直接擁有 Runner state machine；透過既有 runtime projection / service hooks 讀資料與 allowed actions。
 [ ] Prototype 階段只抽「會重複且已穩定」的 shared template；不要為模組化而複製 state 或提前造 React-like framework。
+[x] 新增 bootstrap-state.js：第一次 paint 前先套用 Theme / Appearance / Language，並預讀 current Project / Tasks Project filter；不得碰 Runner / Task runtime state。
+[x] Prototype 加入 theme-aware loading transition；初始化期間主 app 不畫錯誤 persisted state，初始化完成後淡出 loader 顯示主 UI。
+[x] tasksProjectFilterButton 移除 HTML 假值「1 selected」；使用 ui-pending / stateful-content，render 真實 filter state 後才解除 pending。
+[x] current Project 與 Tasks Project filter 加入 prototype persistence，reload 時直接從 bootstrap state 起步。
+[x] loading transition 支援 prefers-reduced-motion，並有 fail-open 行為，避免初始化例外造成永久遮罩。
+[ ] Browser 測試 reload：Dark + 非 Teal palette、非預設 Project、Task filter 單選/多選/全選/空選擇時不得出現 Light flash、錯誤 summary 或 layout jump。
+[ ] 正式 React 在 mount 前 pre-hydrate Theme / Project / persisted UI filter；禁止 first render 使用假預設值後再由 useEffect 修正。
 [ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
 [ ] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
 
