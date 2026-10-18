@@ -67,11 +67,14 @@ function restoreTaskInfoShell(t){
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
 }
 function closeTaskDrawerShell({force=false,restoreFocus=true}={}){
+  if(!force&&!(typeof newTaskListDraft!=='undefined'&&newTaskListDraft)&&taskEditorReturnContext&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
+    requestDiscardTaskEditorChanges(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
+  }
   if(!force&&typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
     requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
   }
   if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false});
-  taskEditorReturnContext=null;
+  taskEditorReturnContext=null;taskEditorInitialSnapshot='';
   if(taskEditorHome.classList.contains('open'))taskEditorHome.classList.remove('open');
   if(planSubviewType==='yaml'&&yamlEditorSurface.parentNode===planSubviewMount){
     yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal');
@@ -113,8 +116,11 @@ function hideTaskEditorView(){
   planSubviewMount.hidden=true;
   planModalEl.classList.remove('subview-open');
 }
-function leaveTaskEditorOverlay(){
+function leaveTaskEditorOverlay({force=false}={}){
   const ctx=taskEditorReturnContext;if(!ctx)return;
+  if(!force&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
+    requestDiscardTaskEditorChanges(()=>leaveTaskEditorOverlay({force:true}));return;
+  }
   taskEditorReturnContext=null;
   hideTaskEditorView();
   const owner=(ctx.mode==='draft-create-item'||ctx.mode==='draft-edit-item')?newTaskListDraft:(ctx.ownerId?taskMap[ctx.ownerId]:null);
@@ -212,7 +218,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     ||(ctx.mode==='draft-edit-item'&&toast.textContent===uiText('taskListDraft.updated'));
   const itemSaved=['Task saved','Saved · current task will restart'].includes(toast.textContent);
   const rootSaved=ctx.mode==='root-create'&&String(toast.textContent).startsWith('Task created');
-  if(draftSaved||itemSaved||rootSaved)leaveTaskEditorOverlay();
+  if(draftSaved||itemSaved||rootSaved){taskEditorInitialSnapshot='';leaveTaskEditorOverlay({force:true})}
 };
 
 // YAML is also a long-form editor, so it uses the same Plan subview instead of another large modal.
@@ -488,6 +494,7 @@ loadTaskEditor=function(mode,args={}){
     if(item){const key=Object.keys(projectMeta).find(k=>projectRefMatches(item.project,k));input.value=key||item.project}
   }
   renderNewTaskWorkspace();
+  if(typeof markTaskEditorClean==='function')markTaskEditorClean();
 };
 const projectOptionSelect=selectProject;
 selectProject=function(key){projectOptionSelect(key);renderProjectOptions(key)};
