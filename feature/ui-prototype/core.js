@@ -812,10 +812,10 @@ taskFileUploadPicker?.addEventListener('change',()=>{
   target._uploads={...(target._uploads||{}),[pickerTarget.field]:{token,name:file.name,size:file.size,type:file.type||'',lastModified:file.lastModified||0}};
   target[pickerTarget.field]='';
   const owner=taskMap[currentTaskId];
-  if((pickerTarget.context==='plan'||pickerTarget.context==='batch')&&owner&&!owner._chatDraft){
-    materializeItemUploads(target,`${owner.id}-I${pickerTarget.index+1}`);
+  if((pickerTarget.context==='plan'||pickerTarget.context==='batch')&&owner){
+    if(!owner._chatDraft)materializeItemUploads(target,`${owner.id}-I${pickerTarget.index+1}`);
     if(typeof commitPlanDraft==='function')commitPlanDraft(owner,{markDirty:owner.status==='paused'&&pickerTarget.index===batchState.index});
-    renderBoardFromMap();
+    if(!owner._chatDraft)renderBoardFromMap();
   }
   rerenderPickerTarget();showToast(`Uploaded · ${file.name}${owner&&!owner._chatDraft&&pickerTarget.context!=='task'?' · copied to managed path':' · copied when Task is created'}`);
 });
