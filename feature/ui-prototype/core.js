@@ -9,6 +9,31 @@ nav.forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
 const toast=document.getElementById('toast');
 let toastTimer;
 function showToast(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1900)}
+const AUTO_WORKSPACE_POLICY_KEY='ai-task-runner.prototype.autoWorkspacePolicy';
+const AUTO_WORKSPACE_POLICIES=new Set(['busy_worktree','main_only','always_worktree']);
+function loadAutoWorkspacePolicy(){
+  try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
+  return 'busy_worktree';
+}
+const globalExecutionSettings={autoWorkspacePolicy:loadAutoWorkspacePolicy()};
+function saveAutoWorkspacePolicy(){try{localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
+function autoWorkspaceKind(busy){
+  if(globalExecutionSettings.autoWorkspacePolicy==='always_worktree')return 'worktree';
+  if(globalExecutionSettings.autoWorkspacePolicy==='main_only')return 'main';
+  return busy?'worktree':'main';
+}
+function autoWorkspacePolicyDescription(){
+  return globalExecutionSettings.autoWorkspacePolicy==='always_worktree'
+    ?'Auto always creates an isolated Worktree.'
+    :globalExecutionSettings.autoWorkspacePolicy==='main_only'
+      ?'Auto always uses Main; if Main is busy, the Run is blocked.'
+      :'Auto uses Main when idle and switches to Worktree when the project is busy.';
+}
+function autoWorkspaceStatus(busy,id='Task'){
+  const kind=autoWorkspaceKind(!!busy);
+  if(kind==='worktree')return globalExecutionSettings.autoWorkspacePolicy==='always_worktree'?`${id} → Worktree`:`${busy?'Main busy → ':''}${id} → Worktree`;
+  return busy?'Main busy → Run blocked':'Main available → Main';
+}
 document.getElementById('themeBtn').addEventListener('click',()=>showToast('Mock demo 保持目前 Teal light theme，不另外改設計語言'));
 
 const projectMeta={
@@ -272,6 +297,24 @@ let taskSequence=420;
 function openModal(id){document.getElementById(id)?.classList.add('open')}
 function closeModal(id){document.getElementById(id)?.classList.remove('open')}
 document.querySelectorAll('[data-close-modal]').forEach(b=>b.onclick=()=>closeModal(b.dataset.closeModal));
+function renderGlobalExecutionSettings(){
+  const select=document.getElementById('autoWorkspacePolicy'),hint=document.getElementById('autoWorkspacePolicyHint'),preview=document.getElementById('autoWorkspacePolicyPreview');if(!select)return;
+  select.value=globalExecutionSettings.autoWorkspacePolicy;if(hint)hint.textContent=autoWorkspacePolicyDescription();
+  if(preview){
+    const rows=globalExecutionSettings.autoWorkspacePolicy==='busy_worktree'
+      ?'<strong>Auto</strong> · Idle → Main · Busy → Worktree'
+      :globalExecutionSettings.autoWorkspacePolicy==='main_only'
+        ?'<strong>Auto</strong> · Always Main · Busy → Block Run'
+        :'<strong>Auto</strong> · Always Worktree';
+    preview.innerHTML=rows+'<br>Task-level Main / Worktree always overrides this setting.';
+  }
+}
+document.getElementById('globalSettingsButton')?.addEventListener('click',()=>{renderGlobalExecutionSettings();openModal('globalSettingsModal')});
+document.getElementById('autoWorkspacePolicy')?.addEventListener('change',e=>{
+  globalExecutionSettings.autoWorkspacePolicy=AUTO_WORKSPACE_POLICIES.has(e.target.value)?e.target.value:'busy_worktree';saveAutoWorkspacePolicy();renderGlobalExecutionSettings();
+  if(typeof renderNewTaskWorkspace==='function')renderNewTaskWorkspace();
+  showToast('Auto workspace policy updated');
+});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 document.getElementById('newTask').addEventListener('click',()=>{
   document.getElementById('newTaskTitle').value='New Task';
@@ -438,15 +481,9 @@ document.getElementById('taskPrimaryDemo').onclick=()=>{
     }
   }
   if(t.runtime==='idle'){
-    if(t.workspaceKind==='main'){
-      const busy=mainBusyTask(t.project);
-      if(busy&&busy.id!==t.id){
-        if(t.workspacePolicy==='auto'){
-          t.workspaceKind='worktree';t.branch=`task/${t.id}`;t.executionRoot=worktreeRootFor(t.project,t.id);
-          pushTaskHistory(t,`Main busy by ${busy.id} · Auto switched to isolated worktree`);
-        }else{showToast(`Main workspace 正被 ${busy.id} 使用；請改用 Worktree`);return}
-      }
-    }
+    const workspace=prepareTaskWorkspaceForRun(t);
+    if(!workspace.ok){showToast(workspace.reason);return}
+    if(workspace.changed)pushTaskHistory(t,`Auto workspace resolved → ${workspace.kind}`);
     t.runtime='running';t.stage='planning';t.session='main';t.elapsed='0m';t.desc='Runner 已啟動；Board 與 runtime 仍由不同狀態來源顯示。';
     if(t.status==='new')t.status='ongoing';
     pushTaskHistory(t,'Run started · server-side action guard accepted');
@@ -914,10 +951,23 @@ function mainBusyTask(project){
 }
 function resolveTaskWorkspace(project,id,mode=newTaskWorkspaceMode){
   const busy=mainBusyTask(project);
-  const chosen=mode==='auto'?(busy?'worktree':'main'):mode;
-  if(chosen==='main'&&busy)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用`,busy};
+  const chosen=mode==='auto'?autoWorkspaceKind(!!busy):mode;
+  if(chosen==='main'&&busy)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用 · Auto policy 不使用 Worktree`,busy};
   if(chosen==='worktree')return {ok:true,kind:'worktree',branch:`task/${id}`,root:worktreeRootFor(project,id),busy};
   return {ok:true,kind:'main',branch:projectMeta[project]?.branch||'main',root:projectMeta[project]?.path||project,busy};
+}
+function prepareTaskWorkspaceForRun(t){
+  if(!t)return {ok:false,reason:'Task not found'};
+  if((t.workspacePolicy||'auto')==='auto'){
+    const before=t.workspaceKind||'main',resolved=resolveTaskWorkspace(t.project,t.id,'auto');if(!resolved.ok)return resolved;
+    t.workspaceKind=resolved.kind;t.branch=resolved.branch;t.executionRoot=resolved.root;
+    return {...resolved,changed:before!==resolved.kind};
+  }
+  if(t.workspaceKind==='main'||t.workspacePolicy==='main'){
+    const busy=mainBusyTask(t.project);
+    if(busy&&busy.id!==t.id)return {ok:false,reason:`Main workspace 正被 ${busy.id} 使用；請改用 Worktree`,busy};
+  }
+  return {ok:true,kind:t.workspaceKind||t.workspacePolicy||'main',branch:t.branch,root:t.executionRoot};
 }
 function renderNewTaskWorkspace(){
   const host=document.getElementById('newTaskWorkspace');if(!host)return;
@@ -926,7 +976,7 @@ function renderNewTaskWorkspace(){
   const resolved=resolveTaskWorkspace(project,previewId,newTaskWorkspaceMode);
   const option=(mode,title,desc,status,disabled=false)=>`<label class="workspace-option ${newTaskWorkspaceMode===mode?'selected':''} ${disabled?'disabled':''}"><input type="radio" name="workspaceMode" value="${mode}" ${newTaskWorkspaceMode===mode?'checked':''} ${disabled?'disabled':''}><strong>${title}</strong><small>${desc}</small><span class="workspace-status">${status}</span></label>`;
   host.innerHTML=`<div class="workspace-options">
-    ${option('auto','Auto','Main 有空就直接使用；忙碌時自動建立 isolated worktree。',busy?`Main busy → ${previewId} 將使用 Worktree`:'Main available → 使用 Main')}
+    ${option('auto','Auto',autoWorkspacePolicyDescription(),autoWorkspaceStatus(busy,previewId))}
     ${option('main','Main workspace','直接使用專案目前 working tree；同一路徑只能一個 Running Task。',busy?`Busy · ${busy.id} 正在執行`:'Available',!!busy)}
     ${option('worktree','Isolated worktree','為這個 Task 建立獨立 branch/path，可與同專案其他 Task 同時執行。',`task/${previewId}`)}
   </div><div class="workspace-preview"><strong>Execution preview</strong><br>${resolved.ok?(resolved.kind==='worktree'?`Worktree · ${resolved.branch}<br>${resolved.root}`:`Main · ${resolved.branch}<br>${resolved.root}`):resolved.reason}</div>`;
