@@ -755,8 +755,8 @@ let batchRunTimer=null;
 let batchState={status:'idle',index:0,recovered:false};
 let batchParentTaskId=null;
 let pickerTarget=null;
-const validatorNativeFilePicker=document.getElementById('validatorNativeFilePicker');
-function applyValidatorPickedPath(value){
+const nativeFilePicker=document.getElementById('nativeFilePicker');
+function applyPickedFilePath(value){
   value=String(value||'').trim();if(!value)return;
   if(pickerTarget?.context==='task'){
     newTaskDraft[pickerTarget.field]=value;
@@ -774,20 +774,22 @@ function applyValidatorPickedPath(value){
     if(typeof renderBatchDraft==='function')renderBatchDraft();
   }
 }
-function openValidatorNativePicker(index,field,context='batch'){
-  pickerTarget=context==='task'?{context:'task',field}:context==='plan'?{context:'plan',index,field}:{context:'batch',index,field};
-  if(!validatorNativeFilePicker){showToast('Native file picker is unavailable');return}
-  validatorNativeFilePicker.value='';
-  validatorNativeFilePicker.click();
+function openNativeFilePicker(index,field,kind='file',context='batch'){
+  pickerTarget=context==='task'?{context:'task',field,kind}:context==='plan'?{context:'plan',index,field,kind}:{context:'batch',index,field,kind};
+  if(!nativeFilePicker){showToast('Native file picker is unavailable');return}
+  nativeFilePicker.accept=kind==='validator'?'.py,.pyw,*/*':'';
+  nativeFilePicker.value='';
+  nativeFilePicker.click();
 }
-validatorNativeFilePicker?.addEventListener('change',()=>{
-  const file=validatorNativeFilePicker.files?.[0];
-  if(!file)return;
-  const value=(typeof file.path==='string'&&file.path.trim())?file.path:file.name;
-  applyValidatorPickedPath(value);
-  showToast(value===file.name?'Validator file selected':'Validator path updated');
+nativeFilePicker?.addEventListener('change',()=>{
+  const file=nativeFilePicker.files?.[0];if(!file)return;
+  const fullPath=typeof file.path==='string'?file.path.trim():'';
+  if(!fullPath||/^[A-Za-z]:\\fakepath\\/i.test(fullPath)){
+    showToast('Browser 無法取得完整檔案路徑，請在欄位中手動輸入完整 path');
+    return;
+  }
+  applyPickedFilePath(fullPath);showToast('File path updated');
 });
-
 function cloneBatch(items){return JSON.parse(JSON.stringify(items||[]))}
 function basename(path){return String(path||'').split(/[\\/]/).filter(Boolean).pop()||path||'Untitled'}
 function managedDraftPath(item,index,kind){
@@ -915,25 +917,7 @@ function bindBatchForm(){
   document.querySelectorAll('[data-moveup]').forEach(b=>b.onclick=()=>{const i=+b.dataset.moveup;if(i<1)return;[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]];renderBatchDraft()});
   document.querySelectorAll('[data-movedown]').forEach(b=>b.onclick=()=>{const i=+b.dataset.movedown;if(i>=batchDraft.length-1)return;[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]];renderBatchDraft()});
 }
-function openPathPicker(index,field,kind){
-  if(kind==='validator'){openValidatorNativePicker(index,field,'batch');return}
-  pickerTarget={index,field};
-  const item=batchDraft[index]||{};
-  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
-  const options=kind==='validator'
-    ?[]
-    :kind==='ai'
-      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai-validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
-      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
-  document.getElementById('pathPickerTitle').textContent=kind==='validator'?'Choose File Validator':kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
-  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以關閉後直接在輸入框貼路徑。';
-  document.getElementById('pathPickerOptions').innerHTML=options.map((path,i)=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
-  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
-    if(pickerTarget&&batchDraft[pickerTarget.index])batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
-    closeModal('pathPickerModal');renderBatchDraft();showToast('已選擇 mock 路徑');
-  });
-  openModal('pathPickerModal');
-}
+function openPathPicker(index,field,kind,context='batch'){openNativeFilePicker(index,field,kind,context)}
 function parseSimpleYamlList(source){
   const lines=String(source||'').split(/\r?\n/),items=[];let current=null;
   for(const raw of lines){
@@ -1223,34 +1207,7 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
 };
 
-function openPathPicker(index,field,kind,context='batch'){
-  if(kind==='validator'){openValidatorNativePicker(index,field,context);return}
-  pickerTarget=context==='task'?{context:'task',field}:context==='plan'?{context:'plan',index,field}:{context:'batch',index,field};
-  const item=context==='task'?{project:projectMeta[document.getElementById('newTaskProject').value]?.path||'C:\\project'}:(batchDraft[index]||{});
-  const root=String(item.project||'C:\\project').replace(/[\\/]+$/,'');
-  const options=kind==='validator'
-    ?[]
-    :kind==='ai'
-      ?[`${root}\\.ai-task-runner\\assets\\prompts\\common\\ai_validator.md`,`${root}\\runner\\assets\\prompts\\common\\ai_validator.md`,'D:\\shared\\prompts\\final-review.md']
-      :[`${root}\\tasks\\task.md`,`${root}\\.ai-task-runner\\assets\\prompts\\tasks\\task.md`,'D:\\shared\\prompts\\feature-request.md'];
-  document.getElementById('pathPickerTitle').textContent=kind==='ai'?'Choose AI Validator Prompt':'Choose Task Prompt';
-  document.getElementById('pathPickerHelp').textContent='Mock picker：也可以直接貼絕對或相對路徑。';
-  const pickerOptions=document.getElementById('pathPickerOptions');
-  pickerOptions.innerHTML=options.map(path=>`<button class="picker-option" type="button" data-picker-value="${escapeAttr(path)}"><strong>${escapeHtml(basename(path))}</strong><small>${escapeHtml(path)}</small></button>`).join('');
-  document.querySelectorAll('[data-picker-value]').forEach(b=>b.onclick=()=>{
-    if(pickerTarget?.context==='task'){
-      newTaskDraft[pickerTarget.field]=b.dataset.pickerValue;renderNewTaskSources();
-    }else if(pickerTarget?.context==='plan'&&batchDraft[pickerTarget.index]){
-      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;
-      const t=taskMap[currentTaskId];
-      if(t){commitPlanDraft(t,{markDirty:t.status==='paused'&&pickerTarget.index===batchState.index});renderBoardFromMap();renderExecutionPlan(t);}
-    }else if(pickerTarget&&batchDraft[pickerTarget.index]){
-      batchDraft[pickerTarget.index][pickerTarget.field]=b.dataset.pickerValue;renderBatchDraft();
-    }
-    closeModal('pathPickerModal');showToast('已選擇 mock 路徑');
-  });
-  openModal('pathPickerModal');
-}
+function openPathPicker(index,field,kind,context='batch'){openNativeFilePicker(index,field,kind,context)}
 
 function batchToYaml(items){
   return items.map((x,i)=>{
