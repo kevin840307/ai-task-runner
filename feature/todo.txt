@@ -43,7 +43,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Ask 的 Extra context 為選填；空白可以直接 Next / Submit，不阻擋流程。
 [x] 移除專用 @task 按鈕；透過 @ 自動提示發現與插入 @task / @task-single / @task-list。
 [x] Ask 以互動卡片嵌入 Chat 訊息流；Ask 本身不再額外套內層卷軸，由 Chat 訊息區統一捲動。
-[x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
+[x] 一般 Mock Chat 可隨機觸發 Ask；@ask-demo 可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
 [x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
 [ ] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
@@ -54,7 +54,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
 [x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
 [ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
-[x] Mock 功能入口可透過 @ 自動提示與 Ask mock 入口發現，不必猜特殊指令。
+[x] Mock 功能入口可透過 @ 自動提示發現；Ask 測試入口為 @ask-demo。
 [x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
 [x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
 [x] Settings 拆分為 Interface 與 Language：Interface 收納 Appearance / Theme palette；Language 獨立管理語言。移除左上獨立 themeBtn；三者皆為全域偏好。
@@ -107,7 +107,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
 [ ] @goal、@task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
 [x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
-[x] Chat Composer 提供 Ask mock 明確入口，方便測試多問題流程。
+[x] Chat Composer 不顯示 Ask mock 按鈕；多問題流程以 @ask-demo 測試。
 
 
 4. Project Chat Settings：Agent / Model / Mode / Reasoning / Workflow
@@ -202,7 +202,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
 [ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
 [ ] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
-[ ] Prototype 的一般訊息可以隨機觸發 Ask；Ask mock 按鈕 / @ask-demo 可以強制觸發，不依賴機率。
+[ ] Prototype 的一般訊息可以隨機觸發 Ask；@ask-demo 可以強制觸發，不依賴機率。
 [ ] Mock 至少覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session。
 [ ] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
 [ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
@@ -272,10 +272,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
 [ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
-[x] File Validator 固定為外部檔案路徑輸入：Choose file 直接觸發 native file picker，不再經自訂 dialog；也可直接手動輸入。Prototype 不提供 built-in validator file / preset path。
-[x] File Validator path picker 不再列出 ai_task_runner_validator.py / validation.py / shared validator 等預設候選；正式版由 desktop/backend file picker 回填實際路徑。
-[x] 所有 Choose file 改為直接開系統/native file chooser，不再開 pathPickerModal；舊 custom picker DOM / CSS / duplicate openPathPicker 已移除。
-[x] Native chooser 只有取得真實完整 path 才回填欄位；Browser 僅提供 filename / fakepath 時不得寫入，提示手動輸入完整 path。正式 desktop/backend bridge 必須回傳 absolute path。
+[x] File 型欄位統一提供兩種來源：手動輸入 path，或 Upload file；不再提供 built-in validator file / preset path。
+[x] 手動輸入 path：Create / Save 時直接使用原 path，不 upload、不 copy、不改寫。
+[x] Upload file：先以 transient upload metadata / bytes 暫存；Create / Save 時由 backend copy 到 Runner-managed path，再把回傳的新 canonical path 寫入 Task item。
+[x] Prototype 模擬 managed copy path：.ai-task-runner/uploads/<task-item-id>/<kind>/<filename>；canonical Task 不保存 browser File / upload token。
+[x] backend copy 成功後必須把 managed path 回傳 UI；Task Editor 的 taskValidatorFile / taskGoalFile / taskAiFile 要顯示回傳 path，而不是 filename/fakepath。
+[ ] 正式 backend upload API：接收 bytes + filename + target Task/item identity，原子 copy 到 managed storage；copy 失敗時 Create / Save fail closed，保留 staged upload 供重試。
+[ ] Browser 測試 Upload file → Create/Save → managed path 回填；再測 Upload 後手動輸入 path 時 manual path 優先且 staged upload 被取消。
 [x] Composer 的 Ask mock 按鈕與 handler 已移除；@ask-demo 保留作為 Ask flow 測試入口。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
@@ -505,7 +508,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
 [ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
 [ ] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
-[ ] Mock 測試：Ask 隨機觸發、Ask mock 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
+[ ] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
 [ ] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
