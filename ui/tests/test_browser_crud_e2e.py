@@ -538,6 +538,22 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#chatView").is_hidden()
             assert page.locator("#workflowView").is_hidden()
 
+            # Project Chat session lifecycle is real Backend state, not a browser-only mock.
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.click("#newProjectChatButton")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
+            active_chat.locator("button[title='Rename Chat']").click()
+            page.locator(".ui-dialog-input").fill("Implementation Chat")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('#projectChatSessionList .project-chat-session-open')).some((n) => n.textContent === 'Implementation Chat')"
+            )
+            active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
+            active_chat.locator("button[aria-label='Delete Chat']").click()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+
             page.click("#promptNav")
             page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
             page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('prompt-manager-mode')")
