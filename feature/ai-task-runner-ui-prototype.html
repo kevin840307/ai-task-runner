@@ -4,9 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Task Runner · UI Prototype</title>
+<script src="./ui-prototype/bootstrap-state.js"></script>
 <link rel="stylesheet" href="./ui-prototype/styles.css">
 </head>
 <body>
+<div class="app-bootstrap-loader" id="appBootstrapLoader" role="status" aria-live="polite">
+  <div class="app-bootstrap-card">
+    <span class="app-bootstrap-mark">A</span>
+    <span class="app-bootstrap-copy"><strong>Agent Workflow</strong><small>Loading workspace</small></span>
+    <span class="app-bootstrap-spinner" aria-hidden="true"></span>
+  </div>
+</div>
 <div class="app">
   <aside class="sidebar">
     <div class="brandrow">
@@ -92,7 +100,7 @@
     <section class="view page boardpage active" id="view-tasks">
       <header class="header">
         <div class="title task-title-context"><div class="task-title-row"><h1>Tasks</h1><div class="tasks-project-multiselect" id="tasksProjectMulti">
-  <button class="tasks-project-trigger" id="tasksProjectFilterButton" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong id="tasksProjectFilterSummary">1 selected</strong><span class="tasks-project-chevron" aria-hidden="true"></span></button>
+  <button class="tasks-project-trigger ui-pending" id="tasksProjectFilterButton" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong class="stateful-content" id="tasksProjectFilterSummary" aria-live="polite"></strong><span class="tasks-project-chevron" aria-hidden="true"></span></button>
   <div class="tasks-project-menu" id="tasksProjectFilterMenu" hidden>
     <div class="tasks-project-menu-head"><strong>Show Tasks from</strong><div><button type="button" data-project-filter-all>Select all</button><button type="button" data-project-filter-clear>Clear</button></div></div>
     <div class="tasks-project-options" id="tasksProjectFilterOptions"></div>
@@ -397,5 +405,6 @@
 <script src="./ui-prototype/task-workspace.js"></script>
 <script src="./ui-prototype/project-sidebar.js"></script>
 <script src="./ui-prototype/tasks-page.js"></script>
+<script>window.UiBootstrap?.finish()</script>
 </body>
 </html>
