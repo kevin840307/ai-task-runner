@@ -114,6 +114,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 ------------------------------
 
 [ ] Agent / Model / Mode / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
+[x] Settings 的 Agents(Later) 改為 Global Defaults，提供 Default Agent / Model / Mode / Workflow。
+[x] Global Defaults 只在建立新 Project 時 copy 一份；修改 Global Defaults 不得回寫既有 Project。
+[x] 既有 Project 無設定時維持 legacy base defaults，不因之後修改 Global Defaults 而改變。
+[x] New Project prototype 已可真正建立；建立後立即初始化 Project-level Agent / Model / Mode / Workflow 並進入該 Project Chat。
+[x] 透過 Task Project 欄位新增的新 Project 也使用同一 initializeProjectChatSettings 路徑，不得另造 default 邏輯。
+[x] Project rename / delete 同步搬移或清除 Project-level Agent / Model / Mode / Workflow 與 Project Chat scope。
+[x] New Chat 不持有 default；永遠使用目前 Project 的 Agent / Model / Mode / Workflow。
+[x] Standalone New Task 的初始 Workflow 改讀目前 Project preference，而不是固定 ralphy_ai_validate.yaml。
+[ ] Browser 測試：Global Defaults 改成 OpenCode 後，新 Project 使用 OpenCode defaults；舊 Project 保持原設定；New Chat 繼承目前 Project；reload 後仍一致。
 [x] Prototype 將 Workflow / Agent / Model 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
 [ ] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
 [ ] Agent / Model / Mode / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
