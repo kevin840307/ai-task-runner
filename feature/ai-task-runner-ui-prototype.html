@@ -37,6 +37,9 @@
         <div class="project-current-path" id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</div>
       </div>
     </div>
+    <div class="sidebar-global">
+      <button class="sidebar-settings-btn" id="globalSettingsButton" type="button"><span class="navico">⚙</span><span><strong>Settings</strong><small>Global runner preferences</small></span></button>
+    </div>
   </aside>
 
   <main class="workspace">
@@ -368,6 +371,32 @@
       <div class="project-delete-note" id="projectDeleteNote" hidden></div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="projectManageModal">Cancel</button><button class="btn primary" id="projectManageConfirm">Rename</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="globalSettingsModal">
+  <div class="modal-card global-settings-modal">
+    <div class="modal-head"><div><h2>Settings</h2><p>Global preferences shared by Chat, Tasks and Runner entry points.</p></div><button class="close" data-close-modal="globalSettingsModal">×</button></div>
+    <div class="modal-body global-settings-body">
+      <aside class="settings-sections">
+        <button type="button" class="active"><span>↯</span><strong>Execution</strong></button>
+        <button type="button" disabled><span>◉</span><strong>Agents</strong><small>Later</small></button>
+        <button type="button" disabled><span>◫</span><strong>Interface</strong><small>Later</small></button>
+      </aside>
+      <section class="settings-panel">
+        <div class="settings-panel-head"><span>EXECUTION</span><h3>Workspace behavior</h3><p>Controls how Task-level <strong>Auto</strong> resolves. Explicit Main / Worktree overrides are unchanged.</p></div>
+        <label class="settings-field">
+          <span><strong>Auto workspace policy</strong><small id="autoWorkspacePolicyHint">Use Main when idle; switch to Worktree when the project is busy.</small></span>
+          <select id="autoWorkspacePolicy">
+            <option value="busy_worktree">Busy project → Worktree</option>
+            <option value="main_only">Always Main</option>
+            <option value="always_worktree">Always Worktree</option>
+          </select>
+        </label>
+        <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
+      </section>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="globalSettingsModal">Close</button></div>
   </div>
 </div>
 
