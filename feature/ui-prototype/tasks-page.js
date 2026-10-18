@@ -3,7 +3,13 @@ const tasksProjectFilterButton=document.getElementById('tasksProjectFilterButton
 const tasksProjectFilterMenu=document.getElementById('tasksProjectFilterMenu');
 const tasksProjectFilterOptions=document.getElementById('tasksProjectFilterOptions');
 const tasksProjectFilterSummary=document.getElementById('tasksProjectFilterSummary');
-let selectedTaskProjectKeys=new Set(Object.keys(projectMeta));
+const bootTaskProjectKeys=window.UiBootstrap?.state?.taskProjectKeys;
+let selectedTaskProjectKeys=Array.isArray(bootTaskProjectKeys)
+  ?new Set(bootTaskProjectKeys.filter(key=>projectMeta[key]))
+  :new Set(Object.keys(projectMeta));
+function persistTaskProjectFilter(){
+  try{localStorage.setItem(window.UiBootstrap?.keys?.taskProjectFilters||'ai-task-runner.prototype.taskProjectFilters',JSON.stringify([...selectedTaskProjectKeys]))}catch(_){}
+}
 
 function availableTaskProjectKeys(){return projectRegistryEntries().map(([key])=>key).filter(key=>projectMeta[key])}
 function taskMatchesSelectedProjects(t){
@@ -25,6 +31,8 @@ function renderTasksProjectFilter(){
   tasksProjectFilterSummary.textContent=selected.length===0?'No Project':selected.length===1?selected[0]:(selected.length===all.length&&all.length>1?`All Projects · ${boardCount} Tasks`:`${selected.length} Projects · ${boardCount} Tasks`);
   if(selected.length===1)document.getElementById('tasksProjectLine').textContent=`${projectMeta[selected[0]]?.path||selected[0]} · Tasks`;
   else document.getElementById('tasksProjectLine').textContent=`${selected.length} Projects selected · Tasks from selected Projects`;
+  persistTaskProjectFilter();
+  tasksProjectFilterButton.classList.remove('ui-pending');
 }
 function refreshTaskProjectFilter(){
   renderTasksProjectFilter();
