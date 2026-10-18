@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from ui.chat_ask import demo_questions
 from ui.server import UIState
 
 try:
@@ -161,6 +162,12 @@ def _bridge_for(state: UIState):
                 elif path == "/api/chat/system-capabilities":
                     data = {
                         "capabilities": [
+                            {
+                                "token": "@ask-demo", "name": "ask-demo", "description": "Ask demo",
+                                "kind": "chat_test_command", "source": "Chat",
+                                "user_invocable": True, "enabled": True,
+                                "permission": "explicit", "availability": "available",
+                            },
                             {
                                 "token": "@goal", "name": "goal", "description": "Run goal",
                                 "kind": "runner_command", "source": "Runner",
@@ -349,6 +356,15 @@ def _bridge_for(state: UIState):
                         body.get("draft"),
                         request_id=str(body.get("request_id", "")),
                     )
+                elif path == "/api/chat/ask/demo":
+                    session_id = str(body.get("session_id", ""))
+                    data = state.chat_service.create_ask(
+                        Path(body["project"]),
+                        session_id,
+                        request_id=str(body.get("request_id", "")),
+                        turn_id="demo-" + str(body.get("request_id", "")),
+                        questions=demo_questions(),
+                    )
                 elif path == "/api/chat/turn":
                     session_id = str(body.get("session_id", ""))
                     message = str(body.get("message", ""))
@@ -373,34 +389,6 @@ def _bridge_for(state: UIState):
                             "busy": True,
                             "status": "waiting_ask",
                         }
-                    elif message == "ask browser message":
-                        state.chat_service.append_message(
-                            Path(body["project"]), session_id, "user", message
-                        )
-                        state.chat_service.create_ask(
-                            Path(body["project"]),
-                            session_id,
-                            request_id=str(body.get("request_id", "")),
-                            turn_id="turn-browser-ask",
-                            questions=[
-                                {
-                                    "id": "approach",
-                                    "header": "Approach",
-                                    "question": "Choose an approach",
-                                    "options": [
-                                        {"value": "safe", "label": "Safe"},
-                                        {"value": "clean", "label": "Clean"},
-                                    ],
-                                },
-                                {
-                                    "id": "reason",
-                                    "header": "Reason",
-                                    "question": "Explain why",
-                                    "kind": "text",
-                                },
-                            ],
-                        )
-                        data = {"session_id": session_id, "items": [], "busy": False, "status": "waiting_ask"}
                     elif message == "queue browser message":
                         queue = getattr(state, "_browser_chat_queue", {})
                         queue.setdefault(session_id, []).append({
@@ -965,7 +953,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatView").is_visible()
             assert page.locator("#chatView").is_hidden()
 
-            page.fill("#projectChatInput", "ask browser message")
+            page.fill("#projectChatInput", "@ask-demo")
             page.click("#projectChatSendButton")
             page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
             assert page.locator(".project-chat-ask-head").get_by_text("1 / 2").is_visible()
@@ -1023,7 +1011,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert answered_ask["answers"]["reason"] == "Browser reason"
 
             # Cancel is explicit and also releases next-turn Queue processing.
-            page.fill("#projectChatInput", "ask browser message")
+            page.fill("#projectChatInput", "@ask-demo")
             page.click("#projectChatSendButton")
             page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
             page.fill("#projectChatInput", "queued before cancel")
