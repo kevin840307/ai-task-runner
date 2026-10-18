@@ -27,7 +27,7 @@
       <textarea id="newTaskGoal" hidden>Implement the requested change and run focused verification.</textarea>
       <div class="state-hint">Task settings belong to this task only. Workflow capabilities decide which validation fields appear.</div>
     </div>
-    <div class="modal-foot"><button class="btn" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
+    <div class="modal-foot"><button class="btn" id="taskEditorBack" type="button" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
 </section>`;
 
   const taskListWorkspace=()=>`
