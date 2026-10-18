@@ -5,6 +5,79 @@
 > Scope: add isolated Task worktrees + automatic local merge around the existing Runner. **Do not redesign Runner execution.**
 >
 > Core rule: the captured Project branch is the canonical truth. Every Task runs in its own local worktree/branch. Effective Main is complete only after the Task result is successfully merged back into the captured Project branch.
+>
+> **Hard invariant:** worktree/Git merge support is a removable backend adapter in a new top-level `workspace/` package. It must not live under Runner or UI, and Runner/UI must not own Git worktree/merge behavior.
+
+---
+
+## 0. Physical module boundary: top-level workspace/
+
+Create a new top-level backend package:
+
+```text
+project/
+├─ runner/
+│   └─ existing Runner core
+├─ ui/
+│   └─ presentation / frontend / UI API surface
+├─ workspace/
+│   ├─ manager.py       # resolve/create Task workspace and project_root
+│   ├─ worktree.py      # Git worktree/branch operations
+│   ├─ merge.py         # direct merge transaction / queue / abort / finalize
+│   ├─ recovery.py      # recovery workspace/source metadata mechanics
+│   └─ model.py         # workspace/merge metadata only
+└─ ...
+```
+
+Exact file names may follow the repository's existing naming conventions, but the ownership boundary is fixed.
+
+### Removable adapter invariant
+
+```text
+Task Backend / Orchestrator
+↓
+workspace.prepare(...)
+↓
+project_root
+↓
+Runner(project_root)
+```
+
+Runner does not know whether `project_root` is:
+
+- the original Project path;
+- a Git worktree;
+- a future alternate workspace implementation.
+
+If worktree support is disabled or removed later:
+
+```text
+workspace resolution
+→ project_root = original Project path
+→ Runner(project_root)
+```
+
+Runner contract does not change.
+
+### Dependency direction
+
+```text
+UI
+↓
+Task Backend / Orchestrator
+├─ workspace/ APIs
+└─ Runner APIs
+```
+
+Rules:
+
+- UI never executes Git directly.
+- UI never imports workspace Git implementation.
+- Runner never imports `workspace/`.
+- `workspace/` never imports Runner internals.
+- Task Backend / Orchestrator coordinates the two through narrow APIs.
+- Worktree/merge metadata stays outside Runner RunState.
+- Removing `workspace/` must not require changes to FlowEngine / StageExecutor / Supervisor / Runner recovery contracts.
 
 ---
 
@@ -98,32 +171,71 @@ Do not add a fake/local `git push` step. Use `git push` only for explicit remote
 
 ## 2. Runner contract stays unchanged
 
-Runner continues to own only normal task execution:
+Runner continues to own only execution/validation against a supplied filesystem root:
 
 ```text
-Runner(project_root, task/workflow input)
+run(project_root, task/workflow input)
 → Workflow / Agent
 → Review / Validate
 → Completed
 ```
 
+Runner must not know:
+
+- whether `project_root` is a worktree;
+- workspace mode;
+- Git branch names;
+- merge queue state;
+- merge failure count;
+- merge/fallback status.
+
 Do not add Git merge ownership into:
 
-- FlowEngine
-- StageExecutor
-- Supervisor
-- normal Workflow Stage routing
-- Runner retry/recovery state
+- FlowEngine;
+- StageExecutor;
+- Supervisor;
+- normal Workflow Stage routing;
+- Runner retry/recovery state.
 
-Git orchestration stays outside Runner.
+### Thin validation API is allowed if needed
 
-If a merge conflict requires source changes, Integration Manager calls the **same existing Runner** again with the latest Project code and merge-conflict context.
+If post-merge validation cannot reuse an existing public Runner/service entry point, add only a thin Git-unaware API such as:
+
+```text
+validate(project_root, validation_config)
+→ PASS | SOURCE_FAIL | TECHNICAL_ERROR
+```
+
+The API accepts a `project_root` and validation configuration only. It must not accept or interpret worktree/branch/merge concepts.
+
+Task Backend / Orchestrator owns sequencing:
+
+```text
+workspace.prepare()
+↓
+Runner.run(project_root)
+↓
+workspace.snapshot_result()
+↓
+workspace.begin_merge()
+↓
+post-merge validation required?
+├─ No  → workspace.commit_merge()
+└─ Yes → Runner.validate(merged_project_root)
+          ├─ PASS            → workspace.commit_merge()
+          ├─ SOURCE_FAIL     → workspace.abort_merge() → recovery flow
+          └─ TECHNICAL_ERROR → workspace.abort_merge() → existing technical retry/backoff
+```
+
+For merge conflict recovery, the orchestrator prepares the latest-target recovery workspace through `workspace/`, then calls the **same existing Runner run API** with that recovery `project_root`.
+
+Neither `workspace/` nor Runner needs to import the other.
 
 ---
 
 ## 3. Modes: Auto / Main / Isolated Worktree
 
-All modes execute in isolated Task worktrees.
+When worktree support is enabled, all three modes execute in isolated Task worktrees. This is a Workspace-layer policy, not a Runner requirement.
 
 ```text
 Task mode
@@ -441,7 +553,46 @@ git merge --no-ff --no-commit local/task/T-001-r1
 git commit
 ```
 
-If no separate merge validation is configured, a conflict-free merge may proceed directly to `git commit`.
+### When post-merge validation is required
+
+A Task source was already validated by Runner against its own base. Re-validating the identical tree adds no value.
+
+Before merge, compare the current target HEAD with the base that the current merge source was built/validated against:
+
+```text
+current target HEAD == merge_source_base_sha
+→ merged source introduces no unseen target changes
+→ no extra post-merge validation required
+→ commit conflict-free merge
+
+current target HEAD != merge_source_base_sha
+→ target changed after this source was built/validated
+→ merged tree is a new combination Runner has not validated
+→ post-merge validation required before merge commit
+```
+
+Persist/update `merge_source_base_sha` together with the current merge source.
+
+Examples:
+
+```text
+Task source:
+base C → Task T
+target still C
+→ no extra post-merge validation
+
+Task source:
+base C → Task T
+target now C-A-B
+→ merge produces C-A-B+T
+→ post-merge validation required
+```
+
+A recovery source created from latest target `L` uses `merge_source_base_sha=L`. If target is still `L` when it merges, no second post-merge validation is necessary because Runner already reviewed/validated that recovery result against `L`.
+
+If target advances again before delivery, post-merge validation becomes required.
+
+If no post-merge validation is required, a conflict-free merge may proceed directly to `git commit`.
 
 Validation result semantics:
 
@@ -570,6 +721,7 @@ Initially after Runner Complete:
 ```text
 merge_source_branch   = local/task/T-001-r1
 merge_source_sha      = task_snapshot_sha
+merge_source_base_sha = task_base_sha
 merge_source_worktree = .worktrees/T-001-r1
 ```
 
@@ -589,6 +741,7 @@ commit recovered result
 atomically update:
   merge_source_branch
   merge_source_sha
+  merge_source_base_sha = latest target HEAD used to create recovery workspace
   merge_source_worktree
 ↓
 next merge attempt uses ONLY this latest merge source
@@ -735,6 +888,7 @@ git:
 
   merge_source_branch: local/task/T-001-r2
   merge_source_sha: def456
+  merge_source_base_sha: abc123
   merge_source_worktree: .worktrees/T-001-r2
 
   merge_failure_count: 0
@@ -771,7 +925,7 @@ Normal merge preserves ancestry, so restart detection is simple.
 After restart:
 
 1. restore pending Main Tasks ordered by persisted `merge_queue_seq`;
-2. restore the persisted current `merge_source_branch / merge_source_sha / merge_source_worktree`;
+2. restore the persisted current `merge_source_branch / merge_source_sha / merge_source_base_sha / merge_source_worktree`;
 3. if `merge_source_sha` is already an ancestor of the captured target branch:
 
 ```text
@@ -790,42 +944,63 @@ Do not create duplicate merge commits after a crash.
 
 ## 18. Ownership boundaries
 
-### Task Manager / UI backend
+### Task Backend / Orchestrator
 
 Owns:
 
 - Task lifecycle;
 - requested/effective mode;
-- captured target branch;
+- calling `workspace/`;
+- calling Runner public APIs;
+- deciding orchestration sequence;
 - enqueueing effective Main merge;
-- exposing merge status/actions.
+- exposing status/actions to UI.
 
-### Workspace Manager
+It coordinates Workspace and Runner but must not duplicate either implementation.
+
+### workspace/ Manager
 
 Owns:
 
 - Task branch/worktree create/remove;
-- optional recovery worktree create/remove;
+- optional recovery branch/worktree create/remove;
+- resolving `project_root`;
 - ownership-safe cleanup;
-- returning `project_root` to Runner.
+- workspace metadata.
 
-### Runner
+### workspace/ Merge Manager
 
-Owns normal task/recovery execution only.
-
-### Integration Manager
-
-Owns:
+Owns deterministic Git mechanics only:
 
 - merge queue/lock;
+- durable `merge_queue_seq`;
 - safe target worktree resolution;
-- direct normal merge;
+- `git merge --no-ff --no-commit`;
+- ancestry checks;
 - merge abort/conflict detection;
+- merge-source metadata;
 - merge failure counting;
-- invoking existing Runner for recovery;
 - fallback decision;
 - merged target SHA/idempotency;
 - cleanup coordination.
+
+It returns merge/validation state to the Task Backend / Orchestrator. It does **not** invoke Runner internals directly.
+
+### Runner
+
+Owns only:
+
+- run against `project_root`;
+- existing Workflow / Agent / Review / Validate behavior;
+- optional thin `validate(project_root, validation_config)` public API.
+
+Runner owns no Git/worktree state.
+
+### UI
+
+Owns presentation and user intent only.
+
+UI calls Task/Workspace backend APIs; it never performs Git/worktree operations itself.
 
 ### Publish
 
@@ -911,14 +1086,17 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Phase A — settings / contracts
 
+- [ ] Create independent top-level `workspace/` backend package; do not place worktree/merge implementation under Runner or UI.
+- [ ] Enforce dependency direction: UI → Task Backend/Orchestrator → workspace + Runner; workspace and Runner do not import each other's internals.
 - [ ] Preserve Auto / Main / Isolated Worktree.
 - [ ] Global Settings owns `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
 - [ ] Task persists only actual `merge_failure_count`; Global Settings owns the merge failure limit.
 - [ ] Capture target branch + HEAD per Task run.
 - [ ] Keep Runner architecture unchanged.
 
-### Phase B — Workspace Manager
+### Phase B — workspace/ Manager
 
+- [ ] Keep all Git worktree/branch creation/removal in top-level workspace package.
 - [ ] Create Task branch/worktree directly from captured target HEAD.
 - [ ] Pass Task worktree to Runner as project_root.
 - [ ] Support unique Task + Run identity.
@@ -932,13 +1110,16 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Record task_snapshot_sha.
 - [ ] Handle no_changes without empty commits; Main no_changes is the only normal completion path that skips Project merge.
 
-### Phase D — Main merge
+### Phase D — workspace/ direct merge
 
+- [ ] Keep direct merge implementation inside top-level workspace package, not Runner/UI.
 - [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order.
 - [ ] Resolve safe worktree for captured target branch.
 - [ ] Before merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
 - [ ] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
-- [ ] Run required configured merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
+- [ ] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
+- [ ] Reuse an existing public validation entry point or add only a thin Git-unaware `validate(project_root, validation_config)` API; no worktree/branch/merge args.
+- [ ] Run required post-merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
 - [ ] Commit merge only after acceptance and record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
 
@@ -946,7 +1127,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
 - [ ] Read current Global `merge_failure_limit` after each real failure.
-- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, atomically replace merge_source_branch/SHA/worktree, then retry merge.
+- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, atomically replace merge_source_branch/SHA/base_SHA/worktree, then retry merge.
 - [ ] If count > limit: stop automatic Main merge, retain latest merge source, and close as Isolated Worktree / worktree_ready with reason merge_failure_limit_exceeded.
 - [ ] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
 
@@ -968,6 +1149,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Isolation / concurrency
 
+- [ ] Verify Runner receives only project_root and works unchanged when worktree support is disabled/replaced.
+- [ ] Verify UI has no direct Git/worktree execution path.
 - [ ] Start 2 / 5 / 10 Tasks from one target branch concurrently.
 - [ ] Confirm durable merge_queue_seq FIFO is preserved across process restart.
 - [ ] Every Runner uses a unique Task worktree.
@@ -978,7 +1161,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] Runner Complete does not close Main before merge.
 - [ ] Task source merges directly into target branch with --no-ff --no-commit.
-- [ ] Conflict-free merge remains uncommitted until configured merge validation passes.
+- [ ] target HEAD == merge_source_base_sha: conflict-free merge may commit without redundant post-merge validation.
+- [ ] target HEAD != merge_source_base_sha: conflict-free merge remains uncommitted until post-merge validation passes.
 - [ ] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
 - [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
 - [ ] Merge success commits and closes Main.
@@ -1017,6 +1201,9 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ## 24. Non-goals
 
+- Do not place worktree/merge code under Runner or UI.
+- Do not make Runner understand workspace mode, worktrees, branches, merge queues or merge failures.
+- Do not let workspace/ import Runner internals; Task Backend/Orchestrator coordinates public APIs.
 - Do not redesign Runner.
 - Do not add a Git Workflow Stage.
 - Do not add a second retry/recovery engine.
@@ -1029,6 +1216,12 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 ## 25. Final invariant summary
 
 ```text
+UI
+↓
+Task Backend / Orchestrator
+├─ workspace/  (removable Git/worktree adapter)
+└─ Runner      (Git-unaware; project_root only)
+
 Project branch = canonical truth
 ↓
 Task isolated worktree / local branch
