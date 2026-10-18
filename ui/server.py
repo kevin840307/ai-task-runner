@@ -42,7 +42,8 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
         self._workflow_catalog_cache: dict | None = None
-        self.chat_service = ChatService()\n        self.project_preferences = ProjectPreferences()
+        self.chat_service = ChatService()
+        self.project_preferences = ProjectPreferences()
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
