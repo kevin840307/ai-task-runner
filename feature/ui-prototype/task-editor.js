@@ -761,6 +761,28 @@ function renderAskFlow(session=activeChat(),{preserveScroll=false}={}){
   box.appendChild(panel);
   if(preserveScroll)box.scrollTop=outerScrollTop;else box.scrollTop=box.scrollHeight;
 }
+function finalizeAskFlow(session,{freeform=''}={}){
+  const flow=session?.askFlow;if(!flow)return false;
+  const direct=String(freeform||'').trim();
+  const answered=flow.questions.map((x,i)=>{
+    const answer=String(flow.answers[String(i)]||'').trim();
+    return answer?`${i+1}. ${x.header}: ${answer}`:'';
+  }).filter(Boolean);
+  if(direct)answered.push(`Direct answer: ${direct}`);
+  const summary=answered.join('\n')||direct;
+  session.messages.push(['user',direct||`Clarification answers\n${summary}`]);
+  session.messages.push(['assistant','Mock Agent 已收到 clarification，正式版會把回答回傳給目前 Agent tool call，然後繼續原本 turn。']);
+  session.askFlow=null;session.turnState='idle';
+  if(activeChat()===session)renderChatSession();drainChatQueue(session);
+  return true;
+}
+function submitAskFromComposer(session,text){
+  const value=String(text||'').trim();
+  if(!session?.askFlow||!value)return false;
+  const flow=session.askFlow,key=String(flow.index);
+  flow.answers[key]=value;flow.selected[key]='__composer__';
+  return finalizeAskFlow(session,{freeform:value});
+}
 function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
@@ -768,13 +790,8 @@ function advanceAskFlow(session=activeChat()){
   if((q.type==='text'||selected==='__other__')&&!answer&&q.required!==false){showToast(uiText('chat.askRequired'));return}
   if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
   if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
-  const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
-  session.messages.push(['user',`Clarification answers\n${summary}`]);
-  session.messages.push(['assistant','Mock Agent 已收到所有回答，正式版會把結構化 answers 回傳給目前 Agent tool call，然後繼續原本 turn。']);
-  session.askFlow=null;session.turnState='idle';
-  if(activeChat()===session)renderChatSession();drainChatQueue(session);
+  finalizeAskFlow(session);
 }
-
 function mockInvokeSystemPrompt(session,command,projectKey=session?.projectKey||currentProjectKey){
   if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
   if(command.token==='@project'){const meta=projectMeta[projectKey]||{};session.messages.push(['assistant',`Project · ${projectKey}\nPath · ${meta.path||'—'}\nBranch · ${meta.branch||'—'}`]);return}
@@ -962,7 +979,8 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
   const session=activeChat();hideComposerSuggestions();
-  startMockChatTurn(session,textValue);
+  if(session?.askFlow)submitAskFromComposer(session,textValue);
+  else startMockChatTurn(session,textValue);
   input.value='';resizeChatComposer();
 };
 
@@ -1287,7 +1305,8 @@ chatInputForSuggestions.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='q'){
     e.preventDefault();e.stopImmediatePropagation();
     const value=chatInputForSuggestions.value.trim(),session=activeChat();
-    if(value&&chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
+    if(value&&session?.askFlow){submitAskFromComposer(session,value);chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
+    else if(value&&chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
     else if(value)showToast('Agent 目前沒有執行中的 turn，請直接傳送');
     else showToast('先輸入訊息；Agent 忙碌時按 Ctrl+Q 可排隊');
     return;
