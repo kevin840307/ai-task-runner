@@ -227,3 +227,53 @@ def test_chat_agent_session_resets_when_project_agent_changes(tmp_path: Path) ->
         ("opencode", ""),
         ("opencode", "opencode-session"),
     ]
+
+
+
+def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+
+    calls: list[dict] = []
+
+    def fake_runner(**kwargs):
+        calls.append(dict(kwargs))
+        return {"text": "http reply", "session_id": "native-session"}
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    server.state.chat_agent = ChatAgentService(repo, runner=fake_runner)
+    server.state.project_preferences.update(project, {
+        "agent": "opencode",
+        "model": "provider/model-a",
+        "mode": "read",
+    })
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        response = _json_request(
+            f"http://127.0.0.1:{server.port}/api/chat/turn",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "message": "normal chat",
+            },
+        )
+        assert response["agent"] == "opencode"
+        assert response["model"] == "provider/model-a"
+        assert response["mode"] == "read"
+        assert calls[0]["backend"] == "opencode"
+        assert calls[0]["model"] == "provider/model-a"
+        assert calls[0]["mode"] == "read"
+        assert [row["content"] for row in server.state.chat_service.messages(project, session_id)["messages"]] == [
+            "normal chat", "http reply"
+        ]
+        assert not (project / ".ai-task-runner" / "ui" / "messages.jsonl").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

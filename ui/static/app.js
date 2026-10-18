@@ -240,6 +240,7 @@ const projectChat = createProjectChatController({
   confirmDialog,
   showToast,
   showError: showActionError,
+  autosizeTextarea,
 });
 
 function syncComposerReserve() {

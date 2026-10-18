@@ -191,6 +191,15 @@ def _bridge_for(state: UIState):
             else:
                 if path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
+                elif path == "/api/chat/turn":
+                    session_id = str(body.get("session_id", ""))
+                    user = state.chat_service.append_message(
+                        Path(body["project"]), session_id, "user", str(body.get("message", ""))
+                    )
+                    assistant = state.chat_service.append_message(
+                        Path(body["project"]), session_id, "assistant", "Browser Chat reply"
+                    )
+                    data = {"session_id": session_id, "messages": [user, assistant]}
                 elif path == "/api/chat/session/create":
                     data = state.chat_service.create_session(
                         Path(body["project"]),
@@ -544,6 +553,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.fill("#projectChatInput", "hello from normal chat")
+            page.click("#projectChatSendButton")
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('#projectChatMessages .message')).some((n) => n.textContent.includes('Browser Chat reply'))"
+            )
+            assert page.locator("#projectChatView").is_visible()
+            assert page.locator("#chatView").is_hidden()
+
             page.click("#newProjectChatButton")
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
             active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")

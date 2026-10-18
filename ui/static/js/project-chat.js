@@ -3,7 +3,7 @@ function requestId() {
   return "chat-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError }) {
+export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea }) {
   let project = null;
   let sessions = [];
   let activeSessionId = "";
@@ -19,6 +19,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     preferences = next || {};
     const root = byId("projectChatPreferences");
     if (!root) return;
+    const modeHint = byId("projectChatModeHint");
+    if (modeHint) modeHint.textContent = String(preferences.mode || "auto").toUpperCase();
     root.innerHTML = "";
     const items = [
       ["Agent", preferences.backend || preferences.agent || "Default"],
@@ -126,6 +128,60 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     await refreshMessages();
   }
 
+  function setSending(sending) {
+    const button = byId("projectChatSendButton");
+    const input = byId("projectChatInput");
+    if (button) {
+      button.disabled = !!sending || !project;
+      button.setAttribute("aria-busy", String(!!sending));
+      button.textContent = sending ? "Sending…" : "Send";
+    }
+    if (input) input.disabled = !!sending || !project;
+  }
+
+  function renderPendingUser(text) {
+    const root = byId("projectChatMessages");
+    const empty = byId("projectChatEmptyMessages");
+    if (!root) return;
+    if (empty) empty.hidden = true;
+    const item = document.createElement("article");
+    item.className = "message project-chat-message project-chat-pending user";
+    const body = document.createElement("div");
+    body.className = "message-body";
+    body.textContent = text;
+    item.appendChild(body);
+    root.appendChild(item);
+    requestAnimationFrame(() => { root.scrollTop = root.scrollHeight; });
+  }
+
+  async function sendMessage() {
+    const input = byId("projectChatInput");
+    const text = String(input?.value || "").trim();
+    if (!project || !activeSessionId || !text) return;
+    input.value = "";
+    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    renderPendingUser(text);
+    setSending(true);
+    try {
+      await api("/api/chat/turn", {
+        method: "POST",
+        body: JSON.stringify({
+          project: projectPath(),
+          session_id: activeSessionId,
+          message: text,
+          request_id: requestId(),
+        }),
+      });
+      await refreshMessages();
+    } catch (error) {
+      try { await refreshMessages(); } catch (_) {}
+      showError?.(error.message, "Chat turn failed");
+    } finally {
+      setSending(false);
+      input?.focus();
+    }
+  }
+
   async function createSession() {
     const path = projectPath();
     if (!path) return;
@@ -215,6 +271,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     renderPreferences();
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
+    setSending(false);
     if (!project) {
       sessions = [];
       activeSessionId = "";
@@ -230,6 +287,16 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   byId("newProjectChatButton")?.addEventListener("click", () => void createSession());
+  byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
+  byId("projectChatInput")?.addEventListener("input", (event) => {
+    autosizeTextarea?.(event.currentTarget, { minHeight: 46, maxHeight: 180 });
+  });
+  byId("projectChatInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      void sendMessage();
+    }
+  });
 
   return {
     openProject,

@@ -84,7 +84,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 .project-chat-preferences {
@@ -134,3 +134,28 @@
     border-bottom: 1px solid var(--line);
   }
 }
+
+.project-chat-compose {
+  min-width: 0;
+  padding-top: 18px;
+  border-top: 0;
+  background: linear-gradient(to bottom, transparent, var(--bg) 18px);
+}
+.project-chat-compose .composer-box { max-width: 980px; }
+.project-chat-compose textarea {
+  min-height: 46px !important;
+  max-height: 180px !important;
+}
+.project-chat-mode-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+.project-chat-pending { opacity: .72; }
