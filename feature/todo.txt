@@ -272,6 +272,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
 [x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
+[x] Chat Composer 移除無功能的 Project chip；Project context 由頁面 / Chat session 本身提供，不重複顯示固定 tag。
+[x] Chat Composer 的 Mode 旁新增 New Task；與 Tasks 頁 + New 共用同一 createTypeMenu / TaskUi controller，不建立 Chat 專用建立流程。
+[x] Chat New Task 明確以 active Chat 的 projectKey 作為 Task / Task List 初始 Project；Tasks 頁入口仍使用 currentProjectKey。
+[x] Dark mode 明確覆蓋 msg.user / #composerAsk / Ask head-foot-options，避免動態 Ask surface 被亮色 generic style 蓋回去。
 [x] New Task List Draft 直接重用 TaskListWorkspace 的 List body / List info / DrawerHeader actions；已移除專用 task-list-create-draft markup。
 [x] Task List Draft 的空狀態 CTA 可直接開同一份 canonical Task Editor 新增第一個 Task；不再 disabled 無反應。
 [x] Create Task List 必須至少有 1 個 Task：0 task 時按鈕 disabled，Create handler 也再次 fail closed 檢查，避免繞過 UI 建立空 List。
