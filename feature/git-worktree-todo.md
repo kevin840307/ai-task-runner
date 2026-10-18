@@ -621,17 +621,16 @@ Recommended metadata:
 ```yaml
 git:
   merge_failure_count: 0
-  global_merge_failure_limit: 3   # read from Global Settings → Execution
   last_merge_failure: null
   delivery_fallback: null
 ```
 
-`global_merge_failure_limit` is read from Global Settings. Default: `3`. `merge_failure_count` is the Task's actual real integration-failure count. When `merge_failure_count > global_merge_failure_limit`, automatic Main delivery stops; with limit `3`, the 4th real failed integration attempt falls back.
+`merge_failure_limit` lives only in Global Settings → Execution (default `3`). `merge_failure_count` lives on the Task and is the actual real integration-failure count. After every real failure, Integration Manager reads the current Global `merge_failure_limit`; when `merge_failure_count > merge_failure_limit`, automatic Main delivery stops. With limit `3`, the 4th real failed integration attempt falls back.
 
 Semantics:
 
 - `merge_failure_count`: actual real integration-failure count for this Task delivery;
-- `global_merge_failure_limit`: current Global Settings limit used by automatic Main delivery;
+- `merge_failure_limit`: Global Settings value read by Integration Manager; do not duplicate/copy it into Task Git metadata;
 - `last_merge_failure`: structured latest failure detail.
 
 ### Count exactly once per real failed integration attempt
@@ -665,7 +664,7 @@ Examples that do **not** count:
 
 ### Exhaustion behavior for Main
 
-When `merge_failure_count > global_merge_failure_limit`, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
+When `merge_failure_count > Global Settings.merge_failure_limit`, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
 
 ```text
 requested/effective origin = Main
@@ -801,7 +800,6 @@ git:
   integration_attention: null
 
   merge_failure_count: 0
-  global_merge_failure_limit: 3
   last_merge_failure: null
 ```
 
@@ -1041,7 +1039,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] Require normal Runner Review / Validate.
 - [ ] Commit recovered result and retry candidate merge.
 - [ ] Count only real code/semantic/validation integration failures.
-- [ ] Read `global_merge_failure_limit` from the single Global Settings owner (default 3) and maintain only the Task's actual `merge_failure_count`; when count > limit, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
+- [ ] Read `merge_failure_limit` directly from the single Global Settings owner (default 3); persist only Task `merge_failure_count`. When count > current Global limit, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
 
 ### Phase G — Project delivery
 
