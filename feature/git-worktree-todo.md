@@ -4,7 +4,7 @@
 >
 > Scope: add parallel Task worktree + local Git integration around the existing Runner. **Do not redesign Runner execution.**
 >
-> Final direction: **do not create or maintain a canonical `local/integration` branch.** The captured Project branch is the canonical truth. Task worktrees are isolated execution results; temporary candidate worktrees are disposable merge/recovery sandboxes.
+> Final direction: the captured Project branch is the canonical truth. Task worktrees are isolated execution results; temporary candidate worktrees are disposable merge/recovery sandboxes.
 
 ---
 
@@ -88,19 +88,6 @@ Use the Project branch directly as the canonical integration source.
                                 one Project commit
 ```
 
-### Why remove `local/integration`
-
-A persistent integration branch would duplicate canonical state and require extra rules for:
-
-- synchronizing Project commits into the integration branch;
-- deciding whether file differences are intentional Task results or stale state;
-- preserving accepted integration-only commits;
-- re-baselining after squash delivery;
-- crash recovery for another canonical branch;
-- locking one shared integration ref across unrelated target branches.
-
-Those states are unnecessary when every completed Task is integrated against the latest target branch through a disposable candidate.
-
 ### User-owned feature branches remain user-owned
 
 If the user wants work isolated from `main`, they can create/switch to a Project branch first:
@@ -156,6 +143,19 @@ Because every mode now runs in a worktree:
 
 Persist both requested mode and resolved effective mode per Task run.
 
+### Auto policy × Concurrent Main
+
+`Allow concurrent Main tasks` only decides whether a Task that resolves/selects **Main** may start while another Main Task is already running. It does not rewrite the Auto policy.
+
+| Auto workspace policy | Project has running Main | Concurrent Main = Off | Concurrent Main = On |
+| --- | --- | --- | --- |
+| Busy project → Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
+| Always Main | Auto Task | Block Main start | Main |
+| Always Worktree | Auto Task | Isolated Worktree | Isolated Worktree |
+| Explicit Main | Main selected directly | Block Main start | Main |
+
+So `Busy project → Worktree` remains Worktree while busy even when concurrent Main is enabled.
+
 ### Main
 
 `Main` is a product mode name. It does **not** mean the Git branch must literally be named `main`.
@@ -169,9 +169,12 @@ captured Project branch
 → Task result commit
 → candidate merge against latest captured target branch
 → validate
-→ squash-deliver to target branch
-→ one local target commit
+→ merge --squash candidate
+→ Project branch one local commit
+→ Task Closed · integrated
 ```
+
+**Main completion invariant:** Runner completion alone is not Task completion. A Main Task remains Ongoing through queueing, candidate integration, conflict recovery and target delivery. It becomes Closed only after the validated candidate is committed back to the captured Project branch, or after merge failure exceeds the Global limit and the result explicitly falls back to an Isolated Worktree close.
 
 ### Isolated Worktree
 
@@ -402,6 +405,8 @@ For an effective Main Task:
 ```text
 Task snapshot commit ready
   ↓
+Task remains Ongoing · pending_merge
+  ↓
 take target-branch integration lock
   ↓
 read latest target_branch HEAD = L
@@ -435,9 +440,9 @@ re-read target branch HEAD
   ├─ changed → discard/rebuild candidate against newer HEAD
   └─ same    → continue
   ↓
-squash-deliver candidate to target branch
+git merge --squash candidate into target branch
   ↓
-one target commit
+create exactly one Project-branch commit
   ↓
 record target_commit_sha
   ↓
@@ -466,7 +471,7 @@ The candidate branch is disposable. The original completed Task branch/worktree 
 
 ## 10. Final delivery to Project branch
 
-After candidate validation, deliver exactly the candidate delta to the captured target branch.
+After candidate validation, deliver exactly the validated candidate to the captured target branch. This delivery is part of Main Task completion, not post-completion cleanup.
 
 Normal case:
 
@@ -616,19 +621,17 @@ Recommended metadata:
 ```yaml
 git:
   merge_failure_count: 0
-  merge_retry_attempt: 0
-  merge_failure_limit: 3   # Global Settings → Execution
+  global_merge_failure_limit: 3   # read from Global Settings → Execution
   last_merge_failure: null
   delivery_fallback: null
 ```
 
-`merge_failure_limit` is global. Default: `3`. The fallback happens when the failure count **exceeds** the configured value; with `3`, the 4th real failed integration attempt falls back.
+`global_merge_failure_limit` is read from Global Settings. Default: `3`. `merge_failure_count` is the Task's actual real integration-failure count. When `merge_failure_count > global_merge_failure_limit`, automatic Main delivery stops; with limit `3`, the 4th real failed integration attempt falls back.
 
 Semantics:
 
-- `merge_failure_count`: lifetime diagnostic count for this Task delivery;
-- `merge_retry_attempt`: automatic retry count in the current retry session;
-- `merge_failure_limit`: global automatic recovery limit copied/read from the single Global Settings owner;
+- `merge_failure_count`: actual real integration-failure count for this Task delivery;
+- `global_merge_failure_limit`: current Global Settings limit used by automatic Main delivery;
 - `last_merge_failure`: structured latest failure detail.
 
 ### Count exactly once per real failed integration attempt
@@ -640,7 +643,6 @@ Runner / recovery completed
 → real candidate merge / validation attempted
 → result cannot be accepted due to code / semantic / validation incompatibility
 → merge_failure_count += 1
-→ merge_retry_attempt += 1
 ```
 
 Examples that count:
@@ -663,7 +665,7 @@ Examples that do **not** count:
 
 ### Exhaustion behavior for Main
 
-When the real merge failure count exceeds the Global merge failure limit, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
+When `merge_failure_count > global_merge_failure_limit`, automatic Main delivery stops and the result falls back to an Isolated Worktree close:
 
 ```text
 requested/effective origin = Main
@@ -703,14 +705,14 @@ Git delivery is a secondary Task state.
 | Created, Runner not started | New | not_started |
 | Runner executing | Ongoing | execution_running |
 | Runner Review / Validate | Ongoing | execution_validating |
-| Main Runner completed, queued | Closed | pending_merge |
-| Candidate merge/validation | Closed | integrating |
-| Runner repairing conflict | Closed | conflict_recovery |
-| Target HEAD changed; rebuilding candidate | Closed | target_resync |
-| Target checkout dirty | Closed | waiting_target_clean |
-| Captured target branch unavailable | Closed | waiting_target_workspace |
+| Main Runner completed, queued | Ongoing | pending_merge |
+| Candidate merge/validation | Ongoing | integrating |
+| Runner repairing conflict | Ongoing | conflict_recovery |
+| Target HEAD changed; rebuilding candidate | Ongoing | target_resync |
+| Target checkout dirty | Ongoing | waiting_target_clean · Needs Attention |
+| Captured target branch unavailable | Ongoing | waiting_target_workspace · Needs Attention |
 | Main merge failures exceed Global limit | Closed | worktree_ready · fallback from Main |
-| Main delivered | Closed | integrated |
+| Main delivered to Project branch | Closed | integrated |
 | Isolated result retained | Closed | worktree_ready |
 
 `Paused` remains execution-only: Runner stopped before completion and may resume/reset.
@@ -799,8 +801,7 @@ git:
   integration_attention: null
 
   merge_failure_count: 0
-  merge_retry_attempt: 0
-  merge_failure_limit: 3
+  global_merge_failure_limit: 3
   last_merge_failure: null
 ```
 
@@ -994,7 +995,6 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 
 - [ ] Preserve Auto / Main / Isolated Worktree semantics.
 - [ ] Add Global Execution settings: `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
-- [ ] Remove the canonical `local/integration` branch concept from the new implementation.
 - [ ] Capture `target_branch` + `target_head_sha_at_start` per Task run.
 - [ ] Define Task + Run branch/path identity.
 - [ ] Define Git delivery metadata without duplicating Runner RunState.
@@ -1041,7 +1041,7 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] Require normal Runner Review / Validate.
 - [ ] Commit recovered result and retry candidate merge.
 - [ ] Count only real code/semantic/validation integration failures.
-- [ ] Read the Global merge failure limit (default 3); when real merge failures exceed it, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
+- [ ] Read `global_merge_failure_limit` from the single Global Settings owner (default 3) and maintain only the Task's actual `merge_failure_count`; when count > limit, stop automatic recovery and close as Isolated Worktree / worktree_ready while preserving the original Main origin in history.
 
 ### Phase G — Project delivery
 
@@ -1049,11 +1049,10 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - [ ] `git merge --squash <validated-candidate>` into captured target branch.
 - [ ] Create exactly one local target commit per delivered Task.
 - [ ] Add stable Task-run commit trailer and persist `target_commit_sha`.
-- [ ] No integration-branch reset/re-baseline step exists.
 
 ### Phase H — UI
 
-- [ ] Keep Board New / Ongoing / Paused / Closed.
+- [ ] Keep Board New / Ongoing / Paused / Closed; effective Main stays Ongoing after Runner Completed until Project-branch squash delivery succeeds or fallback closes it.
 - [ ] Show Git delivery as secondary state.
 - [ ] Show requested/effective mode, target branch, Task run/branch, base/snapshot/latest target SHA, merge failures and attention reason.
 - [ ] Keep Paused execution-only.
@@ -1104,10 +1103,9 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 
 ### Retry exhaustion
 
-- [ ] Repeated real merge/validation failures increment exactly once per failed attempt.
+- [ ] Repeated real merge/validation failures increment `merge_failure_count` exactly once per failed attempt.
 - [ ] Queue wait / lock contention / target movement / dirty target do not increment.
 - [ ] Exceed Global merge failure limit => fallback to Isolated Worktree close, retain Task branch/worktree, and stop automatic retries.
-- [ ] Retry merge resets session attempt but preserves lifetime failure count.
 
 ### Restart / idempotency
 
@@ -1130,7 +1128,6 @@ T2 repeats against the latest target and may conflict with either S3 or S1 throu
 - Do not redesign Runner.
 - Do not add a Git Workflow Stage.
 - Do not add a second retry/recovery engine.
-- Do not create/maintain a canonical `local/integration` branch.
 - Do not let frontend execute Git directly.
 - Do not mutate/rebase original completed Task worktree during integration.
 - Do not auto-switch user Project checkout branch.
@@ -1159,13 +1156,15 @@ Task result:
   → stable local/task/<task>-r<run> branch
 
 Main delivery:
-  latest target branch HEAD
+  Runner Completed does NOT close the Task
+  → latest target branch HEAD
   → disposable candidate
   → normal Git merge Task branch
   → conflict => existing Runner redo/recovery
   → validate
-  → target merge --squash candidate
-  → one local Project commit
+  → git merge --squash candidate
+  → exactly one Project-branch commit
+  → Closed · integrated
 
 Isolated Worktree:
   keep Task branch/worktree
@@ -1174,9 +1173,6 @@ Isolated Worktree:
 Concurrency:
   Runner execution parallel
   delivery serialized per target branch
-
-Permanent extra integration branch:
-  none
 
 Remote:
   untouched until explicit Publish
