@@ -248,7 +248,7 @@ function mutateContextItem(action,state){
   const canEdit=taskEditable(t)&&!s.done,canRestructure=canEdit&&!currentLocked;if(!canRestructure)return;
   if(action==='up'&&i>0){[batchDraft[i-1],batchDraft[i]]=[batchDraft[i],batchDraft[i-1]]}
   if(action==='down'&&i<batchDraft.length-1){[batchDraft[i+1],batchDraft[i]]=[batchDraft[i],batchDraft[i+1]]}
-  if(action==='remove'){batchDraft.splice(i,1)}
+  if(action==='remove'){if(batchDraft.length<=1)return;batchDraft.splice(i,1)}
   commitPlanDraft(t);persistCurrentPresetFromTaskMap();renderBoardFromMap();renderFullPlan(t);renderDrawerPlan(t);
 }
 taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=()=>{
@@ -417,7 +417,7 @@ function openContextInfoDrawer(state){
 openItemContextMenu=function(e,owner,index){
   e.preventDefault();e.stopPropagation();hideCreateTypeMenu();selectTaskItem(owner,index);
   const items=canonicalTaskItems(owner),s=planStateFor(owner,index,items.length),editable=taskEditable(owner),currentLocked=owner.status==='paused'&&s.current;
-  const canEdit=editable&&!s.done,canRemove=canEdit&&!currentLocked;
+  const canEdit=editable&&!s.done,canRemove=canEdit&&!currentLocked&&items.length>1;
   taskContextState={scope:'item',ownerId:owner.id,index};
   setContextAction('open',{visible:false});
   setContextAction('edit',{visible:true,enabled:canEdit,label:'Edit'});
