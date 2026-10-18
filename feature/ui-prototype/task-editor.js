@@ -453,14 +453,16 @@ syncChatSessionSelect=function(){
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
 const mockSystemPrompts=[
-  {token:'@goal',title:'Run goal',description:'Create one Task in Ongoing and start immediately with the Workflow selected in Chat settings.',source:'Runner'},
-  {token:'@task',title:'AI decides Task or Task List',description:'Create one Task or multiple ordered Tasks; Mock randomly chooses for testing.',source:'Runner'},
-  {token:'@task-single',title:'Create one Task',description:'Force the generated TaskDraft to contain exactly one Task.',source:'Runner'},
-  {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
-  {token:'@workflow',title:'Generate Workflow',description:'Mock the existing Generate Workflow-style system prompt.',source:'Runner mock'},
-  {token:'@project',title:'Project context',description:'Show the Project context bound to this Chat.',source:'Runner'},
-  {token:'@ask-demo',title:'Mock AI clarification',description:'Force a multi-question AI clarification flow.',source:'Mock'}
+  {token:'@goal',titleKey:'chat.cmd.goal.title',descriptionKey:'chat.cmd.goal.desc',source:'Runner'},
+  {token:'@task',titleKey:'chat.cmd.task.title',descriptionKey:'chat.cmd.task.desc',source:'Runner'},
+  {token:'@task-single',titleKey:'chat.cmd.single.title',descriptionKey:'chat.cmd.single.desc',source:'Runner'},
+  {token:'@task-list',titleKey:'chat.cmd.list.title',descriptionKey:'chat.cmd.list.desc',source:'Runner'},
+  {token:'@workflow',titleKey:'chat.cmd.workflow.title',descriptionKey:'chat.cmd.workflow.desc',source:'Runner mock'},
+  {token:'@project',titleKey:'chat.cmd.project.title',descriptionKey:'chat.cmd.project.desc',source:'Runner'},
+  {token:'@ask-demo',titleKey:'chat.cmd.ask.title',descriptionKey:'chat.cmd.ask.desc',source:'Mock'}
 ];
+function composerItemTitle(item){return item.titleKey?uiText(item.titleKey):(item.title||item.token)}
+function composerItemDescription(item){return item.descriptionKey?uiText(item.descriptionKey):(item.description||'')}
 const mockAgentProfiles={
   qwen:{
     label:'Qwen Code',
@@ -805,12 +807,12 @@ function renderComposerSuggestions(){
   if(!pop||!list)return;
   const trigger=composerTrigger();if(!trigger){hideComposerSuggestions();return}
   const source=trigger.prefix==='@'?mockSystemPrompts:agentCapabilityItems(),q=trigger.query;
-  composerSuggestionItems=source.filter(x=>!q||x.token.slice(1).toLowerCase().includes(q)||x.title.toLowerCase().includes(q));
+  composerSuggestionItems=source.filter(x=>!q||x.token.slice(1).toLowerCase().includes(q)||composerItemTitle(x).toLowerCase().includes(q));
   if(!composerSuggestionItems.length){hideComposerSuggestions();return}
   composerSuggestionIndex=Math.min(composerSuggestionIndex,composerSuggestionItems.length-1);
-  title.textContent=trigger.prefix==='@'?'Runner prompts':`${chatAgentLabel(chatAgentKey())} · Skills / Commands`;
-  hint.textContent=trigger.prefix==='@'?'@ = AI Task Runner':`/ = selected Agent · MOCK ${chatAgentLabel(chatAgentKey())}`;
-  list.innerHTML=composerSuggestionItems.map((x,i)=>`<button class="composer-suggest-item ${i===composerSuggestionIndex?'active':''}" type="button" data-composer-suggest="${i}"><span class="composer-suggest-token">${escapeHtml(x.token)}</span><span class="composer-suggest-copy"><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.description)}</small></span><span class="composer-suggest-source">${escapeHtml(x.source)}</span></button>`).join('');
+  title.textContent=trigger.prefix==='@'?uiText('chat.runnerPrompts'):uiText('chat.agentCommands',{agent:chatAgentLabel(chatAgentKey())});
+  hint.textContent=trigger.prefix==='@'?uiText('chat.runnerHint'):uiText('chat.agentHint',{agent:chatAgentLabel(chatAgentKey())});
+  list.innerHTML=composerSuggestionItems.map((x,i)=>`<button class="composer-suggest-item ${i===composerSuggestionIndex?'active':''}" type="button" data-composer-suggest="${i}"><span class="composer-suggest-token">${escapeHtml(x.token)}</span><span class="composer-suggest-copy"><strong>${escapeHtml(composerItemTitle(x))}</strong><small>${escapeHtml(composerItemDescription(x))}</small></span><span class="composer-suggest-source">${escapeHtml(x.source)}</span></button>`).join('');
   list.querySelectorAll('[data-composer-suggest]').forEach(b=>b.onclick=()=>acceptComposerSuggestion(+b.dataset.composerSuggest));
   pop.hidden=false;resizeChatComposer();
 }
