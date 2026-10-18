@@ -187,12 +187,12 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(b.disabled||!taskContextState)return;const state={...taskContextState},action=b.dataset.contextAction;hideTaskContextMenu();
   const t=taskMap[state.ownerId];if(!t)return;
   if(action==='open'&&state.scope==='list'){openPlanDialog(t.id);return}
-  if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog('rename',t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
+  if(action==='edit'){if(state.scope==='list'){if(taskEditable(t))openListNameDialog(t)}else{const s=planStateFor(t,state.index,canonicalTaskItems(t).length);if(taskEditable(t)&&!s.done)loadTaskEditor('edit-item',{ownerId:t.id,index:state.index})}return}
   if(['up','down','remove'].includes(action)&&state.scope==='item'){mutateContextItem(action,state);return}
   if(action==='remove'&&state.scope==='list'){requestTaskDelete(t.id)}
 });
 document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','emptyListModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskInfoModal','taskListNameModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
 window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
 
 const renderFullPlanBeforeContext=renderFullPlan;
@@ -567,14 +567,11 @@ renderFullPlan=function(t){
   const host=document.getElementById('planFormList');
   host.querySelectorAll('#planEmptyAddTask,.empty-plan-cta,.plan-add-task-footer').forEach(x=>x.remove());
 
-  const add=document.createElement('button');
-  add.type='button';
-  add.className='plan-add-task-footer';
-  add.innerHTML='<span class="plan-add-task-plus">＋</span><strong>Add task</strong>';
+  host.insertAdjacentHTML('beforeend',TaskUiTemplates.addTaskFooter());
+  const add=host.querySelector(':scope > .plan-add-task-footer:last-child');
   add.disabled=!taskEditable(t);
   add.title=add.disabled?(t.status==='ongoing'?'Pause before adding tasks':'Task List is read-only'):'Add task';
   add.onclick=()=>createTaskDirectlyInWorkspace(t.id,'list');
-  host.appendChild(add);
 };
 
 renderTaskList=function(){
@@ -619,3 +616,14 @@ positionTaskContextMenu=function(x,y){
   taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;
   taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
 };
+
+
+/* Shared Task UI controller.
+   Chat / Board / Task List call this facade instead of owning separate DOM/renderers.
+   Future React maps this boundary to TaskEditor + TaskListWorkspace components. */
+window.TaskUi=Object.freeze({
+  openEditor(mode,args={}){return loadTaskEditor(mode,args)},
+  openList(ownerId=currentTaskId){return openPlanDialog(ownerId)},
+  createList(){return createEmptyTaskListAndOpen()},
+  addTask(ownerId=currentTaskId,returnTarget=detectTaskEditorReturnTarget()){return createTaskDirectlyInWorkspace(ownerId,returnTarget)}
+});
