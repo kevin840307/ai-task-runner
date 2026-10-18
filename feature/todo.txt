@@ -21,7 +21,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Task Draft 是暫存規劃資料，不是已建立 Task，也不能帶入假 Runtime / 假執行結果。
 [ ] 一般 TaskDraft / Create Task 建立後進入 New / idle；只有使用者明確輸入 @goal 時，才允許以單一明確動作 Create + Run，且必須沿用同一 Runner action contract。
 [ ] Task-level Auto / Main / Isolated Worktree 必須共用同一 Workspace resolver；三種模式都固定用 isolated worktree 執行，差別只在完成後 delivery。Runner 仍只吃 project_root，不加入 Git integration 邏輯。
-[ ] Main 完成定義：Runner Completed 只代表程式開發階段完成，Task 仍是 Ongoing；Task branch result → latest-target candidate normal merge/validate → `git merge --squash candidate` → captured Project branch exactly one commit 成功後，才 Closed · integrated。若 merge_failure_count > Global merge_failure_limit，則 fallback 為 Isolated Worktree · Closed · worktree_ready。
+[ ] Main 完成定義：Runner Complete 只代表 Runner 階段完成，Task 仍是 Ongoing；commit local Task branch 後直接 normal merge 到 captured Project branch，merge 成功後才 Closed · merged。若 real merge fail：abort → merge_failure_count +1 → 讀 Global Settings.merge_failure_limit；count > limit 則 fallback 為 Isolated Worktree · Closed · worktree_ready。
 [ ] 無法使用的按鈕必須 disabled 並說明原因；Backend 仍要再次驗證，不能只依賴 UI。
 [ ] 避免 Dialog 疊 Dialog、俄羅斯娃娃式流程與重複資料副本。
 [ ] 優先處理 24H 無人值守可靠性、恢復能力與可診斷性，不為 UI 功能另造 Scheduler / Recovery Engine。
@@ -426,12 +426,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 11. Workspace Results / Direct Merge
 ------------------------------------
 
-[ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；不維護 candidate / merge --squash / permanent integration branch 等舊流程。
+[ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
 [ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
 [ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
 [ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行。
 [ ] Main 直接 normal Git merge Task source branch 到 captured Project branch；merge success 才 Closed · merged。
-[ ] 不使用 normal-path candidate branch，不使用 merge --squash。
 [ ] real merge conflict：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
 [ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit，Task 不複製 limit，也不新增 merge_retry_attempt。
 [ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → retry normal merge。
@@ -506,7 +505,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
 [ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
 [ ] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
-[ ] 同一路徑只能有一個 Task 同時處於執行中；檢查必須在 Backend / Runner，不可只做 UI disabled。
+[ ] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
 [ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
 [ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
 [ ] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
@@ -514,7 +513,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
 [ ] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
 [ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
-[ ] Merge preflight 與 direct merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；衝突時拒絕 direct merge。
+[ ] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
 [ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
 [ ] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
 [ ] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。
