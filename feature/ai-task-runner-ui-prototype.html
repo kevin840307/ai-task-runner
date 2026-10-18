@@ -300,6 +300,7 @@
     <div class="modal-head"><div><h2 id="projectManageTitle">Rename Project</h2><p id="projectManageMeta"></p></div><button class="close" data-close-modal="projectManageModal">×</button></div>
     <div class="modal-body">
       <div class="field" id="projectRenameField"><label>Project name</label><input id="projectRenameInput" autocomplete="off"></div>
+      <div class="field" id="projectPathField" hidden><label>Project path</label><input id="projectPathInput" autocomplete="off" placeholder="C:\\path\\to\\project"><small class="field-help">New Projects copy the current Global Defaults once. Existing Projects stay independent.</small></div>
       <div class="project-delete-note" id="projectDeleteNote" hidden></div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="projectManageModal">Cancel</button><button class="btn primary" id="projectManageConfirm">Rename</button></div>
@@ -312,7 +313,7 @@
     <div class="modal-body global-settings-body">
       <aside class="settings-sections">
         <button type="button" class="active" data-settings-tab="execution"><span>↯</span><strong>Execution</strong></button>
-        <button type="button" disabled><span>◉</span><strong>Agents</strong><small>Later</small></button>
+        <button type="button" data-settings-tab="defaults"><span>◉</span><strong>Defaults</strong></button>
         <button type="button" data-settings-tab="interface"><span>◫</span><strong>Interface</strong></button>
         <button type="button" data-settings-tab="language"><span>文</span><strong>Language</strong></button>
       </aside>
@@ -327,6 +328,31 @@
           </select>
         </label>
         <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="defaults" hidden>
+        <div class="settings-panel-head"><span>DEFAULTS</span><h3>New Project defaults</h3><p>Used only when creating a new Project. Existing Projects keep their own Agent / Model / Mode / Workflow.</p></div>
+        <label class="settings-field">
+          <span><strong>Default Agent</strong><small>Agent assigned to newly created Projects.</small></span>
+          <select id="globalDefaultAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Model</strong><small>Model must belong to the selected Agent.</small></span>
+          <select id="globalDefaultModel"></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Mode</strong><small>Permission / approval mode for new Projects.</small></span>
+          <select id="globalDefaultMode"></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Workflow</strong><small>Workflow initially selected for new Projects.</small></span>
+          <select id="globalDefaultWorkflow">
+            <option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option>
+            <option value="mixed.yaml">mixed</option>
+            <option value="file.yaml">file</option>
+            <option value="dynamic_handoff.yaml">dynamic_handoff</option>
+          </select>
+        </label>
+        <div class="settings-policy-preview" id="globalDefaultsPreview"></div>
       </section>
       <section class="settings-panel" data-settings-panel="interface" hidden>
         <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & theme</h3><p>Global visual preferences. These settings are not tied to a Project or Chat.</p></div>
