@@ -46,14 +46,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 一般 Mock Chat 可隨機觸發 Ask；@ask-demo 可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
 [x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
-[ ] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
-[ ] 驗證開啟 Editor 時 Chat 不縮窄、不位移、不被浮層蓋住；Editor / Picker / Suggestion 的層級正確。
-[ ] 驗證 @task / @task-single / @task-list 三條路徑與錯誤提示都能直接操作。
+[x] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
+[x] 驗證開啟 Editor 時 Chat 不縮窄、不位移、不被浮層蓋住；Editor / Picker / Suggestion 的層級正確。
+[x] 驗證 @task / @task-single / @task-list 三條路徑與錯誤提示都能直接操作。
 [ ] 驗證 Queue 編輯 / 刪除後順序、計數與切換 Chat session 的資料隔離。
 [ ] 實際瀏覽器測試連續送出至少 3 筆，確認後續訊息自動入 Queue 並按 FIFO 續跑；Ask 等待期間送出也須排隊，Submit / Cancel 後能繼續處理。
 [ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
 [x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
-[ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
+[x] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
 [x] Mock 功能入口可透過 @ 自動提示發現；Ask 測試入口為 @ask-demo。
 [x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
 [x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
@@ -232,28 +232,28 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 9. @task / @task-single / @task-list 與 TaskDraft
 -----------------------------------------------
 
-[ ] 只有明確的 Runner 指令才可建立 TaskDraft；一般訊息提到 task / run / 建立任務不得觸發。
-[ ] @task <spec>：由 AI 判斷產生單筆 Task 或多筆有序 Task List。
-[ ] @task-single <spec>：強制產生且只產生一筆 Task。
-[ ] @task-list <spec>：強制產生至少兩筆有序 child Task。
-[ ] 三種命令共用同一個 Backend endpoint / service、固定 Prompt、TaskDraft schema、驗證與 Create 流程；只有 mode 參數不同（auto / single / list）。
-[ ] 固定的 Generate Task Prompt 放在 Backend，參照既有 Generate Workflow 的做法；不可把整段 Prompt 寫死在瀏覽器。
-[ ] Prompt 必須要求 AI 輸出結構化資料，不可以只回傳自由文字；驗證失敗要 fail closed。
-[ ] 產生結果先顯示精簡 Draft 預覽，使用者可 Edit、Create Task 或 Dismiss。
-[ ] TaskDraft 最低欄位包含 title、Project reference、ordered items[]；每個 item 至少包含 title、task prompt、Workflow、Project、workspace policy。
+[x] 只有明確的 Runner 指令才可建立 TaskDraft；一般訊息提到 task / run / 建立任務不得觸發。
+[x] @task <spec>：由 AI 判斷產生單筆 Task 或多筆有序 Task List。
+[x] @task-single <spec>：強制產生且只產生一筆 Task。
+[x] @task-list <spec>：強制產生至少兩筆有序 child Task。
+[x] 三種命令共用同一個 Backend endpoint / service、固定 Prompt、TaskDraft schema、驗證與 Create 流程；只有 mode 參數不同（auto / single / list）。
+[x] 固定的 Generate Task Prompt 放在 Backend，參照既有 Generate Workflow 的做法；不可把整段 Prompt 寫死在瀏覽器。
+[x] Prompt 必須要求 AI 輸出結構化資料，不可以只回傳自由文字；驗證失敗要 fail closed。
+[x] 產生結果先顯示精簡 Draft 預覽，使用者可 Edit、Create Task 或 Dismiss。
+[x] TaskDraft 最低欄位包含 title、Project reference、ordered items[]；每個 item 至少包含 title、task prompt、Workflow、Project、workspace policy。
 [ ] Validator / Prompt source override 只在需要時加入；不把無關 runtime 欄位塞進 Draft。
-[ ] Draft 不包含 Runner runtime、Retry、Recovery、Merge 狀態；不得在建立前寫入正式 Task history。
-[ ] 單筆 Draft 的 Edit 使用既有 canonical Task Editor。
-[ ] 多筆 Draft 的 Edit 使用既有 Task List workspace；每個 child 的 Add / Edit 繼續使用同一個 canonical Task Editor。
-[ ] 不新增 Chat 專用 Task 編輯表單；不要同步兩份平行 Draft state。
-[ ] 從 Chat Draft 進入編輯時，Task Editor 必須是 viewport 上層的右側 overlay；Chat 留在背景、不縮窄、不位移。
-[ ] 單筆 Editor 的 Back / Cancel / 遮罩關閉回到原 Chat Draft。
-[ ] 多筆 Task List 關閉回到原 Chat Draft；從 List 進 child Editor，Back 先回 List，關閉 List 再回 Chat Draft。
+[x] Draft 不包含 Runner runtime、Retry、Recovery、Merge 狀態；不得在建立前寫入正式 Task history。
+[x] 單筆 Draft 的 Edit 使用既有 canonical Task Editor。
+[x] 多筆 Draft 的 Edit 使用既有 Task List workspace；每個 child 的 Add / Edit 繼續使用同一個 canonical Task Editor。
+[x] 不新增 Chat 專用 Task 編輯表單；不要同步兩份平行 Draft state。
+[x] 從 Chat Draft 進入編輯時，Task Editor 必須是 viewport 上層的右側 overlay；Chat 留在背景、不縮窄、不位移。
+[x] 單筆 Editor 的 Back / Cancel / 遮罩關閉回到原 Chat Draft。
+[x] 多筆 Task List 關閉回到原 Chat Draft；從 List 進 child Editor，Back 先回 List，關閉 List 再回 Chat Draft。
 [ ] 由 Task Info 進入 Add / Edit 時 Back 回 Info；由 Task List 進入時 Back 回 Task List。返回目的地由來源狀態決定，不可一律回 YAML。
-[ ] Create Task 前再次驗證 items 不為空、Prompt / Project / Workflow / workspace policy 合法。
-[ ] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
-[ ] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
-[ ] Create / Dismiss / Retry / Edit / Back / Create Again 必須有明確的重複操作語義；不能重複建立同一 Draft。
+[x] Create Task 前再次驗證 items 不為空、Prompt / Project / Workflow / workspace policy 合法。
+[x] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
+[x] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
+[x] Create / Dismiss / Retry / Edit / Back / Create Again 必須有明確的重複操作語義；不能重複建立同一 Draft。
 [ ] Prototype 的 @task 隨機單筆 / 多筆；測試可使用固定 fixture / seed，避免自動化測試被隨機結果影響。
 [ ] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
 [ ] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在、Worktree 不可建立都要有測試。
