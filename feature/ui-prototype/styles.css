@@ -833,3 +833,19 @@ html[data-appearance] #taskOverlay .task-edit-lock{
 html[data-appearance] #taskOverlay .yaml-plan-status.ok{background:var(--success-soft)!important;color:var(--pass)}
 html[data-appearance] #taskOverlay .yaml-plan-status.bad{background:var(--danger-soft)!important;color:var(--fail)}
 
+/* Task nested source / validation controls also follow the active appearance. */
+html[data-appearance] #taskOverlay .source-tabs,
+html[data-appearance] #planModal .source-tabs{background:var(--panel-3);border-color:var(--line)}
+html[data-appearance] #taskOverlay .source-tabs button.active,
+html[data-appearance] #planModal .source-tabs button.active{
+  background:var(--panel);color:var(--accent-dark);box-shadow:var(--shadow-sm)
+}
+html[data-appearance] #taskOverlay .cap-chip,
+html[data-appearance] #planModal .cap-chip{background:var(--accent-soft);color:var(--accent-dark)}
+html[data-appearance] #taskOverlay .cap-chip.neutral,
+html[data-appearance] #planModal .cap-chip.neutral{background:var(--panel-3);color:var(--muted)}
+html[data-appearance] #taskOverlay .validation-empty,
+html[data-appearance] #planModal .validation-empty{border-color:var(--line-strong);color:var(--muted)}
+html[data-appearance] #taskOverlay .field-optional,
+html[data-appearance] #planModal .field-optional{color:var(--muted)}
+
