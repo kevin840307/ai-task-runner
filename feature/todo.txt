@@ -402,13 +402,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Workspace policy 保留 Auto / Main / Isolated Worktree。
 [x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
 [x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
-[ ] 正式版更新同一個 Workspace resolver 到 all-worktree execution；不新增第二套 resolver。
-[ ] 三種模式實際執行一律建立獨立 Task Run worktree；Main 不直接讓 Runner 寫 Project checkout。
+[ ] 正式版三種模式執行一律建立獨立 Task Run worktree/local branch；Runner 永遠不直接寫 Project checkout。
 [ ] Project branch 是 canonical truth。
-[ ] Task Run 啟動時捕捉 Project 當下 checkout branch 為 target_branch + HEAD SHA；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
-[ ] Task branch/worktree 直接從 captured target HEAD 建立；Branch / path 包含 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
+[ ] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
+[ ] Task branch/worktree 直接從 captured target HEAD 建立；branch/path 使用 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
 [ ] Uncommitted Project working-tree 修改不自動進 Task base；要成為新 Task base 先 commit。
-[ ] Auto policy × Concurrent Main 規則固定如下，Concurrent 開關只控制「已解析/明選為 Main 的 Task 在 Main busy 時能否啟動」，不可改寫 Auto policy：
+[ ] Auto policy × Concurrent Main 規則固定如下：
 
     | Auto policy / selection | Main 已 Running | Concurrent Off | Concurrent On |
     | --- | --- | --- | --- |
@@ -417,40 +416,38 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     | Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
     | Explicit Main | yes | Block Main start | Main |
 
-[ ] Concurrent Main=On 時多個 Main Task 各自在 isolated worktree 平行跑；同 target branch delivery 仍排隊。
-[ ] Explicit Main / Isolated Worktree override Global Auto policy；Auto 保存 requested mode + resolved effective mode。
-[ ] 每個 child Task / RunRequest 若有自己的 Workspace policy，就有自己的 Task-run worktree/result；Board parent 只 aggregate。
+[ ] Concurrent Main 開關只控制 Main busy 時能否啟動 Main；不可改寫 Auto policy。
+[ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
 [ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
-[ ] Backend 對 path 做正規化與 ownership 保護。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
-[ ] Task 刪除、Task reset、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
+[ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
 
 
-11. Workspace Results / Integration / Merge
--------------------------------------------
+11. Workspace Results / Direct Merge
+------------------------------------
 
-[ ] 詳細 Git integration source of truth 使用 feature/git-worktree-todo.md；只保留目前 Project branch → Task worktree → candidate → Project branch delivery 契約，不維護舊相容流程。
-[ ] effective Main：Runner Completed 後先 git add -A + Task snapshot commit；此時 Task 仍 Ongoing，不是 Closed。
-[ ] Integration Queue 以 repository + captured target branch 序列化 delivery；Runner execution 可平行。
-[ ] Main integration 從 latest target HEAD 建 temporary candidate，再 normal Git merge committed Task branch 進 candidate；不可直接先改 target checkout。
-[ ] 原始 completed Task branch/worktree 不可 rebase/改寫；candidate 是 disposable merge/recovery sandbox。
-[ ] candidate merge conflict / semantic incompatibility / validation failure 若要改 Code，一律呼叫既有 Runner，帶 original Task、base/snapshot SHA、latest target SHA、conflict files、Git error。
-[ ] candidate validate 成功後 commit temporary candidate result，再執行：`git merge --squash candidate` → captured Project branch exactly one commit。
-[ ] Main 只有 Project branch commit 成功並記錄 target_commit_sha 後才 Closed · integrated；pending_merge / integrating / conflict_recovery / target_resync / waiting_target_clean / waiting_target_workspace 全部仍是 Ongoing secondary state。
-[ ] effective Isolated Worktree：Runner Completed 後 snapshot/commit 結果即可 Closed · worktree_ready，不自動 merge。
-[ ] target HEAD 在 candidate 驗證期間有變動 → discard/rebuild candidate from latest HEAD；這本身不算 merge failure。
-[ ] Task 只保存實際 `merge_failure_count`；Global Settings 保存 `merge_failure_limit`。每次 real merge / semantic / validation failure 才 count += 1，再讀 Global limit 判斷是否超過。
-[ ] queue wait、lock busy、target dirty、target HEAD moved、暫時 Git error 都不增加 merge_failure_count。
-[ ] merge_failure_count > Global merge_failure_limit → 停止自動 Main recovery，保留 Task branch/worktree，delivery fallback 成 Isolated Worktree，Closed · worktree_ready，記 fallback reason=merge_retry_exhausted。
-[ ] fallback 後保留 original requested/effective Main origin 供 history/diagnostics；可提供手動 Merge / Merge Chat，但不是 automatic retry session。
-[ ] target checkout dirty 時 automatic squash delivery => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash / reset / discard / stage / commit 使用者修改。
-[ ] 不得自動 git switch 使用者 Project checkout；captured target branch 無安全 delivery workspace 時用 managed temporary worktree，若被 unmanaged/user worktree 占用則 Ongoing · waiting_target_workspace / Needs Attention。
-[ ] Workspace Results 依 Project / Task Run 聚合 Branch、Path、target branch、requested/effective mode、delivery fallback、integration state、merge_failure_count、conflict summary。
-[ ] Board 維持 New / Ongoing / Paused / Closed；Main delivery 是 Task 完成的一部分，不是 Closed 後的 post-processing。
-[ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 做 retained/orphaned worktree 管理。
-[ ] Merge Chat 建新的 Project Chat session，不污染目前 Chat；預填 Task Run/worktree/branch、captured target branch、latest target SHA、conflict/error context，且不自動送出。
-[ ] Merge / Delete / cleanup 等 Backend action 再次做 branch/path/clean/lock/ownership preflight，不能只靠 UI disabled。
-[ ] Remote push 是獨立 Publish action；正常 Task integration 不自動 git push origin。
+[ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；不維護 candidate / merge --squash / permanent integration branch 等舊流程。
+[ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
+[ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
+[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行。
+[ ] Main 直接 normal Git merge Task source branch 到 captured Project branch；merge success 才 Closed · merged。
+[ ] 不使用 normal-path candidate branch，不使用 merge --squash。
+[ ] real merge conflict：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
+[ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit，Task 不複製 limit，也不新增 merge_retry_attempt。
+[ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → retry normal merge。
+[ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留 Task branch/worktree，fallback=isolated_worktree，Closed · worktree_ready。
+[ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
+[ ] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
+[ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
+[ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
+[ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
+[ ] 不得自動 git switch 使用者 Project checkout。
+[ ] Main completion boundary：merged source commit 已成為 target branch ancestry 且 merged target SHA 已持久化。
+[ ] Restart 時若 task_snapshot_sha / final recovery source commit 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge。
+[ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
+[ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
+[ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
+[ ] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
 
 
 12. 共用 Chat Backend 與 API
