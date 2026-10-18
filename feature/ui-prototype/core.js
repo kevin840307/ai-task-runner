@@ -42,7 +42,10 @@ const UI_TEXT={
     'taskListDraft.title':'標題','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'狀態',
     'taskListDraft.notCreated':'尚未建立','taskListDraft.defaultTitle':'新增 Task List','taskListDraft.listInfo':'List 資訊','taskListDraft.needTask':'建立 Task List 前至少要加入一個 Task',
     'taskListDraft.titleRequired':'Task List 標題不可空白','taskListDraft.created':'Task List 已建立 · 可繼續加入 Task',
-    'taskListDraft.added':'已加入草稿 Task',
+    'taskListDraft.added':'已加入草稿 Task','taskListDraft.updated':'已更新草稿 Task','taskListDraft.removed':'已移除草稿 Task',
+    'taskListDraft.edit':'編輯','taskListDraft.moveUp':'上移','taskListDraft.moveDown':'下移','taskListDraft.remove':'移除',
+    'taskListDraft.discardTitle':'捨棄 Task List 草稿？','taskListDraft.discardHelp':'這個草稿尚未建立，捨棄後不會出現在 Board。','taskListDraft.discardBody':'目前有尚未建立的變更。確定要捨棄這份 Task List 草稿嗎？','taskListDraft.keepEditing':'繼續編輯','taskListDraft.discard':'捨棄草稿',
+    'taskListDraft.creating':'建立中…',
     'common.save':'儲存','common.cancel':'取消','common.edit':'編輯','common.delete':'刪除','common.dismiss':'關閉','common.openTask':'開啟 Task',
     'chat.you':'你','chat.assistant':'Assistant','chat.working':'Agent 正在處理…','chat.emptyTitle':'新對話','chat.emptyDesc':'這個 session 只屬於目前 Project。',
     'chat.draft.created':'已建立','chat.draft.mock':'MOCK AI · TASK 草稿','chat.draft.task':'Task','chat.draft.taskList':'Task List',
@@ -93,7 +96,10 @@ const UI_TEXT={
     'taskListDraft.title':'Title','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'State',
     'taskListDraft.notCreated':'Not created','taskListDraft.defaultTitle':'New Task List','taskListDraft.listInfo':'List info','taskListDraft.needTask':'Add at least one task before creating the Task List',
     'taskListDraft.titleRequired':'Task List title cannot be empty','taskListDraft.created':'Task List created · add tasks when ready',
-    'taskListDraft.added':'Draft task added',
+    'taskListDraft.added':'Draft task added','taskListDraft.updated':'Draft task updated','taskListDraft.removed':'Draft task removed',
+    'taskListDraft.edit':'Edit','taskListDraft.moveUp':'Move up','taskListDraft.moveDown':'Move down','taskListDraft.remove':'Remove',
+    'taskListDraft.discardTitle':'Discard Task List draft?','taskListDraft.discardHelp':'This draft has not been created and will not appear on the Board if discarded.','taskListDraft.discardBody':'There are uncreated changes in this Task List draft. Discard them?','taskListDraft.keepEditing':'Keep editing','taskListDraft.discard':'Discard draft',
+    'taskListDraft.creating':'Creating…',
     'common.save':'Save','common.cancel':'Cancel','common.edit':'Edit','common.delete':'Delete','common.dismiss':'Dismiss','common.openTask':'Open Task',
     'chat.you':'You','chat.assistant':'Assistant','chat.working':'Agent is working…','chat.emptyTitle':'New Chat','chat.emptyDesc':'This session belongs only to the current Project.',
     'chat.draft.created':'CREATED','chat.draft.mock':'MOCK AI · TASK DRAFT','chat.draft.task':'Task','chat.draft.taskList':'Task List',
@@ -627,9 +633,7 @@ function syncDrawerExpand(){
 }
 drawerExpand.onclick=()=>{taskDrawer.classList.toggle('expanded');syncDrawerExpand()};
 syncDrawerExpand();
-document.getElementById('closeDrawer').onclick=()=>document.getElementById('taskOverlay').classList.remove('open');
-document.getElementById('taskOverlay').addEventListener('click',e=>{if(e.target.id==='taskOverlay')e.currentTarget.classList.remove('open')});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('taskOverlay').classList.remove('open')});
+// Task Drawer Close / backdrop / Escape ownership lives in task-workspace.js.
 document.getElementById('taskPrimaryDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t)return;
   if(t.kind==='list'||t.workspaceKind==='batch'){
