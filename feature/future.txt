@@ -184,6 +184,9 @@ Prototype composition:
 - TaskDrawerShell is the only owner of Drawer Close / backdrop / Escape / focus return. Do not reintroduce page-level close handlers.
 - Escape follows top-layer ownership: child modal / popover / rename editor handles it before TaskDrawerShell; production should use one layered overlay/focus manager rather than document-level competing listeners.
 - TaskEditor owns a local dirty snapshot only for unsaved form data; Task List Draft owns its own transient draft lifecycle. Closing nested editors must guard child dirty state before parent draft discard.
+- YAML editor follows the same local unsaved-form rule: route/back/close must guard unsaved YAML before leaving, but Apply commits to the existing Task List model and clears the local dirty baseline.
+- Chat TaskDraft models may be temporarily mounted into the prototype Task store only as an adapter for shared TaskEditor/TaskListWorkspace; leaving the shared surface must unmount the transient model. Production should pass Draft context explicitly instead of inserting transient data into the canonical store.
+- Successful root Task creation owns its destination: once Create opens the new Task Info view, outer editor-return wrappers must not apply stale pre-create returnTarget state.
 - Task List may expose a bottom Back action for long-scroll ergonomics, but it must delegate to the same TaskDrawerShell navigation action as the Header Back; footer controls never own separate route state.
 - After these mock/template interactions are stable, feature/ui should freeze structurally; remaining prototype changes should be browser-regression bug fixes rather than new IA layers.
 - Main HTML keeps mount points instead of duplicating those surfaces.
