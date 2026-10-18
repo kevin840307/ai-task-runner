@@ -55,7 +55,7 @@ normal Git merge Task branch → captured Project branch
       ↓
     stop automatic Main merge
       ↓
-    retain Task branch/worktree
+    retain latest current merge source branch/worktree
       ↓
     delivery_fallback = isolated_worktree
       ↓
@@ -384,7 +384,11 @@ resolve safe worktree for target_branch
 ↓
 read latest target HEAD
 ↓
-git merge --no-ff --no-commit <merge_source_branch>
+is merge_source_sha already an ancestor of target_branch?
+├─ Yes → record current target HEAD → Closed · merged
+└─ No
+    ↓
+  git merge --no-ff --no-commit <merge_source_branch>
 ↓
 Git conflict?
 ├─ Yes
@@ -420,6 +424,14 @@ Git conflict?
       ↓
     existing technical retry/backoff or Needs Attention
 ```
+
+Before running Git merge, check:
+
+```bash
+git merge-base --is-ancestor <merge_source_sha> <target_branch>
+```
+
+If true, delivery is already present; finalize without creating another commit.
 
 Conceptual merge:
 
@@ -477,7 +489,7 @@ merge_failure_count > merge_failure_limit ?
     ↓
   stop automatic Main merge
     ↓
-  retain Task branch/worktree
+  retain latest current merge source branch/worktree
     ↓
   delivery_fallback = isolated_worktree
     ↓
@@ -924,7 +936,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order.
 - [ ] Resolve safe worktree for captured target branch.
-- [ ] Use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
+- [ ] Before merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
+- [ ] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
 - [ ] Run required configured merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
 - [ ] Commit merge only after acceptance and record merged_target_head_sha.
 - [ ] Merge success is the effective Main completion boundary.
@@ -970,7 +983,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
 - [ ] Merge success commits and closes Main.
 - [ ] Main no_changes closes without a Project merge.
-- [ ] Restart after merge recognizes ancestry and does not duplicate merge.
+- [ ] Restart/external pre-delivery merge recognizes merge_source_sha ancestry and does not duplicate merge.
 
 ### Merge conflict
 
@@ -986,8 +999,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 ### Merge failure limit
 
 - [ ] Global limit=3: failures 1/2/3 recover, failure 4 falls back.
-- [ ] Fallback retains Task branch/worktree and closes as worktree_ready.
-- [ ] Task does not store a duplicate merge limit or retry-attempt counter.
+- [ ] Fallback retains the latest current merge source branch/worktree and closes as worktree_ready.
+- [ ] Task stores only actual merge_failure_count; merge_failure_limit stays Global.
 
 ### Target safety
 
@@ -1007,7 +1020,6 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - Do not redesign Runner.
 - Do not add a Git Workflow Stage.
 - Do not add a second retry/recovery engine.
-- Do not create a permanent integration branch.
 - Do not auto-switch user Project checkout branch.
 - Do not auto-stash/reset/discard/commit unrelated dirty Project files.
 - Do not auto-push every Task to remote.
