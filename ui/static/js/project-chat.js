@@ -774,9 +774,16 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         workflows: settingsCatalog.workflows,
         returnFocus: edit,
         onSave: (nextDraft) => {
-          const target = findTaskDraft(originSession, entry.draft_id);
-          if (!target) return;
-          target.draft = nextDraft;
+          const rows = taskDraftsBySession.get(originSession) || [];
+          if (!rows.some((row) => row.draft_id === entry.draft_id)) return;
+          taskDraftsBySession.set(
+            originSession,
+            rows.map((row) => (
+              row.draft_id === entry.draft_id
+                ? { ...row, draft: nextDraft }
+                : row
+            )),
+          );
           if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
         },
       });
@@ -1118,7 +1125,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         method: "POST",
         body: JSON.stringify({
           project: path,
-          draft: entry.draft,
+          draft: structuredClone ? structuredClone(entry.draft) : JSON.parse(JSON.stringify(entry.draft)),
           request_id: "create-" + entry.draft_id,
         }),
       });
