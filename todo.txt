@@ -1,703 +1,706 @@
-AI Task Runner - Future 實作 TODO
+AI Task Runner - Future Migration TODO
+======================================
+
+Updated: 2026-10-18
+Target: evolve current main into the latest agreed Project Chat / Tasks / Settings / Workspace product.
+Reference roadmap: future.txt
+Detailed final Git-worktree contract: feature/git-worktree-todo.md
+
+IMPORTANT
+---------
+
+This is a FUTURE implementation backlog.
+
+- Every checkbox means work still required in production/main.
+- Do not mark an item complete merely because feature/ui prototype mocks it.
+- Do not copy prototype code wholesale into production.
+- Keep current main runtime/model-discovery/reliability behavior unless a newer explicit contract replaces it.
+- If an older TODO conflicts with current main or the latest future.txt / feature/git-worktree-todo.md, use current/latest.
+- Git worktree/Main auto-delivery is intentionally the LAST major phase.
+
+
+CURRENT MAIN BASELINE - PRESERVE
 ================================
 
-重建日期：2026-10-17
-分支：feature/ui
-依據：根目錄 future.txt（2026-10-17 新版）
+These are not TODO items; they are protected baseline behavior:
 
-目的
-----
-這份 todo.txt 是依照新版 future.txt 重新打造的中文實作清單。
-舊版 minimal-closed-loop-runtime TODO 視為舊 roadmap，不再拿來驅動這一輪 Future Chat / Task / Worktree / Merge 開發。
-
-最高原則
---------
-[ ] Runner Core 仍是 Workflow / Stage / retry / recovery / resume / runtime truth 的唯一權威。
-[ ] Chat 不得為了方便直接塞進 FlowEngine / StageExecutor。
-[ ] Chat Queue 與 Runner Task Queue/ordered items 完全分離。
-[ ] Ask/Question 是 Chat Agent interaction，不得污染 RunState / retry / recovery。
-[ ] UI disabled 只是 UX；所有 destructive / transition action 後端仍需 fail-closed guard。
-[ ] Main workspace 永久保留；Worktree 是可選隔離。
-[ ] Task 完成不自動 Merge。
-[ ] Merge/Conflict 不進 Runner recovery state machine。
-[ ] 任何會影響 24H runtime 的修改都要補 deterministic/mock/live regression。
-[ ] 正式 UI 不准把 Qwen/OpenCode 的 capabilities/models/skills 寫死在 frontend。
-[ ] Prototype 可以 mock，但 Mock 必須使用跟 production 相同的 schema。
-[ ] 新功能完成後移除舊 handler / duplicate wrapper，不保留平行 contract。
+- WorkflowRunner / FlowEngine / StageExecutor / RunState ownership is already established.
+- Dynamic Handoff is supported; Discussion/Group Chat remains removed.
+- Current resume/recovery/API transient retry/24H reliability behavior must not regress.
+- Current Runner runtime projection and backend action guards remain the runtime truth.
+- Current Workflow/Prompt Studio remains the production asset editor.
+- Current backend/model discovery is registry/adapter owned.
+- Current Qwen/OpenCode model discovery fixes and environment diagnostics are already implemented.
+- runner/workspace.py remains Runner-side project safety/instruction/read-only support; it is not the future Git-worktree package.
+- CLI/standalone Runner already accepts project_root and must remain workspace/worktree unaware.
 
 
-PHASE 0 - Prototype 對齊 Future 規格
-===================================
+PHASE 0 - MIGRATION GUARDS / SOURCE OF TRUTH
+============================================
 
-目前已完成的 prototype mock（只代表可操作 UI，不代表 production 完成）
------------------------------------------------------------------------
-[x] Project sidebar click -> 해당 Project Chat。
-[x] Composer 預設小高度、自動長高、有最大高度。
-[x] @ 與 / autocomplete prototype。
-[x] Agent / Model / Mode 自訂 picker prototype。
-[x] @task / @task-single / @task-list mock。
-[x] @task 可隨機 single / multi。
-[x] @task-single 固定 single。
-[x] @task-list 固定 >= 2 tasks。
-[x] Chat Draft 只顯示摘要，不再做另一套完整 Task form。
-[x] Chat Draft Edit 重用 canonical Task / Task List editor。
-[x] Worktree 醒目標示。
-[x] Workspace Results 依 Project 分組。
-[x] Merge / Merge Chat 兩個 action prototype。
-[x] Merge Chat 新建 Project Chat、預填 prompt、不自動 send。
-[x] Task Delete confirmation。
-[x] Ongoing 不可編輯的 action disabled。
-[x] Info / Task List Add/Edit source-aware Back。
-[x] Queue prototype 顯示在 Composer 上方。
-[x] Queue prototype 可 Edit / Delete。
-[x] Ctrl+Q mock enqueue。
-[x] Ask prototype 支援多題、option、text、Other 自訂回答、Next / Submit。
-[x] 一般 Mock Chat 有機率出現 Ask；Ask mock 可強制測試。
-
-Prototype 還要補
----------------
-[ ] 實際 browser smoke test：確認 Chat Draft Edit 的右側 sheet 完全 overlay 在 Chat 上層，不改變 Chat grid/width。
-[ ] 實際 browser smoke test：單 Task Draft Edit -> Back to Chat Draft。
-[ ] 實際 browser smoke test：多 Task Draft -> Task List -> child Edit -> Back -> Task List -> Back to Chat Draft。
-[ ] 實際 browser smoke test：Queue 1/多筆 Edit/Delete。
-[ ] 實際 browser smoke test：Ask 2/3 題、Other text、free text、最後 Submit。
-[ ] 實際 browser smoke test：Agent switch 後 Model / Mode / / palette 跟著改。
-[ ] 實際 browser smoke test：@task-list 永遠 >= 2。
-[ ] 實際 browser smoke test：toast / Ask / Queue / picker / modal z-index 不互相遮擋。
-[ ] Prototype wrapper-heavy function 再逐步收斂；不要一次大重寫。
+[ ] Add/update architecture tests so new Chat/Task code cannot create a second FlowEngine, StageExecutor, recovery loop, runtime state store or Workflow representation.
+[ ] Add an explicit production dependency rule: normal Chat service cannot import/use FlowEngine/StageExecutor as a conversation engine.
+[ ] Keep Runner public execution entry project_root-driven; no UI Task/Chat/Git state in Runner request contracts unless already canonical runtime input.
+[ ] Document that feature/ui is interaction/reference only; production sources remain ui/, runner/, existing backend services and tests.
+[ ] Before porting each prototype surface, identify the current main owner and replace/extend that owner instead of layering wrapper-after-wrapper.
+[ ] Preserve current backend/model catalog behavior; new Agent/Chat capability work must build around it rather than reimplement model discovery.
+[ ] Preserve current Workflow Studio source/build boundary: edit ui/studio-src source only, never hand-edit generated bundle as the implementation path.
+[ ] Define one migration checklist for deleting replaced legacy UI handlers/routes after each new surface is production-backed and tested.
 
 
-PHASE 1 - 共用 Agent Capability 層
-=================================
+PHASE 1 - PRODUCTION APP SHELL / NAVIGATION
+==========================================
 
-目標
-----
-正式 UI 只能向 backend 問「這個 Agent 現在能做什麼」，不能理解 Qwen/OpenCode 內部細節。
+Goal: make main production UI use the latest Project Chat + Tasks shell while preserving current visual language.
 
-1.1 共用 capability schema
--------------------------
-[ ] 在 runner/agent 共用層新增/整理 Agent capability schema。
-[ ] schema 至少包含：
-    - agent id / display name
-    - available models
-    - permission/mode profiles
-    - slash commands
-    - user-invocable skills
-    - capability source（builtin / skill / command / extension / project / user）
-    - Ask/question support
-    - streaming support
-    - cancel support
-    - queue/steer support（若 native 有）
-[ ] capability 只描述能力，不保存 Chat session 狀態。
-[ ] 保留現有 AgentBackend.ask() 給 Runner 執行用途，不把 Chat session state 塞進 BaseBackend。
-[ ] 評估新增 ChatAgentAdapter 或 thin interactive adapter，重用 runner/agent 的 command/model discovery。
-[ ] 避免 BaseBackend 變成超大型 God object。
+[ ] Split the current "Tasks/Chat" mixed main surface into explicit Project Chat and Tasks product surfaces without removing Workflows/Prompts.
+[ ] Keep left sidebar navigation visually aligned with current main style/tokens.
+[ ] Clicking a Project selects it and opens Project Chat.
+[ ] Project context menu (...) performs management only and does not navigate.
+[ ] New/Open Project remains easy to reach and does not duplicate Project stores.
+[ ] Project list gets its own bounded scroll region.
+[ ] Rename preserves stable Project identity/path references used by Chat/Tasks.
+[ ] Delete Project uses backend guard + confirmation and clearly defines what Project-scoped Chat/preferences metadata is removed.
+[ ] Tasks page gets a page-local Project filter independent from selected Project Chat.
+[ ] Parent Task List remains visible when at least one child matches the Task Project filter.
+[ ] Preserve Workflows/Prompts library/editor behavior from main; only add navigation/handoff hooks needed by Tasks/Chat.
+[ ] Remove redundant Tasks subtitle/project labels that duplicate already-visible Project/filter context.
+[ ] Preserve scroll/focus when switching Projects/surfaces where current main already guarantees it.
+[ ] Browser test Project click -> Chat, Project ... no navigation, Tasks filter no Chat context mutation.
 
-1.2 Qwen adapter
-----------------
-[ ] runner/agent/qwen.py 正式取得 model list，沿用/整理現在 available_models()。
-[ ] capability discovery 參考 Qwen 自己的 slash command registry / SkillManager。
-[ ] 支援 project/user/extension/bundled Skills 的可見性。
-[ ] 尊重 user-invocable / disabled slash command / disabled skill 規則。
-[ ] / palette 要能看到 user-invocable Skill 的 /<skill-name>。
-[ ] extension skill 名稱保留 namespace（例如 owner:name）。
-[ ] Qwen Mode mapping：
-    - Read -> plan/read-only
-    - Auto -> auto
-    - YOLO -> yolo
-[ ] 若實際 Qwen 版本不支援某 mode，capability 回 unavailable，不可 frontend 假裝支援。
-[ ] Ask 對接 ask_user_question：
-    questions[] -> UI -> answers[index] -> 回原 tool call。
-[ ] Queue 若採 application-level，仍可提供 Ctrl+Q UX；不必依賴 CLI native queue 實作。
 
-1.3 OpenCode adapter
---------------------
-[ ] runner/agent/opencode.py 正式取得 provider/model list。
-[ ] / palette capability 來源：
-    - built-in commands
-    - .opencode/commands
-    - config-defined commands
-    - slash-enabled SKILL.md
-[ ] Skill discovery 尊重 OpenCode project/global/compatible skill locations與 permission。
-[ ] Mode mapping：
-    - Read -> deny write/edit/shell/task mutation
-    - Auto -> normal safe permission profile
-    - YOLO -> allow-all equivalent（只有實際支援才 expose）
-[ ] Question tool 正規化成共用 Ask schema。
-[ ] 不把 OpenCode permission JSON 直接暴露給 frontend。
+PHASE 2 - GLOBAL SETTINGS + PROJECT PREFERENCES
+==============================================
 
-1.4 API
+Goal: replace scattered prototype/localStorage settings with one production backend/config owner.
+
+2.1 Settings shell
+------------------
+[ ] Add Global Settings entry at the bottom of the sidebar.
+[ ] Use one Settings surface with sections; remove the old standalone theme panel/button only after parity is complete.
+[ ] Reuse current main theme/i18n tokens and helpers.
+
+2.2 Interface / Language
+------------------------
+[ ] Move Appearance into Global Settings: System / Light / Dark.
+[ ] Move Theme palette into Global Settings: Teal / Deep Blue / Violet / Amber / Rose.
+[ ] Preserve current motion/accessibility preference behavior if already supported.
+[ ] Give Language its own section; initial zh-TW / English.
+[ ] Ensure Settings overlay does not resize/reflow the main app.
+[ ] Persist through the production settings owner; localStorage may remain cache/preference transport only where appropriate, not canonical backend truth.
+
+2.3 Global Defaults
+-------------------
+[ ] Add Global Defaults for new Projects:
+    Agent
+    Model
+    Mode
+    Reasoning
+    Workflow
+[ ] New Project copies current Global Defaults once.
+[ ] Changing Global Defaults does not rewrite existing Project preferences.
+[ ] Creating Project from any UI entry point uses the same initialize-project path.
+
+2.4 Project-scoped Chat preferences
+-----------------------------------
+[ ] Persist per Project:
+    Agent
+    Model
+    Mode
+    Reasoning
+    Workflow
+[ ] All Chat sessions in the same Project share those preferences.
+[ ] New Chat never owns a duplicate preference copy.
+[ ] Project switch immediately loads that Project's preferences.
+[ ] Project rename/delete migrates/cleans preference scope safely.
+[ ] Reasoning values are capability-driven/mapped by selected Agent/backend; do not assume prototype levels are universally valid.
+[ ] Agent switch normalizes dependent Model/Mode/capabilities without wiping unrelated valid Project preferences.
+[ ] Workflow preference uses the existing Workflow catalog/visibility owner.
+[ ] Browser/API tests cover reload, Project switch, New Project defaults, old Project stability and Agent switch dependency normalization.
+
+NOTE:
+Execution settings tied to Auto/Main/Worktree, merge_failure_limit and concurrent Main are deferred to the FINAL Git-worktree phase.
+Do not expose active production controls before that backend owner exists.
+
+
+PHASE 3 - NORMAL PROJECT CHAT BACKEND
+=====================================
+
+Goal: add real Project Chat without turning Runner into a Chat engine.
+
+3.1 Chat storage / sessions
+---------------------------
+[ ] Add one Chat service/store separate from Runner RunState/messages/runtime history.
+[ ] Define stable Project-scoped Chat session id.
+[ ] Support Create / Rename / Switch / Delete Chat session.
+[ ] Delete Chat requires confirmation and removes only Chat-session data.
+[ ] Chat message history survives UI/backend restart according to the chosen local persistence policy.
+[ ] Existing Runner history remains Runner/Task history; do not silently migrate it into normal Chat conversations.
+
+3.2 Chat turn lifecycle
+-----------------------
+[ ] Define active turn identity/status.
+[ ] Support streaming assistant output.
+[ ] Support cancel active turn.
+[ ] Support reconnect/resume projection for UI after browser refresh/backend reconnect where the Agent process permits it.
+[ ] Stale/double Send/Cancel actions get backend idempotency/guarding.
+[ ] Chat failure cannot corrupt or reset an active Runner Task.
+
+3.3 Interactive Agent adapter boundary
+--------------------------------------
+[ ] Reuse current runner/agent backend discovery/model owner where possible.
+[ ] Add a thin interactive Chat Agent adapter/service instead of stuffing session/Queue/Ask state into BaseBackend.
+[ ] Do not expose Qwen/OpenCode process-specific details directly to frontend state.
+[ ] Normalize only the capabilities Chat needs while leaving Runner execution semantics unchanged.
+
+3.4 API
 -------
-[ ] GET /api/chat/agents
-[ ] GET /api/chat/agents/{agent}/models
-[ ] GET /api/chat/agents/{agent}/capabilities
-[ ] 加 cache/version/etag 或最小 refresh 機制，避免每次 keypress 都重新啟 CLI。
-[ ] Agent config / project context 改變時可 refresh。
-[ ] API error 時 UI 顯示可理解 fallback，不 blank Chat。
-
-驗證
-----
-[ ] Mock adapter unit tests。
-[ ] Qwen capability parser tests。
-[ ] OpenCode capability parser tests。
-[ ] disabled skill/command 不出現在 / palette。
-[ ] Agent 切換不會殘留前一個 Agent model/mode/skill。
+[ ] Add Project Chat session CRUD APIs.
+[ ] Add message Send/Stream/Cancel APIs.
+[ ] Add stable event ids / request ids / idempotency where retries can duplicate actions.
+[ ] Keep API errors structured: code/message/retryable/request_id.
+[ ] Add API tests for session isolation, delete, reconnect, duplicate send/cancel and backend failure.
 
 
-PHASE 2 - Chat Service / Chat API
-================================
+PHASE 4 - COMPOSER / AGENT CAPABILITIES / QUEUE / ASK
+=====================================================
 
-架構
-----
-[ ] 新增獨立 Chat service（建議 ui service layer 或獨立模組），不要塞進 FlowEngine。
-[ ] ui/server.py 只負責 HTTP routing/serialization，Chat business logic 放 service。
-[ ] Chat service 可重用 runner/agent adapter，但不透過 StageExecutor 跑一般 Chat。
-[ ] Chat session 與 Project 綁定。
-[ ] Chat session 保存：
-    - session id
-    - project id/root
-    - agent
-    - model
-    - mode
-    - messages
-    - active turn
-    - queue
-    - pending Ask
-    - created_at / updated_at
-[ ] 不把 Runner Task runtime log 複製進 Chat history。
+4.1 Composer layout
+-------------------
+[ ] Composer starts compact and auto-grows to bounded height.
+[ ] After max height, textarea scrolls internally.
+[ ] Chat message area always reserves enough space for the current Composer height.
+[ ] Programmatic prompt prefill recalculates height immediately.
+[ ] Keep Mode as compact quick control.
+[ ] Add "+ New Task" beside compact execution controls; current Project is prefilled.
+[ ] Remove redundant Project tag below the Composer.
+[ ] Chat settings popup holds Workflow / Agent / Model / Reasoning and must not reflow Chat.
 
-API
----
-[ ] GET /api/chat/projects/{project}/sessions
-[ ] POST /api/chat/projects/{project}/sessions
-[ ] PATCH /api/chat/sessions/{session}（rename / Agent / Model / Mode）
-[ ] DELETE/Archive Chat policy先定義；active turn/Task 時 fail closed。
-[ ] POST /api/chat/sessions/{session}/messages
-[ ] POST /api/chat/sessions/{session}/cancel
-[ ] streaming event transport：SSE/WebSocket/現有可維護方案擇一，不要同時做兩套。
-
-Streaming event schema
-----------------------
-[ ] assistant_text
-[ ] thinking/tool_activity
-[ ] ask_request
-[ ] queue_updated
-[ ] turn_started
-[ ] turn_completed
-[ ] turn_error
-[ ] task_draft_result
-[ ] capability_changed（必要時）
-
-[ ] event 都包含 session_id / turn_id，避免 stale tab 套錯事件。
-[ ] reconnect 後可以重新讀目前 Chat projection。
-[ ] UI 不自行從零碎 event 推導另一套 state machine。
-
-
-PHASE 3 - Chat Queue
-====================
-
-產品行為
---------
-[ ] Agent active turn 時允許加入 queued prompts。
-[ ] 顯示位置固定在 Composer 上方。
-[ ] 沒 Queue 時完全隱藏。
-[ ] FIFO。
-[ ] 每筆可 Edit。
-[ ] 每筆可 Delete。
-[ ] Edit/Delete 必須有 item id/version，防止 stale UI 修改錯筆。
-[ ] Queue 是 session-scoped。
-[ ] Queue 不等於 Task List。
-[ ] Queue 不會建立 Runner Task。
-
-Backend
--------
-[ ] POST /api/chat/sessions/{session}/queue
-[ ] PATCH /api/chat/sessions/{session}/queue/{item}
-[ ] DELETE /api/chat/sessions/{session}/queue/{item}
-[ ] GET queue projection 可併進 session projection。
-[ ] current turn 完成後由 Chat service 取下一筆。
-[ ] process restart 時定義 queue persistence：
-    - pending 保留
-    - executing item 依 turn state 決定 recovered/failed
-[ ] 不使用 Runner retry/recovery 去恢復 Chat Queue。
-
-快捷鍵
-------
-[ ] Ctrl+Q 明確 enqueue（參考 Qwen Code UX）。
-[ ] Enter 的 active-turn 行為要明確：
-    - steer current turn 或
-    - queue
-    先選一個產品規則，不可 agent 各自偷偷不同。
-[ ] 如果 Agent native 行為不同，由 adapter 映射。
-
-測試
-----
-[ ] enqueue 1/多筆。
-[ ] edit。
-[ ] delete。
-[ ] FIFO consume。
-[ ] active turn cancel。
-[ ] reconnect queue 保留。
-[ ] stale edit/delete fail closed。
-
-
-PHASE 4 - AI Ask / 反問
-=======================
-
-共用 schema
------------
-[ ] 定義 normalized AskRequest：
-    ask_id
-    session_id
-    turn_id
-    questions[]
-[ ] Question：
-    header
-    question
-    type = choice | text
-    options[]（choice only）
-[ ] Choice UI 永遠追加「其他（自行輸入）」；不要要求 Agent 自己重複提供 Other。
-[ ] Answer payload：
-    answers keyed by question index 或 stable question id。
-[ ] Qwen/OpenCode adapter 各自轉成 native format。
-
-UI
---
-[ ] Ask panel 顯示在 Composer 上方。
-[ ] 多題顯示 progress N / total。
-[ ] choice：點 option。
-[ ] choice 最後固定 Other -> text input。
-[ ] text：直接 text input。
-[ ] 回答後 Next。
-[ ] 最後一題 Submit。
-[ ] Submit 前保留前面答案，可 Back 若 UX 評估需要。
-[ ] Cancel 明確 cancel/deny pending question。
-[ ] Ask pending 時 normal Chat composer 如何處理要定義；建議仍可編寫但 Send 進 Queue，避免干擾 suspended turn。
-[ ] Ask 不當成普通 assistant message。
-[ ] Submit 後 original Agent turn resume。
-
-Agent 對接
-----------
-[ ] Qwen：ask_user_question tool -> AskRequest -> updatedInput.answers。
-[ ] OpenCode：question tool -> AskRequest -> answer submit。
-[ ] Agent 不支援 Question tool 時 capability=false，Ask UI/button disabled/hidden。
-[ ] Permission approval 與 Ask clarification 分開 schema，避免混在一起。
-
-測試
-----
-[ ] 單題 choice。
-[ ] 多題 choice。
-[ ] free text。
-[ ] Other custom text。
-[ ] validation empty answer。
-[ ] Next / final Submit。
-[ ] Cancel。
-[ ] reconnect pending Ask。
-[ ] Agent switch 不可把 pending Ask 丟給另一 Agent。
-[ ] process exit while waiting Ask -> clear error state，可重試但不進 Runner recovery。
-
-
-PHASE 5 - Composer @ / / Command Palette
-========================================
-
-@ Runner commands
------------------
-[ ] @ 只顯示 AI Task Runner 系統能力。
-[ ] production 至少：
+4.2 @ Runner command palette
+----------------------------
+[ ] At Composer start, "@" opens Runner-owned command suggestions.
+[ ] Include:
+    @goal
     @task
     @task-single
     @task-list
-[ ] @workflow / @project 是否保留 production 由產品需求決定。
-[ ] Mock-only @queue / @ask-demo 不得誤當正式 contract。
+[ ] Support filter, Arrow Up/Down, Enter/Tab accept, Escape close.
+[ ] Selecting suggestion inserts text only; never auto-send.
+[ ] No dedicated @task button.
 
-/ Agent capabilities
---------------------
-[ ] / 只顯示 selected Agent 回傳的 commands/Skills。
-[ ] 顯示 token / title / description / source。
-[ ] keyboard：
-    Arrow Up/Down
-    Enter/Tab accept
-    Escape close
-[ ] accept 只插入，不 auto-send。
-[ ] Agent switch 後 palette 立即刷新。
-[ ] capability refresh 不應卡住 Chat first paint。
-
-Qwen discovery
---------------
-[ ] 參考 Qwen slash command registry / SkillManager，不自行掃前端。
-[ ] project .qwen/skills / user / extension / bundled 由 Qwen adapter 統一 resolve。
-[ ] user-invocable=false 不顯示在 user / palette。
-[ ] slashCommands.disabled 要生效。
-
-OpenCode discovery
-------------------
-[ ] .opencode/commands + config commands。
-[ ] slash-enabled SKILL.md。
-[ ] project/global compatible skill locations。
-[ ] permission deny 的 skill 不顯示。
-
-
-PHASE 6 - Agent / Model / Mode Picker
-====================================
-
-[ ] Agent/Model/Mode 都用自訂 picker UI。
-[ ] 不露出瀏覽器 native select。
-[ ] Trigger 顯示主值 + 類別 + compact icon。
-[ ] Popup 顯示：
-    label
+4.3 / Agent capability palette
+------------------------------
+[ ] "/" opens selected Agent's user-invocable commands/skills.
+[ ] Add normalized capability schema:
+    token/name
     description
-    source/native mapping
-    selected state
-[ ] keyboard/focus/Escape。
-[ ] Agent -> Model/Mode 能力同步刷新。
-[ ] Model 不存在時選 default，不保留 stale model。
-[ ] Mode 不存在時選 default，不 silent emulate。
-[ ] YOLO 使用醒目但不誇張的警示外觀。
-[ ] Mode tooltip 說明實際 native mapping。
-[ ] Model list 由 adapter/backend 取得。
+    kind
+    source
+    enabled/availability
+    permission/user_invocable
+[ ] Qwen capability discovery uses Qwen's resolved command/Skill owner; do not frontend-scan directories.
+[ ] OpenCode capability discovery uses OpenCode resolved command/skill owner; do not frontend-scan directories.
+[ ] Preserve project/user/extension/native permission semantics.
+[ ] Capability cache invalidates on Agent/Project/config/permission changes.
+[ ] Reuse main backend/model discovery for model picker; no duplicate model catalog.
 
-
-PHASE 7 - @task TaskDraft 生成
-=============================
-
-命令
-----
-[ ] @task <spec>
-    - mode=auto
-    - AI 決定 single / multi
-[ ] @task-single <spec>
-    - mode=single
-    - exactly 1 item
-[ ] @task-list <spec>
-    - mode=list
-    - items >= 2
-
-Backend fixed prompt
---------------------
-[ ] 建立 ONE generate-task fixed prompt，放 backend/resource 層。
-[ ] 參考 Generate Workflow ownership，不把 full prompt 放 frontend。
-[ ] request：
-    spec
-    mode(auto/single/list)
-    current Project
-    selected/default Workflow context（必要時）
-[ ] response = TaskDraft structured schema。
-[ ] malformed response validation fail closed。
-[ ] mode constraint backend 再驗證：
-    single != 1 -> reject/repair policy 明確
-    list < 2 -> reject/repair policy 明確
-[ ] 不 fork 三套 prompt/planner。
-
-TaskDraft schema
-----------------
-[ ] parent title。
-[ ] project context。
-[ ] ordered items[]。
-[ ] child：
-    title
-    prompt/spec
-    Project
-    Workflow
-    workspace policy
-    optional validator/prompt override
-[ ] 禁止 runtime/retry/merge 假資料進 Draft。
-
-Mock
-----
-[ ] @task 隨機 single/multi。
-[ ] @task-single 固定 single。
-[ ] @task-list 固定 >=2。
-[ ] mock:error。
-[ ] mock:invalid。
-[ ] long spec。
-[ ] Mock 走同 schema validator。
-
-
-PHASE 8 - Canonical Task / Task List Editor
-==========================================
-
-[ ] root New Task、normal Task Edit、Task List child Add/Edit、Chat Draft Edit 共用 ONE canonical Task Editor。
-[ ] 不建立 Chat-only Task form。
-[ ] Editor 是 fixed right-side overlay sheet。
-[ ] overlay 不參與 Chat/Task List 主 layout，不造成 reflow。
-[ ] underlying source surface 保留。
-[ ] Back context：
-    Chat Draft -> Chat Draft
-    Info -> Info
-    Task List -> Task List
-[ ] multi TaskDraft 用既有 Task List surface。
-[ ] child Edit 再用同一 canonical Task Editor。
-[ ] Draft Create 前不能 Move existing 真實 Board Task 進 Draft。
-[ ] Draft Create 後才進 durable Task registry。
-[ ] Create 後 status=New/runtime=idle。
-[ ] 不 auto-run。
-
-Validation
-----------
-[ ] Prompt empty/error 在 active sheet 上方可見。
-[ ] Project/Workflow/Validator/Workspace validation 共用 manual creation path。
-[ ] 不可用 action disabled。
-[ ] Ongoing read-only。
-[ ] Paused current/future/completed 規則照 future.txt。
-
-
-PHASE 9 - Task persistence / Runner integration
-==============================================
-
-Task persistence
-----------------
-[ ] durable Task store 與 Chat store 分離。
-[ ] Task identity 保存 run ids/history references。
-[ ] older Completed Tasks 不被新 Task 覆蓋。
-[ ] Delete explicit + confirmation。
-[ ] active path owner 不可 Delete。
-
-Runner 要改的地方
-----------------
-[ ] Runner 不需要知道 Chat Queue。
-[ ] Runner 不需要知道 Ask。
-[ ] Runner 不需要知道一般 Chat session。
-[ ] Runner 只接收 Task Create/Start 後 freeze 的 execution inputs。
-[ ] reuse runner/workspace.py 做 Main/Worktree resolution，必要時補 global canonical-path ownership。
-[ ] one active Task per canonical execution path 後端 guard。
-[ ] runtime_view.py/現有 projection 提供 Task UI status + allowed actions。
-[ ] Continue/Resume/Rerun 都先重新 acquire path ownership。
-[ ] Task List 仍使用既有 ordered execution，不新增 DAG scheduler。
-[ ] StageExecutor retry/recovery 不因 Chat/Merge 改變。
-[ ] FlowEngine 不處理 Chat command / Ask / Queue。
-
-runner/agent 可共用的地方
+4.4 Product Mode mapping
 ------------------------
-[ ] available_models() 繼續共用。
-[ ] backend command/env/config resolution 共用。
-[ ] 新 capability discovery 可放 runner/agent 共用層。
-[ ] interactive Chat transport 若與 Runner blocking ask() 差異過大，新增 thin adapter，不硬塞到現有 ask()。
+[ ] Define product-facing Read / Auto / YOLO capability mapping through adapters.
+[ ] Unsupported mode is hidden/disabled, never simulated only in UI.
+[ ] Permission enforcement happens in Agent/backend, not just picker text.
+[ ] Add focused Qwen/OpenCode mapping tests against installed/current supported behavior.
+
+4.5 Chat Queue
+--------------
+[ ] Remove the concept of a dedicated "+ Queue" action from the normal flow.
+[ ] If active Chat turn is still running and user sends another message, enqueue automatically.
+[ ] Allow multiple queued messages.
+[ ] Show Queue above Composer.
+[ ] Queue item supports Edit/Delete before execution.
+[ ] Preserve FIFO.
+[ ] Queue is Chat-session scoped.
+[ ] Queue persists/reconnects according to Chat store policy.
+[ ] Pending Ask keeps active turn blocked; messages sent during Ask remain queued.
+[ ] Queue code must not create a second Runner scheduler/task queue.
+
+4.6 Ask / clarification
+-----------------------
+[ ] Normalize Agent ask/question tool output into one Ask schema.
+[ ] Render Ask as an interactive card in the Chat message stream.
+[ ] Support multiple questions.
+[ ] Support option question.
+[ ] Option question has final Other/custom-text path where applicable.
+[ ] Support free-text question.
+[ ] Extra context is optional.
+[ ] Next validates only the current question and advances.
+[ ] Final Submit returns structured answers to the same Agent turn.
+[ ] Cancel explicitly cancels/denies the pending question instead of inventing an answer.
+[ ] No production Ask mock button.
+[ ] Long options remain usable without covering Composer.
+[ ] Ask is Chat-turn state, never RunState/retry state.
+[ ] Browser/API tests cover multi-question, Other, free text, optional context, Cancel, queue-during-Ask and reload/stale actions.
 
 
-PHASE 10 - Workspace / Worktree
-===============================
+PHASE 5 - DURABLE TASK PRODUCT MODEL / BOARD
+============================================
 
-[ ] Workspace：Auto / Main / Worktree。
-[ ] Main 永遠存在。
-[ ] Auto：
-    Main free -> Main
-    Main busy -> Worktree
-[ ] canonical path busy guard backend authoritative。
-[ ] Worktree branch/path/result 投影。
-[ ] Board/List/Info/Editor 醒目 WORKTREE。
-[ ] multi child 可跨 Project / workspace。
-[ ] 不把多 Project worktree 假裝成單一 workspace。
+Goal: introduce a durable Task product layer over the existing Runner without duplicating runtime truth.
 
-測試
-----
-[ ] Main available。
-[ ] Main busy。
-[ ] Auto -> Worktree。
-[ ] forced Main busy -> reject。
-[ ] forced Worktree。
-[ ] multiple Project children。
+5.1 Task store
+--------------
+[ ] Define one durable Task/Task List backend model.
+[ ] Stable Task id survives Run/Rerun/Resume history.
+[ ] One parent Task may own ordered child items.
+[ ] TaskDraft is not persisted as a durable Task until Create.
+[ ] Runtime attempts/history reference Task identity but Runner RunState remains canonical runtime state.
+[ ] Existing legacy Runner history remains inspectable without fabricating fake Task records.
 
-
-PHASE 11 - Workspace Results / Merge
-====================================
-
-UI
---
-[ ] Parent Info 依 Project grouping。
-[ ] 每 Worktree 一 row。
-[ ] only：
-    Merge
-    Merge Chat
-[ ] status：
-    Ready
-    Conflict
-    Blocked
-    Merged
-
-Backend merge service
----------------------
-[ ] Merge service 不放 StageExecutor。
-[ ] preflight：
-    worktree/source exists
-    target exists
-    task completion/validation condition
-    dirty state
-    conflict check
-[ ] UI 開啟時可讀 projection。
-[ ] 按 Merge 時 backend 重新 preflight，不能信 stale UI。
-[ ] Ready -> direct Merge。
-[ ] Conflict -> direct Merge disabled。
-[ ] merge success 記錄 merged commit。
-[ ] Merge failure 不進 Runner retry/recovery。
-
-Merge Chat
-----------
-[ ] 找到 Worktree Project。
-[ ] 切該 Project。
-[ ] create NEW Chat session。
-[ ] prefill：
-    parent Task
-    child Task
-    Project path
-    Worktree path
-    source branch
-    target branch
-    preflight status/reason
-    integration instruction
-[ ] 不 auto-send。
-
-
-PHASE 12 - Tasks UI/UX
-======================
-
-[ ] Project click -> Chat。
-[ ] Tasks Project multi-select independent。
-[ ] New -> Task List。
-[ ] Ongoing/Paused/Closed -> Info。
-[ ] Board：
+5.2 Board lifecycle
+-------------------
+[ ] Use only:
     New
     Ongoing
     Paused
     Closed
-[ ] 不加 Waiting Merge column。
-[ ] Paused -> New confirmation。
-[ ] Closed -> New confirmation + preserve history。
-[ ] Delete confirmation。
-[ ] Ongoing Delete disabled。
-[ ] Add/Edit source-aware Back。
-[ ] Open Workflow 只有有 selected child 時顯示/enable。
-[ ] card description ellipsis。
-[ ] drag reorder。
-[ ] remove obsolete Move up/down menu 若 UI 已可 drag。
-[ ] YAML 是 canonical list 的 advanced view，不是另一套資料。
+[ ] Keep Runner/runtime detail separate from Board lifecycle.
+[ ] New -> Ongoing only through canonical Run action.
+[ ] Ongoing -> Paused through Stop/Pause semantics.
+[ ] Paused -> Ongoing through canonical Resume.
+[ ] Reset/restart transitions require confirmation when history/resume state is abandoned.
+[ ] Closed -> New/Rerun preserves prior History.
+[ ] UI drag/state action calls backend transition; frontend cannot mutate lifecycle truth directly.
+[ ] Invalid transitions are disabled and backend rejected.
+
+5.3 Board + dense List view
+---------------------------
+[ ] Port prototype Board interaction into production current-main style/tokens.
+[ ] Add dense Task List view for scanning many Tasks.
+[ ] Task cards/rows show useful status/project/progress without oversized controls.
+[ ] Long descriptions truncate with ellipsis and preserve access to full content.
+[ ] Search/running filters do not mutate Task state.
+
+5.4 Delete
+----------
+[ ] Delete Task requires confirmation.
+[ ] Running/recovering Task Delete is disabled and backend rejected.
+[ ] Define Task record/history cleanup separately from future Worktree cleanup.
+[ ] Delete never performs hidden source merge/integration.
+
+5.5 Runtime projection reuse
+----------------------------
+[ ] Task Info consumes current main canonical runtime projection.
+[ ] Allowed Run/Stop/Resume/Reset/Rerun actions come from backend/runtime owners.
+[ ] Do not duplicate Running/Recovering/Stopped/Completed/Needs Attention derivation inside Task frontend.
+[ ] Regression tests ensure main current runtime/action races remain guarded.
 
 
-PHASE 13 - API / Persistence / Concurrency
-=========================================
+PHASE 6 - ONE TASK DRAWER + CANONICAL TASK EDITOR
+=================================================
 
-[ ] ui/server.py route 逐步薄化，business logic 拆 service。
-[ ] Chat store、Task store、Runner state owner 分清楚。
-[ ] 所有 mutation request 有 stable id。
-[ ] stale tab / double-click 後端 fail closed。
-[ ] active turn / queue / Ask / Task start concurrency 測試。
-[ ] process restart：
-    Chat messages 可讀
-    queue pending 可讀
-    pending Ask 有明確 interrupted 狀態
-    Runner Task 仍依現有 durable resume
-[ ] 不因 Chat store 錯誤毀損 Runner RunState。
+6.1 One Drawer shell
+--------------------
+[ ] Implement one right-side Task Drawer owner.
+[ ] Info shell fixed tabs:
+    Overview
+    Runtime
+    Output
+    History
+[ ] Remove/avoid separate "Steps" tab/page.
+[ ] Task List / Task Editor / YAML are subviews of the same Drawer shell.
+[ ] Large Task editing flows must not stack multiple full-size dialogs.
 
+6.2 Task Info
+-------------
+[ ] Overview shows Task identity/status/project/current selected child/workflow/workspace summary.
+[ ] Runtime reuses canonical runtime projection/timeline.
+[ ] Output shows the same runtime output owner, not a second log store.
+[ ] History shows Task lifecycle/run attempts without rewriting Runner history.
+[ ] Open Workflow only visible/enabled for a concrete selected child with Workflow.
 
-PHASE 14 - Frontend production implementation
-=============================================
+6.3 New Task creation behavior
+------------------------------
+[ ] "+ New" from Tasks or Chat opens a transient creation workspace.
+[ ] Merely opening Task List/create UI must NOT create a durable Task.
+[ ] Create button is disabled when no valid Task item exists.
+[ ] Successful Create creates New/idle and opens its Info.
+[ ] Opening an existing New Task defaults to Task List editable workspace.
+[ ] New Task List provides "Back to Info" when entered from Task Info.
 
-[ ] Prototype 驗證後再搬到正式 UI source。
-[ ] Full Designer 仍只改 ui/studio-src，不改 compiled output。
-[ ] Chat/Tasks frontend 按責任拆 module：
-    chat session
-    composer
-    agent picker
-    capability palette
-    queue
-    ask
-    task draft
-    task editor bridge
-    merge result
-[ ] 不再用一個 300KB script 疊 wrapper。
-[ ] one owner per action。
-[ ] accessibility：
-    aria-expanded
-    role=listbox/option
-    focus restore
-    Escape
-    keyboard palette
-[ ] responsive：
-    Queue/Ask/Picker/Editor 不造成 horizontal reflow。
+6.4 Source-aware navigation
+---------------------------
+[ ] Info -> Add/Edit child -> Editor -> correct return surface.
+[ ] Task List -> Editor -> Task List.
+[ ] Chat TaskDraft -> Editor/List -> Chat TaskDraft.
+[ ] Prompts/Workflows navigation closes/suspends Drawer safely and preserves dirty guards.
+[ ] Do not hardcode all Back actions to Task List/YAML.
 
+6.5 Dirty state / Escape / focus
+-------------------------------
+[ ] Task Editor owns unsaved snapshot.
+[ ] YAML owns unsaved snapshot.
+[ ] Parent Task List Draft discard resolves dirty child Editor first.
+[ ] Back/X/Escape/navigation asks before discarding unsaved edits.
+[ ] Top-most popup/modal/context menu owns Escape before Drawer.
+[ ] Restore initiating focus after close/cancel when possible.
+[ ] Fix z-index/focus interactions for Drawer, picker, autocomplete, toast, Ask and confirmations.
 
-PHASE 15 - Tests / Gates
-========================
-
-Unit
-----
-[ ] Agent capability schema。
-[ ] Qwen capability discovery。
-[ ] OpenCode capability discovery。
-[ ] mode mapping。
-[ ] TaskDraft schema/mode validation。
-[ ] Ask normalization。
-[ ] Queue mutations。
-[ ] merge preflight。
-
-API
----
-[ ] Chat session CRUD。
-[ ] stream event ids。
-[ ] Queue CRUD。
-[ ] Ask submit/cancel。
-[ ] TaskDraft generate。
-[ ] Task Create/Start path guard。
-[ ] Merge preflight/merge。
-
-Browser
--------
-[ ] Agent/Model/Mode picker。
-[ ] @ autocomplete。
-[ ] / per-Agent autocomplete。
-[ ] Ctrl+Q queue。
-[ ] Queue Edit/Delete。
-[ ] Ask multi-question。
-[ ] Other text。
-[ ] final Submit。
-[ ] @task random single/multi。
-[ ] @task-single single。
-[ ] @task-list >=2。
-[ ] Chat Draft Edit overlay 不 reflow。
-[ ] Back to Chat Draft。
-[ ] Task state disabled actions。
-[ ] Delete confirm。
-[ ] Worktree indicators。
-[ ] Project-grouped Merge。
-[ ] Merge Chat unsent prompt。
-
-Runner regression
------------------
-[ ] existing mock suite 全綠。
-[ ] dry-run 全綠。
-[ ] resume/recovery/process restart 不受 Chat 改動影響。
-[ ] HTTP 429/502/503 recovery 不受影響。
-[ ] Dynamic Handoff 不受影響。
-[ ] Final Review quorum 不受影響。
-[ ] 若 workspace/path ownership 有改，補 live probe。
-[ ] 若 Agent backend 共用層有改，補 Qwen/OpenCode focused live probe。
-[ ] 24H soak 只有 runtime-affecting change 才重新作為 release gate，但不能跳過需要的 soak。
+6.6 Canonical Task Editor
+-------------------------
+[ ] Reuse ONE Task Editor for:
+    standalone New Task
+    existing Task edit
+    Task List child Add/Edit
+    Chat TaskDraft single
+    Chat TaskDraft list child
+[ ] Project + Workflow + optional Title use compact basics layout.
+[ ] Task Prompt is the primary visual surface.
+[ ] Prompt source modes keep stable geometry.
+[ ] File Validator/AI Validation appear only when applicable.
+[ ] Mixed File Validator + AI Validation cards align consistently.
+[ ] Workspace/execution controls remain secondary.
+[ ] Narrow layout stacks cleanly without changing field ownership.
+[ ] Task execution picker values reuse common backend catalogs/preferences rather than hardcoded copies.
 
 
-PHASE 16 - 文件與清理
-=====================
+PHASE 7 - TASK LIST / YAML / FILE INPUTS
+=======================================
 
-[ ] future.txt 與 todo.txt 同步。
-[ ] 更新 UI.txt / README / README.zh-TW（只有正式實作改 current contract 時）。
-[ ] 刪除 prototype-only mock contract，不讓正式 code 引用。
-[ ] 刪除 legacy Chat->Task direct copy handler。
-[ ] 刪除 side-question 舊 Ask 語意；/btw 若保留只當 Agent slash capability。
-[ ] 刪除 duplicate Task editor。
-[ ] 刪除 duplicate model/skill hardcode。
-[ ] project.bundle.txt 排除新的 runtime output/cache。
-[ ] 最後全 repo 搜尋 legacy symbol / duplicate routes。
+7.1 Ordered Task List
+---------------------
+[ ] Reuse existing ordered YAML/CLI task capability; do not create another scheduler/DAG.
+[ ] Parent list owns list title/order; child execution fields stay on children.
+[ ] Add/Edit/Remove child.
+[ ] Drag handle reorder is primary.
+[ ] Remove redundant Move Up/Move Down actions if drag is available.
+[ ] Click selects; double-click can edit where state allows.
+[ ] Context actions are selection-aware and do not double-trigger edit.
+[ ] Ongoing list is observation-only.
+[ ] Paused editing follows restart/history safety rules.
+[ ] Closed is read-only except explicit lifecycle actions.
+
+7.2 YAML subview
+----------------
+[ ] YAML is an advanced representation of the same Task List model.
+[ ] Validate before Apply.
+[ ] Apply updates the same draft/model, not a parallel copy.
+[ ] Dirty YAML gets discard confirmation.
+[ ] Completed execution history cannot be rewritten by YAML mutation.
+
+7.3 Upload file contract
+------------------------
+[ ] Replace fake/path-only browser Choose behavior with explicit Upload file where local file bytes must be brought into managed Task storage.
+[ ] Stage browser-selected bytes transiently.
+[ ] Backend allocates/returns a managed destination path.
+[ ] Immediately display the full managed path in the same Task path field.
+[ ] Create/Save atomically materializes/copies staged bytes.
+[ ] Canonical Task stores managed path only.
+[ ] Browser File/fakepath/upload token never becomes canonical Task data.
+[ ] Manual path edit overrides/discards the staged upload for that field.
+[ ] Copy/materialization failure fails closed; never persist missing path.
+[ ] TaskDraft/List child navigation preserves staged upload until Save/Create/discard.
+[ ] Cover Task prompt/goal file, File Validator and AI validator prompt file where supported.
+
+7.4 Workflow capability-driven validation fields
+------------------------------------------------
+[ ] Continue using Workflow Stage contract/capability discovery to decide whether File Validator / AI Validation inputs are required.
+[ ] Do not hardcode Workflow filenames to show/hide validation controls.
+[ ] Preserve current main validator/runtime semantics.
 
 
-完成定義
-========
+PHASE 8 - TASKDRAFT / @TASK / @GOAL BACKEND
+===========================================
 
-整個 Future 不算完成，直到：
-[ ] Chat API、AgentAdapter、Queue、Ask、@task*、Task Editor、Worktree、Merge 都有 production contract。
-[ ] UI Mock 與 production 共用 schema。
-[ ] Runner 沒有被 Chat state 污染。
-[ ] 單 Task、多 Task、多 Project、Main/Worktree 都有測試。
-[ ] Queue/Ask reconnect/stale action 有 guard。
-[ ] Merge conflict 不能直接 Merge。
-[ ] Merge Chat 正確切 Project + 新 Chat + unsent prompt。
-[ ] 所有不可用 action 都 disabled + backend guard。
-[ ] browser/API/mock/runtime regression 全綠。
-[ ] 舊 contract/handler 清乾淨。
+8.1 TaskDraft schema
+--------------------
+[ ] Define canonical backend TaskDraft schema.
+[ ] Draft contains no runtime status/retry/merge/output.
+[ ] Validate Project/Workflow/prompt/file/execution references before Create.
+[ ] Invalid AI output fails closed with visible error.
+[ ] Frontend mock and production use the same schema.
+
+8.2 One generation service
+--------------------------
+[ ] Add one backend generate-task service with mode:
+    auto
+    single
+    list
+[ ] @task -> auto.
+[ ] @task-single -> single.
+[ ] @task-list -> list.
+[ ] Backend owns the fixed generation prompt; frontend never embeds a second planner prompt.
+[ ] Use user spec verbatim as source requirement and generate the smallest useful ordered list.
+[ ] Do not generate redundant review/test child items when selected Workflow already owns that responsibility unless explicitly requested.
+
+8.3 Chat TaskDraft UX
+---------------------
+[ ] Chat shows compact Draft summary only.
+[ ] Edit opens canonical Task Editor/Task List Drawer.
+[ ] Changes update the same transient Draft.
+[ ] Create Task persists New/idle only.
+[ ] Dismiss removes transient Draft.
+[ ] Draft never appears on Board/count/history before Create.
+
+8.4 @goal
+---------
+[ ] Implement @goal as explicit Create + Run using the same Task schema/default resolution.
+[ ] Use current Project preferences.
+[ ] Create durable Task first, then canonical backend Run.
+[ ] New/Ongoing UI immediately reflects the durable Task/runtime.
+[ ] @goal is never inferred from ordinary Chat text.
+
+8.5 Manual + New Task parity
+----------------------------
+[ ] Chat "+ New Task" and Tasks "+ New" reuse the same create controller/schema.
+[ ] Current Project is prefilled when launched from Project Chat.
+[ ] Standalone Task creation uses Project Workflow/default preferences rather than a hardcoded Workflow.
+[ ] Create checks that at least one valid Task exists.
+
+
+PHASE 9 - PRODUCTION INTEGRATION / TESTS / CLEANUP
+=================================================
+
+9.1 Data/API ownership
+----------------------
+[ ] Persist Global Settings/Defaults through one production owner.
+[ ] Persist Project Chat preferences through one Project owner.
+[ ] Persist Chat sessions/Queue/Ask through one Chat owner.
+[ ] Persist Task/Task List through one Task owner.
+[ ] Keep Runner RunState/runtime logs separate and authoritative for execution.
+[ ] Define schema versions/migrations for newly persisted product data.
+[ ] Never use localStorage as the sole production truth for Chat/Task/runtime state.
+
+9.2 Main UI integration
+-----------------------
+[ ] Port prototype behaviors into modular production source files; do not copy the prototype monolith.
+[ ] Keep current main CSS/theme/i18n/dialog helpers.
+[ ] Keep Workflow/Prompt Studio source/build pipeline intact.
+[ ] Avoid wrapper chains where the same function is repeatedly monkey-patched/redefined.
+[ ] One owner per render/action path.
+[ ] Remove legacy handlers/routes/components only after replacement tests are green.
+
+9.3 Browser E2E
+---------------
+[ ] Project -> Project Chat.
+[ ] Multi Chat Create/Rename/Switch/Delete.
+[ ] Global Settings + Project preferences persistence.
+[ ] @ command palette.
+[ ] / Agent capability palette.
+[ ] Active turn send -> Queue; multi FIFO Edit/Delete.
+[ ] Ask multi-question/Other/free text/Cancel/queue-during-Ask.
+[ ] @task Draft -> Edit -> Create.
+[ ] @task-single exactly one.
+[ ] @task-list multiple ordered items.
+[ ] @goal Create + Run.
+[ ] Chat + New Task.
+[ ] Task Board/List filters/transitions.
+[ ] One Drawer shell / four Info tabs.
+[ ] source-aware Back.
+[ ] dirty Task Editor/YAML confirmations.
+[ ] Task List drag reorder.
+[ ] Upload file -> managed full path -> Create/Save.
+[ ] Workflows/Prompts/Studio regression remains green.
+
+9.4 API/unit
+------------
+[ ] Chat session CRUD + isolation.
+[ ] Queue mutations/FIFO/idempotency.
+[ ] Ask normalization/submit/cancel.
+[ ] Agent capability schema/discovery.
+[ ] Mode/Reasoning mapping.
+[ ] Task/Task List lifecycle/actions.
+[ ] TaskDraft generation/schema validation.
+[ ] File staging/materialization/manual override.
+[ ] Project/Global preference copy/migration.
+
+9.5 Runner/reliability regression
+---------------------------------
+[ ] Existing Python deterministic suite stays green.
+[ ] Existing runtime action/race tests stay green.
+[ ] Dynamic Handoff tests stay green.
+[ ] resume/recovery/process restart tests stay green.
+[ ] HTTP 429/502/503 recovery tests stay green.
+[ ] dry-run/live alignment stays green.
+[ ] main backend/model discovery tests stay green.
+[ ] Run focused Qwen/OpenCode live probes when shared Agent/backend code changes.
+[ ] Run long soak/release gate when runtime-affecting changes justify it.
+
+9.6 Docs/cleanup
+----------------
+[ ] Update UI.txt / README / README.zh-TW only when production contract changes.
+[ ] Remove prototype-only mock contracts from production paths.
+[ ] Remove duplicate Task editor/forms.
+[ ] Remove stale Chat->Runner direct behavior replaced by normal Chat + explicit Task actions.
+[ ] Remove hardcoded model/skill lists.
+[ ] Remove obsolete Steps/old Task List navigation handlers.
+[ ] Search whole repo for duplicate/legacy routes and wrappers.
+[ ] Keep future.txt/todo.txt aligned with final shipped contract.
+
+
+PHASE 10 - FINAL / DEFERRED: GIT WORKTREE + MAIN AUTO DELIVERY
+==============================================================
+
+DO THIS LAST.
+
+Detailed source of truth:
+    feature/git-worktree-todo.md
+
+Do not duplicate or reinterpret that full Git transaction design here. The checklist below is only the integration plan.
+
+10.1 Physical architecture
+--------------------------
+[ ] Create a NEW top-level workspace/ backend package for Git worktree/merge orchestration.
+[ ] Do not put the new Git-worktree manager under runner/ or ui/.
+[ ] Keep existing runner/workspace.py unchanged in ownership: Runner safety/instructions/read-only helpers.
+[ ] UI/Task Backend calls workspace/ to prepare project_root, then triggers Runner.
+[ ] CLI/standalone Runner remains caller-project_root driven and has no workspace/worktree dependency.
+[ ] workspace/ and Runner do not import each other's internals.
+[ ] Task Backend/Orchestrator coordinates public workspace + Runner APIs.
+
+10.2 Current UI Task execution model
+------------------------------------
+[ ] Auto / Main / Isolated Worktree share one Workspace resolver.
+[ ] Current UI Task runs execute inside unique Task Run worktrees/local branches.
+[ ] Capture target_branch + target_head_sha_at_start per Task Run; never hardcode main.
+[ ] Task branch/worktree identity includes Task + Run.
+[ ] Uncommitted Project changes are not silently imported into Task base.
+[ ] Runner receives only project_root.
+[ ] Runner Complete snapshot preflight verifies:
+    worktree registration
+    repository identity
+    expected Task/recovery branch
+    expected source-base ancestry
+    no active merge/rebase/cherry-pick/revert/bisect
+[ ] Fail closed on ownership/history mismatch.
+
+10.3 Global Execution settings
+------------------------------
+[ ] Add production Global Auto workspace policy:
+    Busy project -> Worktree
+    Always Main
+    Always Worktree
+[ ] Add production Global merge_failure_limit (default 3).
+[ ] Add production Allow concurrent Main tasks (default Off).
+[ ] Concurrent switch controls Main-busy admission only; it does not rewrite Auto policy.
+[ ] Persist Global execution settings through the same versioned settings owner used by UI/CLI/API.
+[ ] Task stores actual merge_failure_count only; do not copy Global limit into Task metadata.
+
+10.4 Main merge queue
+---------------------
+[ ] Runner execution can be parallel.
+[ ] Merge delivery is serialized per repository + captured target branch.
+[ ] Allocate durable FIFO merge_queue_seq when a deliverable Main result is enqueued.
+[ ] Restart restores queue order.
+[ ] Queue head keeps its turn during conflict recovery.
+[ ] Long Runner recovery releases short Git locks; later same-target Tasks still cannot overtake queue head.
+
+10.5 Direct Main delivery
+-------------------------
+[ ] Main Runner Complete does NOT close Task.
+[ ] Snapshot/commit local Task result.
+[ ] Maintain exactly one current merge source:
+    merge_source_branch
+    merge_source_sha
+    merge_source_base_sha
+    merge_source_worktree
+[ ] Before delivery, verify merge_source_base_sha is still target ancestry.
+[ ] If target branch missing -> waiting_target_branch / Needs Attention.
+[ ] If target history rewritten/diverged -> waiting_target_history / Needs Attention.
+[ ] If target worktree dirty -> waiting_target_clean / Needs Attention.
+[ ] If target workspace unsafe/unavailable -> waiting_target_workspace / Needs Attention.
+[ ] Do not auto-switch/reset/stash/discard unrelated user state.
+[ ] Idempotency: if merge_source_sha is already target ancestry, finalize merged without duplicate commit.
+[ ] Otherwise use direct ancestry-preserving:
+    git merge --no-ff --no-commit <current merge source>
+[ ] Keep pending merge abortable until acceptance.
+[ ] Main becomes Closed · merged only after merge commit succeeds.
+[ ] no_changes is the normal Main exception that closes without merge.
+
+10.6 Post-merge validation
+--------------------------
+[ ] Persist merge_source_base_sha.
+[ ] If current target HEAD == merge_source_base_sha and merge is conflict-free, avoid redundant post-merge validation.
+[ ] If target advanced beyond merge_source_base_sha, merged tree is a new combination and requires post-merge validation before commit.
+[ ] Reuse an existing safe public validator or add only a thin Git-unaware:
+    validate(project_root, validation_config)
+[ ] Validation-only path is verdict-only/source-non-mutating.
+[ ] Result semantics:
+    PASS
+    SOURCE_FAIL
+    TECHNICAL_ERROR
+[ ] PASS -> transaction ownership pre-commit check -> git commit.
+[ ] SOURCE_FAIL -> abort -> one real merge failure.
+[ ] TECHNICAL_ERROR -> abort, no merge_failure_count increment, existing technical retry/backoff / Needs Attention.
+[ ] Before commit verify pre-merge target HEAD, MERGE_HEAD and worktree/index ownership still match this transaction.
+
+10.7 Real merge fail + Runner recovery
+--------------------------------------
+[ ] Git conflict/SOURCE_FAIL aborts merge and increments merge_failure_count exactly once.
+[ ] Read current Global merge_failure_limit after each real failure.
+[ ] count <= limit:
+    create latest-target recovery worktree/branch
+    call existing Runner against that recovery project_root
+    normal Runner Review/Validate
+    commit recovery result
+    atomically replace current merge source
+    retry delivery
+[ ] Never merge stale original Task branch after recovery source replaces it.
+[ ] count > limit:
+    stop automatic Main delivery
+    retain latest current merge source
+    delivery_fallback=isolated_worktree
+    Closed · worktree_ready
+    reason=merge_failure_limit_exceeded
+[ ] Queue wait/lock contention/dirty target/missing workspace/target history issues/TECHNICAL_ERROR do not increment merge_failure_count.
+
+10.8 Cleanup / retention / remote
+---------------------------------
+[ ] Successful Main Task/recovery worktrees clean only after merged state is durable.
+[ ] Main fallback keeps latest merge source worktree/branch.
+[ ] Isolated Worktree keeps worktree_ready until explicit cleanup/delete.
+[ ] Cleanup verifies Git registration + Task/Run ownership before deletion.
+[ ] Normal Task lifecycle never git push origin.
+[ ] Remote Publish remains explicit/separate.
+
+10.9 Worktree browser/API/runtime tests
+--------------------------------------
+[ ] Auto policy × Concurrent Main matrix.
+[ ] 2/5/10 parallel Tasks get unique worktrees.
+[ ] Same-target merge FIFO + restart recovery.
+[ ] Same-line concurrent conflict invokes existing Runner recovery.
+[ ] Recovery updates current merge source; stale Task source is not merged.
+[ ] merge_failure_limit 3 -> failures 1/2/3 recover, 4th fallback.
+[ ] target move beyond source base triggers post-merge validation.
+[ ] validation PASS / SOURCE_FAIL / TECHNICAL_ERROR.
+[ ] target branch missing/history divergence/dirty/unmanaged worktree fail closed.
+[ ] Task/recovery branch reset/rebase that breaks ancestry fails closed.
+[ ] crash during pending/committed merge remains idempotent.
+[ ] CLI Runner still runs directly from caller project_root with workspace package absent from its contract.
+[ ] UI has no direct Git execution path.
+[ ] No old candidate/integration/squash delivery contract returns.
+
+10.10 Final Worktree acceptance
+-------------------------------
+[ ] All feature/git-worktree-todo.md implementation TODO items resolved or explicitly superseded by a newer reviewed contract.
+[ ] All feature/git-worktree-todo.md critical tests implemented and green.
+[ ] Main Task only finishes after successful Project-branch delivery or explicit merge-limit fallback.
+[ ] Runner remains Git/worktree unaware.
+[ ] Worktree feature can be replaced/removed at module boundary without changing Runner/CLI public contract.
+
+
+FINAL ACCEPTANCE
+================
+
+Do not call the overall Future migration complete until:
+
+[ ] main production UI matches the agreed Project Chat / Tasks / Drawer / Settings UX.
+[ ] current main Workflow/Prompt Studio remains intact.
+[ ] normal Chat, Queue and Ask are production-backed and separated from Runner runtime state.
+[ ] Project Agent/Model/Mode/Reasoning/Workflow preferences are backend-owned.
+[ ] TaskDraft and durable Task/Task List use one canonical product model.
+[ ] Manual New Task and Chat-generated Task reuse one Task Editor/Drawer.
+[ ] Ordered Task List/YAML reuses existing execution capability instead of a second scheduler.
+[ ] Upload-file managed-path contract is production-backed.
+[ ] browser/API/unit/runtime regression gates are green.
+[ ] replaced legacy handlers/contracts are removed.
+[ ] final Git worktree/Main-delivery phase is green per feature/git-worktree-todo.md.
