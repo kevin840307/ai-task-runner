@@ -756,39 +756,66 @@ let batchState={status:'idle',index:0,recovered:false};
 let batchParentTaskId=null;
 let pickerTarget=null;
 const nativeFilePicker=document.getElementById('nativeFilePicker');
-function applyPickedFilePath(value){
-  value=String(value||'').trim();if(!value)return;
-  if(pickerTarget?.context==='task'){
-    newTaskDraft[pickerTarget.field]=value;
-    if(typeof renderNewTaskSources==='function')renderNewTaskSources();
-  }else if(pickerTarget?.context==='plan'&&batchDraft[pickerTarget.index]){
-    batchDraft[pickerTarget.index][pickerTarget.field]=value;
-    const t=taskMap[currentTaskId];
-    if(t&&typeof commitPlanDraft==='function'){
-      commitPlanDraft(t,{markDirty:t.status==='paused'&&pickerTarget.index===batchState.index});
-      renderBoardFromMap();
-      if(typeof renderExecutionPlan==='function')renderExecutionPlan(t);
-    }
-  }else if(pickerTarget&&batchDraft[pickerTarget.index]){
-    batchDraft[pickerTarget.index][pickerTarget.field]=value;
-    if(typeof renderBatchDraft==='function')renderBatchDraft();
-  }
+const stagedUploadFiles=new Map(),mockManagedFileCopies=new Map();
+let stagedUploadSequence=0;
+function cloneUploadMeta(value={}){
+  return Object.fromEntries(Object.entries(value||{}).map(([field,meta])=>[field,meta?{...meta}:meta]).filter(([,meta])=>meta));
 }
-function openNativeFilePicker(index,field,kind='file',context='batch'){
+function stagedUploadMeta(source,field){return source?._uploads?.[field]||null}
+function hasFileSource(source,field){return !!String(source?.[field]||'').trim()||!!stagedUploadMeta(source,field)}
+function stagedUploadName(source,field){return stagedUploadMeta(source,field)?.name||''}
+function clearStagedUpload(source,field){
+  const meta=stagedUploadMeta(source,field);if(meta?.token)stagedUploadFiles.delete(meta.token);
+  if(source?._uploads){delete source._uploads[field];if(!Object.keys(source._uploads).length)delete source._uploads}
+}
+function safeUploadSegment(value,fallback='file'){return String(value||fallback).replace(/[<>:"/\\|?*\x00-\x1f]+/g,'-').replace(/^\.+|\.+$/g,'').trim()||fallback}
+function managedUploadPath(item,itemRef,field,meta){
+  const root=String(item?.project||projectMeta[currentProjectKey]?.path||'C:\\project').replace(/[\\/]+$/,'');
+  const folder=field==='validator'?'validators':field==='aiFile'?'ai-validator-prompts':'task-prompts';
+  return `${root}\\.ai-task-runner\\uploads\\${safeUploadSegment(itemRef,'task')}\\${folder}\\${safeUploadSegment(meta?.name,'uploaded-file')}`;
+}
+function materializeItemUploads(item,itemRef){
+  if(!item?._uploads)return item;
+  for(const field of ['goalFile','validator','aiFile']){
+    const meta=stagedUploadMeta(item,field);if(!meta)continue;
+    const path=managedUploadPath(item,itemRef,field,meta),file=stagedUploadFiles.get(meta.token)||null;
+    mockManagedFileCopies.set(path,{...meta,file,copiedAt:new Date().toISOString()});
+    if(meta.token)stagedUploadFiles.delete(meta.token);item[field]=path;delete item._uploads[field];
+  }
+  if(!Object.keys(item._uploads||{}).length)delete item._uploads;
+  return item;
+}
+function pickerTargetSource(){
+  if(pickerTarget?.context==='task')return newTaskDraft;
+  if((pickerTarget?.context==='plan'||pickerTarget?.context==='batch')&&batchDraft[pickerTarget.index])return batchDraft[pickerTarget.index];
+  return null;
+}
+function rerenderPickerTarget(){
+  if(pickerTarget?.context==='task'){if(typeof renderNewTaskSources==='function')renderNewTaskSources();return}
+  const t=taskMap[currentTaskId];
+  if(pickerTarget?.context==='plan'&&t){renderFullPlan(t);renderDrawerPlan(t);return}
+  if(typeof renderBatchDraft==='function')renderBatchDraft();
+}
+function openFileUploadPicker(index,field,kind='file',context='batch'){
   pickerTarget=context==='task'?{context:'task',field,kind}:context==='plan'?{context:'plan',index,field,kind}:{context:'batch',index,field,kind};
-  if(!nativeFilePicker){showToast('Native file picker is unavailable');return}
+  if(!nativeFilePicker){showToast('File upload picker is unavailable');return}
   nativeFilePicker.accept=kind==='validator'?'.py,.pyw,*/*':'';
-  nativeFilePicker.value='';
-  nativeFilePicker.click();
+  nativeFilePicker.value='';nativeFilePicker.click();
 }
 nativeFilePicker?.addEventListener('change',()=>{
-  const file=nativeFilePicker.files?.[0];if(!file)return;
-  const fullPath=typeof file.path==='string'?file.path.trim():'';
-  if(!fullPath||/^[A-Za-z]:\\fakepath\\/i.test(fullPath)){
-    showToast('Browser 無法取得完整檔案路徑，請在欄位中手動輸入完整 path');
-    return;
+  const file=nativeFilePicker.files?.[0],target=pickerTargetSource();if(!file||!target||!pickerTarget)return;
+  clearStagedUpload(target,pickerTarget.field);
+  const token=`U${++stagedUploadSequence}`;
+  stagedUploadFiles.set(token,file);
+  target._uploads={...(target._uploads||{}),[pickerTarget.field]:{token,name:file.name,size:file.size,type:file.type||'',lastModified:file.lastModified||0}};
+  target[pickerTarget.field]='';
+  const owner=taskMap[currentTaskId];
+  if((pickerTarget.context==='plan'||pickerTarget.context==='batch')&&owner&&!owner._chatDraft){
+    materializeItemUploads(target,`${owner.id}-I${pickerTarget.index+1}`);
+    if(typeof commitPlanDraft==='function')commitPlanDraft(owner,{markDirty:owner.status==='paused'&&pickerTarget.index===batchState.index});
+    renderBoardFromMap();
   }
-  applyPickedFilePath(fullPath);showToast('File path updated');
+  rerenderPickerTarget();showToast(`Uploaded · ${file.name}${owner&&!owner._chatDraft&&pickerTarget.context!=='task'?' · copied to managed path':' · copied when Task is created'}`);
 });
 function cloneBatch(items){return JSON.parse(JSON.stringify(items||[]))}
 function basename(path){return String(path||'').split(/[\\/]/).filter(Boolean).pop()||path||'Untitled'}
@@ -902,7 +929,7 @@ function bindBatchForm(){
     };
     el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
   });
-  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind));
+  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openFileUploadPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind));
   document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
   const add=document.getElementById('addRequest');
   if(add)add.onclick=()=>{
@@ -1177,9 +1204,9 @@ function renderNewTaskSources(){
   document.getElementById('newTaskValidationSource').innerHTML=fields.length?`<div class="validation-grid ${fields.length===1?'one':''}">${fields.join('')}</div>`:'<div class="validation-empty">這個 Workflow 不需要額外 Validator 輸入。</div>';
   document.querySelectorAll('[data-task-goal-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.goalMode=b.dataset.sourceValue;renderNewTaskSources()});
   document.querySelectorAll('[data-task-ai-mode]').forEach(b=>b.onclick=()=>{captureNewTaskSources();newTaskDraft.aiMode=b.dataset.sourceValue;renderNewTaskSources()});
-  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
-  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
-  document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
+  document.getElementById('taskPickGoal')?.addEventListener('click',()=>openFileUploadPicker(-1,'goalFile','goal','task'));
+  document.getElementById('taskPickValidator')?.addEventListener('click',()=>openFileUploadPicker(-1,'validator','validator','task'));
+  document.getElementById('taskPickAi')?.addEventListener('click',()=>openFileUploadPicker(-1,'aiFile','ai','task'));
   document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt Asset 仍由原本 Prompts workspace 管理')});
   renderNewTaskWorkspace();
 }
@@ -1206,8 +1233,6 @@ document.getElementById('createTaskConfirm').onclick=()=>{
   const t={id,status:'new',title,runtime:'idle',desc:workspace.kind==='worktree'?'尚未開始；Run 時會使用 isolated worktree。':'尚未開始；Run 時使用 Main workspace。',tags,workflow,project,progress:[0,4],elapsed:'—',stage:'Idle',session:'—',goal,promptSource:{...newTaskDraft},workspacePolicy:newTaskWorkspaceMode,workspaceKind:workspace.kind,branch:workspace.branch,executionRoot:workspace.root};
   taskMap[id]=t;renderBoardFromMap();closeModal('newTaskModal');showToast(`已建立 mock Task · ${workspaceName(t)}`);openTaskById(id);
 };
-
-function openPathPicker(index,field,kind,context='batch'){openNativeFilePicker(index,field,kind,context)}
 
 function batchToYaml(items){
   return items.map((x,i)=>{
@@ -1245,7 +1270,7 @@ function bindBatchForm(){
     el.addEventListener(el.tagName==='SELECT'?'change':'input',handler);
   });
   document.querySelectorAll('[data-yaml-source]').forEach(b=>b.onclick=()=>{const i=+b.dataset.item,field=b.dataset.field;if(batchState.status==='stopped'&&i===batchState.index)batchState.currentDirty=true;batchDraft[i][field]=b.dataset.sourceValue;renderBatchDraft()});
-  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openPathPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind,'batch'));
+  document.querySelectorAll('[data-pick-index]').forEach(b=>b.onclick=()=>openFileUploadPicker(+b.dataset.pickIndex,b.dataset.pickField,b.dataset.pickKind,'batch'));
   document.querySelectorAll('[data-view-prompts]').forEach(b=>b.onclick=()=>{showView('prompts');showToast('Prompt 管理仍使用原本 Prompts workspace')});
   const add=document.getElementById('addRequest');
   if(add)add.onclick=()=>{batchDraft.push({prompt:'New child RunRequest',goalMode:'inline',goalFile:'',goalAsset:'common/review.md',project:'C:\\Users\\kevin\\ai-task-runner',workflow:'ralphy_ai_validate.yaml',validatorMode:'file',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'});renderBatchDraft();showToast('新增 mock child RunRequest')};
