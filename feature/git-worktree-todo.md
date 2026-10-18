@@ -1399,7 +1399,7 @@ T-002 then repeats against the latest committed target.
 - [ ] On retry exhaustion, keep the Task `Closed · Awaiting merge` with `merge_retry_exhausted`; Closed means execution finished, not necessarily merged.
 - [ ] Provide Retry merge / Resume and Keep as Worktree actions after exhaustion; never silently change delivery mode.
 - [ ] Keep Board columns as New / Ongoing / Paused / Closed; do not add an Integration column.
-- [ ] Runner execution Completed moves the Task to Closed immediately; Main delivery then uses Closed secondary states until merge/integration succeeds or needs attention.
+- [ ] Runner execution Completed moves the Task to Closed immediately; Project-Branch delivery then uses Closed secondary states until merge/integration succeeds or needs attention.
 - [ ] Worktree-delivery Task may move to Closed when Runner Completed because the retained worktree is the requested output.
 - [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / waiting_target_clean / recovery / integrated / failed / not_required.
 - [ ] Keep Paused reserved for unfinished resumable Runner execution; all post-execution Git delivery states stay under Closed.
