@@ -279,6 +279,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] New Task List Draft 直接重用 TaskListWorkspace 的 List body / List info / DrawerHeader actions；已移除專用 task-list-create-draft markup。
 [x] Task List Draft 的空狀態 CTA 可直接開同一份 canonical Task Editor 新增第一個 Task；不再 disabled 無反應。
 [x] Create Task List 必須至少有 1 個 Task：0 task 時按鈕 disabled，Create handler 也再次 fail closed 檢查，避免繞過 UI 建立空 List。
+[x] Prototype Task List Draft child 與正式 List 使用一致操作語意：Edit 走 canonical Task Editor、Remove、↑/↓、Enter 編輯與 drag reorder；全部只改 transient draft。
+[x] Task List Draft child Edit 保留該 child 原本 Project，不再被後段 Project wrapper 覆蓋成 current Project。
+[x] Task List Draft 有內容或修改 Title / Project 時，X / backdrop / Escape / Cancel 先顯示 discard confirmation；空白預設 Draft 可直接關閉。
+[x] Prototype Create/Save 增加 UI submitting lock：Task Editor、Task List Draft Create、Chat TaskDraft Create 防止連點重複建立；正式版仍需 Backend idempotency。
+[x] Task Drawer Close / backdrop / Escape 移除 core.js 舊 ownership，只由 Task Workspace Shell 控制；child modal 開啟時不得穿透關閉 Drawer。
+[x] Task Drawer mock 補 focus return、基本 Tab containment、select / tabindex focus-visible；正式 React 再補完整 dialog/focus primitives。
 [x] Chat AI TaskDraft 產生時不再 eager 寫入 taskMap；未 Create 前保持 transient，Edit 才暫掛到共用 Editor surface，Create 才轉正式 Task。
 [x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 先進 transient Draft，不分配正式 Task ID、不寫 taskMap/Board；按 Create Task List 後才建立 items=[] 的正式 Task。
 [x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
@@ -290,6 +296,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Move existing / Add task 回 List 不再 remove/reopen taskOverlay，避免 Drawer 抽動。
 [x] Header Back handler 由 route shell 重設，避免 Editor / YAML callback 殘留到 List。
 [ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
+[ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
 [x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
 [x] Chat Draft 單筆、Task List child Add/Edit、Task Info Edit 都共用同一 Editor View；returnTarget 只控制回 List / Info / Chat / Close。
