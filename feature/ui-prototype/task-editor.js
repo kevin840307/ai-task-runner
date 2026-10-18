@@ -1487,7 +1487,7 @@ renderNewTaskSources=function(){
   const rows=[];
   if(caps.file)rows.push(TaskUiTemplates.sourceCard({
     title:'File Validator',subtitle:'Required by this workflow',control:'<span class="cap-chip">Required</span>',
-    body:`<div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Python validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div><div class="source-note">Choose an existing validator file path or type it manually. No built-in validator file is provided.</div>`
+    body:`<div class="pathrow"><input id="taskValidatorFile" value="${escapeAttr(newTaskDraft.validator)}" placeholder="Or type an existing validator path"><button class="mini-btn" type="button" id="taskPickValidator">Upload file</button></div>${stagedUploadHint(newTaskDraft,'validator')}<div class="source-note">Manual path is used as-is. Uploaded file is copied on Create/Save; the returned managed path is written back into this field.</div>`
   }));
   if(caps.ai)rows.push(TaskUiTemplates.sourceCard({
     title:'AI Validation',subtitle:newTaskDraft.aiMode==='default'?'Workflow default':'Custom prompt source',
