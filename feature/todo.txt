@@ -86,6 +86,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task-level Main / Worktree 明確 override Global Auto policy；只有 Task-level Auto 讀取 Global policy。
 [x] Execution 新增 Global `Merge failure limit`，Prototype 預設 3 並持久化；正式 Git integration 在 real merge failure count > limit 時停止自動 merge，fallback 成 Isolated Worktree close / worktree_ready。
 [x] Execution 新增 Global `Allow concurrent Main tasks` 開關，Prototype 預設 Off；Off 維持 Main busy disabled/block，On 解除限制並讓 Main Task selector / resolver 一致允許並行。
+[x] 修正 TaskEditor 後載入 `renderNewTaskWorkspace()` override 仍以 `!!busy` 無條件 disable Main 的問題；現在 Concurrent Main=On 時 core resolver 與 Task Editor UI 都一致可選。
 [ ] 正式 Backend/config schema 必須持久化 merge_failure_limit + allow_concurrent_main_tasks，UI / CLI / API 共用同一設定 owner。
 [x] Settings → Interface 集中 Appearance / Theme palette；Language 獨立為一個 Settings section；移除左上獨立 themeBtn。
 [x] Appearance 支援 System / Light / Dark；Theme palette 對齊現有 UI：Teal / Deep Blue / Violet / Amber / Rose。Prototype 立即套用並保存。
