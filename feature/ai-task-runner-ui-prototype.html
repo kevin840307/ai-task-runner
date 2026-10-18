@@ -381,6 +381,7 @@
         <button type="button" class="active" data-settings-tab="execution"><span>↯</span><strong>Execution</strong></button>
         <button type="button" disabled><span>◉</span><strong>Agents</strong><small>Later</small></button>
         <button type="button" data-settings-tab="interface"><span>◫</span><strong>Interface</strong></button>
+        <button type="button" data-settings-tab="language"><span>文</span><strong>Language</strong></button>
       </aside>
       <section class="settings-panel" data-settings-panel="execution">
         <div class="settings-panel-head"><span>EXECUTION</span><h3>Workspace behavior</h3><p>Controls how Task-level <strong>Auto</strong> resolves. Explicit Main / Worktree overrides are unchanged.</p></div>
@@ -395,7 +396,7 @@
         <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
       </section>
       <section class="settings-panel" data-settings-panel="interface" hidden>
-        <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & language</h3><p>Global interface preferences. These settings are not tied to a Project or Chat.</p></div>
+        <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & theme</h3><p>Global visual preferences. These settings are not tied to a Project or Chat.</p></div>
         <label class="settings-field">
           <span><strong>Appearance</strong><small>Follow the system appearance or force Light / Dark.</small></span>
           <select id="globalAppearance">
@@ -414,14 +415,18 @@
             <button class="settings-theme-option" type="button" data-prototype-theme="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><span><strong>Rose</strong><small>Modern</small></span></button>
           </div>
         </div>
+        <div class="settings-policy-preview" id="interfaceSettingsPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="language" hidden>
+        <div class="settings-panel-head"><span>LANGUAGE</span><h3>Language</h3><p>Global UI language preference. This setting is independent from appearance and theme.</p></div>
         <label class="settings-field">
-          <span><strong>Language</strong><small>Global UI language preference.</small></span>
+          <span><strong>UI language</strong><small>Applies globally across Projects and Chat sessions.</small></span>
           <select id="globalLanguage">
             <option value="zh-TW">繁體中文</option>
             <option value="en">English</option>
           </select>
         </label>
-        <div class="settings-policy-preview" id="interfaceSettingsPreview"></div>
+        <div class="settings-policy-preview" id="languageSettingsPreview"></div>
       </section>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="globalSettingsModal">Close</button></div>
