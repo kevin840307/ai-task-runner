@@ -855,7 +855,6 @@ function mockBuildChatTaskDraft(spec,projectKey=currentProjectKey,mode='auto'){
   const model={id,_chatDraft:true,kind:'task_list',status:'new',title:mockTaskDraftTitle(source),runtime:'idle',desc:'Mock AI Task Draft',tags:[`${count} task${count===1?'':'s'}`],workflow:count===1?first.workflow:'Tasks',project:projectKey,projectContext:projectKey,progress:[0,count],elapsed:'—',stage:'Draft',session:'—',goal:count===1?first.prompt:`${count} ordered tasks`,items,listItems:items};
   if(count===1)Object.assign(model,{promptSource:{goalMode:first.goalMode,prompt:first.prompt,goalFile:first.goalFile,goalAsset:first.goalAsset,validator:first.validator,aiMode:first.aiMode,aiPrompt:first.aiPrompt,aiFile:first.aiFile,aiAsset:first.aiAsset},workspacePolicy:first.workspacePolicy,workspaceKind:first.workspaceKind,branch:first.branch,executionRoot:first.executionRoot});
   else Object.assign(model,{workspacePolicy:'per_item',workspaceKind:'per_item',branch:'—',executionRoot:'Per-task workspaces'});
-  taskMap[id]=model;
   return {mock:true,originalSpec:source,projectKey,model,createdTaskId:''};
 }
 function discardChatTaskDraft(session,{render=true}={}){
