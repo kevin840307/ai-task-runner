@@ -160,7 +160,7 @@
   </main>
 </div>
 
-<div class="overlay" id="taskOverlay">
+<div class="overlay" id="taskOverlay" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
   <aside class="drawer">
     <div class="drawerhead" id="taskDrawerHeader">
       <div class="drawerheadtop">
@@ -177,7 +177,7 @@
           <button class="btn primary" id="confirmTaskListDraft" type="button" hidden data-i18n="taskListDraft.create">Create Task List</button>
         </div>
         <button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button>
-        <button class="close" id="closeDrawer">×</button>
+        <button class="close" id="closeDrawer" type="button" aria-label="Close task workspace">×</button>
       </div>
       <p id="drawerInfoMeta">#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
       <p id="drawerRouteMeta" hidden></p>
@@ -289,6 +289,14 @@
   <button type="button" data-project-action="rename"><span>Rename</span><span>✎</span></button>
   <div class="menu-sep"></div>
   <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
+</div>
+
+<div class="modal-overlay" id="taskListDraftDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskListDraftDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="taskListDraftDiscardTitle" data-i18n="taskListDraft.discardTitle">Discard Task List draft?</h2><p data-i18n="taskListDraft.discardHelp">This draft has not been created and will not appear on the Board if discarded.</p></div><button class="close" data-close-modal="taskListDraftDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="taskListDraft.discardBody">There are uncreated changes in this Task List draft. Discard them?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskListDraftDiscardModal" type="button" data-i18n="taskListDraft.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardTaskListDraft" type="button" data-i18n="taskListDraft.discard">Discard draft</button></div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="taskDeleteModal">
