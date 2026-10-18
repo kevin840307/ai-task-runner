@@ -83,7 +83,7 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
     const showInfo=route==='list'&&taskDrawerListReturnTarget==='close'&&current?.status==='new'&&!current?._chatDraft;
     planPageInfo.hidden=!showInfo;
     planPageInfo.textContent=uiText('taskList.backInfo');
-    planPageInfo.onclick=showInfo?()=>openTaskById(currentTaskId):null;
+    planPageInfo.onclick=showInfo?()=>openTaskById(current.id):null;
   }
   if(planPageBack){
     planPageBack.hidden=!(route==='list'||route==='list-draft');
