@@ -16,6 +16,7 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
 - Project is the primary context.
 - Clicking a Project opens that Project's Chat.
 - Tasks remain the durable work records / Board lifecycle.
+- Task Drawer uses one child-task editing surface: Overview summary links to Task List Workspace. Do not reintroduce a separate Steps tab / drawer-items editor.
 - Runner Core remains authoritative for execution and runtime truth.
 - Chat is for conversation, clarification, queueing, and explicit Runner commands.
 - Workflows / Prompts remain reusable assets and are not owned by one Chat.
@@ -90,6 +91,7 @@ Behavior:
 - A new Project copies the current Global Defaults once, then owns its own four settings.
 - Existing Projects never follow later Global Defaults changes.
 - All Chat sessions under the same Project share those four settings.
+- Chat sessions are deletable within their Project. Deleting a Chat never deletes Tasks or Project settings; if the last Chat is deleted, create a fresh empty Chat so the Project always has an active conversation surface.
 - Switching Chat sessions does not reset them.
 - Switching Projects loads that Project's own settings.
 - Agent changes revalidate Model and Mode against that Agent's capabilities.
