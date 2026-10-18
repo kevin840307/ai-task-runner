@@ -272,6 +272,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
 [ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
 [ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
+[x] File Validator 固定為外部檔案路徑輸入：可按 Choose file 選路徑，也可直接手動輸入；Prototype 不提供任何 built-in validator file / preset path。
+[x] File Validator path picker 不再列出 ai_task_runner_validator.py / validation.py / shared validator 等預設候選；正式版由 desktop/backend file picker 回填實際路徑。
 [ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
 [x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
