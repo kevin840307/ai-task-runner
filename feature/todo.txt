@@ -432,7 +432,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行。
 [ ] Main 直接 normal Git merge Task source branch 到 captured Project branch；merge success 才 Closed · merged。
 [ ] real merge conflict：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
-[ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit，Task 不複製 limit，也不新增 merge_retry_attempt。
+[ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
 [ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → retry normal merge。
 [ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留 Task branch/worktree，fallback=isolated_worktree，Closed · worktree_ready。
 [ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
