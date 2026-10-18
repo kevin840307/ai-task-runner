@@ -15,6 +15,75 @@ const AUTO_WORKSPACE_POLICIES=new Set(['busy_worktree','main_only','always_workt
 const THEME_PALETTES=new Set(['teal','blue','violet','amber','rose']);
 const APPEARANCES=new Set(['system','light','dark']);
 const LANGUAGES=new Set(['zh-TW','en']);
+const UI_TEXT={
+  'zh-TW':{
+    'chat.rename':'重新命名','chat.newChat':'+ 新對話','chat.commands':'指令','chat.typeToFilter':'輸入以篩選',
+    'chat.project':'PROJECT','chat.runSettings':'執行設定','chat.workflow':'Workflow','chat.workflowHelp':'供 @goal 與新的 Chat 任務使用',
+    'chat.agent':'Agent','chat.savedProject':'儲存在目前 Project','chat.model':'Model',
+    'chat.turnRunning':'Agent 正在處理；送出訊息會自動加入 Queue','chat.turnWaiting':'Agent 正在等待 Ask 回答；新訊息會排隊',
+    'chat.pending':'待處理','chat.queueHint':'Agent 忙碌時，送出會自動排隊',
+    'chat.inputPlaceholder':'傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command',
+    'chat.settingsTitle':'Chat 執行設定','chat.modeTitle':'權限 / 核准模式','chat.mode':'Mode',
+    'chat.newTask':'+ 新增 Task','chat.newTaskTitle':'在目前 Project 建立 Task 或 Task List',
+    'chat.askMock':'Ask 模擬','chat.askMockTitle':'強制觸發 AI 反問流程','chat.send':'傳送',
+    'chat.runnerPrompts':'Runner prompts','chat.agentCommands':'{agent} · Skills / Commands',
+    'chat.runnerHint':'@ = AI Task Runner','chat.agentHint':'/ = 已選 Agent · MOCK {agent}',
+    'chat.queueSave':'儲存','chat.queueCancel':'取消','chat.queueEdit':'編輯','chat.queueDelete':'刪除',
+    'chat.queueEmpty':'排隊訊息不可空白','chat.queueUpdated':'Queue 已更新','chat.addedQueue':'已加入 Queue',
+    'chat.askOptional':'選填','chat.askClarification':'釐清問題','chat.askQuestion':'第 {current} 題，共 {total} 題',
+    'chat.askCancel':'取消','chat.askNext':'下一步','chat.askSubmit':'提交',
+    'chat.askOther':'其他（自行輸入）','chat.askOtherDesc':'輸入自己的答案',
+    'chat.askCustomPlaceholder':'輸入自訂答案…','chat.askOptionalPlaceholder':'選填，可直接下一步','chat.askAnswerPlaceholder':'輸入你的回答…',
+    'chat.askChoose':'請先選擇一個選項','chat.askRequired':'請填寫回答','chat.askCancelled':'Mock Ask 已取消；未提交任何答案。',
+    'task.createTask':'Task','task.createTaskDesc':'建立一個 Task，使用共用 Task Editor。',
+    'task.createList':'Task List','task.createListDesc':'建立 Task List 草稿，再加入其中的 Tasks。',
+    'taskListDraft.cancel':'取消','taskListDraft.create':'建立 Task List','taskListDraft.meta':'草稿 · 尚未建立',
+    'taskListDraft.info':'草稿資訊','taskListDraft.noTasks':'目前沒有 Task','taskListDraft.addFirst':'+ 加入第一個 Task',
+    'taskListDraft.title':'標題','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'狀態',
+    'taskListDraft.notCreated':'尚未建立','taskListDraft.needTask':'建立 Task List 前至少要加入一個 Task',
+    'taskListDraft.titleRequired':'Task List 標題不可空白','taskListDraft.created':'Task List 已建立 · 可繼續加入 Task',
+    'taskListDraft.added':'已加入草稿 Task'
+  },
+  en:{
+    'chat.rename':'Rename','chat.newChat':'+ New Chat','chat.commands':'Commands','chat.typeToFilter':'Type to filter',
+    'chat.project':'PROJECT','chat.runSettings':'Run settings','chat.workflow':'Workflow','chat.workflowHelp':'Used by @goal and new Chat tasks',
+    'chat.agent':'Agent','chat.savedProject':'Saved for this Project','chat.model':'Model',
+    'chat.turnRunning':'Agent is working; new messages are queued automatically','chat.turnWaiting':'Agent is waiting for Ask answers; new messages are queued',
+    'chat.pending':'pending','chat.queueHint':'Messages are queued automatically while the Agent is busy',
+    'chat.inputPlaceholder':'Message AI…  @ = Runner command · / = Agent Skill / Command',
+    'chat.settingsTitle':'Chat run settings','chat.modeTitle':'Permission / approval mode','chat.mode':'Mode',
+    'chat.newTask':'+ New Task','chat.newTaskTitle':'Create a Task or Task List for this Project',
+    'chat.askMock':'Ask mock','chat.askMockTitle':'Force a mock AI clarification flow','chat.send':'Send',
+    'chat.runnerPrompts':'Runner prompts','chat.agentCommands':'{agent} · Skills / Commands',
+    'chat.runnerHint':'@ = AI Task Runner','chat.agentHint':'/ = selected Agent · MOCK {agent}',
+    'chat.queueSave':'Save','chat.queueCancel':'Cancel','chat.queueEdit':'Edit','chat.queueDelete':'Delete',
+    'chat.queueEmpty':'Queued prompt cannot be empty','chat.queueUpdated':'Queue updated','chat.addedQueue':'Added to Queue',
+    'chat.askOptional':'Optional','chat.askClarification':'Clarification','chat.askQuestion':'Question {current} of {total}',
+    'chat.askCancel':'Cancel','chat.askNext':'Next','chat.askSubmit':'Submit',
+    'chat.askOther':'Other (type your own)','chat.askOtherDesc':'Enter your own answer',
+    'chat.askCustomPlaceholder':'Enter a custom answer…','chat.askOptionalPlaceholder':'Optional; you can go directly to Next','chat.askAnswerPlaceholder':'Enter your answer…',
+    'chat.askChoose':'Choose an option first','chat.askRequired':'Enter an answer','chat.askCancelled':'Mock Ask cancelled; no answers were submitted.',
+    'task.createTask':'Task','task.createTaskDesc':'Create one Task using the shared Task Editor.',
+    'task.createList':'Task List','task.createListDesc':'Create a Task List draft, then add Tasks inside it.',
+    'taskListDraft.cancel':'Cancel','taskListDraft.create':'Create Task List','taskListDraft.meta':'Draft · not created yet',
+    'taskListDraft.info':'Draft info','taskListDraft.noTasks':'No tasks yet','taskListDraft.addFirst':'+ Add first task',
+    'taskListDraft.title':'Title','taskListDraft.project':'Project','taskListDraft.tasks':'Tasks','taskListDraft.state':'State',
+    'taskListDraft.notCreated':'Not created','taskListDraft.needTask':'Add at least one task before creating the Task List',
+    'taskListDraft.titleRequired':'Task List title cannot be empty','taskListDraft.created':'Task List created · add tasks when ready',
+    'taskListDraft.added':'Draft task added'
+  }
+};
+function uiText(key,vars={}){
+  const language=globalInterfaceSettings?.language||'zh-TW';
+  let value=UI_TEXT[language]?.[key]??UI_TEXT.en[key]??key;
+  return String(value).replace(/\{(\w+)\}/g,(_,name)=>vars[name]??'');
+}
+function applyUiTranslations(root=document){
+  root.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=uiText(el.dataset.i18n));
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(el=>el.setAttribute('placeholder',uiText(el.dataset.i18nPlaceholder)));
+  root.querySelectorAll('[data-i18n-title]').forEach(el=>el.setAttribute('title',uiText(el.dataset.i18nTitle)));
+  root.querySelectorAll('[data-i18n-aria-label]').forEach(el=>el.setAttribute('aria-label',uiText(el.dataset.i18nAriaLabel)));
+}
 function loadAutoWorkspacePolicy(){
   try{const value=localStorage.getItem(AUTO_WORKSPACE_POLICY_KEY);if(AUTO_WORKSPACE_POLICIES.has(value))return value}catch(_){}
   return 'busy_worktree';
@@ -32,7 +101,7 @@ const globalInterfaceSettings=loadInterfaceSettings();
 function saveAutoWorkspacePolicy(){try{localStorage.setItem(AUTO_WORKSPACE_POLICY_KEY,globalExecutionSettings.autoWorkspacePolicy)}catch(_){}}
 function saveInterfaceSettings(){try{localStorage.setItem(INTERFACE_SETTINGS_KEY,JSON.stringify(globalInterfaceSettings))}catch(_){}}
 function resolvedAppearance(){return globalInterfaceSettings.appearance==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):globalInterfaceSettings.appearance}
-function applyInterfaceSettings(){document.documentElement.dataset.theme=globalInterfaceSettings.theme;document.documentElement.dataset.appearancePreference=globalInterfaceSettings.appearance;document.documentElement.dataset.appearance=resolvedAppearance();document.documentElement.lang=globalInterfaceSettings.language}
+function applyInterfaceSettings(){document.documentElement.dataset.theme=globalInterfaceSettings.theme;document.documentElement.dataset.appearancePreference=globalInterfaceSettings.appearance;document.documentElement.dataset.appearance=resolvedAppearance();document.documentElement.lang=globalInterfaceSettings.language;applyUiTranslations()}
 applyInterfaceSettings();
 function autoWorkspaceKind(busy){
   if(globalExecutionSettings.autoWorkspacePolicy==='always_worktree')return 'worktree';
@@ -358,7 +427,7 @@ document.querySelectorAll('[data-prototype-theme]').forEach(button=>button.addEv
   globalInterfaceSettings.theme=THEME_PALETTES.has(button.dataset.prototypeTheme)?button.dataset.prototypeTheme:'teal';saveInterfaceSettings();applyInterfaceSettings();renderGlobalInterfaceSettings();showToast(`Theme · ${globalInterfaceSettings.theme}`);
 }));
 document.getElementById('globalLanguage')?.addEventListener('change',e=>{
-  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalLanguageSettings();showToast('Language preference updated');
+  globalInterfaceSettings.language=LANGUAGES.has(e.target.value)?e.target.value:'zh-TW';saveInterfaceSettings();applyInterfaceSettings();renderGlobalLanguageSettings();if(typeof renderChatSession==='function')renderChatSession();if(typeof renderChatQueue==='function')renderChatQueue();if(typeof renderChatTurnStatus==='function')renderChatTurnStatus();if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof renderNewTaskListDraftWorkspace==='function')renderNewTaskListDraftWorkspace();showToast(globalInterfaceSettings.language==='zh-TW'?'語言偏好已更新':'Language preference updated');
 });
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(globalInterfaceSettings.appearance==='system'){applyInterfaceSettings();renderGlobalInterfaceSettings()}});
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
