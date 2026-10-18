@@ -469,12 +469,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 #planModal .plan-side-card h3{display:flex;align-items:center;justify-content:space-between}
 #planModal .plan-side-card.info-active{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-softer)}
 #planModal .plan-side-card.info-active h3{color:var(--accent-dark)}
-.task-list-create-draft{min-height:0;height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto;background:var(--bg)}
-.task-list-create-draft[hidden]{display:none!important}
-.task-list-create-card{align-self:start;width:min(620px,calc(100% - 32px));margin:20px auto;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow-sm)}
-.task-list-create-card .field:first-child{margin-top:0}
-.task-list-create-card select{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--input-bg);color:var(--text);padding:8px;font-size:10px}
-.task-list-create-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel-2)}
+.task-list-draft-control{display:block;min-width:0}.task-list-draft-control input,.task-list-draft-control select{width:100%;min-width:0;border:1px solid var(--line);border-radius:7px;background:var(--input-bg);color:var(--text);padding:7px 8px;font-size:8.5px}
 
 
 
