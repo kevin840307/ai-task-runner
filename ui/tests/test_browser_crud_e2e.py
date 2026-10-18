@@ -220,25 +220,41 @@ def _bridge_for(state: UIState):
                         "cached": False,
                     }
                 elif path == "/api/chat/capabilities":
-                    data = {
-                        "agent": query.get("agent", ["qwen"])[0] or "qwen",
-                        "capabilities": [
-                            {
-                                "token": "/btw", "name": "btw", "description": "Side question",
-                                "kind": "command", "source": "builtin", "user_invocable": True,
-                                "enabled": True, "permission": "available", "availability": "available",
-                            },
+                    selected_agent = query.get("agent", ["qwen"])[0] or "qwen"
+                    if selected_agent == "opencode":
+                        capabilities = [
                             {
                                 "token": "/review", "name": "review", "description": "Review code",
                                 "kind": "skill", "source": "project", "user_invocable": True,
                                 "enabled": True, "permission": "ask", "availability": "available",
                             },
                             {
+                                "token": "/deploy", "name": "deploy", "description": "Deploy through OpenCode",
+                                "kind": "skill", "source": "project", "user_invocable": True,
+                                "enabled": True, "permission": "ask", "availability": "available",
+                            },
+                        ]
+                    else:
+                        capabilities = [
+                            {
+                                "token": "/btw", "name": "btw", "description": "Qwen side question",
+                                "kind": "command", "source": "builtin", "user_invocable": True,
+                                "enabled": True, "permission": "available", "availability": "available",
+                            },
+                            {
+                                "token": "/qreview", "name": "qreview", "description": "Qwen review skill",
+                                "kind": "skill", "source": "project", "user_invocable": True,
+                                "enabled": True, "permission": "available", "availability": "available",
+                            },
+                            {
                                 "token": "/hidden", "name": "hidden", "description": "Hidden skill",
                                 "kind": "skill", "source": "user", "user_invocable": False,
                                 "enabled": False, "permission": "deny", "availability": "disabled",
                             },
-                        ],
+                        ]
+                    data = {
+                        "agent": selected_agent,
+                        "capabilities": capabilities,
                         "cached": False,
                     }
                 elif path == "/api/chat/sessions":
@@ -845,6 +861,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#projectChatModelSelect')?.value === ''")
             assert page.locator("#projectChatModelSelect option[value='openai/gpt-5.2']").count() == 0
             assert page.locator("#projectChatModelSelect option[value='qwen/model-a']").count() == 1
+            page.fill("#projectChatInput", "/bt")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            assert page.locator("#projectChatSuggestList .project-chat-suggest-token").get_by_text("/btw").is_visible()
+            page.keyboard.press("Escape")
 
             # Restore OpenCode for the remaining Project/session-scoping flow.
             page.select_option("#projectChatAgentSelect", "opencode")
