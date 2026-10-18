@@ -19,7 +19,8 @@ const taskEditorSurface=taskEditorHome;
 const yamlEditorHome=document.getElementById('yamlPlanModal');
 const yamlEditorSurface=yamlEditorHome.querySelector('.yaml-plan-modal');
 let planSubviewType=null,planSubviewOwnerId=null,planSubviewIndex=null,planReturnScroll=0,planSubviewReturnTarget='list';
-let taskEditorReturnContext=null,taskDrawerListReturnTarget='close';
+let taskEditorReturnContext=null,taskDrawerListReturnTarget='close',taskDrawerReturnFocus=null;
+taskDrawerEl.tabIndex=-1;
 
 function taskDrawerMetaFor(t,prefix=''){
   if(!t)return prefix||'';
@@ -27,6 +28,8 @@ function taskDrawerMetaFor(t,prefix=''){
   return prefix||`${t.id} · ${statusLabel(t.status)} · ${items.length} task${items.length===1?'':'s'}`;
 }
 function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Back'}={}){
+  const wasOpen=taskOverlayEl.classList.contains('open');
+  if(!wasOpen)taskDrawerReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
   const workspace=route!=='info';
   taskDrawerEl.dataset.route=route;
   taskDrawerEl.classList.toggle('workspace-route',workspace);
@@ -47,6 +50,7 @@ function setTaskDrawerShell(route,{title='',meta='',showBack=false,backTitle='Ba
   if(title)document.getElementById('drawerTitle').textContent=title;
   if(workspace)taskDrawerRouteMeta.textContent=meta||'';
   taskOverlayEl.classList.add('open');
+  if(!wasOpen)setTimeout(()=>taskDrawerEl.focus({preventScroll:true}),0);
 }
 function restoreTaskInfoShell(t){
   if(!t)return;
@@ -54,7 +58,10 @@ function restoreTaskInfoShell(t){
   taskDrawerInfoMeta.hidden=false;taskDrawerRouteMeta.hidden=true;taskDrawerRuntimeSlot.hidden=false;
   taskDrawerWorkspaceActions.hidden=true;taskDrawerRename.hidden=true;taskDrawerBack.hidden=true;
 }
-function closeTaskDrawerShell(){
+function closeTaskDrawerShell({force=false}={}){
+  if(!force&&typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
+    requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true}));return;
+  }
   if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof discardNewTaskListDraft==='function')discardNewTaskListDraft({close:false});
   taskEditorReturnContext=null;
   if(taskEditorHome.classList.contains('open'))taskEditorHome.classList.remove('open');
@@ -65,6 +72,8 @@ function closeTaskDrawerShell(){
   planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open','open');
   clearTaskSelection?.();
   taskOverlayEl.classList.remove('open');
+  const focusTarget=taskDrawerReturnFocus;taskDrawerReturnFocus=null;
+  if(focusTarget?.isConnected)setTimeout(()=>focusTarget.focus({preventScroll:true}),0);
 }
 
 function restoreSurfaceCloseBehavior(surface,overlayId){
@@ -260,7 +269,10 @@ taskContextMenu.querySelectorAll('[data-context-action]').forEach(b=>b.onclick=(
   if(action==='remove'&&state.scope==='list'){requestTaskDelete(t.id)}
 });
 document.addEventListener('click',e=>{if(!taskContextMenu.hidden&&!taskContextMenu.contains(e.target))hideTaskContextMenu()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTaskContextMenu();const childOpen=['pathPickerModal','addPlanTaskModal','taskListNameModal'].some(id=>document.getElementById(id)?.classList.contains('open'));if(!childOpen&&planSubviewType)leavePlanSubview()}});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||taskContextMenu.hidden)return;
+  e.preventDefault();e.stopImmediatePropagation();hideTaskContextMenu();
+});
 window.addEventListener('scroll',hideTaskContextMenu,true);window.addEventListener('resize',hideTaskContextMenu);
 
 const renderFullPlanBeforeContext=renderFullPlan;
@@ -649,6 +661,7 @@ taskOverlayEl.addEventListener('click',e=>{
 },true);
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape'||!taskOverlayEl.classList.contains('open'))return;
+  if(document.querySelector('.modal-overlay.open'))return;
   e.preventDefault();e.stopImmediatePropagation();
   if(taskEditorReturnContext)leaveTaskEditorOverlay();
   else if(planSubviewType)leavePlanSubview();
