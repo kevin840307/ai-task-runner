@@ -152,7 +152,49 @@ Keep these scopes explicit in UI/API/storage to prevent accidental cross-project
 - Ask supports multiple questions, choices, text, Other/custom answer, Next, final Submit.
 - Ask uses the outer Chat scrolling; do not add unnecessary nested scrolling unless a future real-world layout proves it necessary.
 
-8. Formal implementation direction
+8. Task UI composition / React boundary
+----------------------------------------
+User-visible hierarchy:
+- + New
+  - Task
+  - Task List
+- Task and Task List are sibling creation choices.
+- A Task List owns ordered items[].
+- A simple Task is the one-item case; Task List is the multi/empty-container case.
+- "Plan" is not another user-visible object layer. It may remain an internal code/model term or YAML editing mode only.
+
+Prototype composition:
+- feature/ui-prototype/task-ui-templates.js owns the shared static markup for:
+  - TaskEditor
+  - TaskListWorkspace
+  - TaskSourceCard
+  - TaskListEmptyState
+  - TaskListAddFooter
+- Main HTML keeps mount points instead of duplicating those surfaces.
+- window.TaskUi is the shared navigation/controller facade.
+- Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
+- Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
+- Move existing is a secondary chooser, not a second Create Task path.
+- Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
+
+Future React mapping:
+- TaskCreateMenu
+- TaskEditor
+- TaskListWorkspace
+- TaskSourceCard
+- WorkspaceSelector
+- TaskRuntimePanel
+- TaskDraftPreview
+
+React rules:
+- One component implementation per responsibility; no Chat-only or Board-only duplicate Task Editor JSX.
+- Entry points pass mode / ownerId / itemIndex / returnTarget / project context as props or router state.
+- Canonical items[] remains the data source for Task List rows, YAML, Chat Draft editing and execution.
+- UI composition must not create another state machine or another Task model.
+- Shared components use theme tokens and the same validation / capability rules.
+- When migrating from the static prototype, remove task-ui-templates.js after React components cover the same boundaries; do not keep both implementations.
+
+9. Formal implementation direction
 ----------------------------------
 When moving beyond the prototype:
 - Do not copy localStorage behavior directly into production architecture.
@@ -164,8 +206,8 @@ When moving beyond the prototype:
 - Tests must cover Project switching, Chat-session switching, reload persistence, all Auto workspace policies, and @goal failure/retry cases.
 - Preserve 24H unattended reliability and existing Runner recovery behavior.
 
-9. Prototype acceptance before formalization
---------------------------------------------
+10. Prototype acceptance before formalization
+---------------------------------------------
 - Browser-test Global Settings -> Execution / Interface / Language.
 - Verify System / Light / Dark appearance and persistence.
 - Verify all five palettes in both Light and Dark, especially Tasks, Worktree cards, selected/hover borders, modals, inputs, and sidebar boundaries.
