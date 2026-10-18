@@ -218,8 +218,10 @@ const taskContextMenu=document.getElementById('taskContextMenu');
 let taskContextState=null;
 function hideTaskContextMenu(){taskContextMenu.hidden=true;taskContextState=null}
 function positionTaskContextMenu(x,y){
-  taskContextMenu.hidden=false;const w=454,h=260;
-  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
+  taskContextMenu.hidden=false;
+  const rect=taskContextMenu.getBoundingClientRect(),w=rect.width||205,h=rect.height||180;
+  taskContextMenu.style.left=`${Math.min(window.innerWidth-w-8,Math.max(8,x))}px`;
+  taskContextMenu.style.top=`${Math.min(window.innerHeight-h-8,Math.max(8,y))}px`;
 }
 function setContextAction(name,{visible=true,enabled=true,label=null}={}){
   const b=taskContextMenu.querySelector(`[data-context-action="${name}"]`);if(!b)return;
