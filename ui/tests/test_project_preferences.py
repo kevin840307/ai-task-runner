@@ -55,8 +55,12 @@ def test_project_preferences_reject_unknown_or_invalid_values(tmp_path: Path) ->
         preferences.update(project, {"other": "value"})
     with pytest.raises(ValueError, match="Mode must be"):
         preferences.update(project, {"mode": "unsafe"})
-    with pytest.raises(ValueError, match="reasoning"):
-        preferences.update(project, {"reasoning": "ultra"})
+    native = preferences.update(project, {"reasoning": "deep"})
+    assert native["reasoning"] == "deep"
+    with pytest.raises(ValueError, match="Reasoning is required"):
+        preferences.update(project, {"reasoning": ""})
+    with pytest.raises(ValueError, match="Reasoning is too long"):
+        preferences.update(project, {"reasoning": "x" * 121})
     with pytest.raises(ValueError, match="must be an object"):
         preferences.update(project, {"validators": []})
 
