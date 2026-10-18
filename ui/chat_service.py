@@ -193,6 +193,8 @@ class ChatService:
                 "title": self._title(str(row.get("title") or "")),
                 "created_at": float(row.get("created_at") or 0),
                 "updated_at": float(row.get("updated_at") or 0),
+                "agent_backend": str(row.get("agent_backend") or ""),
+                "agent_session_id": str(row.get("agent_session_id") or ""),
             })
         active = str(state.get("active_session_id") or "")
         if active and active not in seen:
@@ -245,6 +247,8 @@ class ChatService:
             "title": self._title(title),
             "created_at": now,
             "updated_at": now,
+            "agent_backend": "",
+            "agent_session_id": "",
         }
 
     @staticmethod
@@ -291,10 +295,45 @@ class ChatService:
             raise ValueError("Invalid Chat session_id")
         return project / CHAT_DIR / "sessions" / f"{session_id}.jsonl"
 
+    def agent_session(self, project: Path, session_id: str, backend: str) -> str:
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            if str(session.get("agent_backend") or "") != str(backend or ""):
+                return ""
+            return str(session.get("agent_session_id") or "")
+
+    def set_agent_session(
+        self,
+        project: Path,
+        session_id: str,
+        backend: str,
+        agent_session_id: str,
+    ) -> None:
+        value = str(agent_session_id or "").strip()
+        if not value:
+            return
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            session["agent_backend"] = str(backend or "").strip()
+            session["agent_session_id"] = value
+            session["updated_at"] = time.time()
+            self._write(project, state)
+
     @staticmethod
-    def _snapshot(state: dict[str, Any], *, session_id: str = "") -> dict[str, Any]:
+    def _public_session(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "session_id": row["session_id"],
+            "title": row["title"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    @classmethod
+    def _snapshot(cls, state: dict[str, Any], *, session_id: str = "") -> dict[str, Any]:
         return {
             "active_session_id": state["active_session_id"],
             "session_id": session_id or state["active_session_id"],
-            "sessions": [dict(row) for row in state["sessions"]],
+            "sessions": [cls._public_session(row) for row in state["sessions"]],
         }

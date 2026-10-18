@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 
 try:
+    from .chat_agent_service import ChatAgentService
     from .chat_service import ChatService
     from .project_preferences import ProjectPreferences
     from .project_runtime_state import ProjectRuntimeMixin
@@ -17,6 +18,7 @@ try:
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
+    from chat_agent_service import ChatAgentService
     from chat_service import ChatService
     from project_preferences import ProjectPreferences
     from project_runtime_state import ProjectRuntimeMixin
@@ -43,6 +45,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
         self._workflow_catalog_cache: dict | None = None
         self.chat_service = ChatService()
+        self.chat_agent = ChatAgentService(self.repo_root)
         self.project_preferences = ProjectPreferences()
         if not self.projects_file.exists():
             self._write_projects([])
@@ -164,6 +167,23 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.project_preferences.update(
                     self._project(body),
                     body,
+                ))
+            if parsed.path == "/api/chat/turn":
+                project = self._project(body)
+                preferences = self.state.project_preferences.get(project)
+                backend = str(preferences.get("agent") or "").strip()
+                if not backend:
+                    backend = str(
+                        self.state.backend_catalog(project).get("default") or ""
+                    ).strip()
+                return self._json(self.state.chat_agent.turn(
+                    project,
+                    self.state.chat_service,
+                    session_id=str(body.get("session_id", "")),
+                    message=str(body.get("message", "")),
+                    backend=backend,
+                    model=str(preferences.get("model") or ""),
+                    mode=str(preferences.get("mode") or "auto"),
                 ))
             if parsed.path == "/api/chat/session/create":
                 return self._json(self.state.chat_service.create_session(

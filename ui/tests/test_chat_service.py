@@ -6,6 +6,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from ui.chat_agent_service import ChatAgentService
 from ui.chat_service import ChatService
 from ui.server import UIServer
 
@@ -172,3 +173,57 @@ def test_project_chat_session_api_uses_existing_ui_server(tmp_path: Path) -> Non
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+def test_chat_agent_turn_is_separate_from_runner_history_and_reuses_agent_session(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_runner(**kwargs):
+        calls.append(dict(kwargs))
+        return {
+            "text": "reply-" + str(len(calls)),
+            "session_id": kwargs.get("session_id") or "agent-session-1",
+        }
+
+    chat = ChatService()
+    service = ChatAgentService(repo, runner=fake_runner)
+    session_id = chat.sessions(project)["active_session_id"]
+
+    service.turn(project, chat, session_id=session_id, message="hello", backend="qwen", model="model-a", mode="auto")
+    service.turn(project, chat, session_id=session_id, message="again", backend="qwen", model="model-a", mode="auto")
+
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
+        "hello", "reply-1", "again", "reply-2"
+    ]
+    assert calls[0]["session_id"] == ""
+    assert calls[1]["session_id"] == "agent-session-1"
+    assert not (project / ".ai-task-runner" / "ui" / "messages.jsonl").exists()
+
+
+def test_chat_agent_session_resets_when_project_agent_changes(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    seen: list[tuple[str, str]] = []
+
+    def fake_runner(**kwargs):
+        seen.append((kwargs["backend"], kwargs["session_id"]))
+        return {"text": "ok", "session_id": kwargs["backend"] + "-session"}
+
+    chat = ChatService()
+    service = ChatAgentService(repo, runner=fake_runner)
+    session_id = chat.sessions(project)["active_session_id"]
+
+    service.turn(project, chat, session_id=session_id, message="a", backend="qwen", mode="auto")
+    service.turn(project, chat, session_id=session_id, message="b", backend="opencode", mode="auto")
+    service.turn(project, chat, session_id=session_id, message="c", backend="opencode", mode="auto")
+
+    assert seen == [
+        ("qwen", ""),
+        ("opencode", ""),
+        ("opencode", "opencode-session"),
+    ]
