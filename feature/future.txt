@@ -179,6 +179,9 @@ Prototype composition:
 - Main HTML keeps mount points instead of duplicating those surfaces.
 - window.TaskUi is the shared navigation/controller facade.
 - Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
+- + New and Chat TaskDraft must render the same TaskEditor / TaskListWorkspace components; source differences belong in draft data and return context only.
+- Task / Task List drafts stay transient until Create; opening a creation surface must not allocate a durable Task ID or write the canonical Task store.
+- Chat may render a lightweight TaskDraftPreview card, but Edit/Create must hand off to the same shared Task surfaces used by Tasks.
 - Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
 - Move existing is a secondary chooser, not a second Create Task path.
 - Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
