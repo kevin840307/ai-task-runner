@@ -141,7 +141,7 @@ class ChatAgentService:
         chat: ChatService,
         session_id: str,
     ) -> dict[str, Any]:
-        chat.recover_processing(project, session_id)
+        chat.recover_dispatching(project, session_id)
         processed: list[str] = []
         failure = ""
         while True:
