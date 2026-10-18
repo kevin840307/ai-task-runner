@@ -1151,7 +1151,7 @@ commitPlanDraft=function(t,{markDirty=false}={}){
 };
 
 function projectKeyFromPath(path, fallback=currentProjectKey){const found=Object.keys(projectMeta).find(k=>projectMeta[k].path===path);return found||(projectMeta[path]?path:fallback)}
-function editorOwner(){if(taskEditorContext.mode==='draft-create-item')return newTaskListDraft;return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
+function editorOwner(){if(taskEditorContext.mode==='draft-create-item'||taskEditorContext.mode==='draft-edit-item')return newTaskListDraft;return taskEditorContext.ownerId?taskMap[taskEditorContext.ownerId]:null}
 function editorItemRef(){
   const owner=editorOwner();
   if(taskEditorContext.mode==='root-create')return `T-${taskSequence+1}`;
@@ -1546,7 +1546,11 @@ function syncTaskListDraftActions(active){
     const el=document.getElementById(id);if(el)el.hidden=!!active;
   });
   const cancel=document.getElementById('cancelTaskListDraft'),create=document.getElementById('confirmTaskListDraft');
-  if(cancel)cancel.hidden=!active;if(create)create.hidden=!active;
+  if(cancel)cancel.hidden=!active;
+  if(create){
+    create.hidden=!active;
+    if(active){delete create.dataset.submitting;create.textContent=uiText('taskListDraft.create')}
+  }
 }
 function taskListDraftHasChanges(){
   if(!newTaskListDraft)return false;
@@ -1566,6 +1570,11 @@ function requestDiscardNewTaskListDraft(onDiscard){
 document.getElementById('confirmDiscardTaskListDraft')?.addEventListener('click',()=>{
   const action=taskListDraftDiscardAction;taskListDraftDiscardAction=null;
   discardNewTaskListDraft({close:false});closeModal('taskListDraftDiscardModal');action?.();
+});
+document.querySelectorAll('[data-close-modal="taskListDraftDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskListDraftDiscardAction=null}));
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!document.getElementById('taskListDraftDiscardModal')?.classList.contains('open'))return;
+  e.preventDefault();e.stopImmediatePropagation();taskListDraftDiscardAction=null;closeModal('taskListDraftDiscardModal');
 });
 function moveNewTaskListDraftItem(from,to){
   const items=newTaskListDraft?.items;if(!items||from===to||from<0||to<0||from>=items.length||to>=items.length)return;
