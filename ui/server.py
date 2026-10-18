@@ -15,6 +15,7 @@ try:
     from .agent_capability_service import AgentCapabilityService
     from .agent_settings_service import AgentSettingsService
     from .chat_agent_service import ChatAgentService
+    from .chat_ask import demo_questions
     from .chat_service import ChatService
     from .project_preferences import ProjectPreferences
     from .chat_system_capabilities import system_capabilities
@@ -28,6 +29,7 @@ except ImportError:
     from agent_capability_service import AgentCapabilityService
     from agent_settings_service import AgentSettingsService
     from chat_agent_service import ChatAgentService
+    from chat_ask import demo_questions
     from chat_service import ChatService
     from project_preferences import ProjectPreferences
     from chat_system_capabilities import system_capabilities
@@ -333,6 +335,15 @@ class Handler(SimpleHTTPRequestHandler):
                     mode=str(preferences.get("mode") or "auto"),
                     reasoning=str(preferences.get("reasoning") or ""),
                     request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/chat/ask/demo":
+                project = self._project(body)
+                return self._json(self.state.chat_service.create_ask(
+                    project,
+                    str(body.get("session_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                    turn_id="demo-" + str(body.get("request_id", "")),
+                    questions=demo_questions(),
                 ))
             if parsed.path == "/api/chat/ask/submit":
                 project = self._project(body)
