@@ -27,6 +27,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let askIndex = 0;
   let askAnswers = {};
   let askError = "";
+  let preferenceAction = Promise.resolve();
 
   const byId = (id) => document.getElementById(id);
 
@@ -262,6 +263,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     button.setAttribute("aria-expanded", "true");
     renderSettingsControls();
     requestAnimationFrame(positionSettingsPopover);
+  }
+
+  function queuePreferenceAction(action) {
+    const run = async () => action();
+    preferenceAction = preferenceAction.then(run, run);
+    return preferenceAction;
   }
 
   async function savePreferencePatch(patch, { refreshCatalog = false, refreshCapabilities = false } = {}) {
@@ -1322,12 +1329,30 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   byId("newProjectChatButton")?.addEventListener("click", () => void createSession());
   byId("projectChatSettingsButton")?.addEventListener("click", toggleSettingsPopover);
   byId("projectChatSettingsClose")?.addEventListener("click", closeSettingsPopover);
-  byId("projectChatAgentSelect")?.addEventListener("change", (event) => void changeAgent(event.currentTarget.value));
-  byId("projectChatModelSelect")?.addEventListener("change", (event) => void changeModel(event.currentTarget.value));
-  byId("projectChatModeSelect")?.addEventListener("change", (event) => void savePreferencePatch({ mode: event.currentTarget.value }));
-  byId("projectChatModeQuick")?.addEventListener("change", (event) => void savePreferencePatch({ mode: event.currentTarget.value }));
-  byId("projectChatReasoningSelect")?.addEventListener("change", (event) => void savePreferencePatch({ reasoning: event.currentTarget.value }));
-  byId("projectChatWorkflowSelect")?.addEventListener("change", (event) => void savePreferencePatch({ workflow: event.currentTarget.value }));
+  byId("projectChatAgentSelect")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => changeAgent(value));
+  });
+  byId("projectChatModelSelect")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => changeModel(value));
+  });
+  byId("projectChatModeSelect")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => savePreferencePatch({ mode: value }));
+  });
+  byId("projectChatModeQuick")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => savePreferencePatch({ mode: value }));
+  });
+  byId("projectChatReasoningSelect")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => savePreferencePatch({ reasoning: value }));
+  });
+  byId("projectChatWorkflowSelect")?.addEventListener("change", (event) => {
+    const value = event.currentTarget.value;
+    void queuePreferenceAction(() => savePreferencePatch({ workflow: value }));
+  });
   document.addEventListener("click", (event) => {
     const panel = byId("projectChatSettingsPopover");
     const button = byId("projectChatSettingsButton");
