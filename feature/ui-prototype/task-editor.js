@@ -293,7 +293,7 @@ function openWorktreeMergeChat(t,index){
   const item=canonicalTaskItems(t)[index];if(!item)return;
   const preflight=worktreeMergePreflight(t,item,index);if(!preflight.canChat)return;
   const projectKey=worktreeProjectKey(item,t);if(!projectMeta[projectKey])return;
-  document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal');
+  if(typeof closeTaskDrawerShell==='function')closeTaskDrawerShell({force:true,restoreFocus:false});else{document.getElementById('taskOverlay').classList.remove('open');closeModal('planModal')}
   selectProject(projectKey);showView('chat');
   const sessions=ensureProjectChats(projectKey),id=`${projectKey}-chat-${++chatSequence}`;
   sessions.unshift({id,name:`Merge ${t.id} · Task ${index+1}`,projectKey,messages:[]});projectActiveChat[projectKey]=id;
