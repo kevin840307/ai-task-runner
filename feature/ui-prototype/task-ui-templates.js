@@ -51,10 +51,11 @@
   <div class="source-body">${body}</div>
 </div>`;
 
+  const tx=(key,fallback)=>typeof window.uiText==='function'?window.uiText(key):fallback;
   const emptyTaskList=({large=false,id='planEmptyAddTask'}={})=>`
-<button class="empty-plan-cta${large?' large':''}" id="${esc(id)}" type="button"><strong>No tasks yet</strong><span>${large?'+ Add first task':'Add the first task →'}</span></button>`;
+<button class="empty-plan-cta${large?' large':''}" id="${esc(id)}" type="button"><strong data-i18n="taskList.empty">${esc(tx('taskList.empty','No tasks yet'))}</strong><span data-i18n="${large?'taskList.addFirst':'taskList.add'}">${esc(large?tx('taskList.addFirst','+ Add first task'):tx('taskList.add','Add task'))}</span></button>`;
 
-  const addTaskFooter=()=>'<button type="button" class="plan-add-task-footer"><span class="plan-add-task-plus">＋</span><strong>Add task</strong></button>';
+  const addTaskFooter=()=>`<button type="button" class="plan-add-task-footer"><span class="plan-add-task-plus">＋</span><strong data-i18n="taskList.add">${esc(tx('taskList.add','Add task'))}</strong></button>`;
 
   function mount(id,html){
     const host=document.getElementById(id);if(!host)return;
