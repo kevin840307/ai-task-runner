@@ -193,7 +193,7 @@ function setSurfaceBackBehavior(surface,type,returnTarget='list'){
   taskDrawerBack.hidden=returnTarget==='close'&&type==='task';
   taskDrawerBack.title=label;taskDrawerBack.textContent='←';
   taskDrawerBack.onclick=e=>{e.preventDefault();leave()};
-  if(cancel){cancel.textContent=returnTarget==='close'&&type==='task'?'Cancel':label;cancel.onclick=e=>{e.preventDefault();leave()}}
+  if(cancel){cancel.hidden=false;cancel.textContent=returnTarget==='close'&&type==='task'?'Cancel':label;cancel.title=label;cancel.onclick=e=>{e.preventDefault();leave()}}
 }
 function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null,returnTarget='list'){
   const scrollHost=planListSurface.querySelector('.plan-main')||planListSurface;
@@ -763,7 +763,12 @@ document.addEventListener('keydown',e=>{
 
 document.getElementById('editTaskDemo').onclick=()=>{
   const t=taskMap[currentTaskId];if(!t||!taskEditable(t))return;
-  openPlanDialog(t.id);setTimeout(()=>beginWorkspaceRename(t),0);
+  const items=canonicalTaskItems(t);
+  if(items.length===1){
+    const state=planStateFor(t,0,1);if(state.done)return;
+    loadTaskEditor('edit-item',{ownerId:t.id,index:0,returnTarget:'info'});return;
+  }
+  openPlanDialog(t.id,{returnTarget:'info'});
 };
 const contextEditAction=taskContextMenu.querySelector('[data-context-action="edit"]');
 contextEditAction.onclick=()=>{
