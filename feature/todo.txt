@@ -57,7 +57,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Mock 功能入口可透過 @ 自動提示與 Ask mock 入口發現，不必猜特殊指令。
 [x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
 [x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
-[x] Settings → Interface 收納 Appearance / Theme palette / Language；移除左上獨立 themeBtn。三者皆為全域偏好。
+[x] Settings 拆分為 Interface 與 Language：Interface 收納 Appearance / Theme palette；Language 獨立管理語言。移除左上獨立 themeBtn；三者皆為全域偏好。
 [x] Agent / Model / Mode / Workflow 改為 Project-level preference；同 Project 的多個 Chat session 共用，切換 Project 載入各自設定並在 Prototype 以 localStorage 保存。
 
 
@@ -84,7 +84,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Always Main
     - Always Worktree
 [x] Task-level Main / Worktree 明確 override Global Auto policy；只有 Task-level Auto 讀取 Global policy。
-[x] Settings → Interface 集中 Appearance / Theme palette / Language；移除左上獨立 themeBtn。
+[x] Settings → Interface 集中 Appearance / Theme palette；Language 獨立為一個 Settings section；移除左上獨立 themeBtn。
 [x] Appearance 支援 System / Light / Dark；Theme palette 對齊現有 UI：Teal / Deep Blue / Violet / Amber / Rose。Prototype 立即套用並保存。
 [x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
 [ ] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
@@ -379,7 +379,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
 [ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Workflow；切換同 Project 的 Chat session 不改變這四項設定。
-[ ] Browser 測試：Global Settings 的 Execution / Interface、Appearance / Theme palette / Language persistence、Auto workspace policy 三種模式。
+[ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Appearance / Theme palette / Language persistence、Auto workspace policy 三種模式。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
 [ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
