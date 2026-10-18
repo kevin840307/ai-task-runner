@@ -107,7 +107,7 @@ Target branch
   main
   feature/ui
   release/v4
-  ...the branch originally selected for the Project
+  ...the Project branch captured when the Task run starts
 
 Runner-owned local integration branch
   local/integration
@@ -125,8 +125,8 @@ Example:
 feature/ui
 local/integration
 local/task/T-001-r1
-local/task/T-002
-local/task/T-003
+local/task/T-002-r1
+local/task/T-003-r1
 ```
 
 ### Important Git ref rule
@@ -738,7 +738,7 @@ A normal Git conflict is not automatically a Task execution failure.
 Integration Manager owns deterministic Git operations:
 
 - inspect latest target/integration SHA
-- replay/rebase/cherry-pick mechanics
+- Task snapshot + candidate `merge --squash` mechanics
 - conflict detection
 - integration worktree lifecycle
 - retry after branch movement
@@ -814,9 +814,9 @@ cleanup retry
 Examples that must call the existing Runner again:
 
 ```text
-merge/rebase conflict requiring source edits
+candidate `merge --squash` conflict requiring source edits
 latest target changed architecture and old patch no longer applies
-validation/test failure after replay
+validation/test failure after applying the Task snapshot to the latest candidate
 review failure caused by integration result
 generated code no longer matches latest interfaces/contracts
 semantic conflict even when Git has no textual conflict
@@ -1017,9 +1017,9 @@ merge_retry_attempt += 1
 
 Examples that **count**:
 
-- replay/rebase produces a source conflict that requires Runner repair/rework
-- recovery Runner completes, but the next merge/replay attempt still conflicts
-- replay succeeds textually, but integration validation/test fails and requires Runner code changes
+- candidate `merge --squash` produces a source conflict that requires Runner repair/rework
+- recovery Runner completes, but the next candidate merge attempt still conflicts
+- candidate apply succeeds textually, but integration validation/test fails and requires Runner code changes
 - semantic incompatibility with latest target requires Runner to redo part of the implementation
 
 Examples that **do not count**:
