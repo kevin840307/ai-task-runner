@@ -472,4 +472,5 @@ class UIServer(ThreadingHTTPServer):
         state = UIState(repo_root)
         handler = type("BoundHandler", (Handler,), {"state": state})
         super().__init__((host, port), handler)
+        self.state = state
         self.port = self.server_address[1]

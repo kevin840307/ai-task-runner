@@ -64,15 +64,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 2. Project 與 Chat 導覽
 -----------------------
 
-[ ] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
-[ ] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
-[ ] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
+[x] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
+[x] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
+[x] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
 [ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
 [ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
 [ ] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
-[ ] Chat history 與 Task runtime history 分開儲存與顯示。
+[x] Chat history 與 Task runtime history 分開儲存與顯示。
 
 
 2.1 Global Settings
