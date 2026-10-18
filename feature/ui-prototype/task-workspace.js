@@ -25,6 +25,32 @@ taskDrawerEl.tabIndex=-1;
 function unmountTransientChatTask(owner){
   if(owner?._chatDraft&&taskMap[owner.id]===owner)delete taskMap[owner.id];
 }
+let yamlInitialText='',yamlDiscardAction=null,yamlDiscardReturnFocus=null;
+function yamlSubviewHasChanges(){
+  return planSubviewType==='yaml'&&String(document.getElementById('yamlEditor')?.value||'')!==yamlInitialText;
+}
+function restoreYamlDiscardFocus(){
+  const target=yamlDiscardReturnFocus;yamlDiscardReturnFocus=null;
+  if(target?.isConnected)setTimeout(()=>target.focus({preventScroll:true}),0);
+}
+function requestDiscardYamlChanges(onDiscard){
+  if(!yamlSubviewHasChanges()){onDiscard?.();return true}
+  yamlDiscardAction=typeof onDiscard==='function'?onDiscard:null;
+  yamlDiscardReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  openModal('yamlDiscardModal');
+  setTimeout(()=>document.getElementById('confirmDiscardYaml')?.focus({preventScroll:true}),0);
+  return false;
+}
+document.getElementById('confirmDiscardYaml')?.addEventListener('click',()=>{
+  const action=yamlDiscardAction;yamlDiscardAction=null;yamlDiscardReturnFocus=null;
+  closeModal('yamlDiscardModal');yamlInitialText='';action?.();
+});
+document.querySelectorAll('[data-close-modal="yamlDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{yamlDiscardAction=null;restoreYamlDiscardFocus()}));
+document.getElementById('yamlDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){yamlDiscardAction=null;closeModal('yamlDiscardModal');restoreYamlDiscardFocus()}});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!document.getElementById('yamlDiscardModal')?.classList.contains('open'))return;
+  e.preventDefault();e.stopImmediatePropagation();yamlDiscardAction=null;closeModal('yamlDiscardModal');restoreYamlDiscardFocus();
+});
 
 function taskDrawerMetaFor(t,prefix=''){
   if(!t)return prefix||'';
@@ -72,6 +98,9 @@ function restoreTaskInfoShell(t){
 function closeTaskDrawerShell({force=false,restoreFocus=true,skipEditorGuard=false}={}){
   if(!force&&!skipEditorGuard&&taskEditorReturnContext&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges()){
     requestDiscardTaskEditorChanges(()=>closeTaskDrawerShell({restoreFocus,skipEditorGuard:true}));return;
+  }
+  if(!force&&planSubviewType==='yaml'&&yamlSubviewHasChanges()){
+    requestDiscardYamlChanges(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
   }
   if(!force&&typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
     requestDiscardNewTaskListDraft(()=>closeTaskDrawerShell({force:true,restoreFocus}));return;
@@ -176,8 +205,11 @@ function enterPlanSubview(type,surface,sourceOverlay,ownerId,index=null,returnTa
   setTaskDrawerShell(type==='yaml'?'yaml':type,{title:type==='yaml'?'Edit task list YAML':'Task',meta:owner?`${owner.id} · ${owner.title}`:'',showBack:true,backTitle:'Back to Task List'});
   setSurfaceBackBehavior(surface,type,returnTarget);
 }
-function leavePlanSubview(){
+function leavePlanSubview({force=false}={}){
   if(!planSubviewType)return;
+  if(!force&&planSubviewType==='yaml'&&yamlSubviewHasChanges()){
+    requestDiscardYamlChanges(()=>leavePlanSubview({force:true}));return;
+  }
   const type=planSubviewType,ownerId=planSubviewOwnerId,index=planSubviewIndex;
   if(type==='yaml'){yamlEditorHome.appendChild(yamlEditorSurface);restoreSurfaceCloseBehavior(yamlEditorSurface,'yamlPlanModal')}
   planSubviewType=null;planSubviewOwnerId=null;planSubviewIndex=null;planSubviewReturnTarget='list';planSubviewMount.hidden=true;planModalEl.classList.remove('subview-open');
@@ -238,6 +270,7 @@ openYamlPlanModal=function(){
   const ownerId=currentTaskId;if(!ownerId)return;
   if(!planModalEl.classList.contains('open'))openPlanDialog(ownerId);
   yamlOpenBeforeSubview();
+  yamlInitialText=String(document.getElementById('yamlEditor')?.value||'');
   if(yamlEditorHome.classList.contains('open'))enterPlanSubview('yaml',yamlEditorSurface,yamlEditorHome,ownerId,null);
 };
 document.getElementById('stepsAdvanced').onclick=openYamlPlanModal;
@@ -245,7 +278,10 @@ document.getElementById('planEditYaml').onclick=openYamlPlanModal;
 const yamlApplyBeforeSubview=document.getElementById('applyYamlPlan').onclick;
 document.getElementById('applyYamlPlan').onclick=()=>{
   const embedded=planSubviewType==='yaml';yamlApplyBeforeSubview();
-  if(embedded&&toast.textContent==='Task list YAML applied')leavePlanSubview();
+  if(embedded&&toast.textContent==='Task list YAML applied'){
+    yamlInitialText=String(document.getElementById('yamlEditor')?.value||'');
+    leavePlanSubview({force:true});
+  }
 };
 
 // --- Shared right-click context menu for list rows and Board cards. ---
