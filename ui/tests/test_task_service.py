@@ -201,6 +201,17 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert generated["draft"]["items"][0]["workflow"] == "workflow.yaml"
         assert server.state.tasks.list(project)["tasks"] == []
 
+        validated = _json_request(
+            f"{base}/api/tasks/validate-draft",
+            method="POST",
+            body={
+                "project": str(project),
+                "draft": generated["draft"],
+            },
+        )
+        assert validated["draft"]["items"][0]["prompt"] == "Do it"
+        assert server.state.tasks.list(project)["tasks"] == []
+
         created = _json_request(
             f"{base}/api/tasks/create",
             method="POST",
