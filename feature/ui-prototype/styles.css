@@ -60,7 +60,6 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}bu
   background:radial-gradient(circle at 0 0,rgba(15,118,110,.10),transparent 34%),linear-gradient(180deg,#fff,#f8fafc)}
 .brandrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(216,222,232,.72)}
 .brand{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:760}.brandmark{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-weight:950;box-shadow:0 10px 22px rgba(15,118,110,.22)}
-.iconbtn{width:34px;height:34px;border:1px solid var(--line);border-radius:999px;background:linear-gradient(180deg,#fff,var(--panel-2));color:var(--muted)}
 .nav{display:grid;gap:7px;margin-top:12px;padding-bottom:12px;border-bottom:1px solid rgba(216,222,232,.72)}
 .navbtn{width:100%;min-height:42px;padding:0 12px;display:flex;align-items:center;gap:9px;border:1px solid rgba(203,213,225,.72);border-radius:14px;background:rgba(255,255,255,.74);box-shadow:var(--shadow-sm);font-weight:800;font-size:13px;text-align:left;transition:.15s}
 .navbtn:hover,.navbtn.active{transform:translateY(-1px);border-color:rgba(15,118,110,.36);background:#fff;box-shadow:0 10px 24px rgba(15,23,42,.08);color:var(--accent-dark)}
