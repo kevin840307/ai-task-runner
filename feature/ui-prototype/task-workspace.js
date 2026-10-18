@@ -182,8 +182,8 @@ loadTaskEditor=function(mode,args={}){
   const editing=mode==='edit-item'||mode==='draft-edit-item';
   document.getElementById('taskFormTitle').textContent=editing?'Edit task':mode==='root-create'?'New Task':'New task';
   document.getElementById('taskFormHelp').textContent=returnTarget==='chat'
-    ?(mode==='edit-item'?'Edit this Task Draft item. Chat stays behind this workspace.':'Configure this Task Draft item. Chat stays behind this workspace.')
-    :(mode==='root-create'?'Create one Task in this workspace.':mode==='edit-item'?'Edit this task only.':'Configure this task only.');
+    ?(editing?'Edit this Task Draft item. Chat stays behind this workspace.':'Configure this Task Draft item. Chat stays behind this workspace.')
+    :(mode==='root-create'?'Create one Task in this workspace.':editing?'Edit this task only.':'Configure this task only.');
   document.getElementById('editTaskScopeNote').hidden=true;
   showTaskEditorView();
   const editorOwner=draftMode?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
@@ -669,6 +669,14 @@ document.addEventListener('keydown',e=>{
   if(taskEditorReturnContext)leaveTaskEditorOverlay();
   else if(planSubviewType)leavePlanSubview();
   else closeTaskDrawerShell();
+},true);
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Tab'||!taskOverlayEl.classList.contains('open')||document.querySelector('.modal-overlay.open'))return;
+  const focusable=[...taskDrawerEl.querySelectorAll('button:not([disabled]):not([hidden]),input:not([disabled]):not([hidden]),textarea:not([disabled]):not([hidden]),select:not([disabled]):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])')].filter(x=>x.offsetParent!==null);
+  if(!focusable.length){e.preventDefault();taskDrawerEl.focus({preventScroll:true});return}
+  const first=focusable[0],last=focusable[focusable.length-1],active=document.activeElement;
+  if(e.shiftKey&&(active===first||!taskDrawerEl.contains(active))){e.preventDefault();last.focus()}
+  else if(!e.shiftKey&&(active===last||!taskDrawerEl.contains(active))){e.preventDefault();first.focus()}
 },true);
 
 document.getElementById('editTaskDemo').onclick=()=>{
