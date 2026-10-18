@@ -36,6 +36,9 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
 - Global Defaults are templates, not live inheritance: changing them never mutates existing Projects.
 - New Chat sessions read their Project settings; Chat does not own another default layer.
 - Prototype may store Global Defaults in localStorage; production should move them to the versioned Global Settings owner.
+- Execution also owns two global Git delivery controls:
+  - Merge failure limit: default `3`; when real Main merge failures exceed the value, automatic merge stops and the result closes as an Isolated Worktree fallback.
+  - Allow concurrent Main tasks: default `Off`; Off preserves the current Main-busy guard, On allows parallel Main execution in isolated worktrees and relies on the target-branch Integration Queue for serialized delivery.
 - Appearance options:
   - System
   - Light
@@ -62,50 +65,47 @@ Task-level choices remain:
 
 Execution invariant:
 - Every Task run executes in its own isolated Git worktree.
-- Runner continues to receive only project_root and remains unaware of Git integration.
+- Runner receives only project_root and remains unaware of Git integration.
+- The captured Project branch is the canonical truth; do not create/maintain a permanent local/integration branch.
 - Main is a delivery mode name; it does not imply the Git branch is literally named main.
 
-Target branch / integration baseline:
-- At Task run start, capture the Project repository's currently checked-out branch as target_branch.
-- local/integration is a committed local branch synchronized from target_branch by Git commit ancestry only.
-- File-content differences alone never cause local/integration to reset.
-- Uncommitted Project working-tree changes are outside this sync contract; they must be committed before becoming a new Main Task base.
-- If local/integration already contains the current Project HEAD plus accepted Task merge commits, keep those Task commits.
-- If Project branch has new commits missing from local/integration, fast-forward when possible; otherwise reconcile/merge those Project commits while preserving accepted Task commits.
-- Delete/recreate/reset local/integration only when it has no accepted undelivered Task result.
+Task start:
+- Capture the Project repository's currently checked-out branch as target_branch.
+- Create the Task branch/worktree directly from target_branch HEAD.
+- Uncommitted Project working-tree changes are not silently imported into the Task base; commit them first if they should become part of new Task bases.
+- Task branch/path uses Task + Run identity, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
 
-Global Settings -> Execution still defines how Auto resolves:
-- Busy project -> Isolated Worktree
-  - Project idle => effective Main
-  - Project busy => effective Isolated Worktree
-  - This remains a product policy, not a filesystem-safety requirement.
-- Always Main
-  - Auto => effective Main.
-  - Multiple Main Tasks may execute concurrently in separate worktrees; do not block merely because another Main Task is running.
-- Always Worktree
-  - Auto => effective Isolated Worktree.
+Global Settings -> Execution:
+- Auto workspace policy:
+  - Busy project -> Isolated Worktree: idle => Main, busy => Isolated Worktree.
+  - Always Main: Auto => Main.
+  - Always Worktree: Auto => Isolated Worktree.
+- Merge failure limit:
+  - Default 3.
+  - Only real merge/semantic/validation integration failures count.
+  - When count exceeds the configured value, stop automatic Main delivery, preserve Task branch/worktree, and close as Isolated Worktree / worktree_ready fallback.
+- Allow concurrent Main tasks:
+  - Default Off: preserve current Main-busy disabled/block behavior.
+  - On: explicit Main and Auto→Main may run concurrently in separate Task worktrees.
+  - Delivery to the same target branch remains serialized through the Integration Queue.
 
 Rules:
 - Explicit Task-level Main / Isolated Worktree overrides Global Auto policy.
-- All entry points must call the same workspace resolver; do not add a second resolver.
-- Persist requested mode and resolved effective mode for each Task run.
-- Task branch/path uses Task + Run identity, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
+- All entry points call the same workspace resolver; do not duplicate busy/concurrency logic.
+- Persist requested mode and resolved effective mode per Task run.
 - effective Main:
-  - Task worktree branches from committed local/integration.
-  - Runner Completed => commit any remaining Task changes into the Task branch.
-  - Serialize canonical integration per repository through the single local/integration branch.
-  - Merge the committed Task branch into a temporary candidate using normal Git merge, not squash, so shared ancestry/conflicts are preserved.
-  - If merge conflicts or semantic validation fails, collect error/latest-context and call the existing Runner to redo/recover; Integration Manager itself does not repair code.
-  - After candidate validation, advance local/integration to the merge commit.
-  - Deliver accepted local/integration to captured target_branch using git merge --squash + one local Task commit.
-  - Because squash does not preserve ancestry, re-baseline local/integration to the new target commit after durable delivery.
-  - If merge recovery exceeds configured N: preserve Task branch/worktree, keep mode=Main, Closed · Awaiting merge.
+  - Runner Completed => commit remaining Task changes locally.
+  - Integration Queue creates a temporary candidate from latest target branch HEAD.
+  - Normal Git merge Task branch into candidate so Git can detect conflicts using shared ancestry.
+  - Conflict/code repair reuses existing Runner; Integration Manager does not become another code-repair engine.
+  - Validate candidate, then merge --squash candidate into captured target branch and create one local Project commit.
+  - If failures exceed Global merge failure limit, delivery falls back to Isolated Worktree close.
 - effective Isolated Worktree:
-  - Runner Completed => snapshot/commit the Task result locally.
-  - Preserve branch/worktree and do not auto-integrate into local/integration / target_branch.
-- Target checkout must be clean for automatic squash delivery; never auto-stash/reset/commit unrelated user changes.
+  - Runner Completed => snapshot/commit result locally.
+  - Preserve branch/worktree and do not auto-modify target branch.
+- Target delivery worktree must be safe/clean; never auto-stash/reset/commit unrelated user changes.
 - Never auto-switch the user's Project checkout branch.
-- Remote push remains a separate explicit action.
+- Remote push remains a separate explicit Publish action.
 - Detailed implementation source of truth: feature/git-worktree-todo.md.
 
 4. Project-level Chat run settings
