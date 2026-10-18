@@ -62,20 +62,23 @@ Task-level choices remain:
 
 Execution invariant:
 - Every Task run executes in its own isolated Git worktree.
-- Main is a delivery mode name; it does not mean Runner writes directly into the Project checkout and it does not mean the Git branch must literally be named main.
 - Runner continues to receive only project_root and remains unaware of Git integration.
+- Main is a delivery mode name; it does not imply the Git branch is literally named main.
 
-At Task run start:
-- Capture the Project repository's currently checked-out branch as target_branch.
-- Capture the full current Project working state: branch HEAD + staged + unstaged + tracked deletions + untracked non-ignored files. Ignored files stay excluded. Snapshotting must not modify the user's index, stash, working tree, or branch history.
-- Use Task + Run identity for branch/path, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
-- target_branch remains fixed for that run even if the user later switches the Project checkout.
+Target branch / integration baseline:
+- At Task run start, capture the Project repository's currently checked-out branch as target_branch.
+- local/integration is a committed local branch synchronized from target_branch by Git commit ancestry only.
+- File-content differences alone never cause local/integration to reset.
+- Uncommitted Project working-tree changes are outside this sync contract; they must be committed before becoming a new Main Task base.
+- If local/integration already contains the current Project HEAD plus accepted Task merge commits, keep those Task commits.
+- If Project branch has new commits missing from local/integration, fast-forward when possible; otherwise reconcile/merge those Project commits while preserving accepted Task commits.
+- Delete/recreate/reset local/integration only when it has no accepted undelivered Task result.
 
 Global Settings -> Execution still defines how Auto resolves:
 - Busy project -> Isolated Worktree
   - Project idle => effective Main
   - Project busy => effective Isolated Worktree
-  - This is now a delivery policy, not filesystem-safety; all execution is isolated anyway.
+  - This remains a product policy, not a filesystem-safety requirement.
 - Always Main
   - Auto => effective Main.
   - Multiple Main Tasks may execute concurrently in separate worktrees; do not block merely because another Main Task is running.
@@ -84,24 +87,26 @@ Global Settings -> Execution still defines how Auto resolves:
 
 Rules:
 - Explicit Task-level Main / Isolated Worktree overrides Global Auto policy.
-- All entry points must call the same workspace resolver; update the resolver for the all-worktree model rather than adding another resolver.
-- Persist both requested mode and resolved effective mode for each Task run.
-- Effective Main:
-  - Runner Completed => Closed · pending_merge.
-  - Serialize integration per repository through the single local/integration branch.
-  - Before Task start and before each Main integration, create/update local/integration from the latest Project working-state snapshot when no earlier undelivered integration result exists.
-  - Task worktrees branch from local/integration. When completed, apply the Task snapshot back into a temporary candidate based on the latest local/integration, then advance local/integration only after validation.
-  - Conflict/code repair goes back through the existing Runner; do not build a second repair engine.
-  - On success: update the Project from the accepted local/integration result. If the Project base was clean, one local squash commit is allowed; if the Project base already had uncommitted changes, apply only the Task delta and leave the user's pre-existing dirty changes uncommitted.
-  - If real merge failures exceed configured N: stop automatic recovery, preserve Task branch/worktree, remain mode=Main, Closed · Awaiting merge.
-- Effective Isolated Worktree:
-  - Runner Completed => Closed · worktree_ready.
-  - Preserve branch/worktree and do not auto-integrate into target_branch.
-- Never auto-switch the user's Project checkout branch. If the captured target branch cannot be safely delivered without switching/overwriting another user workspace, preserve artifacts and expose a blocked delivery state.
-- Never auto-stash/reset user dirty files.
+- All entry points must call the same workspace resolver; do not add a second resolver.
+- Persist requested mode and resolved effective mode for each Task run.
+- Task branch/path uses Task + Run identity, e.g. local/task/T-001-r2 and .worktrees/T-001-r2.
+- effective Main:
+  - Task worktree branches from committed local/integration.
+  - Runner Completed => commit any remaining Task changes into the Task branch.
+  - Serialize canonical integration per repository through the single local/integration branch.
+  - Merge the committed Task branch into a temporary candidate using normal Git merge, not squash, so shared ancestry/conflicts are preserved.
+  - If merge conflicts or semantic validation fails, collect error/latest-context and call the existing Runner to redo/recover; Integration Manager itself does not repair code.
+  - After candidate validation, advance local/integration to the merge commit.
+  - Deliver accepted local/integration to captured target_branch using git merge --squash + one local Task commit.
+  - Because squash does not preserve ancestry, re-baseline local/integration to the new target commit after durable delivery.
+  - If merge recovery exceeds configured N: preserve Task branch/worktree, keep mode=Main, Closed · Awaiting merge.
+- effective Isolated Worktree:
+  - Runner Completed => snapshot/commit the Task result locally.
+  - Preserve branch/worktree and do not auto-integrate into local/integration / target_branch.
+- Target checkout must be clean for automatic squash delivery; never auto-stash/reset/commit unrelated user changes.
+- Never auto-switch the user's Project checkout branch.
 - Remote push remains a separate explicit action.
 - Detailed implementation source of truth: feature/git-worktree-todo.md.
-
 
 4. Project-level Chat run settings
 ----------------------------------
