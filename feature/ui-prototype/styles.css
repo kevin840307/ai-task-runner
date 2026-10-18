@@ -1014,6 +1014,7 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
 
 /* Stable Task source mode geometry */
 #newTaskModal .task-primary-source>.source-head,
+#newTaskModal .task-file-source>.source-head,
 #newTaskModal .task-ai-source>.source-head{
   display:grid;
   grid-template-columns:minmax(0,1fr);
@@ -1021,6 +1022,7 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
   gap:6px
 }
 #newTaskModal .task-primary-source>.source-head>div:first-child,
+#newTaskModal .task-file-source>.source-head>div:first-child,
 #newTaskModal .task-ai-source>.source-head>div:first-child{min-width:0}
 #newTaskModal .task-primary-source .source-tabs,
 #newTaskModal .task-ai-source .source-tabs{
@@ -1077,7 +1079,22 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
 }
 #newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .validation-stack{
   grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  align-items:start
+  align-items:stretch
+}
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .source-card{
+  height:100%
+}
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-file-source>.source-head,
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-ai-source>.source-head{
+  grid-template-rows:minmax(30px,auto) 30px
+}
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-file-source>.source-head>div:first-child,
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-ai-source>.source-head>div:first-child{
+  min-height:30px
+}
+#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-file-source>.source-head>.cap-chip{
+  justify-self:start;
+  align-self:center
 }
 #newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-primary-source{
   width:100%
