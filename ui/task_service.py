@@ -10,7 +10,10 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from .task_models import validate_task_draft_for_create, validate_task_id
+try:
+    from .task_models import validate_task_draft_for_create, validate_task_id
+except ImportError:
+    from task_models import validate_task_draft_for_create, validate_task_id
 
 STATE_VERSION = 1
 CREATE_REQUEST_LIMIT = 512
