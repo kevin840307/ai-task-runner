@@ -449,7 +449,7 @@ def test_chat_agent_busy_turns_queue_and_drain_fifo(tmp_path: Path) -> None:
     ]
 
 
-def test_chat_queue_recovers_processing_item_after_restart(tmp_path: Path) -> None:
+def test_chat_queue_recovers_dispatching_item_after_restart(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
     project.mkdir(parents=True)
@@ -461,7 +461,7 @@ def test_chat_queue_recovers_processing_item_after_restart(tmp_path: Path) -> No
     )
     claimed = chat.claim_next(project, session_id)
     assert claimed is not None
-    assert chat.queue(project, session_id)["processing"]["content"] == "persisted"
+    assert chat.queue(project, session_id)["dispatching"]["content"] == "persisted"
 
     calls: list[str] = []
     service = ChatAgentService(
@@ -890,3 +890,42 @@ def test_waiting_ask_blocks_new_turns_into_session_queue_until_resolved(tmp_path
     assert drained["status"] == "idle"
     assert calls == ["one", "two", "three"]
     assert chat.queue(project, session_id)["items"] == []
+
+
+
+def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    queued = chat.enqueue_turn(
+        project,
+        session_id,
+        "legacy",
+        request_id="legacy-status-1",
+        backend="qwen",
+    )
+    queue_id = queued["queue_id"]
+    state_path = project / ".ai-task-runner" / "ui" / "chat" / "state.json"
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    raw["version"] = 4
+    raw["sessions"][0]["queue"][0]["status"] = "processing"
+    raw["turn_requests"]["legacy-status-1"]["status"] = "processing"
+    raw["turn_requests"]["finished"] = {
+        "session_id": session_id,
+        "queue_id": queue_id,
+        "status": "done",
+    }
+    state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    restarted = ChatService()
+    snapshot = restarted.queue(project, session_id)
+    assert snapshot["dispatching"]["status"] == "dispatching"
+
+    normalized = json.loads(restarted._state_path(project).read_text(encoding="utf-8"))
+    # Loading is migration-only; persisted rewrite happens on the next state mutation.
+    restarted.recover_dispatching(project, session_id)
+    normalized = json.loads(restarted._state_path(project).read_text(encoding="utf-8"))
+    assert normalized["version"] == 5
+    assert normalized["sessions"][0]["queue"][0]["status"] == "queued"
+    assert normalized["turn_requests"]["legacy-status-1"]["status"] == "queued"
