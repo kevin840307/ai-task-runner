@@ -38,7 +38,7 @@ must reconcile these decisions with the authoritative runtime/API contracts and 
 - Prototype may store Global Defaults in localStorage; production should move them to the versioned Global Settings owner.
 - Execution also owns two global Git delivery controls:
   - Merge failure limit: default `3`; when real Main merge failures exceed the value, automatic merge stops and the result closes as an Isolated Worktree fallback.
-  - Allow concurrent Main tasks: default `Off`; Off preserves the current Main-busy guard, On allows parallel Main execution in isolated worktrees and relies on the target-branch Integration Queue for serialized delivery.
+  - Allow concurrent Main tasks: default `Off`; Off preserves the current Main-busy guard, On allows parallel Main execution in isolated worktrees; direct merges into the same target branch are serialized.
 - Appearance options:
   - System
   - Light
@@ -107,8 +107,6 @@ effective Main:
 - Within limit => existing Runner redoes Task against latest Project branch in a recovery worktree, commits result, retries normal merge.
 - Above limit => preserve result and close as Isolated Worktree / worktree_ready fallback.
 - Merge success => Closed / merged.
-- Do not use normal-path candidate branches.
-- Do not use merge --squash.
 
 effective Isolated Worktree:
 - Runner Complete => commit/snapshot result locally.
