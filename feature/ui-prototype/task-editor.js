@@ -1530,40 +1530,58 @@ function showCreateTypeMenu(anchor){
   createTypeMenu.style.left=`${left}px`;createTypeMenu.style.top=`${top}px`;
 }
 let newTaskListDraft=null;
-function renderTaskListDraftProjectOptions(){
-  const select=document.getElementById('taskListDraftProject');if(!select)return;
-  select.innerHTML=Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('');
-  select.value=projectMeta[newTaskListDraft?.project]?newTaskListDraft.project:currentProjectKey;
+function syncTaskListDraftActions(active){
+  ['planOpenWorkflow','planAddTask','planAddExisting','planEditYaml'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.hidden=!!active;
+  });
+  const cancel=document.getElementById('cancelTaskListDraft'),create=document.getElementById('confirmTaskListDraft');
+  if(cancel)cancel.hidden=!active;if(create)create.hidden=!active;
 }
-function hideTaskListCreateDraft(){
-  const view=document.getElementById('taskListCreateDraft'),body=document.querySelector('#planModal > .plan-page-body');
-  if(view)view.hidden=true;if(body)body.hidden=false;
+function renderNewTaskListDraftWorkspace(){
+  if(!newTaskListDraft)return;
+  const host=document.getElementById('planFormList'),summary=document.getElementById('planTaskSummary');
+  document.getElementById('planStatePill').textContent='Draft';
+  document.getElementById('planInfoHeading').textContent='Draft info';
+  host.innerHTML=TaskUiTemplates.emptyTaskList({large:true,id:'taskListDraftEmpty'});
+  const empty=host.querySelector('#taskListDraftEmpty');
+  if(empty){
+    empty.disabled=true;
+    empty.querySelector('strong').textContent='No tasks yet';
+    empty.querySelector('span').textContent='Create the Task List first';
+  }
+  summary.innerHTML=`<span>Title</span><label class="task-list-draft-control"><input id="taskListDraftTitle" value="${escapeAttr(newTaskListDraft.title)}" autocomplete="off"></label><span>Project</span><label class="task-list-draft-control"><select id="taskListDraftProject">${Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('')}</select></label><span>State</span><strong>Not created</strong>`;
+  const title=document.getElementById('taskListDraftTitle'),project=document.getElementById('taskListDraftProject');
+  project.value=projectMeta[newTaskListDraft.project]?newTaskListDraft.project:currentProjectKey;
+  title.oninput=e=>{
+    if(!newTaskListDraft)return;
+    newTaskListDraft.title=e.target.value;
+    document.getElementById('drawerTitle').textContent=e.target.value.trim()||'New Task List';
+  };
+  project.onchange=e=>{if(newTaskListDraft)newTaskListDraft.project=e.target.value};
+  syncTaskListDraftActions(true);
 }
 function discardNewTaskListDraft({close=true}={}){
-  newTaskListDraft=null;hideTaskListCreateDraft();
+  newTaskListDraft=null;syncTaskListDraftActions(false);
+  document.getElementById('planInfoHeading').textContent='List info';
   if(close&&typeof closeTaskDrawerShell==='function')closeTaskDrawerShell();
 }
 function createEmptyTaskListAndOpen(){
   newTaskListDraft={title:'New Task List',project:currentProjectKey};
-  const view=document.getElementById('taskListCreateDraft'),body=document.querySelector('#planModal > .plan-page-body');
-  if(body)body.hidden=true;if(view)view.hidden=false;
-  renderTaskListDraftProjectOptions();
-  document.getElementById('taskListDraftTitle').value=newTaskListDraft.title;
   planModalEl.classList.remove('subview-open');planModalEl.classList.add('open');
-  setTaskDrawerShell('list-draft',{title:'New Task List',meta:'Draft · not created yet',showBack:false});
+  setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:'Draft · not created yet',showBack:false});
+  renderNewTaskListDraftWorkspace();
   setTimeout(()=>{const input=document.getElementById('taskListDraftTitle');input?.focus();input?.select()},0);
 }
-document.getElementById('taskListDraftTitle')?.addEventListener('input',e=>{if(newTaskListDraft)newTaskListDraft.title=e.target.value});
-document.getElementById('taskListDraftProject')?.addEventListener('change',e=>{if(newTaskListDraft)newTaskListDraft.project=e.target.value});
 document.getElementById('cancelTaskListDraft')?.addEventListener('click',()=>discardNewTaskListDraft());
 document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
   if(!newTaskListDraft)return;
-  const title=String(document.getElementById('taskListDraftTitle')?.value||'').trim();
-  const project=document.getElementById('taskListDraftProject')?.value||currentProjectKey;
+  const title=String(document.getElementById('taskListDraftTitle')?.value||newTaskListDraft.title||'').trim();
+  const project=document.getElementById('taskListDraftProject')?.value||newTaskListDraft.project||currentProjectKey;
   if(!title){showToast('Task List title cannot be empty');return}
   const id='T-'+(++taskSequence);
   const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:'Empty task list',tags:['0 tasks'],workflow:'—',projectContext:project,project,progress:[0,0],elapsed:'—',stage:'Draft',session:'—',goal:'',items:[],listItems:[],workspacePolicy:'none',workspaceKind:'none',branch:'—',executionRoot:'—'};
-  newTaskListDraft=null;hideTaskListCreateDraft();
+  newTaskListDraft=null;syncTaskListDraftActions(false);
+  document.getElementById('planInfoHeading').textContent='List info';
   taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
   openPlanDialog(id,{returnTarget:'close'});showToast('Task List created · add tasks when ready');
 });
