@@ -302,6 +302,12 @@ class Handler(SimpleHTTPRequestHandler):
                     workflow=str(preferences.get("workflow") or ""),
                     request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/tasks/validate-draft":
+                project = self._project(body)
+                return self._json(self.state.tasks.validate(
+                    project,
+                    body.get("draft"),
+                ))
             if parsed.path == "/api/tasks/create":
                 project = self._project(body)
                 return self._json(self.state.tasks.create(
