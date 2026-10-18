@@ -51,7 +51,9 @@ class ChatService:
             existing = str(state["create_requests"].get(request) or "")
             if existing:
                 self._require_session(state, existing)
-                state["active_session_id"] = existing
+                if state["active_session_id"] != existing:
+                    state["active_session_id"] = existing
+                    self._write(project, state)
                 return self._snapshot(state, session_id=existing)
 
             session = self._new_session(title)

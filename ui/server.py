@@ -11,13 +11,13 @@ from urllib.parse import parse_qs, urlparse
 
 try:
     from .chat_service import ChatService
-    from .project_runtime_state import ProjectRuntimeMixin
+    from .project_preferences import ProjectPreferences\n    from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
     from chat_service import ChatService
-    from project_runtime_state import ProjectRuntimeMixin
+    from project_preferences import ProjectPreferences\n    from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
     from server_support import is_loopback_host
@@ -40,7 +40,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
         self._workflow_catalog_cache: dict | None = None
-        self.chat_service = ChatService()
+        self.chat_service = ChatService()\n        self.project_preferences = ProjectPreferences()
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
@@ -71,6 +71,10 @@ class Handler(SimpleHTTPRequestHandler):
                         exclude_runtime_path=query.get("exclude_runtime", [""])[0]
                     )
                 )
+            if parsed.path == "/api/project/preferences":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.project_preferences.get(project))
             if parsed.path == "/api/chat/sessions":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
@@ -153,6 +157,11 @@ class Handler(SimpleHTTPRequestHandler):
                     project=str(body.get("project", "")),
                     current=str(body.get("current", "")),
                 )
+            if parsed.path == "/api/project/preferences":
+                return self._json(self.state.project_preferences.update(
+                    self._project(body),
+                    body,
+                ))
             if parsed.path == "/api/chat/session/create":
                 return self._json(self.state.chat_service.create_session(
                     self._project(body),
