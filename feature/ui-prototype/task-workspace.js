@@ -514,7 +514,10 @@ function openProjectDropdown(showAll=true){renderProjectDropdown(showAll?'':proj
 projectDropdownToggle.onclick=e=>{e.preventDefault();e.stopPropagation();if(projectDropdown.hidden)openProjectDropdown(true);else setProjectDropdownOpen(false)};
 projectComboInput.addEventListener('focus',()=>openProjectDropdown(true));
 projectComboInput.addEventListener('input',()=>{renderProjectDropdown(projectComboInput.value);setProjectDropdownOpen(true);renderNewTaskWorkspace()});
-projectComboInput.addEventListener('keydown',e=>{if(e.key==='Escape')setProjectDropdownOpen(false)});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||projectDropdown.hidden)return;
+  e.preventDefault();e.stopImmediatePropagation();setProjectDropdownOpen(false);projectComboInput.focus({preventScroll:true});
+});
 document.addEventListener('click',e=>{if(!e.target.closest('.project-combobox'))setProjectDropdownOpen(false)});
 
 // Keep legacy datalist population harmless, but drive visible choices from the custom menu.
@@ -666,8 +669,8 @@ function beginWorkspaceRename(t=taskMap[currentTaskId]){
 }
 document.getElementById('planRenameList').onclick=()=>beginWorkspaceRename();
 document.getElementById('drawerTitle').addEventListener('keydown',e=>{
-  if(e.key==='Enter'){e.preventDefault();commitWorkspaceRename(false)}
-  if(e.key==='Escape'){e.preventDefault();commitWorkspaceRename(true)}
+  if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commitWorkspaceRename(false)}
+  if(e.key==='Escape'){e.preventDefault();e.stopPropagation();commitWorkspaceRename(true)}
 });
 document.getElementById('drawerTitle').addEventListener('blur',()=>commitWorkspaceRename(false));
 
@@ -676,9 +679,16 @@ taskOverlayEl.addEventListener('click',e=>{
   if(e.target!==taskOverlayEl)return;
   e.preventDefault();e.stopImmediatePropagation();closeTaskDrawerShell();
 },true);
+function taskDrawerChildOwnsEscape(){
+  if(document.querySelector('.modal-overlay.open'))return true;
+  if(!taskContextMenu.hidden)return true;
+  if(!projectDropdown.hidden)return true;
+  if(document.getElementById('drawerTitle')?.isContentEditable)return true;
+  return false;
+}
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape'||!taskOverlayEl.classList.contains('open'))return;
-  if(document.querySelector('.modal-overlay.open'))return;
+  if(taskDrawerChildOwnsEscape())return;
   e.preventDefault();e.stopImmediatePropagation();
   if(taskEditorReturnContext)leaveTaskEditorOverlay();
   else if(planSubviewType)leavePlanSubview();
