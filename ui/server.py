@@ -11,13 +11,15 @@ from urllib.parse import parse_qs, urlparse
 
 try:
     from .chat_service import ChatService
-    from .project_preferences import ProjectPreferences\n    from .project_runtime_state import ProjectRuntimeMixin
+    from .project_preferences import ProjectPreferences
+    from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
     from chat_service import ChatService
-    from project_preferences import ProjectPreferences\n    from project_runtime_state import ProjectRuntimeMixin
+    from project_preferences import ProjectPreferences
+    from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
     from server_support import is_loopback_host
