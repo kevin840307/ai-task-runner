@@ -1,0 +1,586 @@
+AI Task Runner — Chat / Task / Workspace 整體待辦
+================================================
+
+版本日期：2026-10-18
+目標分支：feature/ui
+範圍：產品 UI、Chat API、Agent Adapter、TaskDraft、Runner 整合、Worktree、Merge、測試與 24H 穩定性。
+
+本檔是 feature/ui 打樣期的「實作待辦」，與 feature/future.txt 同步；打樣階段只改 feature/。正式化時再同步根目錄 future.txt 與正式契約。
+[ ] 完成項目需在同一變更中補測試、更新必要文件，並清除已被取代的舊路徑。
+[ ] Prototype 的 Mock 行為不能被當成正式 Backend / Runner 功能已完成。
+[ ] 未完成真實 Browser / API / Live 測試前，不得宣稱整體完成或已證明 24H 穩定。
+
+
+0. 不可違反的設計原則
+----------------------
+
+[ ] 保留目前 AI Task Runner 的 UI 視覺語言，改善原有介面，不另造一套陌生的 ChatGPT 外殼。
+[ ] Chat 負責對話、排隊與釐清；Task 負責工作紀錄；Runner Core 負責執行、Stage 路由、Retry、Recovery、Resume 與真實 Runtime 狀態。
+[ ] Chat 不能因一般對話而偷偷建立或啟動 Runner Task。
+[ ] UI、CLI、YAML、API、Dry Run 必須共用同一份核心契約，不可各自實作第二套排程或復原邏輯。
+[ ] Task Draft 是暫存規劃資料，不是已建立 Task，也不能帶入假 Runtime / 假執行結果。
+[ ] 一般 TaskDraft / Create Task 建立後進入 New / idle；只有使用者明確輸入 @goal 時，才允許以單一明確動作 Create + Run，且必須沿用同一 Runner action contract。
+[ ] 目前 UI/Task flow 的 Auto / Main / Isolated Worktree 共用同一 Workspace resolver，皆先建立 isolated worktree 再 trigger Runner；CLI/standalone Runner 仍只吃 caller-supplied project_root，完全不依賴 Workspace/Worktree/Git integration。
+[ ] Main 完成定義：Runner Complete 只代表 Runner 階段完成，Task 仍是 Ongoing；commit local Task branch 後直接 normal merge 到 captured Project branch，merge 成功後才 Closed · merged。若 real merge fail：abort → merge_failure_count +1 → 讀 Global Settings.merge_failure_limit；count > limit 則 fallback 為 Isolated Worktree · Closed · worktree_ready。
+[ ] 無法使用的按鈕必須 disabled 並說明原因；Backend 仍要再次驗證，不能只依賴 UI。
+[ ] 避免 Dialog 疊 Dialog、俄羅斯娃娃式流程與重複資料副本。
+[ ] 優先處理 24H 無人值守可靠性、恢復能力與可診斷性，不為 UI 功能另造 Scheduler / Recovery Engine。
+
+
+1. Prototype 目前狀態與待驗證項目
+-------------------------------
+
+下列項目在 feature/ui prototype 中已有 Mock 實作；仍需實際開啟 HTML 操作驗證，不能視為正式功能完成。
+
+[x] Chat 控制已收斂：Mode 保留在 Composer 快速切換；Workflow / Agent / Model / Reasoning 收進 Chat 設定；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
+[x] 輸入框以 @ 顯示 Runner 系統指令，以 / 顯示目前 Agent 的 Mock Skills / Commands。
+[x] @task 隨機產生單筆 Task 或多筆 Task List；@task-single 強制單筆；@task-list 至少兩筆。
+[x] Chat 顯示精簡 TaskDraft 預覽，提供 Edit / Create Task / Dismiss。
+[x] TaskDraft Edit 共用既有 Task Editor / Task List，不在 Chat 裡複製一套完整表單。
+[x] Chat Queue Mock 有新增、編輯、刪除；Queue 區塊位於 Composer 上方。
+[x] 不設獨立 Queue 按鈕；Mock Agent turn 執行中再次按傳送會自動排隊，可連續排多筆。
+[x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
+[x] Ask 的 Extra context 為選填；空白可以直接 Next / Submit，不阻擋流程。
+[x] 移除專用 @task 按鈕；透過 @ 自動提示發現與插入 @task / @task-single / @task-list。
+[x] Ask 以互動卡片嵌入 Chat 訊息流；Ask 本身不再額外套內層卷軸，由 Chat 訊息區統一捲動。
+[x] 一般 Mock Chat 可隨機觸發 Ask；@ask-demo 可強制觸發。
+[x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
+[x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
+[ ] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
+[ ] 驗證開啟 Editor 時 Chat 不縮窄、不位移、不被浮層蓋住；Editor / Picker / Suggestion 的層級正確。
+[ ] 驗證 @task / @task-single / @task-list 三條路徑與錯誤提示都能直接操作。
+[ ] 驗證 Queue 編輯 / 刪除後順序、計數與切換 Chat session 的資料隔離。
+[ ] 實際瀏覽器測試連續送出至少 3 筆，確認後續訊息自動入 Queue 並按 FIFO 續跑；Ask 等待期間送出也須排隊，Submit / Cancel 後能繼續處理。
+[ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
+[x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
+[ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
+[x] Mock 功能入口可透過 @ 自動提示發現；Ask 測試入口為 @ask-demo。
+[x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
+[x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
+[x] Settings 拆分為 Interface 與 Language：Interface 收納 Appearance / Theme palette；Language 獨立管理語言。移除左上獨立 themeBtn；三者皆為全域偏好。
+[x] Agent / Model / Mode / Reasoning / Workflow 改為 Project-level preference；同 Project 的多個 Chat session 共用，切換 Project 載入各自設定並在 Prototype 以 localStorage 保存。
+
+
+2. Project 與 Chat 導覽
+-----------------------
+
+[ ] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
+[ ] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
+[ ] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
+[ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
+[ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
+[ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
+[ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
+[ ] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
+[ ] Chat history 與 Task runtime history 分開儲存與顯示。
+
+
+2.1 Global Settings
+-------------------
+
+[x] Global Settings 固定在左側 sidebar 最底部，不跟隨 Project 切換，也不藏在 Chat 專屬設定裡。
+[x] Execution → Auto workspace policy 提供：
+    - Busy project → Worktree
+    - Always Main
+    - Always Worktree
+[x] Task-level Main / Worktree 明確 override Global Auto policy；只有 Task-level Auto 讀取 Global policy。
+[x] Execution 新增 Global `Merge failure limit`，Prototype 預設 3 並持久化；正式版只由 Global Settings owner 保存 `merge_failure_limit`，Task 只保存實際 `merge_failure_count`；每次 real failure 後讀 Global limit，count > limit 即停止自動 merge並 fallback 成 Isolated Worktree close / worktree_ready。
+[x] Execution 新增 Global `Allow concurrent Main tasks` 開關，Prototype 預設 Off；Off 維持 Main busy disabled/block，On 解除限制並讓 Main Task selector / resolver 一致允許並行。
+[x] 修正 TaskEditor 後載入 `renderNewTaskWorkspace()` override 仍以 `!!busy` 無條件 disable Main 的問題；現在 Concurrent Main=On 時 core resolver 與 Task Editor UI 都一致可選。
+[ ] 正式 Backend/config schema 必須持久化 Global `merge_failure_limit` + `allow_concurrent_main_tasks`，UI / CLI / API 共用同一設定 owner；Task 不複製一份 merge limit。
+[x] Settings → Interface 集中 Appearance / Theme palette；Language 獨立為一個 Settings section；移除左上獨立 themeBtn。
+[x] Appearance 支援 System / Light / Dark；Theme palette 對齊現有 UI：Teal / Deep Blue / Violet / Amber / Rose。Prototype 立即套用並保存。
+[x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
+[ ] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
+[ ] 正式版設定 schema 需可版本化、驗證、migration，UI / CLI / API 讀同一份設定。
+[ ] Browser 驗證 Settings section 切換、重新整理保存、System appearance 跟隨 OS、5 組 palette 在 Light/Dark 下可讀，Project 切換不影響 Global preference。
+
+
+3. Composer 與指令自動提示
+--------------------------
+
+[ ] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
+[ ] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
+[ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
+[ ] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
+[ ] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
+[ ] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
+[ ] 自動提示支援文字篩選、↑ / ↓、Enter / Tab 接受、Escape 關閉；接受後只插入文字，不自動送出。
+[ ] 提示清單顯示名稱、描述、來源與啟用狀態；停用或無權限的能力不應被列為可執行項目。
+[ ] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
+[ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
+[ ] @goal、@task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
+[x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
+[x] Chat Composer 不顯示 Ask mock 按鈕；多問題流程以 @ask-demo 測試。
+
+
+4. Project Chat Settings：Agent / Model / Mode / Reasoning / Workflow
+------------------------------
+
+[ ] Agent / Model / Mode / Reasoning / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
+[x] Settings 的 Agents(Later) 改為 Global Defaults，提供 Default Agent / Model / Mode / Reasoning / Workflow。
+[x] Global Defaults 只在建立新 Project 時 copy 一份；修改 Global Defaults 不得回寫既有 Project。
+[x] 既有 Project 無設定時維持 legacy base defaults，不因之後修改 Global Defaults 而改變。
+[x] New Project prototype 已可真正建立；建立後立即初始化 Project-level Agent / Model / Mode / Reasoning / Workflow 並進入該 Project Chat。
+[x] 透過 Task Project 欄位新增的新 Project 也使用同一 initializeProjectChatSettings 路徑，不得另造 default 邏輯。
+[x] Project rename / delete 同步搬移或清除 Project-level Agent / Model / Mode / Reasoning / Workflow 與 Project Chat scope。
+[x] New Chat 不持有 default；永遠使用目前 Project 的 Agent / Model / Mode / Reasoning / Workflow。
+[x] Standalone New Task 的初始 Workflow 改讀目前 Project preference，而不是固定 ralphy_ai_validate.yaml。
+[ ] Browser 測試：Global Defaults 改成 OpenCode 後，新 Project 使用 OpenCode defaults；舊 Project 保持原設定；New Chat 繼承目前 Project；reload 後仍一致。
+[x] Prototype 將 Workflow / Agent / Model / Reasoning 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
+[x] Project-level Reasoning prototype 支援固定五種：low / medium / high / xhigh / max；預設 medium，跟 Project localStorage 一起保存。
+[x] Global Defaults 增加 Default Reasoning；新 Project copy 一次，既有 Project 缺欄位時使用 legacy base medium，不受之後 Global Defaults 改動影響。
+[x] Agent 切換只重設相依的 Model / Mode；Reasoning 保留 Project 原值。正式版再由 AgentAdapter / Backend 回報各 Agent / Model 支援的 reasoning levels。
+[ ] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
+[ ] Agent / Model / Mode / Reasoning / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
+[ ] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Reasoning / Workflow，Slash / Ask capability 也同步刷新。
+[ ] Chat Settings 使用 viewport 定位；不可因為打開設定而撐開、縮窄或重新排版 Chat。
+[ ] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
+[ ] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
+[ ] UI 提供 Read / Auto / YOLO 三種產品層級模式，但它們不是假設所有 Agent 的原生模式完全相同。
+[ ] Adapter 必須回報每個模式是否支援，以及對應的原生設定；不支援的模式需隱藏或 disabled，不可默默模擬。
+[ ] Qwen Code：Read 對應原生 Plan / read-only；Auto 與 YOLO 依目前 CLI 支援的 approval mode 映射。
+[ ] OpenCode：Read 對應禁止 edit / write / bash 等修改權限的 permission profile；Auto 使用安全預設與必要 Ask；YOLO 只有在 Agent 真正支援時才映射為允許全部工具。
+[ ] UI 顯示目前模式的簡短安全說明，尤其 YOLO 要清楚指出可能自動核准工具。
+[ ] 真正的權限設定與工具核准仍由 Agent / Backend adapter 執行；不能只在 UI 顯示文字。
+[ ] 測試切換 Agent 後 Model 是否重設到合法預設，且不會留下另一個 Agent 的 Model ID。
+
+
+5. Agent Skills / Slash Commands 的取得方式
+-------------------------------------------
+
+[ ] 新增統一的 Agent capability discovery 介面，前端只顯示 Backend 回傳的能力，不自行掃描本機檔案系統。
+[ ] 能力資料至少包含：token / name、description、kind、source、user_invocable、enabled、permission / availability。
+[ ] Qwen Code adapter 優先使用 Qwen Code 的 SkillManager / slash-command registry 或目前 Agent process 可提供的能力投影。
+[ ] Qwen Code 要尊重內建命令、擴充命令、專案 / 個人 Skills、path-gated Skills 與 user-invocable 設定；不要只用檔名猜測。
+[ ] OpenCode adapter 使用其 resolved command / skill registry 或官方 UI/TUI 使用的能力來源。
+[ ] OpenCode 要尊重專案與全域 Skills、命令設定、Agent 的 skill permission、deny / ask / allow 與停用 skill tool 的規則。
+[ ] OpenCode 的 Skills 可能來自 .opencode/skills、.claude/skills、.agents/skills 及使用者全域目錄；由 OpenCode 自己決定解析結果，前端不重做搜尋。
+[ ] 不把 Skill 全文塞入前端清單；列表只呈現摘要，使用者選取後交由 Agent 原生機制載入。
+[ ] capability 結果可以快取作為 UI 投影，但 Agent、Project、設定或權限改變時必須重新整理。
+[ ] Mock Qwen / OpenCode 的 / 清單應不同，讓使用者可以測試切換 Agent 的效果。
+[ ] 正式版若某個能力取得失敗，要顯示錯誤 / Retry，不可退回一份看似真實的硬編碼清單。
+[ ] 保留 /btw 等 Agent 原生 side question 命令；它與本系統 Ask（暫停目前 turn 向使用者詢問）不是同一功能。
+
+參考：
+- OpenCode Skills： https://opencode.ai/docs/skills/
+- OpenCode Commands： https://dev.opencode.ai/docs/commands
+- OpenCode Tools / question： https://opencode.ai/docs/tools/
+- Qwen Code Skills： https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/
+- Qwen Code Commands： https://qwenlm.github.io/qwen-code-docs/en/users/features/commands/
+
+
+6. Chat Queue（對話排隊）
+-------------------------
+
+[ ] Queue 與 Runner Task List 是完全不同的概念；Chat Queue 只保存尚待送給目前 Chat Agent 的 Prompt。
+[ ] Queue 以 Chat session 為單位儲存，切換 Project / Chat 不可串錯。
+[ ] 有 Agent turn 執行中時，使用者送出的後續 Prompt 應依 Agent 原生能力加入 Queue；若 Agent 沒有原生 Queue，Backend 提供相同產品契約。
+[x] Queue 項目直接顯示在 Composer 上方；沒有項目時整塊隱藏，busy 時另顯示自動排隊提示。
+[ ] 每個項目顯示順序、可閱讀的摘要與 Edit / Delete。
+[ ] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
+[ ] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
+[ ] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
+[ ] 以 Qwen Code 原生 queued-next-turn 行為為參考（例如 Ctrl+Q）；由 adapter 決定是否支援原生快捷鍵。
+[x] Prototype 不提供 Queue 按鈕；Mock 模擬 Agent busy，連續按傳送會自動排隊，並可編輯／刪除多筆 Queue。Ctrl+Q 只保留為 busy 時的可選快捷鍵。
+[ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
+[ ] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
+[ ] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
+[ ] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。
+
+
+7. AI Ask / Clarification（反問使用者）
+--------------------------------------
+
+[ ] Ask 指的是 Agent 在目前工作過程中遇到需要使用者決定的事項，暫停目前 turn 並向使用者提問。
+[ ] Ask 不是 Qwen /btw 這種獨立 side question；/btw 保持為 Agent 原生能力。
+[ ] 統一 Ask 問題資料格式，避免 Qwen 與 OpenCode 各做一套前端流程。
+[ ] 一次 Ask 可以有多個問題；每題可為選項題或自由文字題。
+[ ] 選項題最後固定提供「其他／自行輸入」，選擇後顯示文字輸入框。
+[ ] 選項題未選選項、Other 沒填文字、文字題空白時，不可 Next / Submit。
+[ ] 每題顯示目前進度；使用者回答後按 Next；最後一題顯示 Submit。
+[ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
+[ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
+[ ] 正式版 Ask 卡片嵌入 Chat 訊息流，選項清單有獨立捲動區，不使用遮住訊息的浮層。
+[ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
+[ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
+[ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
+[ ] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
+[ ] Prototype 的一般訊息可以隨機觸發 Ask；@ask-demo 可以強制觸發，不依賴機率。
+[ ] Mock 至少覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session。
+[ ] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
+[ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
+
+
+8. @goal 快速執行
+----------------
+
+[x] Prototype 支援 @goal <spec>；這是明確的 Runner action，不屬於一般 Chat intent inference。
+[x] @goal 直接建立一筆 Task 並啟動 Runner；Board lifecycle 立即為 Ongoing，runtime 為 Running，因此 Tasks 頁立刻可見。
+[x] @goal 使用目前 Project 保存的 Workflow；沒有設定時 fallback ralphy_ai_validate.yaml。
+[x] @goal 的 Workspace=Auto 使用全域 Auto workspace policy 與共用 resolveTaskWorkspace，不另外寫一套 busy/worktree 判斷。
+[x] 若選定 Workflow 需要額外 File Validator，而 Quick Goal 缺少必要輸入，Prototype fail closed 並提示改用 @task / Task Editor。
+[ ] 正式版 @goal 必須是 Backend 的 atomic/idempotent「create then run」命令或等價 transaction；不得讓 UI 先直接寫 Task store 再自己改 runtime。
+[ ] @goal 建立成功但 Run 啟動失敗時，要有明確 durable 狀態與 Retry/Resume 語義，不得留下 UI 假 Running。
+[ ] 測試 @goal 空 spec、重複送出、雙擊、Workflow 不存在、File Validator 必填、Main busy + 三種 Global Auto policy。
+[ ] @goal 與 @task 的責任保持分離：@goal = 快速交付目標並執行；@task = 先產生 Draft / Review / Edit / Create。
+
+
+[x] Chat Ask choice UI 每題最多 5 個可見項目（含固定 Other/custom text）；UI defensive clamp，正式 prompt 也要限制選項數量。
+[x] Chat User message / Ask / Queue surface 改用 appearance/theme tokens，Dark mode 不保留白底/淺色 border。
+
+9. @task / @task-single / @task-list 與 TaskDraft
+-----------------------------------------------
+
+[ ] 只有明確的 Runner 指令才可建立 TaskDraft；一般訊息提到 task / run / 建立任務不得觸發。
+[ ] @task <spec>：由 AI 判斷產生單筆 Task 或多筆有序 Task List。
+[ ] @task-single <spec>：強制產生且只產生一筆 Task。
+[ ] @task-list <spec>：強制產生至少兩筆有序 child Task。
+[ ] 三種命令共用同一個 Backend endpoint / service、固定 Prompt、TaskDraft schema、驗證與 Create 流程；只有 mode 參數不同（auto / single / list）。
+[ ] 固定的 Generate Task Prompt 放在 Backend，參照既有 Generate Workflow 的做法；不可把整段 Prompt 寫死在瀏覽器。
+[ ] Prompt 必須要求 AI 輸出結構化資料，不可以只回傳自由文字；驗證失敗要 fail closed。
+[ ] 產生結果先顯示精簡 Draft 預覽，使用者可 Edit、Create Task 或 Dismiss。
+[ ] TaskDraft 最低欄位包含 title、Project reference、ordered items[]；每個 item 至少包含 title、task prompt、Workflow、Project、workspace policy。
+[ ] Validator / Prompt source override 只在需要時加入；不把無關 runtime 欄位塞進 Draft。
+[ ] Draft 不包含 Runner runtime、Retry、Recovery、Merge 狀態；不得在建立前寫入正式 Task history。
+[ ] 單筆 Draft 的 Edit 使用既有 canonical Task Editor。
+[ ] 多筆 Draft 的 Edit 使用既有 Task List workspace；每個 child 的 Add / Edit 繼續使用同一個 canonical Task Editor。
+[ ] 不新增 Chat 專用 Task 編輯表單；不要同步兩份平行 Draft state。
+[ ] 從 Chat Draft 進入編輯時，Task Editor 必須是 viewport 上層的右側 overlay；Chat 留在背景、不縮窄、不位移。
+[ ] 單筆 Editor 的 Back / Cancel / 遮罩關閉回到原 Chat Draft。
+[ ] 多筆 Task List 關閉回到原 Chat Draft；從 List 進 child Editor，Back 先回 List，關閉 List 再回 Chat Draft。
+[ ] 由 Task Info 進入 Add / Edit 時 Back 回 Info；由 Task List 進入時 Back 回 Task List。返回目的地由來源狀態決定，不可一律回 YAML。
+[ ] Create Task 前再次驗證 items 不為空、Prompt / Project / Workflow / workspace policy 合法。
+[ ] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
+[ ] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
+[ ] Create / Dismiss / Retry / Edit / Back / Create Again 必須有明確的重複操作語義；不能重複建立同一 Draft。
+[ ] Prototype 的 @task 隨機單筆 / 多筆；測試可使用固定 fixture / seed，避免自動化測試被隨機結果影響。
+[ ] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
+[ ] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在、Worktree 不可建立都要有測試。
+[ ] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
+
+
+10. Task、Task List、狀態與編輯政策
+---------------------------------
+
+[ ] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
+[ ] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
+[ ] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
+[ ] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
+[ ] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
+[ ] Edit Task 的 Back 依來源回 Info / Task List / Chat Draft；關閉按鈕、Cancel、Escape 與遮罩關閉行為需一致。
+[ ] Delete Task 前顯示確認視窗，指出 Task ID、名稱、Project 與刪除後果。
+[ ] Delete 不可在使用者確認前改動資料；Cancel 不改資料。
+[ ] 刪除正在執行、Recovering、或有不可安全刪除狀態的 Task 時必須阻擋，並顯示原因。
+[x] Paused / Closed 重設回 New 必須確認；Paused Reset 明確轉 New + idle + progress 0，已完成 Run 保留 History，舊的 resumable run 標記 abandoned。
+[x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
+[ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
+[ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
+[x] File 型欄位統一提供兩種來源：手動輸入 path，或 Upload file；不再提供 built-in validator file / preset path。
+[x] 手動輸入 path：Create / Save 時直接使用原 path，不 upload、不 copy、不改寫。
+[x] Upload file：先以 transient upload metadata / bytes 暫存；Create / Save 時由 backend copy 到 Runner-managed path，再把回傳的新 canonical path 寫入 Task item。
+[x] Upload 選檔完成後立即計算 managed target path 並寫回對應 input（例如 taskValidatorFile），讓 UI 驗證與 Create/Save 永遠只讀同一個 path 欄位。
+[x] 若 input 仍等於該 staged upload 的 managed target path，capture 不得清除 upload metadata；只有使用者手動改成另一條 path 時才取消 staged upload、改走 manual-path 流程。
+[x] Prototype 模擬 managed copy path：.ai-task-runner/uploads/<task-item-id>/<kind>/<filename>；canonical Task 不保存 browser File / upload token。
+[x] backend copy 成功後必須把 managed path 回傳 UI；Task Editor 的 taskValidatorFile / taskGoalFile / taskAiFile 要顯示回傳 path，而不是 filename/fakepath。
+[ ] 正式 backend upload API：接收 bytes + filename + target Task/item identity，原子 copy 到 managed storage；copy 失敗時 Create / Save fail closed，保留 staged upload 供重試。
+[ ] Browser 測試 Upload file → Create/Save → managed path 回填；再測 Upload 後手動輸入 path 時 manual path 優先且 staged upload 被取消。
+[x] Composer 的 Ask mock 按鈕與 handler 已移除；@ask-demo 保留作為 Ask flow 測試入口。
+[ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
+[x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
+[x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
+[x] Chat Composer 移除無功能的 Project chip；Project context 由頁面 / Chat session 本身提供，不重複顯示固定 tag。
+[x] Chat Composer 的 Mode 旁新增 New Task；與 Tasks 頁 + New 共用同一 createTypeMenu / TaskUi controller，不建立 Chat 專用建立流程。
+[x] Chat New Task 明確以 active Chat 的 projectKey 作為 Task / Task List 初始 Project；Tasks 頁入口仍使用 currentProjectKey。
+[x] Dark mode 明確覆蓋 msg.user / #composerAsk / Ask head-foot-options，避免動態 Ask surface 被亮色 generic style 蓋回去。
+[x] New Task List Draft 直接重用 TaskListWorkspace 的 List body / List info / DrawerHeader actions；已移除專用 task-list-create-draft markup。
+[x] Task List Draft 的空狀態 CTA 可直接開同一份 canonical Task Editor 新增第一個 Task；不再 disabled 無反應。
+[x] Create Task List 必須至少有 1 個 Task：0 task 時按鈕 disabled，Create handler 也再次 fail closed 檢查，避免繞過 UI 建立空 List。
+[x] Prototype Task List Draft child 與正式 List 使用一致操作語意：Edit 走 canonical Task Editor、Remove、↑/↓、Enter 編輯與 drag reorder；全部只改 transient draft。
+[x] Task List Draft child Edit 保留該 child 原本 Project，不再被後段 Project wrapper 覆蓋成 current Project。
+[x] Task List Draft 有內容或修改 Title / Project 時，X / backdrop / Escape / Cancel 先顯示 discard confirmation；空白預設 Draft 可直接關閉。
+[x] Prototype Create/Save 增加 UI submitting lock：Task Editor、Task List Draft Create、Chat TaskDraft Create 防止連點重複建立；正式版仍需 Backend idempotency。
+[x] Task Drawer Close / backdrop / Escape 移除 core.js 舊 ownership，只由 Task Workspace Shell 控制；child modal 開啟時不得穿透關閉 Drawer。
+[x] Task Drawer mock 補 focus return、基本 Tab containment、select / tabindex focus-visible；正式 React 再補完整 dialog/focus primitives。
+[x] Chat AI TaskDraft 產生時不再 eager 寫入 taskMap；未 Create 前保持 transient，Edit 才暫掛到共用 Editor surface，Create 才轉正式 Task。
+[x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 先進 transient Draft，不分配正式 Task ID、不寫 taskMap/Board；按 Create Task List 後才建立 items=[] 的正式 Task。
+[x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
+[x] planModal / newTaskModal 視覺層級已收斂成單一 Task Workspace Shell：newTaskModal 不再是 fixed overlay，只是 shell 內的 Editor View；List / Editor 切換不改外框位置、寬度、陰影。
+[x] Task Info / Task List / Task Editor / YAML 再收斂成同一個 #taskOverlay Drawer；只保留一份 drawerhead。
+[x] 共用 Drawer Header 負責 Back / Title / Meta / Actions / Expand / Close；各 route 不再自己 render modal-head / plan-modal-head。
+[x] planModal 保留 legacy ID 只作 Drawer route container，不再是 modal / fixed overlay；newTaskModal 只作 Editor route。
+[x] List → Editor / YAML → Back 只切 content route 與 header state，不關閉再重開 Drawer。
+[x] Move existing / Add task 回 List 不再 remove/reopen taskOverlay，避免 Drawer 抽動。
+[x] Header Back handler 由 route shell 重設，避免 Editor / YAML callback 殘留到 List。
+[x] Task List plan-page-body 底部新增固定 Back footer；正式 List 與 Header Back 共用 handleTaskDrawerBack，Draft footer 走同一 discard guard，不建立第二套 navigation。
+[x] Task List Draft 正式 Create 時重新以 final T-xxx-Ix 計算每個 child 的 itemId / Workspace / Worktree branch / executionRoot；preflight 失敗會 rollback Task ID 與 submitting lock。
+[x] Draft create/edit 的 editorItemRef 不再誤讀正式 batchDraft.length；Draft workspace preview 使用自己的 transient item index。
+[x] TaskUi.openList facade 保留 options / returnTarget；Chat Draft 等 caller 不再因 facade 吃掉第二參數而依賴隱含 _chatDraft fallback。
+[x] New Task Cancel、Task List → Chat Back、Open Workflow、Merge Chat、Delete 等 active 路徑改走共用 Drawer close/cleanup；跨頁導航可關閉 focus restore，避免 focus 回隱藏頁。
+[x] Paused / Closed Task 從 Info Reset 回 New 後仍留在 Info Drawer，不再意外跳去 Task List。
+[x] Legacy openTaskListEditor / openFullPlanPage 不再導向不存在的 yaml / plan view；舊 caller redirect 到目前 Task List Drawer。
+[x] Draft reorder 對齊正式 Task List drop 語意；畫面以 drag 為主，Alt+↑/↓ 提供鍵盤 reorder，舊 ↑/↓ row buttons 不顯示。
+[x] Draft row action event 修正：Edit / Remove / keyboard Enter / double-click 不再因 bubble 同時觸發兩次 Editor action。
+[x] Drawer Escape ownership 補 top-layer guard：Task context menu、Project dropdown、Title rename、child modal 先處理 Escape，不得被 Drawer capture handler搶先 Back/Close。
+[x] Programmatic openTaskById / openPlanDialog 也必須經 Task List Draft dirty discard guard，不再 silent discard transient Draft。
+[x] Task Editor → Prompts / Task List → Prompts 統一走 Drawer cleanup；dirty Task Editor 與 dirty Task List Draft 會依層級確認，不再看似切頁但 Drawer 仍蓋住。
+[x] Task Editor 增加 transient dirty snapshot；Back / Cancel / X / Escape / 跨頁導航在有未儲存修改時先確認，成功 Save 後清除 snapshot。
+[x] Drawer 關閉順序改為先保護 child Task Editor dirty，再處理整份 Task List Draft dirty；避免 0-item List Draft 仍有 child 未儲存內容時直接遺失。
+[x] Task Editor / Task List Draft discard modal 的 backdrop 會真正 closeModal，並修正 chained confirmation focus 不得回到已隱藏 modal。
+[x] Ask 主 Chat composer 直接 Submit clarification 的實驗改動已取消；Ask 仍只由 Ask 卡片回答/Submit，主 composer 在 waiting_ask 時維持一般 Queue 行為。
+[x] Standalone + New → Task Create 成功後保留新建 Task Info Drawer；不再因外層 stale returnTarget='close' wrapper 把剛開的 Info 一起關掉。
+[x] Task Editor chained dirty confirmation 修正：只有真的離開 Editor 才清 snapshot；若下一層 Task List Draft confirmation 選 Keep editing，child Editor 仍保持 dirty guard。
+[x] Chat TaskDraft Edit/List 只在 Drawer 開啟期間暫掛 taskMap；Back / X / Open Prompts / 關 Drawer 時 unmount transient _chatDraft model，但 session.taskDraft.model 保留編輯結果。
+[x] YAML subview 增加 dirty guard：未 Apply 的 YAML 修改在 Back / X / backdrop / Escape 前確認；Apply 成功後標記 clean 再回 Task List。
+[x] Task Editor / YAML / Task List Draft 三層 discard modal 均有完整 backdrop close、Escape ownership、focus restore；新增 zh-TW / en 文案。
+[x] Project Chat 補 Delete：只刪目前 Project 的當前 Chat；刪除時清 mock turn timer / transient TaskDraft；刪到最後一個自動建立新的空 Chat，Project 永遠保有 active session。
+[x] 移除 Drawer 的舊 Steps tab / drawer-items pane；child Tasks 編排只保留 Overview 的 Tasks 摘要 + Task List Workspace，Runtime / Output / History 改為四欄固定位置。
+[x] Task List 底部 Back footer 改靠右，仍共用 TaskDrawerShell 的同一 Back / discard handler。
+[x] Task Editor footer 明確保留 Back/Cancel 按鈕；從 Task Info 編輯單一 Task 時顯示 Back to Info，多 Task 則進 Task List 並可 Back to Info。
+[x] New 狀態 Task 從 Board 直接開 Task List 時，footer 同時保留原 Back（關閉 Drawer）與 Back to Info（回同一 Task Info）；從 Info/Chat/Draft 進 List 時不重複顯示第二顆 Info 返回鍵。
+[x] Task Info 的 Edit Task：單一 Task 直接開 canonical Task Editor；多 Task 開 Task List Workspace；兩者 returnTarget 均明確為 info。
+[ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
+[ ] Browser 測試 Project Chat Delete：刪中間 Chat / active running mock Chat / 含 TaskDraft Chat / 最後一個 Chat；確認只影響目前 Project，刪最後一個會建立空 Chat。
+[ ] Browser 視覺確認 Drawer tabs 永遠只有 Overview / Runtime / Output / History 四個固定位置，不再出現 Steps 或因 Task 類型左右位移。
+[ ] Browser 測試 Info → Edit Task：單一 New Task 進 Editor 時底部 Back to Info 可見；多 Task 進 Task List 時底部 Back 靠右並可回 Info。
+[ ] Browser 測試 Task Editor dirty guard：修改 Title / Project / Prompt / Workflow / Workspace → Back / Cancel / X / Escape / Open Prompts；Keep editing / Discard 都要保持正確 route/focus。
+[ ] Browser 測試 chained dirty guard：Task List Draft → child Editor 修改未 Save → X / Open Prompts → 先 child discard、再 parent Draft discard；第二層 Keep editing 後 child dirty state 仍需保留。
+[ ] Browser 測試 YAML dirty guard：修改 YAML 未 Apply → Header Back / 底部 Cancel / X / backdrop / Escape；Keep editing / Discard / Apply 後返回 List 都應一致。
+[ ] Browser 測試 Chat TaskDraft transient mount：Edit 單筆/多筆 → Back / X / Open Prompts → 回 Chat 後 taskMap 不殘留 _chatDraft，但 Chat Draft 修改內容仍保留。
+[ ] Browser 測試 Escape top-layer：Task context menu / Project dropdown / Title rename / discard modal 開啟時 Escape 只關最上層，不得同時 Back/Close Drawer。
+[ ] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
+[ ] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；直接開 List → 底部 Back 關 Drawer；Draft → 底部 Cancel → dirty discard confirmation。
+[ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
+[ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
+[x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
+[x] Chat Draft 單筆、Task List child Add/Edit、Task Info Edit 都共用同一 Editor View；returnTarget 只控制回 List / Info / Chat / Close。
+[x] Chat / Composer Dark mode 已完整 token 化：composerwrap、msg user、Ask、Queue、suggest、settings popover、workflow-setting、Mode / New Task / Ask controls、Chat TaskDraft 均不再依賴 light-only 色值。
+[x] Chat composer 的 Project tag 已移除；Mode 旁 New Task 重用 Tasks 頁同一個 + New → Task / Task List menu，預設帶入目前 Chat Project。
+[x] 新增共用 uiText / data-i18n translation layer；這次新增或修改的 Chat / Composer / Task Draft / Task List Draft 文案均提供 zh-TW / en。
+[x] Queue / Ask / command suggestions / Chat TaskDraft / Task List Draft 等動態文字改走 uiText，不只靜態 HTML 翻譯。
+[ ] Browser 測試 Light / Dark × Teal / Blue / Violet / Amber / Rose：Chat composer、Ask、Queue、settings popover、Task Draft 不得出現亮白殘留。
+[ ] Browser 測試 zh-TW / en 即時切換：Composer 靜態文案、Queue / Ask / command suggestions / Task Draft / Task List Draft 應同步更新。
+[x] UI review：移除已被 Drawer / inline inspector 取代的 taskInfoModal、dead renderer 與 task-context-info / wide-menu CSS，避免第二套 Info ownership。
+[x] UI review：Task context menu 定位改讀實際 DOM 尺寸，不再使用舊雙欄 menu 的 454px hardcode。
+[x] UI review：edit scope / move note / delete note / status card / board column / pill / YAML parent hint 等 active surfaces 改用 semantic theme tokens，減少 Dark 靠 late override 修補。
+[x] 正式 Task / Task List 建立後保持 items >= 1；只有 transient Task List Draft 允許 0 task。所有 Remove 路徑都不可刪掉最後一個 child。
+[ ] Prototype 仍有多層 function wrapper / reassignment（例如 openTaskById / renderFullPlan）；正式 React/production migration 時應收斂成單一 controller/service owner，不把 monkey-patch 結構帶進正式版。
+[x] YAML 保持同一 Task Workspace Shell 的 subview；長表單不得再開第二個 full-size overlay。
+[ ] 正式 React 將 legacy id planModal/newTaskModal 改為語意元件/route 名稱（TaskWorkspaceShell / list / editor / yaml），避免名稱再次暗示巢狀 modal。
+[x] 新增 feature/ui-prototype/task-ui-templates.js，集中 TaskEditor / TaskListWorkspace / TaskSourceCard / EmptyState / AddTaskFooter markup，主 HTML 只保留 mount point。
+[x] Chat TaskDraft：單筆 Edit 開同一個 TaskEditor；多筆 Edit 開同一個 TaskListWorkspace；不得維護 Chat 專用表單 DOM。
+[x] New Task / Edit Task 共用 Editor 排版收斂：Project + Workflow + optional Title 同列；Task Prompt 為主視覺；Workflow-required File Validator / AI validation 與 Prompt 並排，Upload file 提升辨識度；Workspace 降為次要 compact 區塊；窄畫面自動改回單欄。
+[x] Task Prompt / AI source mode 排版收斂：Write / File / Asset（AI 另含 Default）保持等寬 segmented tabs 與 100% 內容寬度；高度依模式自然變化。Mixed workflow 時 Task Prompt 先佔完整一列，File Validator + AI Validation 下一列並排，避免 Prompt 下方大片留白。
+[x] Mixed File Validator + AI Validation 對齊：兩張卡同列 stretch、header 使用相同兩列節奏（標題/說明 + control row），因此 AI Default/Write/File/Asset 切換時 body 起點與外框保持對齊。
+[x] Reset / Rerun 統一由 tasks-page.js 單一 lifecycle owner 處理並必須先確認；移除 core.js 舊 direct handler，避免 load-order 繞過 confirmation。
+[ ] Browser smoke：Paused → Reset → Confirm 後卡片移到 New；Cancel 不改狀態；Failed/Completed Rerun 必須先確認；Mixed File + AI 四種 AI mode 逐一切換確認兩卡頂端/body 起點/底部外框對齊。
+[ ] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
+[x] Regression 修正：compact New Task layout 移除 state-hint 後，同步移除舊 startup writer，並把 newTaskListDraft 初始化移到 task-editor.js 最前面，避免 Task Editor 載入中止後 Task Workspace 出現 TDZ ReferenceError。
+[x] Tasks header 移除 tasksProjectLine；HTML 與 task-editor / tasks-page / project-sidebar 所有 writer 一併刪除，不留下 null.textContent 路徑。
+[ ] Browser smoke：reload 後 + New → Task / Task List、Board card → Info / Task List、刪除最後一個 Project、Chat New Task 都實際點擊一次且 console 0 error。
+[ ] Browser 視覺回歸：New Task 在常用 Drawer 寬度確認 Prompt / File Validator 首屏可見；切換 inline / file / asset、file / AI workflow、Light / Dark、820px / 620px breakpoint 不重疊、不截斷。
+[ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
+[ ] React migration 先建立 shared UI primitives：AppShell、Sidebar、Drawer/Modal/Popover、Tabs、Field、Select、Button、Badge/Pill、EmptyState；Theme token 只由一處提供。
+[ ] React page components 建議拆成：ProjectSidebar、ChatWorkspace、ChatComposer、QueueList、AskFlow、TaskBoard、TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskRuntimePanel、GlobalSettings。
+[ ] Workflow / Prompt 保留既有 workspace，但未來 React 只接同一套 AppShell / Sidebar / shared primitives，不另做第二套 layout/theme。
+[ ] Component 不直接擁有 Runner state machine；透過既有 runtime projection / service hooks 讀資料與 allowed actions。
+[ ] Prototype 階段只抽「會重複且已穩定」的 shared template；不要為模組化而複製 state 或提前造 React-like framework。
+[x] 新增 bootstrap-state.js：第一次 paint 前先套用 Theme / Appearance / Language，並預讀 current Project / Tasks Project filter；不得碰 Runner / Task runtime state。
+[x] Prototype 加入 theme-aware loading transition；初始化期間主 app 不畫錯誤 persisted state，初始化完成後淡出 loader 顯示主 UI。
+[x] tasksProjectFilterButton 移除 HTML 假值「1 selected」；使用 ui-pending / stateful-content，render 真實 filter state 後才解除 pending。
+[x] current Project 與 Tasks Project filter 加入 prototype persistence，reload 時直接從 bootstrap state 起步。
+[x] loading transition 支援 prefers-reduced-motion，並有 fail-open 行為，避免初始化例外造成永久遮罩。
+[ ] Browser 測試 reload：Dark + 非 Teal palette、非預設 Project、Task filter 單選/多選/全選/空選擇時不得出現 Light flash、錯誤 summary 或 layout jump。
+[ ] 正式 React 在 mount 前 pre-hydrate Theme / Project / persisted UI filter；禁止 first render 使用假預設值後再由 useEffect 修正。
+[ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
+[ ] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
+
+
+11. Workspace / Worktree
+------------------------
+
+[ ] Workspace policy 保留 Auto / Main / Isolated Worktree。
+[x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
+[x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
+[ ] 正式版 UI/Task flow 三種模式一律先建立獨立 Task Run worktree/local branch 再呼叫 Runner；這是外層 orchestration 規則，不是 Runner contract，CLI Runner 仍可直接跑任意 caller-supplied project_root。
+[ ] Project branch 是 canonical truth。
+[ ] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
+[ ] Task branch/worktree 直接從 captured target HEAD 建立；branch/path 使用 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
+[ ] Uncommitted Project working-tree 修改不自動進 Task base；要成為新 Task base 先 commit。
+[ ] Auto policy × Concurrent Main 規則固定如下：
+
+    | Auto policy / selection | Main 已 Running | Concurrent Off | Concurrent On |
+    | --- | --- | --- | --- |
+    | Busy project → Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+    | Always Main / Auto | yes | Block Main start | Main |
+    | Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+    | Explicit Main | yes | Block Main start | Main |
+
+[ ] Concurrent Main 開關只控制 Main busy 時能否啟動 Main；不可改寫 Auto policy。
+[ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
+[ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
+[ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
+[ ] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
+[ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
+
+
+11. Workspace Results / Direct Merge
+------------------------------------
+
+[ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
+[ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
+[ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
+[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序；queue head 在 conflict Runner recovery 期間保留順位，但短期 Git lock 必須釋放。
+[ ] Main merge 前先檢查 merge_source_sha 是否已是 target branch ancestry；是則 idempotent finalize merged，不重複 commit；否則在 captured target worktree 執行 `git merge --no-ff --no-commit <merge_source_branch>`，保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
+[ ] merge validation 必須 verdict-only / source-non-mutating，統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR；Git conflict 或 SOURCE_FAIL 才算 real merge fail，真正 source repair 只在 recovery worktree 透過 Runner 執行；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count。
+[ ] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
+[ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
+[ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
+[ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
+[ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
+[ ] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
+[ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
+[ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
+[ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
+[ ] captured target branch 被刪除/rename => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
+[ ] target force-reset/divergence 後若 merge_source_base_sha 不再是 current target HEAD ancestor => Ongoing · waiting_target_history / Needs Attention；不可 direct merge/recovery，也不增加 merge_failure_count，避免把被移除 history 重新帶回來。
+[ ] 不得自動 git switch 使用者 Project checkout。
+[ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
+[ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
+[ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
+[ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
+[ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
+[ ] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
+
+
+12. 共用 Chat Backend 與 API
+---------------------------
+
+[ ] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
+[ ] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
+[ ] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
+[ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
+    - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
+    - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
+    - Project-level Agent / Model / Mode / Reasoning / Workflow capability 與目前選擇
+    - 取得 Agent commands / Skills / permission / Ask capability
+    - Queue list / enqueue / edit / delete / reorder（若產品允許排序）
+    - Ask request event / answer submit / cancel
+    - generate TaskDraft / validate TaskDraft / create Task
+    - Merge preflight / direct merge / Merge Chat handoff context
+[ ] 所有 API 使用穩定的 session_id、turn_id、message_id、queue_item_id、ask_id、draft_id、task_id。
+[ ] POST / send / create 等操作需要 request ID 或 idempotency key，避免重試後重複建立訊息或 Task。
+[ ] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
+[ ] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。
+[ ] Chat stream 與 Runner Task runtime stream 必須明確分開；不能混用 Task Stage event 代表 Chat tool call。
+[ ] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
+[ ] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。
+[ ] Chat history、Queue 與等待中的 Ask 有清楚的持久化策略；重啟後不可以讓 UI 顯示假的執行中狀態。
+[ ] 不把完整 system prompt、憑證、API key 或敏感本機環境資訊回傳給 UI。
+[ ] API contract 要有 unit / integration test 與最小可讀文件；UI Mock 與正式 API 共用 schema。
+
+
+14. Agent Adapter
+-----------------
+
+[ ] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
+[ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
+[ ] Agent 原生能力不可用時，回報不支援；不要在 UI 假裝可用或以不同語義硬模擬。
+[ ] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
+[ ] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
+[ ] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
+[ ] Model 列表與預設值由 Adapter 回傳；不要在 production frontend 硬編碼模型名稱。
+[ ] Mode profile 是產品層抽象；Adapter 回報 native mapping、支援狀態與安全描述。
+[ ] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
+[ ] Queue 優先使用 Agent 原生 queued-next-turn；無原生能力時由共用 Chat service 提供 FIFO Queue。
+[ ] Slash skill 只顯示 Agent 實際解析且允許使用的能力；保留原生權限與 user-invocable 限制。
+[ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
+[ ] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
+
+
+15. Runner 必要變更
+-------------------
+
+[ ] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
+[ ] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
+[ ] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
+[ ] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
+[ ] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
+[ ] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
+[ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
+[ ] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
+[ ] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
+[ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
+[ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
+[ ] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
+[ ] Ask Cancel / timeout / client disconnect 要明確終止或取消等待狀態，避免 runner / agent process 永久卡住。
+[ ] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
+[ ] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
+[ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
+[ ] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
+[ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
+[ ] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
+[ ] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。
+[ ] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
+
+
+16. 測試策略與驗收
+-----------------
+
+[ ] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
+[ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
+[ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
+[ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+[ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
+[ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 normalization + Task merge_failure_count separation、Allow concurrent Main tasks Off/On 對 Main disabled/resolver 的一致性、Appearance / Theme palette / Language persistence。
+[x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
+[x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
+[x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
+[ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
+[ ] Browser 測試：Chat Draft 與 Tasks 頁開出的 Task Editor / Task List Workspace DOM 結構與欄位一致，驗證來源只差 return context。
+[ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
+[ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
+[ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
+[ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
+[ ] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
+[ ] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
+[ ] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
+[ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
+[ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
+[ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
+[ ] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
+[ ] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
+[ ] 只有實際執行 Browser / API / Live 測試並保存結果後，才能將對應項目標記完成。
+[ ] 24H soak 排在單元、整合、Browser、故障恢復測試之後；只有實際跑完才能宣稱 24H 驗證完成。
+
+
+17. 建議實作順序
+-----------------
+
+[ ] 第 1 階段：穩定 Prototype UI，修正 Global Settings、Project-level Chat settings、@goal、overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
+[ ] 第 2 階段：確立共用 Chat API / schema / streaming events 與 AgentAdapter 介面。
+[ ] 第 3 階段：實作 Qwen Code / OpenCode 的 capability、Model、Mode、Slash、Ask 與 Queue adapter。
+[ ] 第 4 階段：實作固定 Prompt 的 generate-task service、TaskDraft schema、驗證與 idempotent Create。
+[ ] 第 5 階段：把 UI Mock 換成 API projection，但保留 deterministic Mock / fixture。
+[ ] 第 6 階段：完成 Worktree resolver、Workspace Results、Merge preflight、Merge 與 Merge Chat handoff。
+[ ] 第 7 階段：補齊 unit / API / Browser / Agent live regression 與故障恢復測試。
+[ ] 第 8 階段：完成長時間 soak；修復所有發現的 race、orphan process、重複建立與恢復問題。
+[ ] Prototype 打樣期間只改 feature/；每階段完成後更新 feature/todo.txt 與 feature/future.txt。進入正式實作時再同步根目錄 future.txt、AGENTS / DevFollow、正式文件與測試。
+
+
+18. 完成定義
+------------
+
+每項功能需同時符合以下條件才可標記完成：
+
+[ ] UI 行為符合本檔，且沒有改壞現有風格與相鄰操作。
+[ ] Backend / Runner ownership 正確，沒有第二份狀態機或重複 runtime。
+[ ] Mock 能覆蓋正常路徑與錯誤路徑，必要時可固定 fixture。
+[ ] 自動化測試通過；需要 Browser / Live 的功能不能只做語法檢查。
+[ ] 錯誤、Cancel、Retry、Back、重送與重啟行為明確。
+[ ] 文件、API schema、UI、CLI、YAML、Dry Run 與測試沒有互相矛盾。
+[ ] 沒有留下已被替代的舊 handler、重複 store、死路徑或只靠前端保護的安全假設。
+[ ] 未做過的測試必須明確列為未驗證，不能聲稱 PASS。
+
+
+End of todo.txt

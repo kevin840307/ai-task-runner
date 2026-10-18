@@ -1,0 +1,358 @@
+AI Task Runner — feature/ui Future Direction
+=============================================
+
+Updated: 2026-10-18
+Scope: feature/ prototype only
+
+Purpose
+-------
+This file records the current prototype product direction while feature/ui is still being designed.
+It does not replace the root runtime contract, AGENTS.md, DevFollow.txt, or formal release documentation.
+During this prototype phase, changes stay under feature/. When the design is accepted, the formal implementation
+must reconcile these decisions with the authoritative runtime/API contracts and tests.
+
+1. Product structure
+--------------------
+- Project is the primary context.
+- Clicking a Project opens that Project's Chat.
+- Tasks remain the durable work records / Board lifecycle.
+- Task Drawer uses one child-task editing surface: Overview summary links to Task List Workspace. Do not reintroduce a separate Steps tab / drawer-items editor.
+- Runner Core remains authoritative for execution and runtime truth.
+- Chat is for conversation, clarification, queueing, and explicit Runner commands.
+- Workflows / Prompts remain reusable assets and are not owned by one Chat.
+
+2. Global Settings
+------------------
+- Global Settings lives at the bottom of the left sidebar.
+- Global Settings must not be tied to the current Project or Chat.
+- Remove the standalone theme button from the brand/header area.
+- Settings sections:
+  - Execution
+  - Interface
+  - Defaults
+- Interface owns global Appearance and Theme palette preferences.
+- Language is a separate Global Settings section so localization is not coupled to visual appearance.
+- Defaults owns the initial Agent / Model / Mode / Reasoning / Workflow copied into newly created Projects.
+- Global Defaults are templates, not live inheritance: changing them never mutates existing Projects.
+- New Chat sessions read their Project settings; Chat does not own another default layer.
+- Prototype may store Global Defaults in localStorage; production should move them to the versioned Global Settings owner.
+- Execution also owns two global Git delivery controls:
+  - Merge failure limit: default `3`; when real Main merge failures exceed the value, automatic merge stops and the result closes as an Isolated Worktree fallback.
+  - Allow concurrent Main tasks: default `Off`; Off preserves the current Main-busy guard, On allows parallel Main execution in isolated worktrees; direct merges into the same target branch are serialized.
+- Appearance options:
+  - System
+  - Light
+  - Dark
+- Theme palette options must stay aligned with the existing UI:
+  - Teal
+  - Deep Blue
+  - Violet
+  - Amber
+  - Rose
+- Theme colors are token-based. Task/Card/Board/border/selected states must use the same palette tokens in both Light and Dark; do not reintroduce fixed teal or white surfaces.
+- Language options:
+  - Traditional Chinese
+  - English
+- Prototype may persist these preferences in localStorage.
+- Formal implementation should use one versioned settings owner/schema instead of browser-only state.
+
+3. Workspace / Worktree policy
+------------------------------
+Task-level choices remain:
+- Auto
+- Main
+- Isolated Worktree
+
+Execution invariant:
+- Current UI/Task orchestration prepares every Task run in its own isolated Git worktree/local Task branch before triggering Runner.
+- Standalone/CLI Runner remains workspace-independent: caller supplies project_root directly; Runner receives only project_root and remains unaware of Git merge orchestration.
+- Project branch is canonical truth.
+- Main means Runner result must be merged back into captured Project branch before Task is complete.
+
+Task start:
+- Capture current Project branch + HEAD as target_branch / target_head_sha_at_start.
+- Create local/task/<task-id>-r<run> directly from captured HEAD.
+- Uncommitted Project working-tree changes are not silently imported into Task base; commit them first if needed.
+
+Global Settings -> Execution:
+- Auto workspace policy:
+  - Busy project -> Worktree: idle => Main, busy => Isolated Worktree.
+  - Always Main: Auto => Main.
+  - Always Worktree: Auto => Isolated Worktree.
+- Merge failure limit:
+  - Global Settings owns merge_failure_limit; default 3.
+  - Task owns actual merge_failure_count only.
+  - Every real merge fail increments count once, then reads current Global limit.
+  - count > limit => stop automatic Main merge and close as Isolated Worktree / worktree_ready fallback.
+- Allow concurrent Main tasks:
+  - Default Off: preserve Main-busy block.
+  - On: a Task that resolves/selects Main may run concurrently in its own worktree.
+  - Busy→Worktree Auto still resolves Worktree while busy even when this switch is On.
+  - Direct merges into the same target branch are serialized.
+
+Auto policy × Concurrent Main:
+
+| Auto policy / selection | Main already running | Concurrent Off | Concurrent On |
+| --- | --- | --- | --- |
+| Busy project → Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Always Main / Auto | yes | Block Main start | Main |
+| Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
+| Explicit Main | yes | Block Main start | Main |
+
+effective Main:
+- Runner Complete does not close the Task; Main no_changes is the only normal exception that can close without a Project merge.
+- Commit remaining Task changes to its local Task branch and persist the current merge source.
+- Allocate durable FIFO merge_queue_seq per repository + target branch; restart preserves order, and the queue head keeps its turn during conflict Runner recovery while short Git locks are released.
+- Before direct merge, if merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit; otherwise use `git merge --no-ff --no-commit <merge_source_branch>`.
+- Before merge commit, verdict-only/source-non-mutating merge validation returns PASS / SOURCE_FAIL / TECHNICAL_ERROR; source repair happens only through Runner recovery in a separate workspace.
+- PASS => git commit => Closed / merged.
+- Git conflict or SOURCE_FAIL => abort merge, merge_failure_count += 1, read Global merge_failure_limit.
+- TECHNICAL_ERROR => abort merge without incrementing merge_failure_count; reuse existing technical retry/backoff / Needs Attention.
+- Within merge failure limit => existing Runner redoes Task against latest Project branch in a recovery worktree, commits result, atomically replaces merge_source branch/SHA/worktree, retries merge.
+- Above limit => retain the latest current merge source branch/worktree and close as Isolated Worktree / worktree_ready with merge_failure_limit_exceeded.
+
+effective Isolated Worktree:
+- Runner Complete => ownership preflight (registered worktree, expected repo/Task branch, expected source-base ancestry, no active Git operation) then commit/snapshot result locally.
+- Preserve branch/worktree and Close · worktree_ready.
+- No automatic Project-branch merge.
+
+Safety:
+- Do not auto-switch user's Project checkout branch.
+- Dirty target merge workspace => waiting_target_clean; do not auto-stash/reset/stage/commit user changes.
+- Target in unmanaged/user worktree => waiting_target_workspace.
+- Captured target branch missing/renamed => waiting_target_branch / Needs Attention; never guess/recreate/retarget.
+- If merge_source_base_sha is no longer an ancestor of current target HEAD after force-reset/divergence => waiting_target_history / Needs Attention; do not merge/recover automatically and do not increment merge_failure_count.
+- Remote push remains separate explicit Publish action.
+- Detailed source of truth: feature/git-worktree-todo.md.
+
+4. Project-level Chat run settings
+----------------------------------
+Agent / Model / Mode / Reasoning / Workflow belong to the Project, not to an individual Chat session.
+
+Each Project independently stores:
+- Agent
+- Model
+- Mode
+- Reasoning
+- Workflow
+
+Behavior:
+- A new Project copies the current Global Defaults once, then owns its own five settings.
+- Existing Projects never follow later Global Defaults changes.
+- All Chat sessions under the same Project share those five settings.
+- Chat sessions are deletable within their Project. Deleting a Chat never deletes Tasks or Project settings; if the last Chat is deleted, create a fresh empty Chat so the Project always has an active conversation surface.
+- Switching Chat sessions does not reset them.
+- Switching Projects loads that Project's own settings.
+- Agent changes revalidate Model and Mode against that Agent's capabilities. Reasoning remains the Project value unless the backend reports that level unsupported.
+- Workflow is used by @goal and other Project Chat -> Runner handoffs.
+- File-backed Task inputs (Task Prompt file / File Validator / AI Validator Prompt file) have two distinct sources: a manual path or an uploaded file. Prompt assets remain a separate concept.
+- Manual path is authoritative and is passed through unchanged. It must not trigger upload/copy.
+- Upload file stages bytes + metadata only. On final Task Create/Save, backend copies the file into Runner-managed storage using the final Task/item identity, then returns the canonical managed path.
+- Immediately after file selection, UI computes/reserves the managed target path and writes that path into the same field the Task will use (for example `taskValidatorFile`). The input must never show only the browser filename/fakepath as its canonical value.
+- While the input still equals the staged upload's managed target path, validation/Create/Save treats it as the normal path value and keeps the staged bytes attached. Editing the input to a different path cancels that staged upload and switches to manual-path semantics.
+- The returned managed path becomes the Task field value (`goal_file`, `validator`, or `ai_validator_prompt_file`) and must be written back into the UI input such as `taskValidatorFile`; never display only filename/fakepath as the canonical value.
+- Canonical Task/Workflow state stores only the managed path. Browser File objects, temporary upload tokens and staged bytes are transient UI/backend transfer state and must not enter the canonical Task store.
+- Upload/copy must be fail-closed and atomic from the user's perspective: if copy fails, do not create/save a Task that references a missing managed path; keep the staged upload available for retry.
+- If a user uploads a file and then types a manual path in the same field before Create/Save, the manual path wins and the staged upload for that field is discarded.
+- Ask flow remains testable through explicit command/mock plumbing, but the normal Composer should not expose a dedicated Ask mock button.
+- Prototype may persist Project preferences in localStorage.
+- Formal implementation should persist through the backend/project configuration owner.
+
+Composer UX:
+- Mode remains visible as a quick control because it is changed frequently.
+- Prototype Reasoning values are fixed to low / medium / high / xhigh / max with medium as the base default; production must resolve supported levels from the selected Agent / Model capability.
+- Workflow / Agent / Model / Reasoning are grouped under the compact Chat settings control.
+- Do not restore three large always-visible selectors.
+
+5. Explicit Chat commands
+-------------------------
+@goal <spec>
+- Explicit fast execution path.
+- Create one Task and immediately Run it.
+- Task appears in Tasks -> Ongoing immediately.
+- Uses the current Project's Workflow.
+- Uses the shared workspace resolver and Global Auto workspace policy.
+- If required Workflow inputs are missing, fail closed rather than inventing values.
+
+@task <spec>
+- Generate TaskDraft.
+- AI decides single Task vs Task List.
+- Review/Edit/Create before execution.
+
+@task-single <spec>
+- Generate exactly one TaskDraft item.
+
+@task-list <spec>
+- Generate two or more ordered TaskDraft items.
+
+Responsibility split:
+- @goal = deliver a goal and run now.
+- @task* = draft/review/create, not auto-run.
+- Ordinary Chat never guesses Runner execution intent.
+
+6. Chat session scope
+---------------------
+Chat-session scoped:
+- Messages
+- Queue
+- Ask / clarification state
+- Current turn state
+
+Project scoped:
+- Agent
+- Model
+- Mode
+- Workflow
+
+Global scoped:
+- Auto workspace policy
+- Theme
+- Language
+
+Keep these scopes explicit in UI/API/storage to prevent accidental cross-project/session leakage.
+
+7. Ask / Queue UX
+-----------------
+- Busy Chat automatically queues additional Send actions; no separate +Queue button.
+- Queue items can be edited and deleted.
+- Queue stays above the Composer.
+- Ask is rendered inside the Chat message stream.
+- Each choice-style Ask question should show no more than 5 visible options total. Reserve the final option for Other/custom text, so generated fixed options should normally be capped at 4.
+- The backend/Agent Ask prompt and schema should state this limit, and the UI must clamp defensively if an Agent returns more.
+- Ask supports multiple questions, choices, text, Other/custom answer, Next, final Submit.
+- Ask uses the outer Chat scrolling; do not add unnecessary nested scrolling unless a future real-world layout proves it necessary.
+
+8. Task UI composition / React boundary
+----------------------------------------
+User-visible hierarchy:
+- + New
+  - Task
+  - Task List
+- Task and Task List are sibling creation choices.
+- A Task List owns ordered items[].
+- A simple Task is the one-item case; Task List is the multi/empty-container case.
+- "Plan" is not another user-visible object layer. It may remain an internal code/model term or YAML editing mode only.
+
+Prototype composition:
+- feature/ui-prototype/task-ui-templates.js owns the shared static markup for:
+  - TaskEditor
+  - TaskListWorkspace
+  - TaskSourceCard
+  - TaskListEmptyState
+  - TaskListAddFooter
+- Task List creation stays transient until Create and must reuse TaskListWorkspace + TaskEditor; Draft rows support the same core edit/remove/reorder vocabulary as a formal Task List.
+- Dirty transient Task List drafts require an explicit discard decision before closing; empty untouched drafts may close immediately.
+- Prototype Create buttons may use local submitting locks for UX, but production correctness comes from backend idempotency / request IDs.
+- TaskDrawerShell is the only owner of Drawer Close / backdrop / Escape / focus return. Do not reintroduce page-level close handlers.
+- Escape follows top-layer ownership: child modal / popover / rename editor handles it before TaskDrawerShell; production should use one layered overlay/focus manager rather than document-level competing listeners.
+- TaskEditor owns a local dirty snapshot only for unsaved form data; Task List Draft owns its own transient draft lifecycle. Closing nested editors must guard child dirty state before parent draft discard.
+- YAML editor follows the same local unsaved-form rule: route/back/close must guard unsaved YAML before leaving, but Apply commits to the existing Task List model and clears the local dirty baseline.
+- Chat TaskDraft models may be temporarily mounted into the prototype Task store only as an adapter for shared TaskEditor/TaskListWorkspace; leaving the shared surface must unmount the transient model. Production should pass Draft context explicitly instead of inserting transient data into the canonical store.
+- Successful root Task creation owns its destination: once Create opens the new Task Info view, outer editor-return wrappers must not apply stale pre-create returnTarget state.
+- Task List may expose a bottom Back action for long-scroll ergonomics, but it must delegate to the same TaskDrawerShell navigation action as the Header Back; footer controls never own separate route state.
+- After these mock/template interactions are stable, feature/ui should freeze structurally; remaining prototype changes should be browser-regression bug fixes rather than new IA layers.
+- Main HTML keeps mount points instead of duplicating those surfaces.
+- window.TaskUi is the shared navigation/controller facade.
+- Board, Chat TaskDraft, Task Info and Task List Add/Edit must call the same controller.
+- + New and Chat TaskDraft must render the same TaskEditor / TaskListWorkspace components; source differences belong in draft data and return context only.
+- TaskEditor layout hierarchy is input-first: compact Project / Workflow / optional Title in one basics row; Task Prompt is the primary visual surface; workflow-required File Validator / optional AI validation sit beside it when space allows; Workspace remains a secondary section below. Responsive fallback stacks these groups without changing the field model.
+- When a New-status Task opens directly into Task List, the footer exposes both the normal Back/close action and a separate Back to Info action. The extra Info action is contextual only; Info-origin, Chat Draft and Task List Draft routes keep their existing return semantics.
+- Task Prompt and AI prompt-source selectors keep stable horizontal geometry: Write / File / Asset (plus AI Default) use equal-width mode tabs and 100% body width, while content height may vary naturally by mode. For mixed File + AI validation, Task Prompt spans the primary row and the two validation cards share the row below to avoid dead space.
+- Mixed File Validator + AI Validation cards share the same header rhythm and stretch to the same row height; changing AI source type must not shift the body start or card alignment.
+- Reset and Rerun are destructive lifecycle actions and always require confirmation. Paused Reset transitions the Task to New with idle runtime and zero progress; lifecycle actions have one UI owner so no direct handler may bypass confirmation.
+- Chat Composer may expose New Task as another entry point, but it must call the same create menu/controller as Tasks.
+- Chat New Task seeds the shared create flow from the active Chat's Project; it must not own a second Project selector/default model.
+- Do not show redundant fixed Project chips in the Composer when Project context is already owned by the active Project Chat.
+- Task / Task List drafts stay transient until Create; opening a creation surface must not allocate a durable Task ID or write the canonical Task store.
+- A transient Task List Draft may temporarily contain zero items, but a created canonical Task / Task List must always contain at least one item; Create and every Remove path enforce this invariant.
+- Chat may render a lightweight TaskDraftPreview card, but Edit/Create must hand off to the same shared Task surfaces used by Tasks.
+- Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
+- Move existing is a secondary chooser, not a second Create Task path.
+- Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
+- Prototype uses one visual Task Drawer Shell: #taskOverlay owns the only Drawer and drawerhead.
+- The legacy planModal id is only a List/Subview route container inside that Drawer; it is not a modal or overlay.
+- newTaskModal is only the Editor route inside the same Drawer.
+- Task Info, Task List, Task Editor and YAML all reuse one DrawerHeader; route pages never own another full header.
+- DrawerHeader owns Back / Title / Meta / route actions / Expand / Close.
+- Switching routes changes header state + ViewHost content only; it must not close/reopen the Drawer.
+- In React this maps to TaskDrawerShell -> DrawerHeader + TaskDrawerRouteHost; page components return content/actions metadata rather than duplicate header JSX.
+- Standalone Task creation, Chat Draft editing and Task List child editing all enter that same Editor View.
+- Switching List -> Editor -> List must keep the exact same shell geometry so the user perceives navigation, not another modal opening.
+- YAML is another view of the same shell; full-size nested overlays are prohibited.
+
+Future React mapping:
+Shared primitives:
+- AppShell
+- SidebarNavigation
+- Drawer / Modal / Popover
+- Tabs
+- Field / Select
+- Button
+- Badge / Pill
+- EmptyState
+- ThemeProvider / theme tokens
+
+Feature components:
+- ProjectSidebar
+- ChatWorkspace
+- ChatComposer
+- QueueList
+- AskFlow
+- TaskBoard
+- TaskCreateMenu
+- TaskEditor
+- TaskListWorkspace
+- TaskSourceCard
+- WorkspaceSelector
+- TaskRuntimePanel
+- TaskDraftPreview
+- GlobalSettings
+
+Workflow / Prompt workspaces should reuse the same AppShell, navigation and primitives rather than carrying their own visual framework.
+
+Initial render / hydration:
+- Persisted visual state must be resolved before first paint: Theme, Appearance, Language, current Project and lightweight UI filters.
+- Do not render fake persisted-state labels such as "1 selected" and correct them after mount.
+- Stateful controls may use a dimension-preserving pending state until their real derived value is ready.
+- A short theme-aware bootstrap transition may cover first initialization, but it must not become a data-loading state machine.
+- The loading layer must fail open and respect reduced-motion preferences.
+- React should receive pre-hydrated initial UI state before mount; avoid useEffect-driven first-render correction that causes FOUC/layout shift.
+
+React rules:
+- One component implementation per responsibility; no Chat-only or Board-only duplicate Task Editor JSX.
+- TaskDrawerShell owns one DrawerHeader; TaskInfoPage / TaskListPage / TaskEditorPage / TaskYamlPage must not render their own shell headers.
+- Entry points pass mode / ownerId / itemIndex / returnTarget / project context as props or router state.
+- Canonical items[] remains the data source for Task List rows, YAML, Chat Draft editing and execution.
+- UI composition must not create another state machine or another Task model.
+- Prototype-era function wrapping/reassignment is migration debt only; production/React should expose one controller/service owner per behavior rather than layering monkey patches.
+- Shared components use theme tokens and the same validation / capability rules.
+- User-visible text in shared components must come from the shared i18n owner (zh-TW / en); Chat-only or Task-only duplicated translations are not allowed.
+- Dynamic UI such as Queue, Ask, command suggestions and TaskDraft must use the same uiText/i18n source as static labels.
+- Themeable surfaces must use semantic tokens; feature CSS must not add light-only background/border colors that require later dark-mode overrides.
+- When migrating from the static prototype, remove task-ui-templates.js after React components cover the same boundaries; do not keep both implementations.
+
+9. Formal implementation direction
+----------------------------------
+When moving beyond the prototype:
+- Do not copy localStorage behavior directly into production architecture.
+- Add backend-owned schemas for Global Settings and Project Chat preferences.
+- UI / CLI / YAML / API should share the same workspace resolver and Runner action contract.
+- @goal should be idempotent and durable: create + run must not leave a fake Running Task if startup fails.
+- AgentAdapter owns live Model / Mode / capability discovery.
+- Project settings must validate Agent/Model/Mode compatibility on load and on Agent change.
+- Tests must cover Project switching, Chat-session switching, reload persistence, all Auto workspace policies, and @goal failure/retry cases.
+- Preserve 24H unattended reliability and existing Runner recovery behavior.
+
+10. Prototype acceptance before formalization
+---------------------------------------------
+- Browser-test Global Settings -> Execution / Interface / Language.
+- Verify System / Light / Dark appearance and persistence.
+- Verify all five palettes in both Light and Dark, especially Tasks, Worktree cards, selected/hover borders, modals, inputs, and sidebar boundaries.
+- Task Details is one theme surface: Drawer header/tabs/body/footer, Overview cards, Runtime timeline/output, History, Worktree results, Steps, full Task List and nested Task Editor must never fall back to hard-coded light surfaces.
+- Base Task/Plan/Source controls should use theme tokens directly (not rely only on late dark-mode overrides), including prompt textarea, source headers, Add Task footer, workspace selector, sequence rows, menus and Task List tables.
+- Verify language preference persistence and document language projection.
+- Verify each Project independently remembers Agent / Model / Mode / Reasoning / Workflow.
+- Verify same-Project Chat sessions share those settings.
+- Verify @goal immediately creates an Ongoing Task visible in Tasks.
+- Verify Auto workspace policy is identical across all known Run entry points.
+- Verify no stale themeBtn, duplicate workspace busy logic, or session-level copies of Project preferences remain.

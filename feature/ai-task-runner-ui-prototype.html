@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Task Runner · UI Prototype</title>
+<script src="./ui-prototype/bootstrap-state.js"></script>
+<link rel="stylesheet" href="./ui-prototype/styles.css">
+</head>
+<body>
+<div class="app-bootstrap-loader" id="appBootstrapLoader" role="status" aria-live="polite">
+  <div class="app-bootstrap-card">
+    <span class="app-bootstrap-mark">A</span>
+    <span class="app-bootstrap-copy"><strong>Agent Workflow</strong><small>Loading workspace</small></span>
+    <span class="app-bootstrap-spinner" aria-hidden="true"></span>
+  </div>
+</div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brandrow">
+      <div class="brand"><span class="brandmark">A</span><span>Agent Workflow</span></div>
+    </div>
+    <button class="new-project-fixed" id="newProjectDemo" type="button"><span>＋</span><strong>New Project</strong></button>
+    <div class="sidebar-scroll">
+      <div class="navgroup-label">Work</div>
+      <nav class="nav nav-compact">
+        <button class="navbtn active" data-view="tasks"><span class="navico">▦</span><span>Tasks</span><span class="navcount" id="taskNavCount">6</span></button>
+      </nav>
+      <div class="navgroup-label">Assets</div>
+      <nav class="nav nav-compact asset-nav">
+        <button class="navbtn" data-view="workflows"><span class="navico">◇</span><span>Workflows</span></button>
+        <button class="navbtn" data-view="prompts"><span class="navico">¶</span><span>Prompts</span></button>
+      </nav>
+      <div class="project-area">
+        <div class="project-list-head"><span>Projects</span></div>
+        <div class="project-list" id="projectScroll">
+          <button class="project project-list-item active" type="button" data-project="ai-task-runner"><span class="dot running"></span><span class="project-copy"><strong>ai-task-runner</strong><small>feature/ui · 2 active workspaces</small></span></button>
+          <button class="project project-list-item" type="button" data-project="game-client"><span class="dot done"></span><span class="project-copy"><strong>game-client</strong><small>main · Completed</small></span></button>
+          <button class="project project-list-item" type="button" data-project="lab-tools"><span class="dot"></span><span class="project-copy"><strong>lab-tools</strong><small>dev · Idle</small></span></button>
+          <button class="project project-list-item" type="button" data-project="demo-api"><span class="dot"></span><span class="project-copy"><strong>demo-api</strong><small>main · Idle</small></span></button>
+          <button class="project project-list-item" type="button" data-project="web-console"><span class="dot done"></span><span class="project-copy"><strong>web-console</strong><small>feature/dashboard · Completed</small></span></button>
+          <button class="project project-list-item" type="button" data-project="sandbox-lab"><span class="dot"></span><span class="project-copy"><strong>sandbox-lab</strong><small>main · Idle</small></span></button>
+        </div>
+        <div class="project-current-path" id="projectSwitcherPath">C:\Users\kevin\ai-task-runner</div>
+      </div>
+    </div>
+    <div class="sidebar-global">
+      <button class="sidebar-settings-btn" id="globalSettingsButton" type="button"><span class="navico">⚙</span><span><strong>Settings</strong><small>Global runner preferences</small></span></button>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <!-- Chat -->
+    <section class="view page" id="view-chat">
+      <header class="header chat-header">
+        <div class="title"><h1 id="chatProjectTitle">ai-task-runner</h1><p id="chatProjectLine">C:\Users\kevin\ai-task-runner · Project Chat · 不建立 Runner Task</p></div>
+        <div class="actions chat-session-actions">
+          <select class="mockselect session-select" id="chatPreset"></select>
+          <button class="btn" id="renameChat" data-i18n="chat.rename">Rename</button>
+          <button class="btn danger" id="deleteChat" type="button" data-i18n="chat.delete">Delete</button>
+          <button class="btn primary" id="newChat" data-i18n="chat.newChat">+ New Chat</button>
+        </div>
+      </header>
+      <div class="chatbody">
+        <div class="messages" id="chatMessages"></div>
+        <div class="composerwrap">
+          <div class="composer-suggest" id="composerSuggest" hidden>
+            <div class="composer-suggest-head"><strong id="composerSuggestTitle" data-i18n="chat.commands">Commands</strong><span id="composerSuggestHint" data-i18n="chat.typeToFilter">Type to filter</span></div>
+            <div class="composer-suggest-list" id="composerSuggestList"></div>
+          </div>
+          <div class="composer-settings-popover" id="composerSettingsPopover" hidden>
+            <div class="composer-settings-head"><div><span data-i18n="chat.project">PROJECT</span><strong data-i18n="chat.runSettings">Run settings</strong></div><button type="button" id="composerSettingsClose" aria-label="Close settings">×</button></div>
+            <div class="composer-settings-body">
+              <label class="composer-settings-row"><span><strong data-i18n="chat.workflow">Workflow</strong><small data-i18n="chat.workflowHelp">Used by @goal and new Chat goals</small></span><select id="chatWorkflow"><option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option><option value="mixed.yaml">mixed</option><option value="file.yaml">file</option><option value="dynamic_handoff.yaml">dynamic_handoff</option></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.agent">Agent</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.model">Model</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatModel"></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.reasoning">Reasoning</strong><small data-i18n="chat.reasoningHelp">Reasoning effort saved for this Project</small></span><select id="chatReasoning"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></label>
+            </div>
+          </div>
+          <div class="composer-turn-status" id="composerTurnStatus" hidden data-i18n="chat.turnRunning">Agent 正在處理；送出訊息會自動加入 Queue</div>
+          <div class="composer-queue" id="composerQueue" hidden>
+            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> <span data-i18n="chat.pending">pending</span></strong></div><small data-i18n="chat.queueHint">Agent 忙碌時，送出會自動排隊</small></div>
+            <div class="composer-queue-list" id="composerQueueList"></div>
+          </div>
+          <div class="composer">
+            <textarea id="chatInput" data-i18n-placeholder="chat.inputPlaceholder" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
+            <div class="composerfoot">
+              <div class="composer-controls">
+                <button class="composer-settings-trigger" id="chatSettings" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="chat.settingsTitle" title="Chat run settings">⚙</button>
+                <label class="composer-mode-quick" data-i18n-title="chat.modeTitle" title="Permission / approval mode"><span data-i18n="chat.mode">Mode</span><select id="chatMode"></select></label>
+                <button class="composer-mini-action composer-new-task" id="chatNewTask" type="button" data-i18n="chat.newTask" data-i18n-title="chat.newTaskTitle" title="Create a Task or Task List for this Project">+ New Task</button>
+              </div>
+              <button class="btn primary" id="chatSend" data-i18n="chat.send">傳送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tasks -->
+    <section class="view page boardpage active" id="view-tasks">
+      <header class="header">
+        <div class="title task-title-context"><div class="task-title-row"><h1>Tasks</h1><div class="tasks-project-multiselect" id="tasksProjectMulti">
+  <button class="tasks-project-trigger ui-pending" id="tasksProjectFilterButton" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong class="stateful-content" id="tasksProjectFilterSummary" aria-live="polite"></strong><span class="tasks-project-chevron" aria-hidden="true"></span></button>
+  <div class="tasks-project-menu" id="tasksProjectFilterMenu" hidden>
+    <div class="tasks-project-menu-head"><strong>Show Tasks from</strong><div><button type="button" data-project-filter-all>Select all</button><button type="button" data-project-filter-clear>Clear</button></div></div>
+    <div class="tasks-project-options" id="tasksProjectFilterOptions"></div>
+  </div>
+</div></div></div>
+        <div class="actions"><select class="mockselect" id="boardPreset"><option value="today">Today board</option><option value="recovery">Recovery / Attention</option><option value="history">Completed history</option><option value="empty">Empty board</option></select><span class="pill run" id="runningCount">1 Running</span><button class="btn" id="filterBtn">只看執行中</button><button class="btn primary" id="newTask">+ New</button></div>
+      </header>
+      <div class="boardtools">
+        <input class="search" id="taskSearch" placeholder="搜尋 Task、Workflow、Prompt…">
+        <div class="actions"><span class="move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；Paused / Closed → New 都會先確認</span><div class="toggle"><button class="active" id="boardMode">Board</button><button id="listMode">List</button></div></div>
+      </div>
+      <div class="board" id="board">
+        <section class="col" data-status="new"><div class="colhead"><strong>New</strong><span class="count">0</span><button class="coladd">+</button></div><div class="dropzone"></div></section>
+        <section class="col" data-status="ongoing"><div class="colhead"><strong>Ongoing</strong><span class="count">0</span></div><div class="dropzone"></div></section>
+        <section class="col" data-status="paused"><div class="colhead"><strong>Paused</strong><span class="count">0</span></div><div class="dropzone"></div></section>
+        <section class="col" data-status="closed"><div class="colhead"><strong>Closed</strong><span class="count">0</span></div><div class="dropzone"></div></section>
+      </div>
+      <div class="listview" id="taskListView"></div>
+    </section>
+
+    <!-- Task Info / List / Editor / YAML share one right-side Drawer shell. -->
+
+    <!-- Existing Workflows / Prompts: intentionally unchanged -->
+    <!-- Existing Workflows / Prompts: intentionally unchanged -->
+    <section class="view page" id="view-workflows">
+      <header class="header">
+        <div class="title"><h1>Workflows</h1><p>維持目前 feature/ui 的 Workflow workspace / Workflow Editor 樣式與操作，不在這份 prototype 重新設計。</p></div>
+        <div class="actions"><span class="pill">UNCHANGED</span><button class="btn">Import</button><button class="btn primary">Generate with AI</button></div>
+      </header>
+      <div class="existing-shell">
+        <aside class="existing-sidebar">
+          <div class="existing-sidebar-head"><strong>Workflows</strong><button class="addsmall">+</button></div>
+          <input class="existing-search" placeholder="Search workflows..." disabled>
+          <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
+        </aside>
+        <main class="existing-main">
+          <div class="existing-note"><h2>Workflow 頁面沿用目前正式 UI</h2><p>這頁不放新的 mock schema、第二個 Designer 或新的 asset manager。正式實作時直接保留目前 Workflows → Workflow Editor → Designer / YAML，以及 Stage Form / YAML / Routing / Test 的既有結構。</p></div>
+        </main>
+      </div>
+    </section>
+    <section class="view page" id="view-prompts">
+      <header class="header">
+        <div class="title"><h1>Prompts</h1><p>維持目前 feature/ui 的 Prompt workspace / Prompt Editor 樣式與操作，不在這份 prototype 重新設計。</p></div>
+        <div class="actions"><span class="pill">UNCHANGED</span><button class="btn primary">+ New Prompt</button></div>
+      </header>
+      <div class="existing-shell">
+        <aside class="existing-sidebar">
+          <div class="existing-sidebar-head"><strong>Prompts</strong><button class="addsmall">+</button></div>
+          <input class="existing-search" placeholder="Search prompts..." disabled>
+          <div class="existing-list-placeholder"><div class="existing-list-line"></div><div class="existing-list-line"></div><div class="existing-list-line"></div></div>
+        </aside>
+        <main class="existing-main">
+          <div class="existing-note"><h2>Prompt 頁面沿用目前正式 UI</h2><p>Task item 需要選 Prompt 時，會引用既有 Prompt assets，而不是在 Tasks 裡再做一套 Prompt 管理器。新增、修改、分類 Prompt 仍回到既有 Prompts workspace。</p></div>
+        </main>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="overlay" id="taskOverlay" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <aside class="drawer">
+    <div class="drawerhead" id="taskDrawerHeader">
+      <div class="drawerheadtop">
+        <button class="drawer-back" id="planBackToTask" type="button" title="Back" hidden>←</button>
+        <div id="drawerRuntimeSlot"><span class="pill run" id="drawerRuntime">Running</span></div>
+        <h2 id="drawerTitle">完成 feature/ui 新 Task 介面</h2>
+        <button class="plan-title-edit" id="planRenameList" type="button" title="Rename list" hidden>✎</button>
+        <div class="drawer-shell-actions" id="drawerWorkspaceActions" hidden>
+          <button class="btn" id="planOpenWorkflow" type="button" hidden>Open Workflow</button>
+          <button class="btn" id="planAddTask" type="button">+ Add task</button>
+          <button class="btn ghost" id="planAddExisting" type="button">Move existing</button>
+          <button class="btn" id="planEditYaml" type="button">Edit YAML</button>
+          <button class="btn" id="cancelTaskListDraft" type="button" hidden data-i18n="taskListDraft.cancel">Cancel</button>
+          <button class="btn primary" id="confirmTaskListDraft" type="button" hidden data-i18n="taskListDraft.create">Create Task List</button>
+        </div>
+        <button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button>
+        <button class="close" id="closeDrawer" type="button" aria-label="Close task workspace">×</button>
+      </div>
+      <p id="drawerInfoMeta">#<span id="drawerTaskId">T-103</span> · <span id="drawerProjectName">ai-task-runner</span> · Board: <span id="drawerBoardStatus">Ongoing</span></p>
+      <p id="drawerRouteMeta" hidden></p>
+    </div>
+    <div id="taskListWorkspaceRoot" data-ui-module="TaskListWorkspace"></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
+    <div class="drawerbody">
+      <div class="drawer-worktree-banner" id="drawerWorktreeBanner" hidden><strong>WORKTREE</strong><span id="drawerWorktreeBannerDetail">Isolated development · changes are not in Main until merged.</span></div>
+      <div class="drawer-pane active" id="drawer-overview">
+        <div class="drawer-summary"><div class="metric"><span>Progress</span><strong id="metricProgress">3 / 5</strong></div><div class="metric"><span>Elapsed</span><strong id="metricElapsed">12m</strong></div><div class="metric"><span>Session</span><strong id="metricSession">same</strong></div></div>
+        <section class="section"><h3>Task</h3><div class="kv"><span>Workflow</span><strong id="drawerWorkflow">ralphy_ai_validate.yaml</strong><span>Backend</span><strong id="drawerBackend">Default backend</strong><span>Project</span><strong id="drawerProject">C:\Users\kevin\ai-task-runner</strong><span>Workspace</span><strong id="drawerWorkspace">Main workspace</strong><span>Branch</span><strong id="drawerBranch">feature/ui</strong><span>Execution root</span><strong id="drawerExecutionRoot">C:\Users\kevin\ai-task-runner</strong><span>Board status</span><strong id="drawerStatusValue">Ongoing</strong></div></section>
+        <section class="section"><h3>Goal</h3><div class="callout" id="drawerGoal"></div></section>
+        <div class="task-edit-notice" id="taskEditNotice" hidden></div>
+        <section class="section execution-plan-section">
+          <div class="execution-plan-head">
+            <div><h3>Tasks</h3><p id="taskListEditHint">1 task</p></div>
+            <div class="execution-plan-actions"><button class="btn" id="drawerAddStep" type="button">+ Add task</button><button class="btn ghost" id="drawerAddExisting" type="button" hidden></button><button class="btn ghost" id="openFullPlan" type="button" hidden>Open list</button><button class="btn ghost" id="stepsAdvanced" type="button">Edit YAML</button></div>
+          </div>
+          <div class="steps-summary" id="taskListParentHint">1 task · same Board item</div>
+          <div id="yaml-form"><div class="formlist drawer-plan-summary" id="formList"></div></div>
+          <div id="drawerListItems" hidden></div>
+          <div id="batchPreview" hidden></div>
+          <div id="batchLog" hidden>Task is idle.</div>
+          <select id="batchPreset" hidden><option value="ui">UI list</option><option value="reliability">Reliability list</option><option value="multi">Multi-project list</option><option value="empty">Empty</option></select>
+          <select id="batchOutcome" hidden><option value="success">Success</option><option value="recover">Recover once</option><option value="fail">Fail item 2</option></select>
+          <button id="runBatch" hidden type="button"></button><button id="stopBatch" hidden type="button"></button><button id="resumeBatch" hidden type="button"></button><button id="resetBatch" hidden type="button"></button><button id="backToTasks" hidden type="button"></button><span id="taskListEditorTitle" hidden></span>
+        </section>
+        <section class="section workspace-result-section" id="workspaceResultSection">
+          <div class="workspace-result-head"><div><h3>Workspace results</h3><p id="workspaceResultHint">Worktrees are grouped by Project. Merge only when preflight is safe.</p></div><span class="pill" id="workspaceResultState">No worktrees</span></div>
+          <div class="workspace-result-list" id="workspaceResultList"></div>
+        </section>
+      </div>
+      <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
+      <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
+    <article class="task-live-activity">
+      <div class="task-live-head"><span class="task-live-dot" id="drawerLiveDot" aria-hidden="true"></span><strong>CLI Runtime</strong><small id="drawerLiveProgress">same runtime state</small><small id="drawerLiveUpdated">Last update now</small></div>
+      <div class="task-runtime-activity" id="drawerLiveActivity"><span>AI Activity</span><div id="drawerLiveActivityList"></div></div>
+      <pre class="task-cli-output" id="drawerConsole"></pre>
+      <div class="task-live-footer"><span class="task-live-indicator" id="drawerLiveIndicator">Running</span><span>Elapsed <strong id="drawerLiveElapsed">00:00:00</strong></span></div>
+    </article>
+  </section></div>
+      <div class="drawer-pane" id="drawer-history"><section class="section"><h3>Task history</h3><div class="history-list" id="drawerHistory"></div></section></div>
+    </div>
+    <div class="drawerfoot"><button class="btn danger" id="deleteTaskDemo">Delete</button><button class="btn" id="editTaskDemo">Edit Task</button><button class="btn" id="taskResetDemo" hidden>Reset</button><button class="btn" id="taskSecondaryDemo" hidden>Rerun</button><button class="btn" id="openWorkflowDemo" hidden>Open Workflow</button><button class="btn primary" id="taskPrimaryDemo">Stop</button></div>
+  </aside>
+</div>
+
+
+<div class="modal-overlay" id="taskListNameModal">
+  <div class="modal-card" style="width:min(480px,94vw)">
+    <div class="modal-head"><div><h2 id="listNameModalTitle">Rename Task List</h2><p id="listNameModalHelp">Only the Task List name changes. Child task settings stay untouched.</p></div><button class="close" data-close-modal="taskListNameModal">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>List name</label><input id="emptyListTitle" placeholder="e.g. Finish feature/ui"></div>
+      <div class="empty-list-explain">Task List is the Board container. Project, Workflow, Prompt, Validation and Workspace belong to each child Task.</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskListNameModal">Cancel</button><button class="btn primary" id="confirmEmptyList">Save name</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteChatModal" role="dialog" aria-modal="true" aria-labelledby="deleteChatTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="deleteChatTitle" data-i18n="chat.deleteTitle">Delete Chat?</h2><p id="deleteChatMeta"></p></div><button class="close" data-close-modal="deleteChatModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="chat.deleteHelp">This removes only this Chat from the current Project. Tasks are unchanged.</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="deleteChatModal" type="button" data-i18n="chat.deleteCancel">Cancel</button><button class="btn danger" id="confirmDeleteChat" type="button" data-i18n="chat.deleteConfirm">Delete Chat</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="renameChatModal">
+  <div class="modal-card" style="width:min(460px,94vw)">
+    <div class="modal-head"><div><h2>Rename Chat</h2><p>只修改目前 Chat session 的顯示名稱。</p></div><button class="close" data-close-modal="renameChatModal">×</button></div>
+    <div class="modal-body"><div class="field"><label>Chat name</label><input id="renameChatInput" maxlength="80"></div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="renameChatModal">Cancel</button><button class="btn primary" id="renameChatConfirm">Rename</button></div>
+  </div>
+</div>
+
+<input type="file" id="taskFileUploadPicker" hidden>
+
+<div class="modal-overlay" id="yamlPlanModal">
+  <div class="modal-card yaml-plan-modal">
+    <div class="modal-head"><div><h2>Edit task list YAML</h2><p>Advanced view of the same execution plan. Apply returns to Task Overview.</p></div><button class="close" data-close-modal="yamlPlanModal">×</button></div>
+    <div class="modal-body">
+      <textarea class="code yaml-plan-editor" id="yamlEditor"></textarea>
+      <div class="yaml-plan-status" id="yamlPlanStatus">No changes.</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="yamlPlanModal">Cancel</button><button class="btn" id="validateYaml" type="button">Validate</button><button class="btn primary" id="applyYamlPlan" type="button">Apply</button></div>
+  </div>
+</div>
+
+<div id="existingTaskModal" hidden><div id="existingTaskPicker"></div></div>
+
+<div class="modal-overlay" id="addPlanTaskModal">
+  <div class="modal-card add-plan-task-modal">
+    <div class="modal-head">
+      <div><h2>Move existing Task</h2><p>Move an unused New + Idle Task into this Task List.</p></div>
+      <button class="close" data-close-modal="addPlanTaskModal">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="move-task-note"><strong>Only unused New tasks can be moved.</strong><span>The original Board card is retired and its Task ID is kept as origin metadata.</span></div>
+      <div class="existing-task-picker" id="moveTaskPicker"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close-modal="addPlanTaskModal">Cancel</button>
+      <button class="btn primary" id="confirmAddPlanTask">Move here</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="project-action-menu" id="projectActionMenu" hidden>
+  <button type="button" data-project-action="rename"><span>Rename</span><span>✎</span></button>
+  <div class="menu-sep"></div>
+  <button type="button" class="danger-item" data-project-action="delete"><span>Delete</span><span>×</span></button>
+</div>
+
+<div class="modal-overlay" id="yamlDiscardModal" role="dialog" aria-modal="true" aria-labelledby="yamlDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="yamlDiscardTitle" data-i18n="yaml.discardTitle">Discard YAML changes?</h2><p data-i18n="yaml.discardHelp">Unsaved YAML changes will be lost.</p></div><button class="close" data-close-modal="yamlDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="yaml.discardBody">Discard the unsaved YAML changes and leave this editor?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="yamlDiscardModal" type="button" data-i18n="yaml.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardYaml" type="button" data-i18n="yaml.discard">Discard changes</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taskEditorDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskEditorDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="taskEditorDiscardTitle" data-i18n="taskEditor.discardTitle">Discard task changes?</h2><p data-i18n="taskEditor.discardHelp">Unsaved changes in this Task Editor will be lost.</p></div><button class="close" data-close-modal="taskEditorDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="taskEditor.discardBody">Discard the unsaved changes and leave this editor?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskEditorDiscardModal" type="button" data-i18n="taskEditor.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardTaskEditor" type="button" data-i18n="taskEditor.discard">Discard changes</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taskListDraftDiscardModal" role="dialog" aria-modal="true" aria-labelledby="taskListDraftDiscardTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="taskListDraftDiscardTitle" data-i18n="taskListDraft.discardTitle">Discard Task List draft?</h2><p data-i18n="taskListDraft.discardHelp">This draft has not been created and will not appear on the Board if discarded.</p></div><button class="close" data-close-modal="taskListDraftDiscardModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="taskListDraft.discardBody">There are uncreated changes in this Task List draft. Discard them?</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskListDraftDiscardModal" type="button" data-i18n="taskListDraft.keepEditing">Keep editing</button><button class="btn danger" id="confirmDiscardTaskListDraft" type="button" data-i18n="taskListDraft.discard">Discard draft</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taskDeleteModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2>Delete Task?</h2><p id="taskDeleteMeta"></p></div><button class="close" data-close-modal="taskDeleteModal">×</button></div>
+    <div class="modal-body">
+      <div class="project-delete-note" id="taskDeleteNote"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskDeleteModal">Cancel</button><button class="btn danger" id="confirmTaskDelete">Delete Task</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taskResetToNewModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="taskResetToNewTitle">Move Task back to New?</h2><p id="taskResetToNewMeta"></p></div><button class="close" data-close-modal="taskResetToNewModal">×</button></div>
+    <div class="modal-body">
+      <div class="project-delete-note" id="taskResetToNewNote"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="taskResetToNewModal">Cancel</button><button class="btn danger" id="confirmTaskResetToNew">Move to New & Reset</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="projectManageModal">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="projectManageTitle">Rename Project</h2><p id="projectManageMeta"></p></div><button class="close" data-close-modal="projectManageModal">×</button></div>
+    <div class="modal-body">
+      <div class="field" id="projectRenameField"><label>Project name</label><input id="projectRenameInput" autocomplete="off"></div>
+      <div class="field" id="projectPathField" hidden><label>Project path</label><input id="projectPathInput" autocomplete="off" placeholder="C:\\path\\to\\project"><small class="field-help">New Projects copy the current Global Defaults once. Existing Projects stay independent.</small></div>
+      <div class="project-delete-note" id="projectDeleteNote" hidden></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="projectManageModal">Cancel</button><button class="btn primary" id="projectManageConfirm">Rename</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="globalSettingsModal">
+  <div class="modal-card global-settings-modal">
+    <div class="modal-head"><div><h2>Settings</h2><p>Global preferences shared by Chat, Tasks and Runner entry points.</p></div><button class="close" data-close-modal="globalSettingsModal">×</button></div>
+    <div class="modal-body global-settings-body">
+      <aside class="settings-sections">
+        <button type="button" class="active" data-settings-tab="execution"><span>↯</span><strong>Execution</strong></button>
+        <button type="button" data-settings-tab="defaults"><span>◉</span><strong>Defaults</strong></button>
+        <button type="button" data-settings-tab="interface"><span>◫</span><strong>Interface</strong></button>
+        <button type="button" data-settings-tab="language"><span>文</span><strong>Language</strong></button>
+      </aside>
+      <section class="settings-panel" data-settings-panel="execution">
+        <div class="settings-panel-head"><span>EXECUTION</span><h3>Workspace behavior</h3><p>Controls how Task-level <strong>Auto</strong> resolves. Explicit Main / Worktree overrides are unchanged.</p></div>
+        <label class="settings-field">
+          <span><strong>Auto workspace policy</strong><small id="autoWorkspacePolicyHint">Use Main when idle; switch to Worktree when the project is busy.</small></span>
+          <select id="autoWorkspacePolicy">
+            <option value="busy_worktree">Busy project → Worktree</option>
+            <option value="main_only">Always Main</option>
+            <option value="always_worktree">Always Worktree</option>
+          </select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Merge failure limit</strong><small>Global automatic merge/recovery budget. When failures exceed this value, keep the result as an Isolated Worktree and close it.</small></span>
+          <input id="globalMergeFailureLimit" class="settings-number" type="number" min="0" max="99" step="1" value="3">
+        </label>
+        <label class="settings-field">
+          <span><strong>Allow concurrent Main tasks</strong><small>Off keeps the current Main-busy restriction. On allows multiple Main Tasks to run in isolated worktrees and merge later through the integration queue.</small></span>
+          <span class="settings-switch-wrap"><input id="allowConcurrentMainTasks" class="settings-switch" type="checkbox"><span>Allow</span></span>
+        </label>
+        <div class="settings-policy-preview" id="autoWorkspacePolicyPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="defaults" hidden>
+        <div class="settings-panel-head"><span>DEFAULTS</span><h3>New Project defaults</h3><p>Used only when creating a new Project. Existing Projects keep their own Agent / Model / Mode / Reasoning / Workflow.</p></div>
+        <label class="settings-field">
+          <span><strong>Default Agent</strong><small>Agent assigned to newly created Projects.</small></span>
+          <select id="globalDefaultAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Model</strong><small>Model must belong to the selected Agent.</small></span>
+          <select id="globalDefaultModel"></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Mode</strong><small>Permission / approval mode for new Projects.</small></span>
+          <select id="globalDefaultMode"></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Reasoning</strong><small>Reasoning effort copied into newly created Projects.</small></span>
+          <select id="globalDefaultReasoning"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select>
+        </label>
+        <label class="settings-field">
+          <span><strong>Default Workflow</strong><small>Workflow initially selected for new Projects.</small></span>
+          <select id="globalDefaultWorkflow">
+            <option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option>
+            <option value="mixed.yaml">mixed</option>
+            <option value="file.yaml">file</option>
+            <option value="dynamic_handoff.yaml">dynamic_handoff</option>
+          </select>
+        </label>
+        <div class="settings-policy-preview" id="globalDefaultsPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="interface" hidden>
+        <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & theme</h3><p>Global visual preferences. These settings are not tied to a Project or Chat.</p></div>
+        <label class="settings-field">
+          <span><strong>Appearance</strong><small>Follow the system appearance or force Light / Dark.</small></span>
+          <select id="globalAppearance">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <div class="settings-theme-field">
+          <div class="settings-theme-copy"><strong>Theme</strong><small>Use the same palette choices as the current UI.</small></div>
+          <div class="settings-theme-options" id="globalThemeOptions">
+            <button class="settings-theme-option" type="button" data-prototype-theme="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><span><strong>Teal</strong><small>Recommended</small></span></button>
+            <button class="settings-theme-option" type="button" data-prototype-theme="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><span><strong>Deep Blue</strong><small>Enterprise</small></span></button>
+            <button class="settings-theme-option" type="button" data-prototype-theme="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><span><strong>Violet</strong><small>AI / Creative</small></span></button>
+            <button class="settings-theme-option" type="button" data-prototype-theme="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><span><strong>Amber</strong><small>Warm / Focus</small></span></button>
+            <button class="settings-theme-option" type="button" data-prototype-theme="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><span><strong>Rose</strong><small>Modern</small></span></button>
+          </div>
+        </div>
+        <div class="settings-policy-preview" id="interfaceSettingsPreview"></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="language" hidden>
+        <div class="settings-panel-head"><span>LANGUAGE</span><h3>Language</h3><p>Global UI language preference. This setting is independent from appearance and theme.</p></div>
+        <label class="settings-field">
+          <span><strong>UI language</strong><small>Applies globally across Projects and Chat sessions.</small></span>
+          <select id="globalLanguage">
+            <option value="zh-TW">繁體中文</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <div class="settings-policy-preview" id="languageSettingsPreview"></div>
+      </section>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close-modal="globalSettingsModal">Close</button></div>
+  </div>
+</div>
+
+<div class="task-context-menu" id="taskContextMenu" hidden>
+  <div class="task-context-actions">
+    <button type="button" data-context-action="open"><span>Open</span><kbd>↵</kbd></button>
+    <button type="button" data-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+    <button type="button" data-context-action="info"><span>Info</span><kbd>i</kbd></button>
+    <button type="button" data-context-action="workflow" hidden><span>Open Workflow</span><kbd>↗</kbd></button>
+    <div class="context-separator"></div>
+    <button type="button" data-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
+  </div>
+</div>
+
+<div class="create-type-menu" id="createTypeMenu" hidden>
+  <button type="button" data-create-type="task">
+    <span class="create-type-icon">＋</span>
+    <span><strong data-i18n="task.createTask">Task</strong><small data-i18n="task.createTaskDesc">Create one Task. Opens the shared Task Editor.</small></span>
+  </button>
+  <button type="button" data-create-type="list">
+    <span class="create-type-icon">≡</span>
+    <span><strong data-i18n="task.createList">Task List</strong><small data-i18n="task.createListDesc">Create a Task List workspace, then add Tasks inside it.</small></span>
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="./ui-prototype/task-ui-templates.js"></script>
+<script src="./ui-prototype/core.js"></script>
+<script src="./ui-prototype/task-model.js"></script>
+<script src="./ui-prototype/task-editor.js"></script>
+<script src="./ui-prototype/task-workspace.js"></script>
+<script src="./ui-prototype/project-sidebar.js"></script>
+<script src="./ui-prototype/tasks-page.js"></script>
+<script>window.UiBootstrap?.finish()</script>
+</body>
+</html>
