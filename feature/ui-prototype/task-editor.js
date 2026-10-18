@@ -644,11 +644,9 @@ let chatQueueSequence=0;
 function ensureChatQueue(session=activeChat()){if(!session)return[];if(!Array.isArray(session.queue))session.queue=[];return session.queue}
 function chatTurnState(session=activeChat()){if(!session)return 'idle';if(!session.turnState)session.turnState='idle';return session.turnState}
 function renderChatTurnStatus(session=activeChat()){
-  const el=document.getElementById('composerTurnStatus'),input=document.getElementById('chatInput'),send=document.getElementById('chatSend');if(!el||!session||activeChat()!==session)return;
-  const state=chatTurnState(session),waitingAsk=state==='waiting_ask';el.hidden=state==='idle';
-  el.textContent=waitingAsk?uiText('chat.turnWaiting'):uiText('chat.turnRunning');
-  if(input)input.placeholder=waitingAsk?uiText('chat.askComposerPlaceholder'):uiText('chat.inputPlaceholder');
-  if(send)send.textContent=waitingAsk?uiText('chat.askSubmit'):uiText('chat.send');
+  const el=document.getElementById('composerTurnStatus');if(!el||!session||activeChat()!==session)return;
+  const state=chatTurnState(session);el.hidden=state==='idle';
+  el.textContent=state==='waiting_ask'?uiText('chat.turnWaiting'):uiText('chat.turnRunning');
 }
 function renderChatQueue(session=activeChat()){
   const panel=document.getElementById('composerQueue'),host=document.getElementById('composerQueueList'),count=document.getElementById('composerQueueCount');if(!panel||!host)return;
@@ -763,28 +761,6 @@ function renderAskFlow(session=activeChat(),{preserveScroll=false}={}){
   box.appendChild(panel);
   if(preserveScroll)box.scrollTop=outerScrollTop;else box.scrollTop=box.scrollHeight;
 }
-function finalizeAskFlow(session,{freeform=''}={}){
-  const flow=session?.askFlow;if(!flow)return false;
-  const direct=String(freeform||'').trim();
-  const answered=flow.questions.map((x,i)=>{
-    const answer=String(flow.answers[String(i)]||'').trim();
-    return answer?`${i+1}. ${x.header}: ${answer}`:'';
-  }).filter(Boolean);
-  const structured=answered.join('\n');
-  const userMessage=direct
-    ?(structured?`Clarification answers\n${structured}\nDirect answer: ${direct}`:direct)
-    :`Clarification answers\n${structured}`;
-  session.messages.push(['user',userMessage]);
-  session.messages.push(['assistant','Mock Agent 已收到 clarification，正式版會把回答回傳給目前 Agent tool call，然後繼續原本 turn。']);
-  session.askFlow=null;session.turnState='idle';
-  if(activeChat()===session)renderChatSession();drainChatQueue(session);
-  return true;
-}
-function submitAskFromComposer(session,text){
-  const value=String(text||'').trim();
-  if(!session?.askFlow||!value)return false;
-  return finalizeAskFlow(session,{freeform:value});
-}
 function advanceAskFlow(session=activeChat()){
   const flow=session?.askFlow,q=currentAskQuestion(flow);if(!flow||!q)return;
   const key=String(flow.index),selected=flow.selected[key]||'',answer=String(flow.answers[key]||'').trim();
@@ -792,7 +768,11 @@ function advanceAskFlow(session=activeChat()){
   if((q.type==='text'||selected==='__other__')&&!answer&&q.required!==false){showToast(uiText('chat.askRequired'));return}
   if(q.type==='choice'&&selected!=='__other__')flow.answers[key]=selected;
   if(flow.index<flow.questions.length-1){flow.index++;renderAskFlow(session);return}
-  finalizeAskFlow(session);
+  const summary=flow.questions.map((x,i)=>`${i+1}. ${x.header}: ${flow.answers[String(i)]||'—'}`).join('\n');
+  session.messages.push(['user',`Clarification answers\n${summary}`]);
+  session.messages.push(['assistant','Mock Agent 已收到所有回答，正式版會把結構化 answers 回傳給目前 Agent tool call，然後繼續原本 turn。']);
+  session.askFlow=null;session.turnState='idle';
+  if(activeChat()===session)renderChatSession();drainChatQueue(session);
 }
 function mockInvokeSystemPrompt(session,command,projectKey=session?.projectKey||currentProjectKey){
   if(command.token==='@workflow'){session.messages.push(['assistant',`MOCK Runner · @workflow ${command.args||'<spec>'} would use the backend fixed Generate Workflow prompt.`]);return}
@@ -981,8 +961,7 @@ document.getElementById('renameChatConfirm').onclick=()=>{
 document.getElementById('chatSend').onclick=()=>{
   const input=document.getElementById('chatInput'),textValue=input.value.trim();if(!textValue)return;
   const session=activeChat();hideComposerSuggestions();
-  if(session?.askFlow)submitAskFromComposer(session,textValue);
-  else startMockChatTurn(session,textValue);
+  startMockChatTurn(session,textValue);
   input.value='';resizeChatComposer();
 };
 
@@ -1347,8 +1326,7 @@ chatInputForSuggestions.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='q'){
     e.preventDefault();e.stopImmediatePropagation();
     const value=chatInputForSuggestions.value.trim(),session=activeChat();
-    if(value&&session?.askFlow){submitAskFromComposer(session,value);chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
-    else if(value&&chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
+    if(value&&chatTurnState(session)!=='idle'){enqueueChatMessage(session,value,{notify:false});showToast('已加入 Queue');chatInputForSuggestions.value='';hideComposerSuggestions();resizeChatComposer()}
     else if(value)showToast('Agent 目前沒有執行中的 turn，請直接傳送');
     else showToast('先輸入訊息；Agent 忙碌時按 Ctrl+Q 可排隊');
     return;
