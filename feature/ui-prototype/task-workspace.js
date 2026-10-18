@@ -218,7 +218,10 @@ document.getElementById('createTaskConfirm').onclick=()=>{
     ||(ctx.mode==='draft-edit-item'&&toast.textContent===uiText('taskListDraft.updated'));
   const itemSaved=['Task saved','Saved · current task will restart'].includes(toast.textContent);
   const rootSaved=ctx.mode==='root-create'&&String(toast.textContent).startsWith('Task created');
-  if(draftSaved||itemSaved||rootSaved){taskEditorInitialSnapshot='';leaveTaskEditorOverlay({force:true})}
+  if(rootSaved){
+    taskEditorInitialSnapshot='';taskEditorReturnContext=null;hideTaskEditorView();return;
+  }
+  if(draftSaved||itemSaved){taskEditorInitialSnapshot='';leaveTaskEditorOverlay({force:true})}
 };
 
 // YAML is also a long-form editor, so it uses the same Plan subview instead of another large modal.
