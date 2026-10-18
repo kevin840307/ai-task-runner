@@ -6,6 +6,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from ui.agent_capability_service import AgentCapabilityService
 from ui.chat_agent_service import ChatAgentService
 from ui.chat_service import ChatService
 from ui.server import UIServer
@@ -277,3 +278,70 @@ def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+def test_agent_capability_service_caches_native_projection(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "tool").mkdir(parents=True)
+    project.mkdir()
+    calls = 0
+
+    class Completed:
+        returncode = 0
+        stderr = ""
+        stdout = json.dumps({
+            "backend": "qwen",
+            "capabilities": [{
+                "token": "/btw",
+                "name": "btw",
+                "description": "Side question",
+                "kind": "command",
+                "source": "builtin",
+                "user_invocable": True,
+                "enabled": True,
+                "permission": "available",
+                "availability": "available",
+            }],
+        })
+
+    def fake_run(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return Completed()
+
+    monkeypatch.setattr("ui.agent_capability_service.subprocess.run", fake_run)
+    service = AgentCapabilityService(repo, ttl_seconds=60)
+    first = service.get(project, "qwen")
+    second = service.get(project, "qwen")
+    refreshed = service.get(project, "qwen", refresh=True)
+
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert refreshed["cached"] is False
+    assert calls == 2
+    assert first["capabilities"][0]["token"] == "/btw"
+
+
+def test_agent_capability_service_fails_closed_on_discovery_error(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    class Completed:
+        returncode = 1
+        stderr = ""
+        stdout = json.dumps({"error": "native registry unavailable"})
+
+    monkeypatch.setattr(
+        "ui.agent_capability_service.subprocess.run",
+        lambda *args, **kwargs: Completed(),
+    )
+    service = AgentCapabilityService(repo)
+    try:
+        service.get(project, "qwen")
+    except ValueError as exc:
+        assert "native registry unavailable" in str(exc)
+    else:
+        raise AssertionError("capability discovery silently fell back")

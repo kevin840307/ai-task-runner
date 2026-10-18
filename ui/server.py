@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 
 try:
+    from .agent_capability_service import AgentCapabilityService
     from .chat_agent_service import ChatAgentService
     from .chat_service import ChatService
     from .project_preferences import ProjectPreferences
@@ -18,6 +19,7 @@ try:
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
+    from agent_capability_service import AgentCapabilityService
     from chat_agent_service import ChatAgentService
     from chat_service import ChatService
     from project_preferences import ProjectPreferences
@@ -46,6 +48,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._workflow_catalog_cache: dict | None = None
         self.chat_service = ChatService()
         self.chat_agent = ChatAgentService(self.repo_root)
+        self.agent_capabilities = AgentCapabilityService(self.repo_root)
         self.project_preferences = ProjectPreferences()
         if not self.projects_file.exists():
             self._write_projects([])
@@ -81,6 +84,21 @@ class Handler(SimpleHTTPRequestHandler):
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
                 return self._json(self.state.project_preferences.get(project))
+            if parsed.path == "/api/chat/capabilities":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                preferences = self.state.project_preferences.get(project)
+                agent = str(
+                    query.get("agent", [""])[0]
+                    or preferences.get("agent")
+                    or self.state.backend_catalog(project).get("default")
+                    or ""
+                ).strip()
+                return self._json(self.state.agent_capabilities.get(
+                    project,
+                    agent,
+                    refresh=query.get("refresh", ["0"])[0] == "1",
+                ))
             if parsed.path == "/api/chat/sessions":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
@@ -164,10 +182,12 @@ class Handler(SimpleHTTPRequestHandler):
                     current=str(body.get("current", "")),
                 )
             if parsed.path == "/api/project/preferences":
-                return self._json(self.state.project_preferences.update(
-                    self._project(body),
-                    body,
-                ))
+                project = self._project(body)
+                before = self.state.project_preferences.get(project)
+                value = self.state.project_preferences.update(project, body)
+                if str(before.get("agent") or "") != str(value.get("agent") or ""):
+                    self.state.agent_capabilities.invalidate(project)
+                return self._json(value)
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
                 preferences = self.state.project_preferences.get(project)
