@@ -195,7 +195,7 @@ html.ui-ready .app-bootstrap-card{
 .source-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
 .source-head strong{font-size:10px}.source-head small{color:var(--muted);font-size:8px}
 .source-mode{height:30px;min-width:150px;padding:0 24px 0 8px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg);color:var(--text);font-size:9px;font-weight:800}
-.source-body{display:grid;gap:6px}.source-body textarea{height:66px}.source-note{padding:6px 8px;border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px;line-height:1.45}
+.source-body{display:grid;gap:6px}.source-body textarea{height:66px}.source-note{padding:6px 8px;border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px;line-height:1.45}.file-upload-hint{display:flex;align-items:center;gap:7px;min-width:0;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);font-size:8px}.file-upload-hint strong{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-upload-hint span{color:var(--muted)}
 .pathrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
 .pathrow input,.pathrow select{width:100%;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg);color:var(--text);font-size:9px}
 .mini-btn{height:32px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--accent-dark);font-size:9px;font-weight:850}
