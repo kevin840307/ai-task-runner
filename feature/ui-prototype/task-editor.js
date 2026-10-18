@@ -1156,7 +1156,7 @@ function editorItemRef(){
   return `${owner?.id||'T'}-I${(taskEditorContext.index??batchDraft.length)+1}`;
 }
 function blankTaskEditorDraft(){return {goalMode:'inline',prompt:'',goalFile:'',goalAsset:'common/review.md',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md'}}
-function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
+function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProjectKey=null}={}){
   if(mode==='root-create'){
     setTaskFormCreateMode();
     document.getElementById('createTaskConfirm').disabled=false;
@@ -1169,7 +1169,8 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
   newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
   if(fromChat)newTaskDraft.prompt=fromChat;
   newTaskWorkspaceMode=item?.workspacePolicy||'auto';
-  const projectKey=item?projectKeyFromPath(item.project,owner?.project||currentProjectKey):(owner?.project||currentProjectKey);
+  const preferredProject=projectMeta[initialProjectKey]?initialProjectKey:currentProjectKey;
+  const projectKey=item?projectKeyFromPath(item.project,owner?.project||preferredProject):(owner?.project||preferredProject);
   document.getElementById('newTaskProject').value=projectMeta[projectKey]?projectKey:currentProjectKey;
   const projectPrefs=projectChatSettingsFor(projectKey);
   document.getElementById('newTaskWorkflow').value=item?.workflow||projectPrefs.workflow;
@@ -1521,7 +1522,7 @@ document.querySelector('#newTaskModal .state-hint').innerHTML='Task settings are
 
 // --- Unified + New / column + dropdown: Task or Task List ---
 const createTypeMenu=document.getElementById('createTypeMenu');
-let createMenuAnchor=null;
+let createMenuAnchor=null,createMenuProjectKey=currentProjectKey;
 function hideCreateTypeMenu(){createTypeMenu.hidden=true;createMenuAnchor=null}
 function showCreateTypeMenu(anchor){
   if(typeof hideTaskContextMenu==='function')hideTaskContextMenu();createMenuAnchor=anchor;createTypeMenu.hidden=false;
@@ -1574,8 +1575,9 @@ function discardNewTaskListDraft({close=true}={}){
   document.getElementById('planInfoHeading').textContent='List info';
   if(close&&typeof closeTaskDrawerShell==='function')closeTaskDrawerShell();
 }
-function createEmptyTaskListAndOpen(){
-  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:'New Task List',project:currentProjectKey,projectContext:currentProjectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
+function createEmptyTaskListAndOpen(initialProjectKey=currentProjectKey){
+  const projectKey=projectMeta[initialProjectKey]?initialProjectKey:currentProjectKey;
+  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:'New Task List',project:projectKey,projectContext:projectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
   planModalEl.classList.remove('subview-open');planModalEl.classList.add('open');
   setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:'Draft · not created yet',showBack:false});
   renderNewTaskListDraftWorkspace();
@@ -1599,11 +1601,13 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
 function handleCreateEntryClick(e){
   e.preventDefault();e.stopImmediatePropagation();
   if(!createTypeMenu.hidden&&createMenuAnchor===e.currentTarget){hideCreateTypeMenu();return}
+  createMenuProjectKey=e.currentTarget.id==='chatNewTask'?chatProjectKey():currentProjectKey;
   showCreateTypeMenu(e.currentTarget);
 }
 document.getElementById('newTask').addEventListener('click',handleCreateEntryClick,true);
+document.getElementById('chatNewTask')?.addEventListener('click',handleCreateEntryClick,true);
 document.querySelectorAll('.coladd').forEach(b=>b.addEventListener('click',handleCreateEntryClick,true));
-createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{hideCreateTypeMenu();setTaskFormCreateMode();(window.TaskUi?.openEditor||loadTaskEditor)('root-create')};
-createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{hideCreateTypeMenu();(window.TaskUi?.createList||createEmptyTaskListAndOpen)()};
+createTypeMenu.querySelector('[data-create-type="task"]').onclick=()=>{const projectKey=createMenuProjectKey;hideCreateTypeMenu();setTaskFormCreateMode();(window.TaskUi?.openEditor||loadTaskEditor)('root-create',{initialProjectKey:projectKey})};
+createTypeMenu.querySelector('[data-create-type="list"]').onclick=()=>{const projectKey=createMenuProjectKey;hideCreateTypeMenu();(window.TaskUi?.createList||createEmptyTaskListAndOpen)(projectKey)};
 document.addEventListener('click',e=>{if(!createTypeMenu.hidden&&!createTypeMenu.contains(e.target)&&e.target!==createMenuAnchor)hideCreateTypeMenu()});
 window.addEventListener('resize',hideCreateTypeMenu);window.addEventListener('scroll',hideCreateTypeMenu,true);
