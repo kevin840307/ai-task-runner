@@ -828,3 +828,62 @@ def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+def test_waiting_ask_blocks_new_turns_into_session_queue_until_resolved(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    calls: list[str] = []
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.create_ask(
+        project,
+        session_id,
+        request_id="ask-turn-1",
+        turn_id="turn-ask-1",
+        questions=[{
+            "id": "confirm",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["yes", "no"],
+        }],
+    )
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: (
+            calls.append(kwargs["prompt"])
+            or {"text": "reply-" + kwargs["prompt"], "session_id": "native"}
+        ),
+    )
+
+    for index, message in enumerate(("one", "two", "three"), start=1):
+        result = service.turn(
+            project,
+            chat,
+            session_id=session_id,
+            message=message,
+            backend="qwen",
+            mode="auto",
+            request_id=f"ask-queued-{index}",
+        )
+        assert result["status"] == "waiting_ask"
+        assert result["busy"] is True
+
+    assert calls == []
+    assert [row["content"] for row in chat.queue(project, session_id)["items"]] == [
+        "one", "two", "three",
+    ]
+    ask_id = chat.ask(project, session_id)["ask"]["ask_id"]
+    chat.submit_ask(
+        project,
+        session_id,
+        ask_id,
+        {"confirm": {"value": "yes"}},
+        request_id="ask-answer-1",
+    )
+    drained = service.drain(project, chat, session_id=session_id)
+    assert drained["status"] == "idle"
+    assert calls == ["one", "two", "three"]
+    assert chat.queue(project, session_id)["items"] == []
