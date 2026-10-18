@@ -57,6 +57,7 @@
         <div class="actions chat-session-actions">
           <select class="mockselect session-select" id="chatPreset"></select>
           <button class="btn" id="renameChat" data-i18n="chat.rename">Rename</button>
+          <button class="btn danger" id="deleteChat" type="button" data-i18n="chat.delete">Delete</button>
           <button class="btn primary" id="newChat" data-i18n="chat.newChat">+ New Chat</button>
         </div>
       </header>
@@ -183,7 +184,7 @@
       <p id="drawerRouteMeta" hidden></p>
     </div>
     <div id="taskListWorkspaceRoot" data-ui-module="TaskListWorkspace"></div>
-    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" id="drawerItemsTab" data-drawertab="items" hidden>Steps</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
+    <div class="drawertabs"><button class="drawertab active" data-drawertab="overview">Overview</button><button class="drawertab" data-drawertab="runtime">Runtime</button><button class="drawertab" data-drawertab="output">Output</button><button class="drawertab" data-drawertab="history">History</button></div>
     <div class="drawerbody">
       <div class="drawer-worktree-banner" id="drawerWorktreeBanner" hidden><strong>WORKTREE</strong><span id="drawerWorktreeBannerDetail">Isolated development · changes are not in Main until merged.</span></div>
       <div class="drawer-pane active" id="drawer-overview">
@@ -210,7 +211,6 @@
           <div class="workspace-result-list" id="workspaceResultList"></div>
         </section>
       </div>
-      <div class="drawer-pane" id="drawer-items"></div>
       <div class="drawer-pane" id="drawer-runtime"><section class="section"><h3>Runtime</h3><div class="runtimebox"><div class="runtop"><strong id="drawerStage">Stage: review</strong><span class="runtime running" id="drawerRuntimeInline">Running</span></div><div class="stagerow"><div class="stagebar"><i id="drawerStageProgress"></i></div><small id="drawerProgressText">3 / 5</small></div><div class="timeline" id="drawerTimeline"></div></div></section></div>
       <div class="drawer-pane" id="drawer-output"><section class="section"><h3>Live output</h3>
     <article class="task-live-activity">
@@ -235,6 +235,14 @@
       <div class="empty-list-explain">Task List is the Board container. Project, Workflow, Prompt, Validation and Workspace belong to each child Task.</div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="taskListNameModal">Cancel</button><button class="btn primary" id="confirmEmptyList">Save name</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteChatModal" role="dialog" aria-modal="true" aria-labelledby="deleteChatTitle">
+  <div class="modal-card project-manage-modal">
+    <div class="modal-head"><div><h2 id="deleteChatTitle" data-i18n="chat.deleteTitle">Delete Chat?</h2><p id="deleteChatMeta"></p></div><button class="close" data-close-modal="deleteChatModal" type="button" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="project-delete-note" data-i18n="chat.deleteHelp">This removes only this Chat from the current Project. Tasks are unchanged.</div></div>
+    <div class="modal-foot"><button class="btn" data-close-modal="deleteChatModal" type="button" data-i18n="chat.deleteCancel">Cancel</button><button class="btn danger" id="confirmDeleteChat" type="button" data-i18n="chat.deleteConfirm">Delete Chat</button></div>
   </div>
 </div>
 
