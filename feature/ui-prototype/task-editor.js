@@ -515,17 +515,72 @@ const mockAgentCapabilities={
   ]
 };
 const PROJECT_CHAT_SETTINGS_KEY='ai-task-runner.prototype.projectChatSettings';
+const GLOBAL_DEFAULTS_KEY='ai-task-runner.prototype.globalDefaults';
 const PROJECT_CHAT_WORKFLOWS=new Set(['ralphy_ai_validate.yaml','mixed.yaml','file.yaml','dynamic_handoff.yaml']);
+const BASE_PROJECT_PREFERENCES=Object.freeze({agent:'qwen',model:'qwen3-coder-plus',mode:'auto',workflow:'ralphy_ai_validate.yaml'});
+
+function normalizeProjectPreferences(value={},fallback=BASE_PROJECT_PREFERENCES){
+  const fallbackAgent=mockAgentProfiles[fallback.agent]?fallback.agent:BASE_PROJECT_PREFERENCES.agent;
+  const agent=mockAgentProfiles[value.agent]?value.agent:fallbackAgent,profile=mockAgentProfiles[agent];
+  const fallbackModel=profile.models.some(x=>x.id===fallback.model)?fallback.model:profile.defaultModel;
+  const fallbackMode=profile.modes.some(x=>x.id===fallback.mode)?fallback.mode:profile.defaultMode;
+  return {
+    agent,
+    model:profile.models.some(x=>x.id===value.model)?value.model:fallbackModel,
+    mode:profile.modes.some(x=>x.id===value.mode)?value.mode:fallbackMode,
+    workflow:PROJECT_CHAT_WORKFLOWS.has(value.workflow)?value.workflow:(PROJECT_CHAT_WORKFLOWS.has(fallback.workflow)?fallback.workflow:BASE_PROJECT_PREFERENCES.workflow)
+  };
+}
+function loadGlobalProjectDefaults(){
+  try{
+    const value=JSON.parse(localStorage.getItem(GLOBAL_DEFAULTS_KEY)||'{}');
+    return normalizeProjectPreferences(value&&typeof value==='object'?value:{},BASE_PROJECT_PREFERENCES);
+  }catch(_){return {...BASE_PROJECT_PREFERENCES}}
+}
+const globalProjectDefaults=loadGlobalProjectDefaults();
+function saveGlobalProjectDefaults(){try{localStorage.setItem(GLOBAL_DEFAULTS_KEY,JSON.stringify(globalProjectDefaults))}catch(_){}}
 function loadProjectChatSettings(){try{const value=JSON.parse(localStorage.getItem(PROJECT_CHAT_SETTINGS_KEY)||'{}');return value&&typeof value==='object'?value:{}}catch(_){return {}}}
 const projectChatSettings=loadProjectChatSettings();
 function saveProjectChatSettings(){try{localStorage.setItem(PROJECT_CHAT_SETTINGS_KEY,JSON.stringify(projectChatSettings))}catch(_){}}
+function initializeProjectChatSettings(key,defaults=globalProjectDefaults){
+  if(!key)return null;
+  if(!projectChatSettings[key]){projectChatSettings[key]=normalizeProjectPreferences(defaults,BASE_PROJECT_PREFERENCES);saveProjectChatSettings()}
+  return projectChatSettings[key];
+}
+function renameProjectChatSettings(oldKey,newKey){
+  if(!oldKey||!newKey||oldKey===newKey)return;
+  if(projectChatSettings[oldKey]){projectChatSettings[newKey]=projectChatSettings[oldKey];delete projectChatSettings[oldKey];saveProjectChatSettings()}
+}
+function deleteProjectChatSettings(key){if(projectChatSettings[key]){delete projectChatSettings[key];saveProjectChatSettings()}}
 function chatProjectKey(session=activeChat()){return session?.projectKey||currentProjectKey}
 function projectChatSettingsFor(key=currentProjectKey){
-  const current=projectChatSettings[key]&&typeof projectChatSettings[key]==='object'?projectChatSettings[key]:{};
-  const agent=mockAgentProfiles[current.agent]?current.agent:'qwen',profile=mockAgentProfiles[agent];
-  const next={agent,model:profile.models.some(x=>x.id===current.model)?current.model:profile.defaultModel,mode:profile.modes.some(x=>x.id===current.mode)?current.mode:profile.defaultMode,workflow:PROJECT_CHAT_WORKFLOWS.has(current.workflow)?current.workflow:'ralphy_ai_validate.yaml'};
+  const current=projectChatSettings[key]&&typeof projectChatSettings[key]==='object'?projectChatSettings[key]:BASE_PROJECT_PREFERENCES;
+  const next=normalizeProjectPreferences(current,BASE_PROJECT_PREFERENCES);
   projectChatSettings[key]=next;return next;
 }
+
+function renderGlobalDefaultSettings(){
+  const agent=document.getElementById('globalDefaultAgent'),model=document.getElementById('globalDefaultModel'),mode=document.getElementById('globalDefaultMode'),workflow=document.getElementById('globalDefaultWorkflow'),preview=document.getElementById('globalDefaultsPreview');
+  if(!agent||!model||!mode||!workflow)return;
+  agent.innerHTML=Object.entries(mockAgentProfiles).map(([key,profile])=>`<option value="${escapeAttr(key)}">${escapeHtml(profile.label)}</option>`).join('');
+  agent.value=globalProjectDefaults.agent;
+  const profile=mockAgentProfiles[globalProjectDefaults.agent]||mockAgentProfiles.qwen;
+  model.innerHTML=profile.models.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.label)}</option>`).join('');
+  mode.innerHTML=profile.modes.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.label)}</option>`).join('');
+  model.value=globalProjectDefaults.model;mode.value=globalProjectDefaults.mode;workflow.value=globalProjectDefaults.workflow;
+  if(preview)preview.innerHTML=`<strong>New Project</strong> · ${escapeHtml(profile.label)} · ${escapeHtml(profile.models.find(x=>x.id===globalProjectDefaults.model)?.label||globalProjectDefaults.model)} · ${escapeHtml(profile.modes.find(x=>x.id===globalProjectDefaults.mode)?.label||globalProjectDefaults.mode)}<br><strong>Workflow</strong> · ${escapeHtml(globalProjectDefaults.workflow)}<br>Existing Projects are unchanged.`;
+}
+function updateGlobalDefaultSettings(patch){
+  const next=normalizeProjectPreferences({...globalProjectDefaults,...patch},globalProjectDefaults);
+  Object.assign(globalProjectDefaults,next);saveGlobalProjectDefaults();renderGlobalDefaultSettings();
+}
+document.getElementById('globalDefaultAgent')?.addEventListener('change',e=>{
+  const agent=mockAgentProfiles[e.target.value]?e.target.value:BASE_PROJECT_PREFERENCES.agent,profile=mockAgentProfiles[agent];
+  Object.assign(globalProjectDefaults,{agent,model:profile.defaultModel,mode:profile.defaultMode});saveGlobalProjectDefaults();renderGlobalDefaultSettings();showToast(`Default Agent · ${profile.label}`);
+});
+document.getElementById('globalDefaultModel')?.addEventListener('change',e=>{updateGlobalDefaultSettings({model:e.target.value});showToast('Default Model updated')});
+document.getElementById('globalDefaultMode')?.addEventListener('change',e=>{updateGlobalDefaultSettings({mode:e.target.value});showToast('Default Mode updated')});
+document.getElementById('globalDefaultWorkflow')?.addEventListener('change',e=>{updateGlobalDefaultSettings({workflow:e.target.value});showToast('Default Workflow updated')});
 function chatAgentKey(session=activeChat()){return projectChatSettingsFor(chatProjectKey(session)).agent}
 function chatAgentProfile(key=chatAgentKey()){return mockAgentProfiles[key]||mockAgentProfiles.qwen}
 function chatAgentLabel(key){return chatAgentProfile(key).label}
@@ -1109,7 +1164,8 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='' }={}){
   newTaskWorkspaceMode=item?.workspacePolicy||'auto';
   const projectKey=item?projectKeyFromPath(item.project,owner?.project||currentProjectKey):(owner?.project||currentProjectKey);
   document.getElementById('newTaskProject').value=projectMeta[projectKey]?projectKey:currentProjectKey;
-  document.getElementById('newTaskWorkflow').value=item?.workflow||'ralphy_ai_validate.yaml';
+  const projectPrefs=projectChatSettingsFor(projectKey);
+  document.getElementById('newTaskWorkflow').value=item?.workflow||projectPrefs.workflow;
   document.getElementById('newTaskTitle').value=item?.title||'';
   document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='create-item'?'New task':'Edit task';
   document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
