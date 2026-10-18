@@ -787,3 +787,49 @@ html[data-appearance] .task-context-info-head,
 html[data-appearance] .context-separator{border-color:var(--line);background-color:var(--line)}
 html[data-appearance] #taskInfoModal .modal-body{background:var(--panel);color:var(--text)}
 
+/* Close remaining high-specificity bright surfaces inside Task details. */
+html[data-appearance] #taskOverlay .workspace-selector-wrap,
+html[data-appearance] #taskOverlay .drawer-list-item,
+html[data-appearance] #taskOverlay #drawer-items .source-card,
+html[data-appearance] #taskOverlay #drawer-items .request-body,
+html[data-appearance] #taskOverlay .tabs.compact,
+html[data-appearance] #taskOverlay .yaml-plan-status{
+  background:var(--panel-2)!important;color:var(--text);border-color:var(--line)!important
+}
+html[data-appearance] #taskOverlay .drawer-list-item .n,
+html[data-appearance] #taskOverlay .sequence-index{
+  background:var(--panel-3);color:var(--muted)
+}
+html[data-appearance] #taskOverlay .tabs.compact .tab.active{
+  background:var(--panel);color:var(--accent-dark);box-shadow:var(--shadow-sm)
+}
+html[data-appearance] #taskOverlay .workspace-option.worktree-option.selected{
+  background:color-mix(in srgb,var(--warn) 10%,var(--panel));
+  border-color:var(--warn);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 14%,transparent)
+}
+html[data-appearance] #taskOverlay .workspace-tag{
+  background:var(--accent-soft)!important;color:var(--accent-dark)!important
+}
+html[data-appearance] #taskOverlay .batch-tag{
+  background:color-mix(in srgb,var(--blue) 14%,var(--panel))!important;color:var(--blue)!important
+}
+html[data-appearance] #taskOverlay .pill.run{
+  background:var(--warning-soft);color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 44%,var(--line))
+}
+html[data-appearance] #taskOverlay .pill.pass{
+  background:var(--success-soft);color:var(--pass);
+  border-color:color-mix(in srgb,var(--pass) 42%,var(--line))
+}
+html[data-appearance] #taskOverlay .pill.fail{
+  background:var(--danger-soft);color:var(--fail);
+  border-color:color-mix(in srgb,var(--fail) 42%,var(--line))
+}
+html[data-appearance] #taskOverlay .workspace-result-state,
+html[data-appearance] #taskOverlay .task-edit-lock{
+  background:var(--panel-3);color:var(--muted);border-color:var(--line)
+}
+html[data-appearance] #taskOverlay .yaml-plan-status.ok{background:var(--success-soft)!important;color:var(--pass)}
+html[data-appearance] #taskOverlay .yaml-plan-status.bad{background:var(--danger-soft)!important;color:var(--fail)}
+
