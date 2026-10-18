@@ -1544,18 +1544,24 @@ function syncTaskListDraftActions(active){
 }
 function renderNewTaskListDraftWorkspace(){
   if(!newTaskListDraft)return;
-  const host=document.getElementById('planFormList'),summary=document.getElementById('planTaskSummary');
+  const host=document.getElementById('planFormList'),summary=document.getElementById('planTaskSummary'),items=newTaskListDraft.items||[];
   document.getElementById('planStatePill').textContent='Draft';
   document.getElementById('planInfoHeading').textContent='Draft info';
-  host.innerHTML=TaskUiTemplates.emptyTaskList({large:true,id:'taskListDraftEmpty'});
-  const empty=host.querySelector('#taskListDraftEmpty');
-  if(empty){
-    empty.disabled=true;
-    empty.querySelector('strong').textContent='No tasks yet';
-    empty.querySelector('span').textContent='Create the Task List first';
+  if(!items.length){
+    host.innerHTML=TaskUiTemplates.emptyTaskList({large:true,id:'taskListDraftEmpty'});
+    const empty=host.querySelector('#taskListDraftEmpty');
+    if(empty){
+      empty.querySelector('strong').textContent='No tasks yet';
+      empty.querySelector('span').textContent='+ Add first task';
+      empty.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
+    }
+  }else{
+    host.innerHTML=items.map((x,i)=>`<article class="plan-row-compact"><div class="plan-row-head"><span class="plan-row-num">${i+1}</span><div class="plan-row-copy"><strong>${escapeHtml(planTitle(x,i))}</strong><small>${escapeHtml(basename(x.project))} · ${escapeHtml(x.workflow)}</small></div><div class="plan-row-actions"><span class="plan-workspace-chip ${itemUsesWorktree(x)?'worktree':''}">${workspaceLabelForItem(x)}</span></div></div></article>`).join('')+TaskUiTemplates.addTaskFooter();
+    const add=host.querySelector('.plan-add-task-footer');
+    if(add)add.onclick=()=>loadTaskEditor('draft-create-item',{returnTarget:'list-draft'});
   }
-  summary.innerHTML=`<span>Title</span><label class="task-list-draft-control"><input id="taskListDraftTitle" value="${escapeAttr(newTaskListDraft.title)}" autocomplete="off"></label><span>Project</span><label class="task-list-draft-control"><select id="taskListDraftProject">${Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('')}</select></label><span>State</span><strong>Not created</strong>`;
-  const title=document.getElementById('taskListDraftTitle'),project=document.getElementById('taskListDraftProject');
+  summary.innerHTML=`<span>Title</span><label class="task-list-draft-control"><input id="taskListDraftTitle" value="${escapeAttr(newTaskListDraft.title)}" autocomplete="off"></label><span>Project</span><label class="task-list-draft-control"><select id="taskListDraftProject">${Object.entries(projectMeta).map(([key,meta])=>`<option value="${escapeAttr(key)}">${escapeHtml(key)} · ${escapeHtml(meta.path||key)}</option>`).join('')}</select></label><span>Tasks</span><strong>${items.length}</strong><span>State</span><strong>Not created</strong>`;
+  const title=document.getElementById('taskListDraftTitle'),project=document.getElementById('taskListDraftProject'),create=document.getElementById('confirmTaskListDraft');
   project.value=projectMeta[newTaskListDraft.project]?newTaskListDraft.project:currentProjectKey;
   title.oninput=e=>{
     if(!newTaskListDraft)return;
@@ -1564,6 +1570,7 @@ function renderNewTaskListDraftWorkspace(){
   };
   project.onchange=e=>{if(newTaskListDraft)newTaskListDraft.project=e.target.value};
   syncTaskListDraftActions(true);
+  if(create){create.disabled=items.length===0;create.title=items.length?'Create Task List':'Add at least one task before creating the Task List'}
 }
 function discardNewTaskListDraft({close=true}={}){
   newTaskListDraft=null;syncTaskListDraftActions(false);
@@ -1571,7 +1578,7 @@ function discardNewTaskListDraft({close=true}={}){
   if(close&&typeof closeTaskDrawerShell==='function')closeTaskDrawerShell();
 }
 function createEmptyTaskListAndOpen(){
-  newTaskListDraft={title:'New Task List',project:currentProjectKey};
+  newTaskListDraft={id:'DRAFT-LIST',_newListDraft:true,title:'New Task List',project:currentProjectKey,projectContext:currentProjectKey,items:[],listItems:[],status:'new',runtime:'idle',progress:[0,0]};
   planModalEl.classList.remove('subview-open');planModalEl.classList.add('open');
   setTaskDrawerShell('list-draft',{title:newTaskListDraft.title,meta:'Draft · not created yet',showBack:false});
   renderNewTaskListDraftWorkspace();
@@ -1583,8 +1590,10 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
   const title=String(document.getElementById('taskListDraftTitle')?.value||newTaskListDraft.title||'').trim();
   const project=document.getElementById('taskListDraftProject')?.value||newTaskListDraft.project||currentProjectKey;
   if(!title){showToast('Task List title cannot be empty');return}
-  const id='T-'+(++taskSequence);
-  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:'Empty task list',tags:['0 tasks'],workflow:'—',projectContext:project,project,progress:[0,0],elapsed:'—',stage:'Draft',session:'—',goal:'',items:[],listItems:[],workspacePolicy:'none',workspaceKind:'none',branch:'—',executionRoot:'—'};
+  const items=(newTaskListDraft.items||[]).map(x=>({...x}));
+  if(!items.length){showToast('Add at least one task before creating the Task List');renderNewTaskListDraftWorkspace();return}
+  const id='T-'+(++taskSequence),first=items[0];
+  const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:items.length===1?'1 task':`${items.length} ordered tasks`,tags:[`${items.length} task${items.length===1?'':'s'}`],workflow:items.length===1?first.workflow:'Tasks',projectContext:project,project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'—',goal:items.length===1?first.prompt:`${items.length} ordered tasks`,items,listItems:items,workspacePolicy:items.length===1?first.workspacePolicy:'per_item',workspaceKind:items.length===1?first.workspaceKind:'per_item',branch:items.length===1?first.branch:'—',executionRoot:items.length===1?first.executionRoot:'Per-task workspaces'};
   newTaskListDraft=null;syncTaskListDraftActions(false);
   document.getElementById('planInfoHeading').textContent='List info';
   taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
