@@ -850,7 +850,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.select_option("#projectChatAgentSelect", "opencode")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
             page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
-            page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value="deep"]') !== null")
+            page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value=\\\"deep\\\"]') !== null")
             page.select_option("#projectChatReasoningSelect", "deep")
             page.select_option("#projectChatModeQuick", "read")
             page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
