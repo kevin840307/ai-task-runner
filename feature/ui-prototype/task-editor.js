@@ -1164,10 +1164,12 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProject
     document.getElementById('createTaskConfirm').disabled=false;
   }
   taskEditorContext={mode,ownerId,index};
-  const owner=mode==='draft-create-item'?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
+  const draftMode=mode==='draft-create-item'||mode==='draft-edit-item';
+  const owner=draftMode?newTaskListDraft:(ownerId?taskMap[ownerId]:null);
   let item=null;
-  if(owner&&index!=null&&mode!=='draft-create-item'){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
-  if(mode==='edit-item'&&!item)return;
+  if(mode==='draft-edit-item'&&owner&&index!=null)item=owner.items?.[index]||null;
+  else if(owner&&index!=null&&!draftMode){if(batchParentTaskId!==owner.id)setPlanDraftForTask(owner);item=batchDraft[index]||null}
+  if((mode==='edit-item'||mode==='draft-edit-item')&&!item)return;
   newTaskDraft=item?{goalMode:item.goalMode,prompt:item.prompt,goalFile:item.goalFile,goalAsset:item.goalAsset,validator:item.validator,aiMode:item.aiMode,aiPrompt:item.aiPrompt,aiFile:item.aiFile,aiAsset:item.aiAsset}:blankTaskEditorDraft();
   if(fromChat)newTaskDraft.prompt=fromChat;
   newTaskWorkspaceMode=item?.workspacePolicy||'auto';
@@ -1177,9 +1179,10 @@ function loadTaskEditor(mode,{ownerId=null,index=null,fromChat='',initialProject
   const projectPrefs=projectChatSettingsFor(projectKey);
   document.getElementById('newTaskWorkflow').value=item?.workflow||projectPrefs.workflow;
   document.getElementById('newTaskTitle').value=item?.title||'';
-  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':mode==='edit-item'?'Edit task':'New task';
-  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='draft-create-item'?'Add a task to this Task List Draft using the same editor.':mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
-  document.getElementById('createTaskConfirm').textContent=mode==='edit-item'?'Save changes':'Create task';
+  const editing=mode==='edit-item'||mode==='draft-edit-item';
+  document.getElementById('taskFormTitle').textContent=mode==='root-create'?'New Task':editing?'Edit task':'New task';
+  document.getElementById('taskFormHelp').textContent=mode==='root-create'?'Create the first task. The Board item starts with items[0].':mode==='draft-create-item'?'Add a task to this Task List Draft using the same editor.':mode==='draft-edit-item'?`Editing draft task ${(index??0)+1}.`:mode==='create-item'?`Add a task to ${owner?.title||'this list'} using the same editor.`:`Editing task ${(index??0)+1} with the same fields used at creation.`;
+  document.getElementById('createTaskConfirm').textContent=editing?'Save changes':'Create task';
   document.getElementById('editTaskScopeNote').hidden=true;
   document.getElementById('newTaskWorkflowField').hidden=false;document.getElementById('newTaskWorkflowCaps').hidden=false;
   document.querySelector('.workspace-selector-wrap').hidden=false;document.getElementById('newTaskPromptSource').hidden=false;document.getElementById('newTaskValidationSource').hidden=false;
@@ -1223,11 +1226,14 @@ function buildEditorItem(owner,index){
 
 document.getElementById('createTaskConfirm').onclick=()=>{
   const ctx=taskEditorContext;
-  if(ctx.mode==='draft-create-item'){
+  if(ctx.mode==='draft-create-item'||ctx.mode==='draft-edit-item'){
     if(!newTaskListDraft)return;
-    const index=newTaskListDraft.items.length,item=buildEditorItem(newTaskListDraft,index);if(!item)return;
-    newTaskListDraft.items.push(item);newTaskListDraft.listItems=newTaskListDraft.items;
-    showToast(uiText('taskListDraft.added'));return;
+    const creating=ctx.mode==='draft-create-item',index=creating?newTaskListDraft.items.length:ctx.index;
+    const item=buildEditorItem(newTaskListDraft,index);if(!item)return;
+    if(creating)newTaskListDraft.items.push(item);
+    else newTaskListDraft.items[index]={...newTaskListDraft.items[index],...item,itemId:newTaskListDraft.items[index].itemId};
+    newTaskListDraft.listItems=newTaskListDraft.items;
+    showToast(uiText(creating?'taskListDraft.added':'taskListDraft.updated'));return;
   }
   if(ctx.mode==='root-create'){
     const id='T-'+(++taskSequence),placeholder={id,project:document.getElementById('newTaskProject').value};
