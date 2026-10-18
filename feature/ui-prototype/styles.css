@@ -629,3 +629,161 @@ html[data-appearance="dark"] .theme-swatches-violet i:nth-child(1){background:#a
 html[data-appearance="dark"] .theme-swatches-amber i:nth-child(1){background:#e6a04b}html[data-appearance="dark"] .theme-swatches-amber i:nth-child(2){background:#49331a}html[data-appearance="dark"] .theme-swatches-amber i:nth-child(3){background:#f1ece5}
 html[data-appearance="dark"] .theme-swatches-rose i:nth-child(1){background:#e8819a}html[data-appearance="dark"] .theme-swatches-rose i:nth-child(2){background:#4b2732}html[data-appearance="dark"] .theme-swatches-rose i:nth-child(3){background:#f2e9ec}
 
+/* Task workspace theme normalization: Drawer / Task List / Editor must fully follow appearance tokens. */
+html[data-appearance] #taskOverlay .drawer{
+  background:var(--panel);color:var(--text);border-color:var(--line);
+  box-shadow:-18px 0 50px color-mix(in srgb,#000 32%,transparent)
+}
+html[data-appearance] #taskOverlay .drawerhead{background:var(--panel);border-color:var(--line)}
+html[data-appearance] #taskOverlay .drawertabs,
+html[data-appearance] #taskOverlay .drawerfoot{background:var(--panel-2);border-color:var(--line)}
+html[data-appearance] #taskOverlay .drawerbody{background:var(--panel);color:var(--text)}
+html[data-appearance] #taskOverlay .section h3,
+html[data-appearance] #planModal .plan-side-card h3,
+html[data-appearance] #planModal .workspace-help-card strong,
+html[data-appearance] #taskOverlay .task-runtime-activity>span,
+html[data-appearance] #taskOverlay .taskrow-project,
+html[data-appearance] #taskOverlay .taskrow-count{color:var(--text)}
+
+html[data-appearance] #taskOverlay .kv,
+html[data-appearance] #taskOverlay .metric,
+html[data-appearance] #taskOverlay .history-row,
+html[data-appearance] #taskOverlay .single-plan-strip,
+html[data-appearance] #taskOverlay .drawer-plan-row,
+html[data-appearance] #taskOverlay .sequence-starter,
+html[data-appearance] #taskOverlay .sequence-item .request-body,
+html[data-appearance] #taskOverlay .steps-summary,
+html[data-appearance] #taskOverlay .workspace-merge-row,
+html[data-appearance] #taskOverlay .compact-default-value,
+html[data-appearance] #taskOverlay .task-editor-handoff,
+html[data-appearance] #taskOverlay .create-choice,
+html[data-appearance] #taskOverlay .empty-list-explain,
+html[data-appearance] #taskOverlay .empty-plan-cta,
+html[data-appearance] #taskOverlay .task-list-table,
+html[data-appearance] #taskOverlay .task-list-empty{
+  background:var(--panel-2);color:var(--text);border-color:var(--line)
+}
+html[data-appearance] #taskOverlay .runtimebox,
+html[data-appearance] #taskOverlay .callout{
+  background:var(--accent-softer);color:var(--text);
+  border-color:color-mix(in srgb,var(--accent) 28%,var(--line))
+}
+html[data-appearance] #taskOverlay .stagebar{background:var(--panel-3)}
+html[data-appearance] #taskOverlay .event:before{border-color:var(--line-strong)}
+html[data-appearance] #taskOverlay .event:after{background:var(--neutral);border-color:var(--panel)}
+html[data-appearance] #taskOverlay .event.done:after{background:var(--pass)}
+html[data-appearance] #taskOverlay .event.now:after{background:var(--accent)}
+html[data-appearance] #taskOverlay .sequence-composer:before{background:var(--line)}
+html[data-appearance] #taskOverlay .sequence-item .reqnum{
+  background:var(--panel);color:var(--muted);border-color:var(--panel);
+  box-shadow:0 0 0 1px var(--line-strong)
+}
+html[data-appearance] #taskOverlay .sequence-item.completed-lock .reqnum{
+  background:var(--success-soft);color:var(--pass);box-shadow:0 0 0 1px color-mix(in srgb,var(--pass) 42%,var(--line))
+}
+html[data-appearance] #taskOverlay .sequence-state,
+html[data-appearance] #taskOverlay .single-plan-state,
+html[data-appearance] #taskOverlay .workspace-merge-status{background:var(--panel-3);color:var(--muted)}
+html[data-appearance] #taskOverlay .sequence-state.running,
+html[data-appearance] #taskOverlay .single-plan-state.running,
+html[data-appearance] #taskOverlay .workspace-merge-status.ready{background:var(--info-soft);color:var(--run)}
+html[data-appearance] #taskOverlay .sequence-state.pass,
+html[data-appearance] #taskOverlay .single-plan-state.done,
+html[data-appearance] #taskOverlay .workspace-merge-status.merged{background:var(--success-soft);color:var(--pass)}
+html[data-appearance] #taskOverlay .sequence-state.stopped,
+html[data-appearance] #taskOverlay .single-plan-state.recover,
+html[data-appearance] #taskOverlay .workspace-merge-status.blocked{background:var(--warning-soft);color:var(--warn)}
+html[data-appearance] #taskOverlay .workspace-merge-row.conflict{
+  background:var(--danger-soft);border-color:color-mix(in srgb,var(--fail) 42%,var(--line))
+}
+html[data-appearance] #taskOverlay .workspace-merge-row.merged{
+  background:var(--success-soft);border-color:color-mix(in srgb,var(--pass) 38%,var(--line))
+}
+html[data-appearance] #taskOverlay .workspace-merge-status.conflict{background:var(--danger-soft);color:var(--fail)}
+html[data-appearance] #taskOverlay .drawer-worktree-banner{
+  background:color-mix(in srgb,var(--warn) 16%,var(--panel));
+  color:var(--text);border-color:color-mix(in srgb,var(--warn) 48%,var(--line))
+}
+html[data-appearance] #taskOverlay .drawer-worktree-banner strong{background:var(--warn);color:#fff}
+html[data-appearance] #taskOverlay .drawer-expand:hover,
+html[data-appearance] #taskOverlay .drawer-expand[aria-pressed="true"]{
+  background:var(--accent-soft);color:var(--accent-dark)
+}
+html[data-appearance] #taskOverlay .drawer-plan-row.current,
+html[data-appearance] #taskOverlay .drawer-plan-row.selected{
+  background:var(--accent-softer)!important;
+  border-color:color-mix(in srgb,var(--accent) 48%,var(--line))!important
+}
+html[data-appearance] #taskOverlay .drawer-plan-row .n,
+html[data-appearance] #taskOverlay .single-plan-icon{background:var(--panel-3);color:var(--muted)}
+html[data-appearance] #taskOverlay .drawer-plan-row[data-drawer-item]:hover{border-color:var(--line-strong)}
+html[data-appearance] #taskOverlay .task-live-dot{background:var(--neutral)}
+html[data-appearance] #taskOverlay .task-live-dot.running{background:var(--run)}
+html[data-appearance] #taskOverlay .task-live-dot.recover{background:var(--warn)}
+html[data-appearance] #taskOverlay .task-live-dot.done{background:var(--pass)}
+html[data-appearance] #taskOverlay .task-live-dot.failed{background:var(--fail)}
+html[data-appearance] #taskOverlay .task-live-indicator.stopped{color:var(--fail)}
+html[data-appearance] #taskOverlay .task-live-indicator.done{color:var(--pass)}
+html[data-appearance] #taskOverlay .task-live-indicator.recover{color:var(--warn)}
+html[data-appearance] #taskOverlay .console{
+  background:var(--code-bg);color:var(--code-text);border-color:var(--line-strong)
+}
+
+/* Task List / Task Editor opened from the Task workspace. */
+html[data-appearance] #planModal>.plan-modal-card,
+html[data-appearance] #planModal>.plan-subview-mount,
+html[data-appearance] #planModal>.plan-subview-mount>.modal-card{
+  background:var(--panel)!important;color:var(--text);border-color:var(--line)!important;
+  box-shadow:-18px 0 50px color-mix(in srgb,#000 32%,transparent)!important
+}
+html[data-appearance] #planModal .plan-modal-head,
+html[data-appearance] #planModal .modal-head{background:var(--panel)!important;color:var(--text);border-color:var(--line)}
+html[data-appearance] #planModal .plan-page-body{background:var(--bg)}
+html[data-appearance] #planModal .plan-main,
+html[data-appearance] #planModal .plan-side-card,
+html[data-appearance] #planModal .plan-row,
+html[data-appearance] #planModal .plan-row-compact,
+html[data-appearance] #planModal .task-editor-handoff,
+html[data-appearance] #planModal .create-choice,
+html[data-appearance] #planModal .existing-task-option,
+html[data-appearance] #planModal .single-plan-strip{
+  background:var(--panel);color:var(--text);border-color:var(--line)
+}
+html[data-appearance] #planModal .plan-row-body,
+html[data-appearance] #planModal .workspace-help-card,
+html[data-appearance] #planModal .compact-default-value,
+html[data-appearance] #planModal .empty-list-explain,
+html[data-appearance] #planModal .empty-plan-cta,
+html[data-appearance] #planModal .steps-summary,
+html[data-appearance] #planModal .tabs.compact{background:var(--panel-2)!important;color:var(--text);border-color:var(--line)}
+html[data-appearance] #planModal .tabs.compact .tab.active{background:var(--panel);color:var(--accent-dark);box-shadow:var(--shadow-sm)}
+html[data-appearance] #planModal .plan-row-controls button,
+html[data-appearance] #planModal .plan-back,
+html[data-appearance] #planModal .project-combobox>button{background:var(--panel-2);color:var(--muted);border-color:var(--line)}
+html[data-appearance] #planModal .plan-row-controls button:hover:not(:disabled),
+html[data-appearance] #planModal .plan-title-edit:hover,
+html[data-appearance] #planModal .plan-row-controls .row-more:hover,
+html[data-appearance] #planModal .project-combobox>button:hover{background:var(--accent-soft);color:var(--text);border-color:var(--accent)}
+html[data-appearance] #planModal .plan-row-num,
+html[data-appearance] #planModal .single-plan-icon{background:var(--panel-3);color:var(--muted)}
+html[data-appearance] #planModal .plan-row.current,
+html[data-appearance] #planModal .plan-row-compact.current,
+html[data-appearance] #planModal .plan-row-compact.selected{
+  background:var(--accent-softer)!important;border-color:color-mix(in srgb,var(--accent) 48%,var(--line))!important
+}
+html[data-appearance] #planModal .plan-row-state{background:var(--panel-3);color:var(--muted)}
+html[data-appearance] #planModal .plan-row-state.pass{background:var(--success-soft);color:var(--pass)}
+html[data-appearance] #planModal .plan-row-state.running{background:var(--info-soft);color:var(--run)}
+html[data-appearance] #planModal .plan-row-state.stopped{background:var(--warning-soft);color:var(--warn)}
+html[data-appearance] #planModal .project-dropdown,
+html[data-appearance] .task-context-menu,
+html[data-appearance] .create-type-menu{background:var(--popover-bg);color:var(--text);border-color:var(--line)}
+html[data-appearance] #planModal .project-dropdown-option:hover,
+html[data-appearance] #planModal .project-dropdown-option.selected,
+html[data-appearance] .task-context-menu button:hover:not(:disabled),
+html[data-appearance] .create-type-menu button:hover{background:var(--accent-soft)}
+html[data-appearance] .task-context-info{background:var(--panel-2);border-color:var(--line)}
+html[data-appearance] .task-context-info-head,
+html[data-appearance] .context-separator{border-color:var(--line);background-color:var(--line)}
+html[data-appearance] #taskInfoModal .modal-body{background:var(--panel);color:var(--text)}
+
