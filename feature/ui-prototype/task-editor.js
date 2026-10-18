@@ -1338,7 +1338,7 @@ function renderAddTaskBackTarget(){
 function returnAfterAddTask(owner){
   if(!owner)return;
   if(addTaskReturnTarget==='info'){closeModal('planModal');openTaskById(owner.id);return}
-  document.getElementById('taskOverlay').classList.remove('open');openPlanDialog(owner.id);
+  openPlanDialog(owner.id);
 }
 openAddTaskDialog=function(ownerId=currentTaskId){
   const owner=taskMap[ownerId];if(!owner||!taskEditable(owner)){showToast(owner?.status==='ongoing'?'Pause Task before editing':'Task is read-only');return}
