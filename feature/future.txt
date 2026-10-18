@@ -182,6 +182,8 @@ Prototype composition:
 - Dirty transient Task List drafts require an explicit discard decision before closing; empty untouched drafts may close immediately.
 - Prototype Create buttons may use local submitting locks for UX, but production correctness comes from backend idempotency / request IDs.
 - TaskDrawerShell is the only owner of Drawer Close / backdrop / Escape / focus return. Do not reintroduce page-level close handlers.
+- Escape follows top-layer ownership: child modal / popover / rename editor handles it before TaskDrawerShell; production should use one layered overlay/focus manager rather than document-level competing listeners.
+- TaskEditor owns a local dirty snapshot only for unsaved form data; Task List Draft owns its own transient draft lifecycle. Closing nested editors must guard child dirty state before parent draft discard.
 - Task List may expose a bottom Back action for long-scroll ergonomics, but it must delegate to the same TaskDrawerShell navigation action as the Header Back; footer controls never own separate route state.
 - After these mock/template interactions are stable, feature/ui should freeze structurally; remaining prototype changes should be browser-regression bug fixes rather than new IA layers.
 - Main HTML keeps mount points instead of duplicating those surfaces.
