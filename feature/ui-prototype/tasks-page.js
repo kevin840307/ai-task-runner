@@ -29,8 +29,6 @@ function renderTasksProjectFilter(){
   const selected=[...selectedTaskProjectKeys].filter(key=>projectMeta[key]),all=entries.map(([key])=>key);
   const boardCount=Object.values(taskMap||{}).filter(taskMatchesSelectedProjects).length;
   tasksProjectFilterSummary.textContent=selected.length===0?'No Project':selected.length===1?selected[0]:(selected.length===all.length&&all.length>1?`All Projects · ${boardCount} Tasks`:`${selected.length} Projects · ${boardCount} Tasks`);
-  if(selected.length===1)document.getElementById('tasksProjectLine').textContent=`${projectMeta[selected[0]]?.path||selected[0]} · Tasks`;
-  else document.getElementById('tasksProjectLine').textContent=`${selected.length} Projects selected · Tasks from selected Projects`;
   persistTaskProjectFilter();
   tasksProjectFilterButton.classList.remove('ui-pending');
 }
