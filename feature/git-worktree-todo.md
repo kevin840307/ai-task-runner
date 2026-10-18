@@ -1204,7 +1204,7 @@ Main:
 ```text
 Runner Completed
 → Closed · pending_merge
-→ Closed · integrating / conflict_recovery / waiting_target_clean / recovery
+→ Closed · integrating / conflict_recovery / project_resync / recovery
 ├─ success → Closed · integrated
 └─ retries exhausted → Closed · Awaiting merge + worktree retained
 ```
@@ -1641,7 +1641,7 @@ T-002 then repeats against the latest committed target.
 - [ ] Keep Board columns as New / Ongoing / Paused / Closed; do not add an Integration column.
 - [ ] Runner execution Completed moves the Task to Closed immediately; effective Main continues through Closed integration states, while Isolated Worktree closes as worktree_ready.
 - [ ] Isolated Worktree closes as worktree_ready when Runner completes and does not auto-integrate.
-- [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / waiting_target_clean / recovery / integrated / failed / not_required.
+- [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / project_resync / waiting_target_workspace / recovery / integrated / failed / not_required.
 - [ ] Keep Paused reserved for unfinished resumable Runner execution; all post-execution Git delivery states stay under Closed.
 - [ ] Add Integration details to Task Info Drawer (requested mode, effective mode, target branch, Task run/branch, base/latest SHA, state, attempt, attention reason).
 - [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
