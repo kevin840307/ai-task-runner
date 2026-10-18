@@ -167,7 +167,7 @@ document.getElementById('applyYamlPlan').onclick=()=>{
 
 // Ensure Task Details always refreshes the canonical plan surfaces after older handlers finish.
 const canonicalPlanOpenTask=openTaskById;
-openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t);document.getElementById('drawerItemsTab').hidden=true}};
+openTaskById=function(id){canonicalPlanOpenTask(id);const t=taskMap[id];if(t){setPlanDraftForTask(t);renderDrawerPlan(t)}};
 
 function persistCurrentPresetFromTaskMap(){
   if(!taskPresets[currentPreset])return;
