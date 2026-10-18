@@ -51,7 +51,7 @@ SYSTEM_COMMANDS = (
 )
 
 
-def runner_capabilities(studio_files: dict[str, Any]) -> dict[str, Any]:
+def system_capabilities(studio_files: dict[str, Any]) -> dict[str, Any]:
     values = [dict(item) for item in SYSTEM_COMMANDS]
     prompts = studio_files.get("prompts")
     if isinstance(prompts, list):
