@@ -1,7 +1,7 @@
 AI Task Runner — Chat / Task / Workspace 整體待辦
 ================================================
 
-版本日期：2026-10-17
+版本日期：2026-10-18
 目標分支：feature/ui
 範圍：產品 UI、Chat API、Agent Adapter、TaskDraft、Runner 整合、Worktree、Merge、測試與 24H 穩定性。
 
@@ -19,8 +19,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Chat 不能因一般對話而偷偷建立或啟動 Runner Task。
 [ ] UI、CLI、YAML、API、Dry Run 必須共用同一份核心契約，不可各自實作第二套排程或復原邏輯。
 [ ] Task Draft 是暫存規劃資料，不是已建立 Task，也不能帶入假 Runtime / 假執行結果。
-[ ] 建立 Task 後一律進入 New / idle；不得自動 Run。
-[ ] Main workspace 永遠保留；Worktree 是可選的隔離策略，不是另一套 Runner。
+[ ] 一般 TaskDraft / Create Task 建立後進入 New / idle；只有使用者明確輸入 @goal 時，才允許以單一明確動作 Create + Run，且必須沿用同一 Runner action contract。
+[ ] Main workspace 永遠保留；Worktree 是可選的隔離策略，不是另一套 Runner。Task-level Auto / Main / Worktree 必須共用同一 Workspace resolver；Global Auto workspace policy 只決定 Auto 的解讀。
 [ ] Task 完成不代表自動 Merge。Git 整合是使用者明確執行的另一個動作。
 [ ] 無法使用的按鈕必須 disabled 並說明原因；Backend 仍要再次驗證，不能只依賴 UI。
 [ ] 避免 Dialog 疊 Dialog、俄羅斯娃娃式流程與重複資料副本。
@@ -32,7 +32,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 下列項目在 feature/ui prototype 中已有 Mock 實作；仍需實際開啟 HTML 操作驗證，不能視為正式功能完成。
 
-[x] Chat 有自訂 Agent / Model / Mode Picker；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
+[x] Chat 控制已收斂：Mode 保留在 Composer 快速切換；Workflow / Agent / Model 收進 Chat 設定；切換 Agent 會更新 Mock model、mode 與 slash capability 清單。
 [x] 輸入框以 @ 顯示 Runner 系統指令，以 / 顯示目前 Agent 的 Mock Skills / Commands。
 [x] @task 隨機產生單筆 Task 或多筆 Task List；@task-single 強制單筆；@task-list 至少兩筆。
 [x] Chat 顯示精簡 TaskDraft 預覽，提供 Edit / Create Task / Dismiss。
@@ -42,7 +42,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Ask Mock 支援多個問題、選項題、文字題、Other 自訂文字、Next 與最後 Submit。
 [x] Ask 的 Extra context 為選填；空白可以直接 Next / Submit，不阻擋流程。
 [x] 移除專用 @task 按鈕；透過 @ 自動提示發現與插入 @task / @task-single / @task-list。
-[x] Ask 以互動卡片嵌入 Chat 訊息流；長選項清單可獨立捲動，並用大量選項測試。
+[x] Ask 以互動卡片嵌入 Chat 訊息流；Ask 本身不再額外套內層卷軸，由 Chat 訊息區統一捲動。
 [x] 一般 Mock Chat 可隨機觸發 Ask；Ask mock 按鈕可強制觸發。
 [x] 有 Mock backend error 與 invalid TaskDraft 的測試路徑。
 [x] Chat-origin Task Editor 與 Task List 使用 viewport overlay，不應改變 Chat 主區域排版。
@@ -55,6 +55,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
 [ ] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
 [x] Mock 功能入口可透過 @ 自動提示與 Ask mock 入口發現，不必猜特殊指令。
+[x] 新增 @goal <spec> 快速執行：明確 Create + Run，建立後直接出現在 Tasks / Ongoing，並使用目前 Project 的 Workflow 設定。
+[x] 左側 sidebar 底部新增 Global Settings；Execution 提供 Auto workspace policy：Busy→Worktree / Always Main / Always Worktree。
+[x] Settings → Interface 收納 Theme / Language；移除左上獨立 themeBtn。Theme / Language 為全域偏好。
+[x] Agent / Model / Mode / Workflow 改為 Project-level preference；同 Project 的多個 Chat session 共用，切換 Project 載入各自設定並在 Prototype 以 localStorage 保存。
 
 
 2. Project 與 Chat 導覽
@@ -63,12 +67,29 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
 [ ] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
 [ ] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
-[ ] 每個 Project 可以有多個獨立 Chat session；切換 session 不混用訊息、Queue、Ask、Agent / Model / Mode 設定。
+[ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
 [ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
 [ ] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
 [ ] Chat history 與 Task runtime history 分開儲存與顯示。
+
+
+2.1 Global Settings
+-------------------
+
+[x] Global Settings 固定在左側 sidebar 最底部，不跟隨 Project 切換，也不藏在 Chat 專屬設定裡。
+[x] Execution → Auto workspace policy 提供：
+    - Busy project → Worktree
+    - Always Main
+    - Always Worktree
+[x] Task-level Main / Worktree 明確 override Global Auto policy；只有 Task-level Auto 讀取 Global policy。
+[x] Settings → Interface 集中 Theme / Language；移除左上獨立 themeBtn。
+[x] Theme 支援 System / Light / Dark，Prototype 立即套用並保存。
+[x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
+[ ] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
+[ ] 正式版設定 schema 需可版本化、驗證、migration，UI / CLI / API 讀同一份設定。
+[ ] Browser 驗證 Settings section 切換、重新整理保存、System theme 跟隨 OS、Dark theme 可讀性與 Project 切換不影響 Global preference。
 
 
 3. Composer 與指令自動提示
@@ -84,17 +105,20 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 提示清單顯示名稱、描述、來源與啟用狀態；停用或無權限的能力不應被列為可執行項目。
 [ ] 切換 Agent 後立即更新 / 清單，不沿用上一個 Agent 的結果。
 [ ] Prototype Mock 可以使用 Mock 清單；正式版不能把安裝的 Skills 寫死在前端。
-[ ] @task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
+[ ] @goal、@task、@task-single、@task-list 必須同時出現在 @ 指令提示中。
 [x] 顯示 Queue 的容易使用入口；可將目前輸入直接加入 Queue，不需先傳送。
 [x] Chat Composer 提供 Ask mock 明確入口，方便測試多問題流程。
 
 
-4. Agent / Model / Mode Picker
+4. Project Chat Settings：Agent / Model / Mode / Workflow
 ------------------------------
 
-[ ] 保留自訂 Picker，不顯示瀏覽器原生下拉的視覺。
-[ ] Agent / Model / Mode 觸發器要有一致的尺寸、主副文字、選取狀態、Hover、Focus、鍵盤操作與適當的寬度。
-[ ] Picker 使用 viewport 定位；不可因為打開選單而撐開、縮窄或重新排版 Chat。
+[ ] Agent / Model / Mode / Workflow 的正式資料來源由 AgentAdapter / Backend 提供，不由前端硬編碼。
+[x] Prototype 將 Workflow / Agent / Model 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
+[ ] Chat 設定浮層不可撐開、縮窄或重新排版 Chat；Mode 快速選擇也要維持 compact。
+[ ] Agent / Model / Mode / Workflow 的選擇以 Project 為 scope；建立或切換 Chat session 不重設 Project preference。
+[ ] Project 切換後立即載入該 Project 自己的 Agent / Model / Mode / Workflow，Slash / Ask capability 也同步刷新。
+[ ] Chat Settings 使用 viewport 定位；不可因為打開設定而撐開、縮窄或重新排版 Chat。
 [ ] Agent 變更後重新讀取 Model、Mode、Slash Commands、Ask 能力與 Agent 相關設定。
 [ ] Model 清單正式版來自目前 Agent 的原生 Model registry，不可將 Mock model 寫死為正式資料。
 [ ] UI 提供 Read / Auto / YOLO 三種產品層級模式，但它們不是假設所有 Agent 的原生模式完全相同。
@@ -172,7 +196,21 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
 
 
-8. @task / @task-single / @task-list 與 TaskDraft
+8. @goal 快速執行
+----------------
+
+[x] Prototype 支援 @goal <spec>；這是明確的 Runner action，不屬於一般 Chat intent inference。
+[x] @goal 直接建立一筆 Task 並啟動 Runner；Board lifecycle 立即為 Ongoing，runtime 為 Running，因此 Tasks 頁立刻可見。
+[x] @goal 使用目前 Project 保存的 Workflow；沒有設定時 fallback ralphy_ai_validate.yaml。
+[x] @goal 的 Workspace=Auto 使用全域 Auto workspace policy 與共用 resolveTaskWorkspace，不另外寫一套 busy/worktree 判斷。
+[x] 若選定 Workflow 需要額外 File Validator，而 Quick Goal 缺少必要輸入，Prototype fail closed 並提示改用 @task / Task Editor。
+[ ] 正式版 @goal 必須是 Backend 的 atomic/idempotent「create then run」命令或等價 transaction；不得讓 UI 先直接寫 Task store 再自己改 runtime。
+[ ] @goal 建立成功但 Run 啟動失敗時，要有明確 durable 狀態與 Retry/Resume 語義，不得留下 UI 假 Running。
+[ ] 測試 @goal 空 spec、重複送出、雙擊、Workflow 不存在、File Validator 必填、Main busy + 三種 Global Auto policy。
+[ ] @goal 與 @task 的責任保持分離：@goal = 快速交付目標並執行；@task = 先產生 Draft / Review / Edit / Create。
+
+
+9. @task / @task-single / @task-list 與 TaskDraft
 -----------------------------------------------
 
 [ ] 只有明確的 Runner 指令才可建立 TaskDraft；一般訊息提到 task / run / 建立任務不得觸發。
@@ -203,7 +241,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
 
 
-9. Task、Task List、狀態與編輯政策
+10. Task、Task List、狀態與編輯政策
 ---------------------------------
 
 [ ] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
@@ -223,10 +261,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] UI 不得在不同入口建立重複的 Task Editor / Task List renderer。
 
 
-10. Workspace / Worktree
+11. Workspace / Worktree
 ------------------------
 
 [ ] Workspace policy 支援 Auto / Main / Worktree。
+[x] Prototype 的 Auto 已改成讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
+[ ] 正式版 Global Auto policy 至少支援 busy→worktree / main-only / always-worktree，並由同一 Backend resolver 決定。
+[ ] main-only 且 Main busy 時必須阻擋 Run；不可偷偷建立 Worktree。
+[ ] always-worktree 時，即使 Main idle，Auto 也應建立 Worktree。
 [ ] Main workspace 永遠可選；若同一路徑已有另一個 Task 在執行，禁止同一路徑第二個 Task 同時執行。
 [ ] Auto：Main 可安全使用時走 Main；Main 被其他 Task 占用時依策略建立 Worktree。
 [ ] Worktree 必須有醒目的 WORKTREE badge / banner、Branch、Execution Path、隔離提示；不可只藏在 Info 欄位。
@@ -267,7 +309,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
     - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
     - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
-    - Agent / Model / Mode 能力與目前選擇
+    - Project-level Agent / Model / Mode / Workflow capability 與目前選擇
     - 取得 Agent commands / Skills / permission / Ask capability
     - Queue list / enqueue / edit / delete / reorder（若產品允許排序）
     - Ask request event / answer submit / cancel
@@ -285,7 +327,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] API contract 要有 unit / integration test 與最小可讀文件；UI Mock 與正式 API 共用 schema。
 
 
-13. Agent Adapter
+14. Agent Adapter
 -----------------
 
 [ ] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
@@ -303,7 +345,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
 
 
-14. Runner 必要變更
+15. Runner 必要變更
 -------------------
 
 [ ] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
@@ -313,7 +355,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
 [ ] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
 [ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
-[ ] 建立後只進 New / idle；Run 是另外一個明確動作。
+[ ] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
 [ ] 同一路徑只能有一個 Task 同時處於執行中；檢查必須在 Backend / Runner，不可只做 UI disabled。
 [ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
 [ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
@@ -329,13 +371,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
 
 
-15. 測試策略與驗收
+16. 測試策略與驗收
 -----------------
 
 [ ] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
 [ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
 [ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
-[ ] Browser 測試：Project 點擊進 Chat、Agent/Model/Mode Picker、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+[ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+[ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Workflow；切換同 Project 的 Chat session 不改變這四項設定。
+[ ] Browser 測試：Global Settings 的 Execution / Interface、Theme / Language persistence、Auto workspace policy 三種模式。
 [ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
 [ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
@@ -353,10 +397,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 24H soak 排在單元、整合、Browser、故障恢復測試之後；只有實際跑完才能宣稱 24H 驗證完成。
 
 
-16. 建議實作順序
+17. 建議實作順序
 -----------------
 
-[ ] 第 1 階段：穩定 Prototype UI，修正 overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
+[ ] 第 1 階段：穩定 Prototype UI，修正 Global Settings、Project-level Chat settings、@goal、overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
 [ ] 第 2 階段：確立共用 Chat API / schema / streaming events 與 AgentAdapter 介面。
 [ ] 第 3 階段：實作 Qwen Code / OpenCode 的 capability、Model、Mode、Slash、Ask 與 Queue adapter。
 [ ] 第 4 階段：實作固定 Prompt 的 generate-task service、TaskDraft schema、驗證與 idempotent Create。
@@ -364,10 +408,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 第 6 階段：完成 Worktree resolver、Workspace Results、Merge preflight、Merge 與 Merge Chat handoff。
 [ ] 第 7 階段：補齊 unit / API / Browser / Agent live regression 與故障恢復測試。
 [ ] 第 8 階段：完成長時間 soak；修復所有發現的 race、orphan process、重複建立與恢復問題。
-[ ] 每階段完成後更新此檔、根目錄 future.txt、必要的 AGENTS / DevFollow / 文件與測試；不以單純打勾取代驗證。
+[ ] Prototype 打樣期間只改 feature/；每階段完成後更新 feature/todo.txt 與 feature/future.txt。進入正式實作時再同步根目錄 future.txt、AGENTS / DevFollow、正式文件與測試。
 
 
-17. 完成定義
+18. 完成定義
 ------------
 
 每項功能需同時符合以下條件才可標記完成：
