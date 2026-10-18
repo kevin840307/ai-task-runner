@@ -153,6 +153,35 @@ def _bridge_for(state: UIState):
                         "busy": bool(getattr(state, "_browser_chat_busy", False)),
                         "status": "busy" if getattr(state, "_browser_chat_busy", False) else "idle",
                     }
+                elif path == "/api/chat/system-capabilities":
+                    data = {
+                        "capabilities": [
+                            {
+                                "token": "@goal", "name": "goal", "description": "Run goal",
+                                "kind": "runner_command", "source": "Runner",
+                                "user_invocable": True, "enabled": False,
+                                "permission": "explicit", "availability": "workspace_phase_pending",
+                            },
+                            {
+                                "token": "@task", "name": "task", "description": "Generate TaskDraft",
+                                "kind": "runner_command", "source": "Runner",
+                                "user_invocable": True, "enabled": True,
+                                "permission": "explicit", "availability": "available",
+                            },
+                            {
+                                "token": "@task-single", "name": "task-single", "description": "Generate one TaskDraft item",
+                                "kind": "runner_command", "source": "Runner",
+                                "user_invocable": True, "enabled": True,
+                                "permission": "explicit", "availability": "available",
+                            },
+                            {
+                                "token": "@task-list", "name": "task-list", "description": "Generate TaskDraft list",
+                                "kind": "runner_command", "source": "Runner",
+                                "user_invocable": True, "enabled": True,
+                                "permission": "explicit", "availability": "available",
+                            },
+                        ]
+                    }
                 elif path == "/api/chat/settings-catalog":
                     selected_agent = query.get("agent", ["qwen"])[0] or "qwen"
                     selected_model = query.get("model", [""])[0]
@@ -259,6 +288,36 @@ def _bridge_for(state: UIState):
                     data = state.global_settings.update(body)
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
+                elif path == "/api/chat/task-draft":
+                    mode = str(body.get("mode", "auto"))
+                    count = 2 if mode == "list" else 1
+                    data = {
+                        "draft_id": "draft-" + "a" * 32,
+                        "mode": mode,
+                        "spec": str(body.get("spec", "")),
+                        "duplicate": False,
+                        "draft": {
+                            "schema_version": 1,
+                            "title": "Browser generated draft",
+                            "project": str(body["project"]),
+                            "items": [
+                                {
+                                    "title": f"Draft item {index + 1}",
+                                    "prompt": f"Do browser item {index + 1}",
+                                    "workflow": "workflow.yaml",
+                                    "project": str(body["project"]),
+                                    "workspace": "auto",
+                                }
+                                for index in range(count)
+                            ],
+                        },
+                    }
+                elif path == "/api/tasks/create":
+                    data = state.tasks.create(
+                        Path(body["project"]),
+                        body.get("draft"),
+                        request_id=str(body.get("request_id", "")),
+                    )
                 elif path == "/api/chat/turn":
                     session_id = str(body.get("session_id", ""))
                     message = str(body.get("message", ""))
@@ -671,6 +730,23 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatSettingsPopover").is_visible()
             page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatSettingsPopover").is_hidden()
+
+            page.fill("#projectChatInput", "@task-l")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            assert page.locator("#projectChatSuggestTitle").inner_text() == "Runner Commands / Prompts"
+            assert page.locator("#projectChatSuggestList .project-chat-suggest-item").count() == 1
+            page.keyboard.press("Tab")
+            assert page.locator("#projectChatInput").input_value() == "@task-list "
+            page.fill("#projectChatInput", "@task-list browser plan")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
+            assert page.locator(".project-chat-task-draft").get_by_text("Browser generated draft").is_visible()
+            assert page.locator(".project-chat-task-draft-item").count() == 2
+            assert state.tasks.list(root)["tasks"] == []
+            page.get_by_role("button", name="Create Task", exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
+            assert len(state.tasks.list(root)["tasks"]) == 1
+            assert state.tasks.list(root)["tasks"][0]["status"] == "new"
 
             page.fill("#projectChatInput", "/re")
             page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
