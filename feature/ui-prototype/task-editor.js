@@ -993,6 +993,17 @@ taskCardHtml=(function(base){return function(t){
 
 // --- Simplified Task editor: one vertical flow, advanced prompt sources on demand ---
 function simpleModeOptions(value,items){return items.map(([k,l])=>`<option value="${k}" ${value===k?'selected':''}>${l}</option>`).join('')}
+function openPromptsFromTaskEditor(){
+  const go=()=>{
+    if(typeof closeTaskDrawerShell==='function')closeTaskDrawerShell({force:true,restoreFocus:false});
+    else closeModal('newTaskModal');
+    showView('prompts');showToast('Prompt assets are managed in Prompts');
+  };
+  if(typeof newTaskListDraft!=='undefined'&&newTaskListDraft&&typeof requestDiscardNewTaskListDraft==='function'){
+    requestDiscardNewTaskListDraft(go);return;
+  }
+  go();
+}
 function newTaskPromptBodySimple(){
   if(newTaskDraft.goalMode==='file')return `<div class="pathrow"><input id="taskGoalFile" value="${escapeAttr(newTaskDraft.goalFile)}" placeholder="Prompt / goal file path"><button class="mini-btn" type="button" id="taskPickGoal">Choose file</button></div>`;
   if(newTaskDraft.goalMode==='asset')return `<div class="pathrow"><select id="taskGoalAsset">${assetOptions(newTaskDraft.goalAsset)}</select><button class="mini-btn" type="button" data-view-prompts-task>Open Prompts</button></div>`;
@@ -1021,7 +1032,7 @@ renderNewTaskSources=function(){
   document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
   document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
   document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
-  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };
 
@@ -1083,7 +1094,7 @@ renderNewTaskSources=(function(){return function(){
   document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
   document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
   document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
-  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };})();
 
@@ -1415,7 +1426,7 @@ renderNewTaskSources=function(){
   document.getElementById('taskPickGoal')?.addEventListener('click',()=>openPathPicker(-1,'goalFile','goal','task'));
   document.getElementById('taskPickValidator')?.addEventListener('click',()=>openPathPicker(-1,'validator','validator','task'));
   document.getElementById('taskPickAi')?.addEventListener('click',()=>openPathPicker(-1,'aiFile','ai','task'));
-  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=()=>{closeModal('newTaskModal');showView('prompts');showToast('Prompt assets are managed in Prompts')});
+  document.querySelectorAll('[data-view-prompts-task]').forEach(b=>b.onclick=openPromptsFromTaskEditor);
   renderNewTaskWorkspace();
 };
 
