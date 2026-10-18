@@ -351,6 +351,9 @@ def _bridge_for(state: UIState):
                         body.get("draft"),
                     )
                 elif path == "/api/tasks/create":
+                    state._browser_last_task_create_draft = json.loads(
+                        json.dumps(body.get("draft"))
+                    )
                     data = state.tasks.create(
                         Path(body["project"]),
                         body.get("draft"),
@@ -902,6 +905,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
             assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
             assert state.tasks.list(state.repo_root)["tasks"][0]["status"] == "new"
+            assert state._browser_last_task_create_draft["items"][0]["prompt"] == "Edited browser item one"
             assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Edited browser item one"
 
             page.fill("#projectChatInput", "@task-single browser one")
@@ -1177,13 +1181,13 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                 page.locator(f"[data-appearance-option='{appearance}']").click()
                 page.wait_for_function(
                     "(value) => document.documentElement.dataset.appearance === value",
-                    appearance,
+                    arg=appearance,
                 )
                 for palette in ("teal", "blue", "violet", "amber", "rose"):
                     page.locator(f"[data-theme-option='{palette}']").click()
                     page.wait_for_function(
                         "(value) => document.documentElement.dataset.theme === value",
-                        palette,
+                        arg=palette,
                     )
                     tokens = page.evaluate(
                         """() => {
