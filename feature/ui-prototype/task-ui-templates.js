@@ -6,8 +6,7 @@
   const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
   const taskEditor=()=>`
-<div class="modal-overlay" id="newTaskModal" data-task-surface="editor">
-  <div class="modal-card task-create-modal">
+<section class="task-create-modal task-workspace-view" id="newTaskModal" data-task-surface="editor">
     <div class="modal-head"><div><h2 id="taskFormTitle">New task</h2><p id="taskFormHelp">Configure this task only.</p></div><button class="close" data-close-modal="newTaskModal">×</button></div>
     <div class="modal-body">
       <div class="modal-grid task-basics">
@@ -29,8 +28,7 @@
       <div class="state-hint">Task settings belong to this task only. Workflow capabilities decide which validation fields appear.</div>
     </div>
     <div class="modal-foot"><button class="btn" data-close-modal="newTaskModal">Cancel</button><button class="btn primary" id="createTaskConfirm">Create Task</button></div>
-  </div>
-</div>`;
+</section>`;
 
   const taskListWorkspace=()=>`
 <div class="modal-overlay" id="planModal" data-task-surface="list-workspace">
@@ -70,6 +68,6 @@
   }
 
   window.TaskUiTemplates=Object.freeze({taskEditor,taskListWorkspace,sourceCard,emptyTaskList,addTaskFooter});
-  mount('taskEditorRoot',taskEditor());
   mount('taskListWorkspaceRoot',taskListWorkspace());
+  mount('planSubviewMount',taskEditor());
 })();
