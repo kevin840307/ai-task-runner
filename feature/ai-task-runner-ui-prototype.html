@@ -56,40 +56,40 @@
         <div class="title"><h1 id="chatProjectTitle">ai-task-runner</h1><p id="chatProjectLine">C:\Users\kevin\ai-task-runner · Project Chat · 不建立 Runner Task</p></div>
         <div class="actions chat-session-actions">
           <select class="mockselect session-select" id="chatPreset"></select>
-          <button class="btn" id="renameChat">Rename</button>
-          <button class="btn primary" id="newChat">+ New Chat</button>
+          <button class="btn" id="renameChat" data-i18n="chat.rename">Rename</button>
+          <button class="btn primary" id="newChat" data-i18n="chat.newChat">+ New Chat</button>
         </div>
       </header>
       <div class="chatbody">
         <div class="messages" id="chatMessages"></div>
         <div class="composerwrap">
           <div class="composer-suggest" id="composerSuggest" hidden>
-            <div class="composer-suggest-head"><strong id="composerSuggestTitle">Commands</strong><span id="composerSuggestHint">Type to filter</span></div>
+            <div class="composer-suggest-head"><strong id="composerSuggestTitle" data-i18n="chat.commands">Commands</strong><span id="composerSuggestHint" data-i18n="chat.typeToFilter">Type to filter</span></div>
             <div class="composer-suggest-list" id="composerSuggestList"></div>
           </div>
           <div class="composer-settings-popover" id="composerSettingsPopover" hidden>
-            <div class="composer-settings-head"><div><span>PROJECT</span><strong>Run settings</strong></div><button type="button" id="composerSettingsClose" aria-label="Close settings">×</button></div>
+            <div class="composer-settings-head"><div><span data-i18n="chat.project">PROJECT</span><strong data-i18n="chat.runSettings">Run settings</strong></div><button type="button" id="composerSettingsClose" aria-label="Close settings">×</button></div>
             <div class="composer-settings-body">
-              <label class="composer-settings-row workflow-setting"><span><strong>Workflow</strong><small>Used by @goal and new Chat goals</small></span><select id="chatWorkflow"><option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option><option value="mixed.yaml">mixed</option><option value="file.yaml">file</option><option value="dynamic_handoff.yaml">dynamic_handoff</option></select></label>
-              <label class="composer-settings-row"><span><strong>Agent</strong><small>Saved for this Project</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
-              <label class="composer-settings-row"><span><strong>Model</strong><small>Saved for this Project</small></span><select id="chatModel"></select></label>
+              <label class="composer-settings-row workflow-setting"><span><strong data-i18n="chat.workflow">Workflow</strong><small data-i18n="chat.workflowHelp">Used by @goal and new Chat goals</small></span><select id="chatWorkflow"><option value="ralphy_ai_validate.yaml">ralphy_ai_validate</option><option value="mixed.yaml">mixed</option><option value="file.yaml">file</option><option value="dynamic_handoff.yaml">dynamic_handoff</option></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.agent">Agent</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatAgent"><option value="qwen">Qwen Code</option><option value="opencode">OpenCode</option></select></label>
+              <label class="composer-settings-row"><span><strong data-i18n="chat.model">Model</strong><small data-i18n="chat.savedProject">Saved for this Project</small></span><select id="chatModel"></select></label>
             </div>
           </div>
-          <div class="composer-turn-status" id="composerTurnStatus" hidden>Agent 正在處理；送出訊息會自動加入 Queue</div>
+          <div class="composer-turn-status" id="composerTurnStatus" hidden data-i18n="chat.turnRunning">Agent 正在處理；送出訊息會自動加入 Queue</div>
           <div class="composer-queue" id="composerQueue" hidden>
-            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> pending</strong></div><small>Agent 忙碌時，送出會自動排隊</small></div>
+            <div class="composer-queue-head"><div><span class="queue-badge">QUEUE</span><strong><span id="composerQueueCount">0</span> <span data-i18n="chat.pending">pending</span></strong></div><small data-i18n="chat.queueHint">Agent 忙碌時，送出會自動排隊</small></div>
             <div class="composer-queue-list" id="composerQueueList"></div>
           </div>
           <div class="composer">
-            <textarea id="chatInput" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
+            <textarea id="chatInput" data-i18n-placeholder="chat.inputPlaceholder" placeholder="傳訊息給 AI…  @ = Runner 指令 · / = Agent Skill / Command"></textarea>
             <div class="composerfoot">
               <div class="composer-controls">
-                <button class="composer-settings-trigger" id="chatSettings" type="button" aria-haspopup="dialog" aria-expanded="false" title="Chat run settings">⚙</button>
-                <label class="composer-mode-quick" title="Permission / approval mode"><span>Mode</span><select id="chatMode"></select></label>
-                <button class="composer-mini-action composer-new-task" id="chatNewTask" type="button" title="Create a Task or Task List for this Project">+ New Task</button>
-                <button class="composer-mini-action" id="chatAsk" type="button" title="Force a mock AI clarification flow">Ask mock</button>
+                <button class="composer-settings-trigger" id="chatSettings" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="chat.settingsTitle" title="Chat run settings">⚙</button>
+                <label class="composer-mode-quick" data-i18n-title="chat.modeTitle" title="Permission / approval mode"><span data-i18n="chat.mode">Mode</span><select id="chatMode"></select></label>
+                <button class="composer-mini-action composer-new-task" id="chatNewTask" type="button" data-i18n="chat.newTask" data-i18n-title="chat.newTaskTitle" title="Create a Task or Task List for this Project">+ New Task</button>
+                <button class="composer-mini-action" id="chatAsk" type="button" data-i18n="chat.askMock" data-i18n-title="chat.askMockTitle" title="Force a mock AI clarification flow">Ask mock</button>
               </div>
-              <button class="btn primary" id="chatSend">傳送</button>
+              <button class="btn primary" id="chatSend" data-i18n="chat.send">傳送</button>
             </div>
           </div>
         </div>
@@ -173,8 +173,8 @@
           <button class="btn" id="planAddTask" type="button">+ Add task</button>
           <button class="btn ghost" id="planAddExisting" type="button">Move existing</button>
           <button class="btn" id="planEditYaml" type="button">Edit YAML</button>
-          <button class="btn" id="cancelTaskListDraft" type="button" hidden>Cancel</button>
-          <button class="btn primary" id="confirmTaskListDraft" type="button" hidden>Create Task List</button>
+          <button class="btn" id="cancelTaskListDraft" type="button" hidden data-i18n="taskListDraft.cancel">Cancel</button>
+          <button class="btn primary" id="confirmTaskListDraft" type="button" hidden data-i18n="taskListDraft.create">Create Task List</button>
         </div>
         <button class="drawer-expand" id="drawerExpand" type="button" title="Expand task workspace" aria-label="Expand task workspace" aria-pressed="false">⤢</button>
         <button class="close" id="closeDrawer">×</button>
@@ -430,11 +430,11 @@
 <div class="create-type-menu" id="createTypeMenu" hidden>
   <button type="button" data-create-type="task">
     <span class="create-type-icon">＋</span>
-    <span><strong>Task</strong><small>Create one Task. Opens the shared Task Editor.</small></span>
+    <span><strong data-i18n="task.createTask">Task</strong><small data-i18n="task.createTaskDesc">Create one Task. Opens the shared Task Editor.</small></span>
   </button>
   <button type="button" data-create-type="list">
     <span class="create-type-icon">≡</span>
-    <span><strong>Task List</strong><small>Create a Task List workspace, then add Tasks inside it.</small></span>
+    <span><strong data-i18n="task.createList">Task List</strong><small data-i18n="task.createListDesc">Create a Task List workspace, then add Tasks inside it.</small></span>
   </button>
 </div>
 
