@@ -365,7 +365,7 @@ def _bridge_for(state: UIState):
                         Path(body["project"]),
                         session_id,
                         request_id=str(body.get("request_id", "")),
-                        turn_id="demo-" + str(body.get("request_id", "")),
+                        turn_id=str(body.get("request_id", "")),
                         questions=demo_questions(),
                     )
                 elif path == "/api/chat/turn":
