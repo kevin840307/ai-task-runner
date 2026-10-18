@@ -182,7 +182,13 @@ Prototype composition:
 - Task List -> Add task opens the same TaskEditor as standalone Task creation; only return context differs.
 - Move existing is a secondary chooser, not a second Create Task path.
 - Avoid nested large dialogs. A child Task editor inside Task List is a subview of the same right-side workspace.
-- Prototype uses one visual Task Workspace Shell: the legacy planModal id is the shell; newTaskModal is only an Editor View inside it, not another overlay.
+- Prototype uses one visual Task Drawer Shell: #taskOverlay owns the only Drawer and drawerhead.
+- The legacy planModal id is only a List/Subview route container inside that Drawer; it is not a modal or overlay.
+- newTaskModal is only the Editor route inside the same Drawer.
+- Task Info, Task List, Task Editor and YAML all reuse one DrawerHeader; route pages never own another full header.
+- DrawerHeader owns Back / Title / Meta / route actions / Expand / Close.
+- Switching routes changes header state + ViewHost content only; it must not close/reopen the Drawer.
+- In React this maps to TaskDrawerShell -> DrawerHeader + TaskDrawerRouteHost; page components return content/actions metadata rather than duplicate header JSX.
 - Standalone Task creation, Chat Draft editing and Task List child editing all enter that same Editor View.
 - Switching List -> Editor -> List must keep the exact same shell geometry so the user perceives navigation, not another modal opening.
 - YAML is another view of the same shell; full-size nested overlays are prohibited.
@@ -227,6 +233,7 @@ Initial render / hydration:
 
 React rules:
 - One component implementation per responsibility; no Chat-only or Board-only duplicate Task Editor JSX.
+- TaskDrawerShell owns one DrawerHeader; TaskInfoPage / TaskListPage / TaskEditorPage / TaskYamlPage must not render their own shell headers.
 - Entry points pass mode / ownerId / itemIndex / returnTarget / project context as props or router state.
 - Canonical items[] remains the data source for Task List rows, YAML, Chat Draft editing and execution.
 - UI composition must not create another state machine or another Task model.
