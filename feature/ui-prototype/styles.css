@@ -1010,3 +1010,77 @@ html[data-appearance] #planModal .field-optional{color:var(--muted)}
   #newTaskModal .task-workflow-field,
   #newTaskModal .task-title-field{grid-column:1!important}
 }
+
+
+/* Stable Task source mode geometry */
+#newTaskModal .task-primary-source>.source-head,
+#newTaskModal .task-ai-source>.source-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  align-items:start;
+  gap:6px;
+  min-height:68px
+}
+#newTaskModal .task-primary-source>.source-head>div:first-child,
+#newTaskModal .task-ai-source>.source-head>div:first-child{min-width:0}
+#newTaskModal .task-primary-source .source-tabs,
+#newTaskModal .task-ai-source .source-tabs{
+  display:grid;
+  width:100%;
+  min-width:0;
+  gap:3px;
+  box-sizing:border-box
+}
+#newTaskModal .task-primary-source .source-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+#newTaskModal .task-ai-source .source-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
+#newTaskModal .task-primary-source .source-tabs button,
+#newTaskModal .task-ai-source .source-tabs button{
+  width:100%;
+  min-width:0;
+  padding:0 5px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+#newTaskModal .task-primary-source>.source-body,
+#newTaskModal .task-ai-source>.source-body{
+  display:block;
+  min-width:0
+}
+#newTaskModal .task-source-mode-panel{
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  gap:6px
+}
+#newTaskModal .task-primary-source .task-source-mode-panel{min-height:118px}
+#newTaskModal .task-ai-source .task-source-mode-panel{min-height:86px}
+#newTaskModal .task-source-mode-panel>.pathrow,
+#newTaskModal .task-source-mode-panel>.compact-default-value,
+#newTaskModal .task-source-mode-panel>textarea{
+  width:100%;
+  box-sizing:border-box
+}
+#newTaskModal .task-primary-source .task-source-mode-panel>textarea{
+  min-height:118px!important;
+  height:118px
+}
+#newTaskModal .task-ai-source .task-source-mode-panel>textarea{
+  min-height:86px!important;
+  height:86px
+}
+#newTaskModal .task-source-mode-panel>.pathrow input,
+#newTaskModal .task-source-mode-panel>.pathrow select{min-width:0}
+#newTaskModal .task-source-mode-panel>.pathrow .mini-btn{
+  min-width:86px;
+  justify-content:center
+}
+#newTaskModal .task-source-mode-panel[data-source-mode="default"] .compact-default-value{
+  min-height:34px
+}
+@media(max-width:820px){
+  #newTaskModal .task-primary-source>.source-head,
+  #newTaskModal .task-ai-source>.source-head{min-height:0}
+}
