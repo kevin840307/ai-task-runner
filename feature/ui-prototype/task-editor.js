@@ -1558,8 +1558,9 @@ function syncTaskListDraftActions(active){
   ['planOpenWorkflow','planAddTask','planAddExisting','planEditYaml'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.hidden=!!active;
   });
-  const cancel=document.getElementById('cancelTaskListDraft'),create=document.getElementById('confirmTaskListDraft');
+  const cancel=document.getElementById('cancelTaskListDraft'),create=document.getElementById('confirmTaskListDraft'),footerBack=document.getElementById('planPageBack');
   if(cancel)cancel.hidden=!active;
+  if(footerBack)footerBack.textContent=uiText(active?'taskListDraft.cancel':'taskList.back');
   if(create){
     create.hidden=!active;
     if(active){delete create.dataset.submitting;create.textContent=uiText('taskListDraft.create')}
@@ -1571,23 +1572,29 @@ function taskListDraftHasChanges(){
     ||String(newTaskListDraft.title||'').trim()!==String(newTaskListDraft._initialTitle||'').trim()
     ||newTaskListDraft.project!==newTaskListDraft._initialProject;
 }
-let taskListDraftDiscardAction=null;
+let taskListDraftDiscardAction=null,taskListDraftDiscardReturnFocus=null;
+function restoreTaskListDraftDiscardFocus(){
+  const target=taskListDraftDiscardReturnFocus;taskListDraftDiscardReturnFocus=null;
+  if(target?.isConnected)setTimeout(()=>target.focus({preventScroll:true}),0);
+}
 function requestDiscardNewTaskListDraft(onDiscard){
   if(!newTaskListDraft){onDiscard?.();return true}
   if(!taskListDraftHasChanges()){discardNewTaskListDraft({close:false});onDiscard?.();return true}
   taskListDraftDiscardAction=typeof onDiscard==='function'?onDiscard:null;
+  taskListDraftDiscardReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
   openModal('taskListDraftDiscardModal');
   setTimeout(()=>document.getElementById('confirmDiscardTaskListDraft')?.focus({preventScroll:true}),0);
   return false;
 }
 document.getElementById('confirmDiscardTaskListDraft')?.addEventListener('click',()=>{
-  const action=taskListDraftDiscardAction;taskListDraftDiscardAction=null;
+  const action=taskListDraftDiscardAction;taskListDraftDiscardAction=null;taskListDraftDiscardReturnFocus=null;
   discardNewTaskListDraft({close:false});closeModal('taskListDraftDiscardModal');action?.();
 });
-document.querySelectorAll('[data-close-modal="taskListDraftDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskListDraftDiscardAction=null}));
+document.querySelectorAll('[data-close-modal="taskListDraftDiscardModal"]').forEach(b=>b.addEventListener('click',()=>{taskListDraftDiscardAction=null;restoreTaskListDraftDiscardFocus()}));
+document.getElementById('taskListDraftDiscardModal')?.addEventListener('click',e=>{if(e.target===e.currentTarget){taskListDraftDiscardAction=null;restoreTaskListDraftDiscardFocus()}});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape'||!document.getElementById('taskListDraftDiscardModal')?.classList.contains('open'))return;
-  e.preventDefault();e.stopImmediatePropagation();taskListDraftDiscardAction=null;closeModal('taskListDraftDiscardModal');
+  e.preventDefault();e.stopImmediatePropagation();taskListDraftDiscardAction=null;closeModal('taskListDraftDiscardModal');restoreTaskListDraftDiscardFocus();
 });
 function moveNewTaskListDraftItem(from,to){
   const items=newTaskListDraft?.items;if(!items||from===to||from<0||to<0||from>=items.length||to>=items.length)return;
