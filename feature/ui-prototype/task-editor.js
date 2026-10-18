@@ -473,7 +473,7 @@ syncChatSessionSelect=function(){
   select.innerHTML=sessions.map(x=>`<option value="${x.id}" ${x.id===id?'selected':''}>${escapeHtml(x.name)}</option>`).join('');
 };
 const mockSystemPrompts=[
-  {token:'@run',title:'Run now',description:'Create one Task and start immediately with the Workflow selected in Chat settings.',source:'Runner'},
+  {token:'@goal',title:'Run goal',description:'Create one Task in Ongoing and start immediately with the Workflow selected in Chat settings.',source:'Runner'},
   {token:'@task',title:'AI decides Task or Task List',description:'Create one Task or multiple ordered Tasks; Mock randomly chooses for testing.',source:'Runner'},
   {token:'@task-single',title:'Create one Task',description:'Force the generated TaskDraft to contain exactly one Task.',source:'Runner'},
   {token:'@task-list',title:'Create Task List',description:'Force the generated TaskDraft to contain two or more ordered Tasks.',source:'Runner'},
@@ -624,8 +624,8 @@ function drainChatQueue(session=activeChat()){
   startMockChatTurn(session,next.text,{fromQueue:true});
 }
 function processMockChatPrompt(session,text,projectKey){
-  const runCommand=chatRunCommand(text),taskCommand=chatTaskCommand(text),agentCommand=chatAgentCommand(text),systemCommand=chatSystemCommand(text);
-  if(runCommand.matched)runChatTaskNow(runCommand.spec,session,projectKey);
+  const goalCommand=chatGoalCommand(text),taskCommand=chatTaskCommand(text),agentCommand=chatAgentCommand(text),systemCommand=chatSystemCommand(text);
+  if(goalCommand.matched)runChatGoal(goalCommand.spec,session,projectKey);
   else if(taskCommand.matched)generateChatTaskDraft(taskCommand.spec,taskCommand.mode,session,projectKey);
   else if(agentCommand.matched)mockInvokeAgentCommand(session,agentCommand);
   else if(systemCommand.matched)mockInvokeSystemPrompt(session,systemCommand,projectKey);
@@ -763,8 +763,8 @@ function renderComposerSuggestions(){
   pop.hidden=false;resizeChatComposer();
 }
 
-function chatRunCommand(text){
-  const match=String(text||'').match(/^\s*@run(?:\s+([\s\S]*?))?\s*$/i);
+function chatGoalCommand(text){
+  const match=String(text||'').match(/^\s*@goal(?:\s+([\s\S]*?))?\s*$/i);
   return match?{matched:true,spec:String(match[1]||'').trim()}:{matched:false,spec:''};
 }
 function chatTaskCommand(text){
@@ -854,27 +854,27 @@ function renderChatTaskDraft(session,box){
   card.querySelector('[data-chat-draft-dismiss]')?.addEventListener('click',()=>discardChatTaskDraft(session));
   card.querySelector('[data-chat-draft-open]')?.addEventListener('click',()=>{const t=taskMap[draft.createdTaskId];if(!t)return;showView('tasks');openPlanDialog(t.id)});
 }
-function runChatTaskNow(spec,targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
+function runChatGoal(spec,targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
   const session=targetSession,source=String(spec||'').trim();if(!session)return;
-  if(!source){session.messages.push(['assistant','Usage: @run <需求>']);showToast('Usage: @run <需求>');return}
+  if(!source){session.messages.push(['assistant','Usage: @goal <需求>']);showToast('Usage: @run <需求>');return}
   const workflow=chatWorkflowKey(session),caps=workflowCaps(workflow);
   if(caps.file){
-    session.messages.push(['assistant',`Quick Run 未啟動：${workflow} 需要 File Validator。請用 @task 建立後補齊設定，或在 ⚙ 切換可直接執行的 Workflow。`]);
+    session.messages.push(['assistant',`Goal 未啟動：${workflow} 需要 File Validator。請用 @task 建立後補齊設定，或在 ⚙ 切換可直接執行的 Workflow。`]);
     showToast('Selected Workflow needs extra validation input');return;
   }
   const id='T-'+(++taskSequence),resolved=resolveTaskWorkspace(projectKey,`${id}-I1`,'auto');
-  if(!resolved.ok){taskSequence--;session.messages.push(['assistant',`Quick Run failed: ${resolved.reason}`]);showToast(resolved.reason);return}
+  if(!resolved.ok){taskSequence--;session.messages.push(['assistant',`Goal failed: ${resolved.reason}`]);showToast(resolved.reason);return}
   const placeholder={id,project:projectKey};
   const item=planItemDefaults({title:mockTaskDraftTitle(source),prompt:source,goalMode:'inline',project:projectMeta[projectKey]?.path||projectKey,workflow,
     validatorMode:'none',validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:'common/ai_validator.md',
     workspacePolicy:'auto',workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root},placeholder,0);
   item.itemId=`${id}-I1`;
-  const t={id,kind:'task_list',status:'ongoing',title:mockTaskDraftTitle(source),runtime:'running',desc:'Quick Run · running',tags:['1 task','Quick Run'],workflow,project:projectKey,progress:[0,1],elapsed:'0m',stage:'execute',session:'same',goal:source,
+  const t={id,kind:'task_list',status:'ongoing',title:mockTaskDraftTitle(source),runtime:'running',desc:'Goal · Ongoing',tags:['1 task','Goal'],workflow,project:projectKey,progress:[0,1],elapsed:'0m',stage:'execute',session:'same',goal:source,
     items:[item],listItems:[item],promptSource:{goalMode:'inline',prompt:source,goalFile:'',goalAsset:item.goalAsset,validator:'',aiMode:'default',aiPrompt:'',aiFile:'',aiAsset:item.aiAsset},
     workspacePolicy:'auto',workspaceKind:resolved.kind,branch:resolved.branch,executionRoot:resolved.root};
   taskMap[id]=t;persistCurrentPresetFromTaskMap();renderBoardFromMap();
-  session.messages.push(['assistant',`Quick Run started · ${id} · ${workflow}`]);
-  showToast(`Run started · ${workflow.replace(/\.yaml$/,'')}`);
+  session.messages.push(['assistant',`Goal started · ${id} · Tasks · Ongoing · ${workflow}`]);
+  showToast(`Goal started · ${id} · Ongoing`);
 }
 function generateChatTaskDraft(spec,mode='auto',targetSession=activeChat(),projectKey=targetSession?.projectKey||currentProjectKey){
   const session=targetSession;if(!session)return;
