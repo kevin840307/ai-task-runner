@@ -126,7 +126,7 @@ function leaveTaskEditorOverlay(){
     return;
   }
   if(ctx.returnTarget==='chat'){
-    planModalEl.classList.remove('open');taskOverlayEl.classList.remove('open');showView('chat');renderChatSession();return;
+    closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
   }
   if(ctx.returnTarget==='info'){
     closeModal('planModal');if(owner)openTaskById(owner.id);return;
@@ -606,7 +606,7 @@ function handleTaskDrawerBack(){
   workspaceInfoRef=null;clearTaskSelection();
   const t=taskMap[currentTaskId];
   if(taskDrawerListReturnTarget==='chat'||t?._chatDraft){
-    planModalEl.classList.remove('open');taskOverlayEl.classList.remove('open');showView('chat');renderChatSession();return;
+    closeTaskDrawerShell({force:true});showView('chat');renderChatSession();return;
   }
   if(taskDrawerListReturnTarget==='info'&&t){
     planModalEl.classList.remove('open');openTaskById(t.id);return;
@@ -786,7 +786,7 @@ positionTaskContextMenu=function(x,y){
    Future React maps this boundary to TaskEditor + TaskListWorkspace components. */
 window.TaskUi=Object.freeze({
   openEditor(mode,args={}){return loadTaskEditor(mode,args)},
-  openList(ownerId=currentTaskId){return openPlanDialog(ownerId)},
+  openList(ownerId=currentTaskId,options={}){return openPlanDialog(ownerId,options)},
   createList(initialProjectKey=currentProjectKey){return createEmptyTaskListAndOpen(initialProjectKey)},
   addTask(ownerId=currentTaskId,returnTarget=detectTaskEditorReturnTarget()){return createTaskDirectlyInWorkspace(ownerId,returnTarget)}
 });
