@@ -100,7 +100,7 @@ function rememberAiValidatorPrompt(workflow, value) {
 }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, globalSettingsWrite: Promise.resolve(), projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "project-chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -151,13 +151,18 @@ async function loadGlobalSettings() {
   return value;
 }
 async function updateGlobalSettings(patch) {
-  const value = await api("/api/settings", {
-    method: "POST",
-    body: JSON.stringify(patch),
-  });
-  state.globalSettings = value;
-  applyGlobalSettings(value);
-  return value;
+  const write = async () => {
+    const value = await api("/api/settings", {
+      method: "POST",
+      body: JSON.stringify(patch),
+    });
+    state.globalSettings = value;
+    applyGlobalSettings(value);
+    return value;
+  };
+  const pending = state.globalSettingsWrite.then(write, write);
+  state.globalSettingsWrite = pending.then(() => undefined, () => undefined);
+  return pending;
 }
 function renderGlobalSettingsForm() {
   const value = state.globalSettings; if (!value) return;
