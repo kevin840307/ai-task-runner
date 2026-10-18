@@ -5,6 +5,17 @@ from typing import Any
 
 SYSTEM_COMMANDS = (
     {
+        "token": "@ask-demo",
+        "name": "ask-demo",
+        "description": "Open a deterministic clarification card for testing the Ask UX.",
+        "kind": "chat_test_command",
+        "source": "Chat",
+        "user_invocable": True,
+        "enabled": True,
+        "permission": "explicit",
+        "availability": "available",
+    },
+    {
         "token": "@goal",
         "name": "goal",
         "description": "Create one durable Task and run it immediately.",
