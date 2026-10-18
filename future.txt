@@ -1,692 +1,664 @@
 AI Task Runner - Future Direction
 =================================
 
-Rebuilt: 2026-10-17
-Branch: feature/ui
+Updated: 2026-10-18
+Migration baseline: main @ b5239e3a5a3c4fe1f900c443e8d4bbcd300611ca
+UI/UX target reference: feature/ui prototype + 2026-10-18 latest decisions
 
-Purpose
+PURPOSE
 -------
-This is a NEW future.txt rebuilt from the latest product/UI discussions.
-Do NOT copy or inherit the old release/v4 future.txt. That roadmap is considered obsolete.
 
-This file records intended future direction only. It must not become a second runtime contract.
-When an item is implemented, keep AGENTS.md / DevFollow.txt / current runtime contracts authoritative
-and update real tests/docs in the same implementation change.
+This file defines the target product direction for evolving the current main branch.
+It is not a second Runner/runtime contract and it is not a record of prototype completion.
 
-Chinese implementation checklist: `feature/todo.txt` (UI、Chat API、Agent Adapter、Runner、Worktree、Merge、測試與驗收)。
-Use that file to track implementation progress; this roadmap remains the product-direction reference.
+Precedence when sources disagree:
 
+1. current main runtime contracts and proven reliability behavior;
+2. latest decisions in this document and feature/git-worktree-todo.md;
+3. feature/ui prototype behavior/commit history as UI/UX reference;
+4. older future/todo/prototype wording.
 
-CORE PRINCIPLES
----------------
-- Preserve the current UI visual language. Improve the existing product instead of replacing it with
-  an unrelated ChatGPT-style shell.
-- Keep the smallest maintainable architecture. Avoid duplicate stores, state machines, schedulers,
-  recovery engines, Workflow representations, or Git orchestration engines.
-- Runner Core remains authoritative for execution, Stage routing, retry/recovery, resume and runtime truth.
-- UI is a projection/controller over the existing runtime.
-- UI / CLI / YAML / API / Dry Run should converge on the same canonical behavior.
-- Main workspace remains supported permanently.
-- Worktree is optional isolation, not a replacement for Main and not a second Runner.
-- A Task executes and validates work. Git integration is a separate explicit user action.
-- Never auto-merge just because execution finished.
-- 24H unattended reliability remains higher priority than UI cleverness.
-- Remove superseded/legacy paths after replacement coverage exists; do not keep parallel implementations.
-- Unavailable actions are visibly disabled; backend guards remain authoritative.
-- Avoid modal-on-modal / Russian-doll interaction.
+The prototype demonstrates interaction and layout direction only. Production implementation must
+reuse current main owners, APIs and tests instead of copying prototype mocks or reintroducing old contracts.
 
 
-1. PRODUCT / NAVIGATION
-=======================
+CURRENT MAIN BASELINE - KEEP, DO NOT REDO
+=========================================
 
-1.1 Project
------------
-- Project is the primary working context.
-- Clicking a Project in the left sidebar selects that Project AND opens its Project Chat.
-- Project `...` is management only (Rename/Delete/etc.) and must not navigate.
-- Project selectors/dropdowns must show all registered Projects.
-- Project identity/path should remain stable and explicit.
+Runtime
+-------
+- WorkflowRunner remains the composition/entry owner.
+- FlowEngine remains semantic PASS/FAIL/HANDOFF + dynamic child Workflow owner.
+- StageExecutor remains technical retry/session/recovery/timeout/safety owner.
+- RunState/StateStore remain durable runtime truth.
+- Dynamic Handoff remains supported; Discussion/Group Chat remains removed.
+- YAML remains canonical for Workflow definitions.
+- ERROR is technical and is not a graph edge.
+- Existing resume/recovery/process-restart/API transient recovery behavior must not regress.
+- Existing 24H/live/dry-run reliability evidence is the baseline to preserve.
 
-1.2 Tasks page Project filtering
--------------------------------
-- Tasks-page Project filtering is independent from sidebar Project selection.
-- Filtering Tasks must not silently change the selected Project Chat.
-- Multi-project Tasks remain visible when any relevant child Task matches the selected filter.
-- Default presentation should keep Project relevance obvious and avoid unrelated noise.
+Runner API boundary
+-------------------
+- Runner is driven by project_root and task/workflow inputs.
+- CLI/standalone Runner remains independent from future UI workspace/worktree orchestration.
+- Do not make Runner understand UI Task board state, Chat session state, Git branch/worktree state,
+  merge queues, merge failure counters or Project Chat history.
 
-1.3 Workflows / Prompts
------------------------
-- Workflows and Prompts remain reusable assets.
-- Preserve the existing Full Designer / Prompt Editor where practical.
-- Do not make Workflow/Prompt assets look owned by one Task or Chat.
-- YAML remains canonical where it is canonical today.
+Existing runner/workspace.py
+----------------------------
+- runner/workspace.py already owns Runner-side project safety/instruction/read-only helper behavior.
+- It is NOT the future Git-worktree orchestration package.
+- Do not move Git worktree/merge ownership into runner/workspace.py merely because the names are similar.
 
-
-2. NORMAL PROJECT CHAT
-======================
-
-2.1 Chat role
--------------
-- Chat is a normal engineering conversation bound to the selected Project.
-- Chat must not silently start Runner execution.
-- Chat history and Task runtime history are separate concepts.
-- Multiple Chat sessions per Project are supported.
-- Merge Chat creates a NEW Chat session instead of polluting an unrelated existing conversation.
-
-2.2 Composer
-------------
-- Composer starts compact.
-- It grows vertically with user input until a bounded maximum height.
-- After the maximum, the textarea scrolls internally.
-- Message layout must reserve enough bottom space so a tall composer never covers the last message.
-- Programmatic prefill (for example Merge Chat) must resize the composer immediately.
-
-2.3 Composer command discovery
+Current production UI / Studio
 ------------------------------
-- Typing `@` at the beginning of the Composer opens AI Task Runner system-prompt / system-command suggestions.
-- `@task <spec>` is one Runner-owned command in this namespace.
-- Typing `/` at the beginning opens commands/skills exposed by the currently selected Agent.
-- `@` and `/` must remain visually distinct:
-    @ = AI Task Runner capability,
-    / = selected Agent capability.
-- Suggestions should support keyboard navigation, filtering, Enter/Tab accept and Escape close.
-- Selecting a suggestion only inserts the token/command; it must not auto-send.
-- The current Agent must be visible/selectable in Chat so users understand why the `/` list changes.
+- Preserve the current visual language, theme tokens, accessibility baseline and layout conventions.
+- Preserve current Workflow/Prompt asset management and Full Designer.
+- Workflow Studio source remains ui/studio-src; committed built output is generated artifact, not source.
+- Preserve canonical runtime projection and server-side action guards already used by main UI.
+- Preserve current backend/environment diagnostics behavior.
 
-Agent capability discovery:
-- Do NOT hardcode installed Agent skills in production frontend code.
-- Ask the selected Agent/backend adapter for its resolved command/skill capabilities.
-- Preserve each Agent's native discovery/permission semantics instead of scanning arbitrary directories in the browser.
-- OpenCode direction:
-    use its resolved skill/command registry/API (for example the same capability source used by its UI/TUI),
-    respect project/global discovery and per-agent skill permissions.
-- Qwen Code direction:
-    use its SkillManager / slash-command registry (or the live Agent process capability projection),
-    including extension/project skills and disabled-skill filtering.
-- Cache only as a UI projection; refresh when Agent capabilities/config change.
-- Different Agents may return different names, descriptions, source badges and availability.
-- Mock mode may provide deterministic per-Agent lists, but must keep the same capability schema as production.
-
-Suggested capability shape:
-    name/token,
-    description,
-    kind (skill / command / builtin),
-    source,
-    user_invocable,
-    enabled.
-
-2.4 Agent / Model / Mode controls
-----------------------------------
-- Chat must expose the currently selected Agent, Model and permission Mode without hiding them in Settings.
-- Agent / Model / Mode use compact custom picker UI, not visible browser-native select styling.
-- Agent picker should be visually clear; changing Agent refreshes its Model / Mode / slash-command / Ask capabilities.
-- Model list is Agent-owned capability data, not a frontend hardcoded production list.
-- Qwen Code direction:
-    use the same live model registry/picker source behind `/model`,
-    use live SkillManager/slash-command capabilities,
-    preserve native approval modes even if this UI exposes a smaller product-level set.
-- OpenCode direction:
-    use the same configured provider/model list exposed by `/models`,
-    use resolved Agent/skill/command capabilities,
-    preserve per-tool permission semantics.
-
-Product-level Mode UI:
-- Keep the main Chat control simple:
-    Read,
-    Auto,
-    YOLO.
-- These are product profiles, NOT assumptions that every Agent has identical native modes.
-- Adapter maps the selected profile to each Agent:
-    Qwen Read -> native Plan/read-only,
-    Qwen Auto -> native Auto,
-    Qwen YOLO -> native YOLO,
-    OpenCode Read -> deny write/edit/shell/task mutation permissions,
-    OpenCode Auto -> normal/safe permission profile with asks where required,
-    OpenCode YOLO -> allow-all/yolo-equivalent profile when supported.
-- Unsupported profiles must be omitted/disabled by capability discovery rather than silently emulated.
-- UI should surface a short native mapping/description so the safety level is understandable.
-- Backend/Agent adapter remains authoritative for the actual permission configuration.
-
-2.5 Chat Queue
---------------
-- When an Agent turn is running or paused while waiting for an Ask answer, pressing Send again automatically queues the new prompt.
-- Do NOT add a separate `+ Queue` button. Send is the default interaction: dispatch immediately when idle; enqueue when the current turn is unfinished.
-- Queue is Chat-session scoped and completely separate from Runner Tasks / Task List execution order.
-- Queue appears directly above the Composer only when at least one item exists; a compact status line explains when new sends will be queued.
-- Each queued prompt can be edited or deleted before dispatch.
-- Preserve FIFO order unless the selected Agent exposes another explicit ordering contract.
-- Backend owns queue state/order; UI only renders and edits that projection.
-- If the Agent has native queue semantics, adapter maps them into the same product contract.
-- Qwen direction includes native queued-next-turn behavior (for example Ctrl+Q); any manual shortcut is optional and must not replace automatic queue-on-send.
-- Prototype Mock must simulate a turn-in-progress long enough to test several consecutive Send actions, FIFO dispatch, and Edit/Delete.
-- No visible Queue button or required `@queue` command is needed for the main flow.
-
-2.6 AI clarification / Ask
---------------------------
-- Ask means the Agent asks the USER for clarification during the CURRENT turn.
-- Ask is NOT Qwen `/btw` side question. `/btw` may still exist independently in the Agent slash palette.
-- One Ask request can contain multiple questions.
-- The `Extra context` free-text question is optional; blank is a valid answer and must not block Next / Submit.
-- Supported question kinds:
-    option question,
-    free-text question.
-- An option question always exposes a final `Other / custom answer` choice with text input.
-- User answers the current question, presses Next, and presses Submit on the final question.
-- Submit returns ONE structured answers object to the suspended Agent/tool call; the original Agent turn then resumes.
-- Ask appears as an interactive card inside the Chat message stream, visually distinct from ordinary messages and Queue; never use a floating panel that hides the conversation or Composer.
-- Ask capability is Agent-specific. Disable/hide the Ask trigger if the selected Agent cannot surface interactive questions.
-- Qwen adapter should map its `ask_user_question` tool contract (questions[] -> answers keyed by index).
-- OpenCode adapter should map its `question` tool contract (header/question/options/custom answer).
-- Do not implement separate Ask state machines per Agent; normalize into one Chat Ask projection.
-- Cancel must explicitly deny/cancel the pending Agent question rather than fabricate an answer.
-
-Mock requirements:
-- Prototype can use mock Agent capability profiles for Qwen Code and OpenCode.
-- Mock Agent switch must visibly change model/options and `/` suggestions.
-- Mock Mode must show the simplified Read / Auto / YOLO mapping.
-- Mock Ask supports multiple questions, options, free text, Other/custom text, Next and final Submit.
-- Ask renders as an interactive card inside the Chat message stream, not a floating layer over the Composer.
-- Long option lists scroll inside the options region; they must not cover the Composer or hide the final actions.
-- The Mock includes a deliberately long choice list so scrolling and selection can be tested.
-- Ordinary Mock Chat may randomly emit an Ask request so the interrupt flow is easy to exercise.
-- Provide a force-demo path/button so tests do not rely only on randomness.
-- Production later replaces mock profiles with live adapter discovery; UI contract stays the same.
-
-3. CHAT COMMANDS: @task / @task-single / @task-list
-====================================================
-
-[ ] Support three explicit Runner Task-generation commands.
-
-Command semantics:
-- `@task <spec>`
-    AI decides whether the result should contain one Task or multiple ordered Tasks.
-    Production uses the backend Task-generation prompt to make that decision.
-    Interactive Mock mode may randomly return single vs multi so both UI paths can be exercised easily.
-- `@task-single <spec>`
-    Force exactly one generated Task.
-- `@task-list <spec>`
-    Force a Task List with at least two ordered child Tasks.
-- Only these explicit Runner commands trigger Task-generation.
-- Ordinary conversation containing words such as `task`, `run`, `建立任務`, etc. must NOT be guessed
-  as Task creation intent.
-- Do not add a dedicated `@task` button. Users discover and insert `@task`, `@task-single`, and `@task-list` through the `@` autocomplete.
-- All three commands MUST use the same backend generate-task endpoint, fixed backend prompt, TaskDraft schema,
-  canonical Task/Task List editor and Create flow. The command only supplies a generation mode constraint.
-
-Backend generation contract:
-- Frontend sends the user `<spec>` plus minimal current Project context.
-- Backend injects ONE fixed generate-task prompt, similar to the existing Generate Workflow pattern.
-- The fixed prompt is backend-owned. Do not hardcode/copy the full prompt template into frontend code.
-- The backend prompt instructs the AI to return a structured TaskDraft, not free-form prose.
-- Use one canonical generate-task service/endpoint for Chat, future UI buttons, tests and mock mode.
-- The request carries a generation mode only: `auto | single | list` corresponding to `@task | @task-single | @task-list`; do not fork three planners.
-- Do not build a second Task planner inside the browser.
-
-Suggested conceptual flow:
-
-  Chat input
-      @task <spec>
-          |
-          v
-  backend generate-task endpoint
-          |
-          +-- fixed backend prompt
-          +-- <spec>
-          +-- Project context
-          |
-          v
-      TaskDraft
-          |
-          v
-  preview / edit
-          |
-          v
-      Create Task
-          |
-          v
-   Board status = New
-
-TaskDraft minimum contract:
-- title
-- project reference
-- ordered items[] (one item is the simple Task case)
-- per item: title, task prompt/spec, Workflow, Project, workspace policy
-- optional validation/prompt-source overrides only when needed
-- no runtime state, retry state, merge state or fake execution output in the draft
-
-Task vs Task List:
-- One Board Task may own one or more ordered child Tasks.
-- AI may decide that a complex spec needs multiple ordered child Tasks.
-- This is still one durable parent Task record with items[].
-- Do not invent a separate scheduler/DAG just because AI returned multiple items.
-
-Confirmation / editing:
-- `@task` expresses explicit create intent, but AI output should first be reviewable as TaskDraft.
-- Chat only needs a compact TaskDraft summary/preview; do NOT build a second full Task editor inside Chat.
-- A TaskDraft may contain one Task or multiple ordered child Tasks.
-- Pressing `Edit` must open/reuse the existing canonical Task / Task List create-edit UI.
-- Single-item draft -> reuse the normal Task create/edit UI.
-- Multi-item draft -> reuse the normal Task List UI, where each child Task uses the same existing Add/Edit Task editor.
-- Reuse the same Project / Workflow / Prompt / Validator / Workspace controls and validation rules as manual creation.
-- Back navigation must still return to the originating Chat/Draft context when Edit was opened from Chat.
-- Changes made in the canonical editor update the same TaskDraft; do not maintain a parallel Chat-only editable copy.
-- `Create Task` creates the durable Task in New/idle state.
-- Creating a Task must NOT automatically press Run.
-
-Mock support:
-- Mock mode must exercise the SAME request/response TaskDraft contract as the real AI path.
-- Interactive prototype behavior:
-    `@task` may randomly choose single Task or multi-Task List for hands-on UI testing.
-    `@task-single` always returns exactly one Task.
-    `@task-list` always returns at least two Tasks.
-- Automated browser/unit tests must be able to replace randomness with a fixed seed/fixture/mode so tests remain deterministic.
-- Do not create a separate mock-only UI model.
-- Mock should cover at least:
-    single Task,
-    ordered Task List,
-    Project selection,
-    Auto/Main/Worktree workspace policy,
-    invalid draft/validation error,
-    backend error,
-    long spec.
-- UI should clearly indicate Mock AI when mock generation is being demonstrated.
-
-Future fixed-prompt quality requirements:
-- Prefer the user's `<spec>` verbatim as the source requirement; do not silently broaden scope.
-- Generate the smallest useful number of ordered child Tasks.
-- Include implementation + focused verification when needed.
-- Avoid redundant 'review/test' child Tasks when the selected Workflow already owns that responsibility,
-  unless the spec explicitly requires separate work.
-- Respect Project development rules and avoid changing unrelated code.
-- Return machine-parseable structured output with validation; malformed AI output fails closed.
+Backend/model discovery
+-----------------------
+- main already has registry/adapter-driven backend/model discovery.
+- Qwen/OpenCode model discovery fixes in current main are baseline behavior.
+- New Chat/Task UI must consume the existing backend catalog owner; do not reimplement model lists in frontend.
+- Provider-specific discovery remains adapter-owned.
 
 
-4. TASK / BOARD MODEL
-=====================
+1. PRODUCT SHELL / NAVIGATION
+=============================
 
-4.1 Durable Task identity
--------------------------
-- A Task is a durable work record, not merely the current process.
-- One Board Task may own one or more ordered child Tasks.
-- Completed/older Tasks remain visible until explicit Delete.
-- Starting another Task on the same Project/path does not erase old Task history.
-- Run/Rerun/Resume history stays associated with the durable Task identity.
+1.1 Main surfaces
+-----------------
+Target primary surfaces:
 
-4.2 Board states
-----------------
-- Keep Board lifecycle small:
-    New
-    Ongoing
-    Paused
-    Closed
-- Do NOT add Waiting Merge / Merged / Cleanup columns.
-- Runtime/recovery detail remains separate from Board lifecycle.
+- Project Chat
+- Tasks
+- Workflows
+- Prompts
 
-Transitions / behavior:
-- New -> Ongoing when execution starts.
-- Ongoing -> Paused when stopped/paused.
-- Ongoing -> Closed when terminal completion is reached.
-- Ongoing cannot directly move back to New.
-- Paused -> Ongoing resumes according to runtime policy.
-- Paused -> New means abandon the resumable execution and reset from the beginning; require confirmation.
-- Closed -> New means prepare another execution/run while preserving previous completed History; require confirmation.
-- Invalid drag targets/actions are disabled/rejected.
+Keep the existing product visual style. Do not replace it with a generic ChatGPT clone.
 
-Open behavior:
-- Clicking New opens Task List/editor workspace.
-- Clicking Ongoing / Paused / Closed opens Task Info/runtime detail.
+1.2 Project navigation
+----------------------
+- Project is the primary working context.
+- Clicking a Project selects it and opens that Project's Chat.
+- Project "..." is management only (Rename/Delete/etc.) and must not navigate.
+- Project list remains independently scrollable.
+- Project identity is path/id based; rename changes display name, not references.
+- New Project initialization uses one backend owner for Project defaults/settings.
 
-4.3 Delete
-----------
-- Delete Task always requires confirmation.
-- Ongoing/running/recovering Task Delete is disabled and backend guarded.
-- Delete removes the Task record/history index from the product UI.
-- Delete must not silently merge source code.
-- Worktree cleanup/integration must not be hidden inside Task deletion.
+1.3 Tasks page filtering
+------------------------
+- Tasks Project filter is page-local and does not switch the active Project Chat.
+- Parent Task Lists remain visible when any child matches the selected Project filter.
+- Search/running filters must not mutate the global selected Project.
+
+1.4 Workflows / Prompts
+-----------------------
+- Keep current main Workflow/Prompt Studio and asset ownership.
+- Task/Chat may link to these assets but must not create another editor or asset store.
+- "Open Workflow" is only enabled when a concrete selected Task item has a Workflow.
 
 
-5. ORDERED TASK LIST / YAML TASKS
-================================
-
-- UI must operate the existing ordered YAML/CLI task capability; do not build another scheduler.
-- Parent Task owns ordered child Tasks executed top-to-bottom using existing Runner contracts.
-- UI and YAML are two views/adapters of the same canonical Task List data.
-- Support Add / Edit / Remove / reorder and YAML view/edit/import/export where appropriate.
-- Prefer drag reorder; avoid redundant Move Up/Move Down menus unless needed for accessibility.
-- Task List itself mainly owns list name/order/children.
-- Project / Workflow / Prompt / Workspace belong to each child Task, not the list container.
-
-Task editor scope:
-- Editing a child Task shows Task fields, not unrelated Task List controls.
-- Reuse ONE canonical Task Editor for root Task creation, normal Task edit, child Add/Edit and AI-generated TaskDraft editing.
-- The canonical Task Editor is a fixed right-side overlay sheet above the source surface; it must not resize/reflow Chat,
-  Task Info or Task List underneath it.
-- Do not move the Task Editor DOM between unrelated layout containers. Source-specific behavior is context/Back navigation only.
-- AI-generated multi-item TaskDrafts reuse the same Task List surface used by manually created multi-task work.
-- Do not implement a separate Chat TaskDraft editor with a duplicated Project / Workflow / Prompt / Workspace form.
-- Avoid stacked modal flows; use one workspace/surface transition where possible.
-
-Back navigation is source-aware:
-- Info -> + Add task -> Task Editor -> Back to Info.
-- Info -> Edit task -> Task Editor -> Back to Info.
-- Task List -> + Add task -> Task Editor -> Back to Task List.
-- Task List -> Edit task -> Task Editor -> Back to Task List.
-- Never hardcode every Back action to YAML/Task List.
-
-Mutation policy:
-- New: editable.
-- Ongoing: observation-only; Add/Edit/Rename/YAML mutation controls disabled.
-- Paused:
-    completed child Tasks are immutable,
-    current child may be edited,
-    runtime-affecting current changes require restart,
-    future children remain editable/reorderable,
-    whole-list YAML edit remains disabled so completed history cannot be rewritten.
-- Closed: read-only except lifecycle actions such as rerun/reset-to-New where explicitly allowed.
-
-Error UX:
-- Validation errors must render above the current modal/sheet.
-- A failed Create/Save must never look like the button did nothing.
-- Prefer clear field-level feedback when practical, with global toast for concise summary.
-
-
-6. WORKSPACE / WORKTREE
-=======================
-
-Workspace policies:
-- Main remains permanently supported.
-- Future supported selection:
-    Auto
-    Main
-    Worktree
-- Auto resolves using backend/global workspace ownership rules.
-- One canonical execution path may have at most one active Task globally.
-
-Worktree visibility:
-- Worktree use must be visually obvious.
-- Show WORKTREE indication on Board card, Task List row, Info and Task Editor where relevant.
-- Show branch/path clearly enough for inspection/merge.
-- Do not make Worktree look like Main.
-
-Multiple child Tasks:
-- Child Tasks may resolve different Projects/workspaces.
-- A parent Task may therefore have multiple Worktree results.
-- Do not collapse unrelated Project worktrees into one fake workspace.
-
-Parallel-agent research (deferred):
-- A shared-workspace multi-Agent write coordinator/file-lock design may be explored later to avoid a worktree
-  per concurrent writer, but it is NOT the current default.
-- Do not weaken isolation/24H reliability merely to avoid duplicated working files.
-- No generic DAG/parallel scheduler should be introduced without a proven need.
-
-
-7. WORKSPACE RESULTS / MERGE
-============================
-
-Merge is explicit source-control integration, separate from Task execution.
-
-Workspace Results UI:
-- Display Worktree results grouped by Project.
-- Under each Project, show one row per Worktree result.
-- Show at least:
-    child Task/title,
-    source branch,
-    target branch,
-    worktree path,
-    merge preflight status.
-- Only expose TWO user actions:
-    Merge
-    Merge Chat
-- Remove/avoid Review Changes / Merge Task / Cleanup button clutter in the primary result UI.
-
-Merge status projection:
-- Ready
-- Conflict
-- Blocked
-- Merged
-- This is source-control result state, NOT a new Runner/Board state machine.
-
-Direct Merge:
-- Enabled only after backend merge preflight says it is safe.
-- At minimum preflight must consider source/target existence, completion/validation requirements,
-  dirty/blocked conditions and Git conflicts.
-- UI preflight is informational only; backend MUST re-check immediately before the merge action.
-- If the target changed after the earlier check, fail closed and refresh status.
-- After successful merge, show Merged/result commit and remove further Merge actions for that row.
-
-Merge Chat:
-- Available for Ready and Conflict/Blocked states where human/AI integration help is meaningful.
-- Conflict => direct Merge disabled; Merge Chat is the intended path.
-- Clicking Merge Chat:
-    1. identify the Worktree's Project,
-    2. switch to that Project,
-    3. open Project Chat,
-    4. create a NEW Chat session,
-    5. prefill a merge prompt,
-    6. focus the composer,
-    7. DO NOT auto-send.
-- The user may edit/add instructions before Send.
-
-Merge Chat prefill should include:
-- parent Task id/title
-- child Task id/index/title
-- Project name/path
-- worktree path
-- source branch
-- target branch
-- current preflight status/reason
-- instruction to inspect changes, preserve unrelated work, follow Project rules, resolve conflicts safely,
-  verify the result, then perform the requested integration.
-
-Important:
-- Runner must not auto-merge on Task completion.
-- Merge failure/conflict must not enter StageExecutor retry/recovery semantics.
-- Merge service/status is an integration adapter, not another Runner.
-
-
-8. TASK INFO / ACTION UX
-========================
-
-- Info is for runtime/result inspection.
-- Task List is for ordered Task composition.
-- Do not make Info and Task List interchangeable surfaces.
-- Open Workflow only appears/enables when a concrete selected child Task has a Workflow.
-- Buttons that are invalid for current state are disabled.
-- Disabled controls should explain why via nearby text/title when not obvious.
-- Task descriptions that are too long should truncate with ellipsis in dense lists/cards.
-- Preserve selected child and scroll position when returning from child Edit to its source surface.
-
-
-9. PROJECT CHAT + TASK RELATIONSHIP
-===================================
-
-- Project Chat is where users discuss normal engineering work.
-- `@task <spec>`, `@task-single <spec>` and `@task-list <spec>` are the explicit bridges from Chat to Runner Task creation.
-- Task execution remains visible in Tasks/Task Info, not mixed into normal Chat.
-- Completed/attention Tasks may provide a lightweight path back to Project Chat for discussion.
-- Merge Chat is a specific Project Chat handoff with prefilled integration context.
-- Do not auto-send generated/prefilled messages.
-
-
-10. MOCK / TESTABILITY
-======================
-
-- Every major future UI flow should have a deterministic/controllable mock path that uses the same frontend contract
-  as production:
-    @task / @task-single / @task-list generation,
-    TaskDraft validation,
-    Task/List creation,
-    Agent / Model / Mode capabilities,
-    per-Agent slash commands / Skills,
-    Chat Queue,
-    multi-question Ask,
-    workspace resolution,
-    merge preflight Ready/Conflict/Blocked/Merged,
-    Merge Chat prefill.
-- Mock should simulate PASS / FAIL / ERROR where appropriate.
-- Avoid mock-only state machines or mock-only UI branches that production will never use.
-- Static/demo prototype behavior is not enough for final implementation; add browser tests for critical flows.
-
-Critical browser-flow coverage eventually required:
-- Project click -> Project Chat.
-- `@task <spec>` -> randomly/AI-decided single or multi TaskDraft -> Edit -> Create -> New Board Task.
-- `@task-single <spec>` -> exactly one Task.
-- `@task-list <spec>` -> at least two ordered Tasks.
-- `@task` invalid backend output -> visible error.
-- New Task validation error remains visible above dialog.
-- Info + Add/Edit -> Back to Info.
-- Task List + Add/Edit -> Back to Task List.
-- Ongoing mutation actions disabled.
-- Delete confirmation + active Delete guard.
-- Composer auto-grow and bounded scroll.
-- Worktree visibility.
-- Project-grouped Workspace Results.
-- Ready -> Merge.
-- Conflict -> Merge disabled + Merge Chat.
-- Merge Chat -> correct Project + new Chat + prefilled unsent prompt.
-- Agent switch -> model/mode/slash capability list refreshes.
-- `/` palette -> selected Agent commands/Skills only.
-- Queue -> appears above Composer, supports Edit/Delete and preserves order.
-- Ask -> multiple questions, option + Other/custom text + free text, Next, final Submit.
-- Chat Draft Edit -> same canonical right-side Task Editor overlay; Chat underneath does not reflow.
-
-
-11. RUNTIME / RELIABILITY NON-REGRESSION
+2. GLOBAL SETTINGS / PROJECT PREFERENCES
 ========================================
 
-- Do not create UI-specific recovery behavior.
-- Same-session recovery / fresh-session rotation remains Runner-owned.
-- Dynamic Handoff remains the supported multi-agent workflow primitive.
-- Final Review/validation remains Runner-owned.
-- Existing Stage / PASS / FAIL / technical ERROR semantics remain authoritative.
-- Existing API transient recovery behavior must remain intact.
-- Keep dry-run/live behavior aligned.
-- Any runtime-affecting future change must preserve or extend deterministic/mock/live regression coverage.
-- Do not claim 24H reliability from prototype UI/static checks.
+2.1 Global Settings location
+----------------------------
+- Global Settings lives at the bottom of the left sidebar.
+- Remove the old standalone theme button after the Settings replacement is production-ready.
+- Use one Settings shell, not separate unrelated settings dialogs.
+
+2.2 Interface
+-------------
+Global Interface settings:
+- Appearance: System / Light / Dark
+- Theme palette: Teal / Deep Blue / Violet / Amber / Rose
+- Motion/accessibility preferences when already supported by main
+
+Use current main theme tokens. Do not copy prototype CSS as a second theme system.
+
+2.3 Language
+------------
+- Language is a dedicated Global Settings section.
+- zh-TW / English are the initial supported UI choices.
+- Production i18n uses the existing UI translation owner.
+
+2.4 Global Defaults
+-------------------
+Global Defaults provide initial values for newly created Projects:
+- Agent
+- Model
+- Mode
+- Reasoning
+- Workflow
+
+Defaults are copied when a Project is created. Changing Global Defaults must not silently rewrite
+existing Project preferences.
+
+2.5 Project preferences
+-----------------------
+Each Project owns:
+- Agent
+- Model
+- Mode
+- Reasoning
+- Workflow
+
+All Chat sessions under the same Project share these preferences.
+Creating/switching Chat sessions does not reset them.
+
+Prototype reasoning values may be used for UI reference, but production supported reasoning levels
+must be returned/mapped by the selected Agent/backend rather than assumed universally.
+
+2.6 Execution settings
+----------------------
+The final target also includes:
+- Auto workspace policy
+- Merge failure limit
+- Allow concurrent Main tasks
+
+These settings belong to the future Git-worktree phase and must not become active/dead controls before
+the production workspace backend exists. Their authoritative final semantics are defined in
+feature/git-worktree-todo.md.
 
 
-12. IMPLEMENTATION / CODE OWNERSHIP
-===================================
+3. NORMAL PROJECT CHAT
+======================
 
-- Keep prototype/production UI split by responsibility rather than one giant HTML/JS file.
-- Prefer one owner per behavior.
-- Avoid chains where the same function is wrapped/redefined many times.
-- When touching legacy wrapper-heavy code, consolidate incrementally with regression checks.
-- Do not edit compiled/built UI output as source.
-- Keep global behavior in the correct shared layer instead of page-specific hardcode.
-- Reuse canonical Task/workspace/project adapters.
-- Remove old contracts/handlers once the replacement is verified.
+3.1 Chat is not Runner Task execution
+-------------------------------------
+- Normal Project Chat is an engineering conversation.
+- Sending a normal Chat message must not silently create/start a Runner Task.
+- Current Runner messages/runtime history must not be reinterpreted as ordinary Chat history.
+- New Chat persistence is separate from Runner RunState/runtime logs.
+
+3.2 Chat sessions
+-----------------
+- A Project can have multiple Chat sessions.
+- Create / rename / switch / delete are Project-scoped.
+- Session messages, Queue and pending Ask state are Chat-session scoped.
+- Project Agent/Model/Mode/Reasoning/Workflow preferences are Project scoped.
+- Delete Chat requires confirmation and must not affect Runner Task history.
+
+3.3 Composer
+------------
+- Compact by default.
+- Auto-grows vertically to a bounded max height, then textarea scrolls.
+- Message area must keep the last message visible as Composer grows.
+- Programmatic prefill recalculates height immediately.
+- Mode remains a compact quick control.
+- "+ New Task" sits near the Composer controls and creates a Task/Task List for the current Project.
+- Do not show the redundant Project tag under the Composer.
+
+3.4 Chat settings
+-----------------
+- Workflow / Agent / Model / Reasoning live in compact Chat settings.
+- Mode remains quickly accessible.
+- Opening Chat settings must not reflow or shrink the Chat surface.
+- Model choices reuse main's backend/model catalog.
+- Agent changes refresh dependent Model/Mode/capability data; Reasoning follows the Project preference unless
+  capability mapping requires normalization.
 
 
-13. IMPLEMENTATION ORDER
-========================
+4. AGENT CAPABILITIES / COMMAND DISCOVERY
+=========================================
 
-Recommended sequence:
+4.1 @ namespace
+---------------
+At Composer start:
+- @goal
+- @task
+- @task-single
+- @task-list
+- other Runner-owned system commands/prompts as explicitly supported
 
-1. Stabilize current Project Chat + Tasks shell while preserving current UI style.
-2. Add shared Chat backend + AgentAdapter contract (Agent/Model/Mode/commands/Skills/Ask/Queue capabilities).
-3. Implement Chat session/message streaming, Queue and normalized Ask request/answer APIs.
-4. Implement backend `@task*` generate-task contract + deterministic mock.
-5. Replace prototype browser heuristics with backend TaskDraft generation.
-6. Reuse canonical right-side Task Editor / Task List for TaskDraft Edit/Create.
-7. Finish state-aware Task actions, source-aware Back, Delete/error/composer polish.
-8. Connect production Worktree workspace resolution and visible workspace results.
-9. Implement backend merge preflight and explicit direct Merge.
-10. Implement Merge Chat handoff using new Project Chat + unsent prompt.
-11. Add focused browser/API/mock/live regression coverage.
-12. Only then consider deeper parallel-agent/shared-workspace experiments.
+Selecting a suggestion inserts it; it does not auto-send.
+
+4.2 / namespace
+---------------
+"/" lists the selected Agent's user-invocable commands/skills.
+Frontend does not scan arbitrary skill folders or hardcode installed skills.
+
+A normalized capability projection should include enough data for:
+- token/name
+- description
+- kind
+- source
+- enabled/availability
+- permission/user-invocable state
+
+Agent-specific discovery stays behind adapters.
+
+4.3 Existing model catalog reuse
+--------------------------------
+- Do not rebuild Qwen/OpenCode model discovery.
+- Extend around the current main backend catalog only where Chat needs additional capability metadata.
+- Avoid turning the existing Runner BaseBackend into a Chat-session God object; a thin interactive adapter/service
+  may reuse backend discovery without contaminating Runner RunState.
 
 
-14. NON-GOALS
+5. CHAT QUEUE
 =============
 
-- Do not turn Tasks into another Workflow engine.
-- Do not make Chat execution-state authoritative.
-- Do not auto-run after any `@task*` Task creation.
-- Do not infer Task creation from ordinary Chat text once `@task` exists.
-- Do not auto-merge completed Tasks.
-- Do not add merge states to the main Task Board lifecycle.
-- Do not build a generic queue/scheduler/DAG merely for Task Lists or Worktrees.
-- Do not duplicate Workflow/Prompt canonical data inside Chat/Task metadata.
-- Do not hide validation errors behind dialogs.
-- Do not keep obsolete UI handlers/contracts after their replacement is verified.
+- No dedicated "+ Queue" button is required.
+- If an Agent turn is active and the user sends another normal Chat message, it becomes queued automatically.
+- Multiple queued messages are supported.
+- Queue appears above the Composer.
+- Queued items can be edited or deleted before execution.
+- FIFO ordering is preserved.
+- Queue state is Chat-session scoped.
+- Pending Ask blocks continuation of the active turn; newly sent messages remain queued until Ask resolves/cancels.
+- Queue is a Chat concern and must not become a Runner Task scheduler or FlowEngine queue.
 
 
-15. ACCEPTANCE CHECKLIST FOR FUTURE CHANGES
-===========================================
+6. AI ASK / CLARIFICATION
+=========================
 
-Before considering a future feature complete, verify:
-- Is there one clear owner for the behavior?
-- Does it reuse existing Runner truth instead of inventing a second state machine?
-- Is the UI action enabled/disabled consistently with backend guards?
-- Does the behavior work for both single Task and ordered Task List?
-- Does multi-Project behavior remain understandable?
-- Are Worktree/Main differences explicit?
-- Is history preserved correctly?
-- Are destructive actions confirmed?
-- Are errors visible in the active UI layer?
-- Does Mock use the same contract as production?
-- Are legacy handlers/contracts removed after migration?
-- Did UI/CLI/YAML/API/Dry Run behavior stay aligned where applicable?
-- Are deterministic tests present?
-- Are live/reliability tests added when the change can affect 24H execution?
+- Normalize Agent-specific ask/question tools into one Chat Ask projection.
+- Ask renders as an interactive card inside the Chat message stream.
+- No production "Ask mock" Composer button.
+- Support multiple questions per Ask request.
+- Question types:
+  - option selection
+  - option + final Other/custom text
+  - free text
+- Extra context is optional.
+- Next advances question-by-question; final Submit returns structured answers.
+- Cancel explicitly cancels/denies the pending Agent question; do not invent an answer.
+- Long option sets remain usable without covering the Composer.
+- Ask state is scoped to the Chat session/turn, not Runner retry/recovery.
 
 
-16. CHAT API / BACKEND OWNERSHIP
-================================
+7. TASK GENERATION FROM CHAT
+============================
 
-- Add one shared Chat backend/service boundary for the Web UI and future clients.
-- Chat backend owns:
-    Project Chat sessions/messages,
-    selected Agent/Model/Mode,
-    active turn identity/status,
-    queued prompts,
-    pending Ask requests/answers,
-    TaskDraft generation requests.
-- Agent-specific CLI/SDK details stay behind AgentAdapter implementations.
-- Do not expose Qwen/OpenCode process-specific details directly to frontend state.
+7.1 @task commands
+------------------
+- @task <spec>: backend decides one Task vs ordered Task List.
+- @task-single <spec>: exactly one Task.
+- @task-list <spec>: ordered multi-Task list.
+- No dedicated @task button.
+- Ordinary Chat text must not be guessed as Task creation intent.
 
-Suggested AgentAdapter capabilities:
-    list_models(project/session context),
-    list_commands_and_skills(project/session context),
-    map_permission_mode(Read/Auto/YOLO),
-    send/stream/cancel turn,
-    queue/edit/delete pending prompt if natively supported or via Chat service,
-    surface normalized Ask requests,
-    submit Ask answers,
-    capability flags.
+All three use one backend TaskDraft generation service with a mode constraint:
+- auto
+- single
+- list
 
-Suggested Chat API capabilities (route naming may change):
-    GET    /api/chat/agents
-    GET    /api/chat/agents/{agent}/models
-    GET    /api/chat/agents/{agent}/capabilities
-    GET    /api/chat/projects/{project}/sessions
-    POST   /api/chat/projects/{project}/sessions
-    PATCH  /api/chat/sessions/{session}
-    POST   /api/chat/sessions/{session}/messages
-    POST   /api/chat/sessions/{session}/cancel
-    GET    /api/chat/sessions/{session}/queue
-    POST   /api/chat/sessions/{session}/queue
-    PATCH  /api/chat/sessions/{session}/queue/{item}
-    DELETE /api/chat/sessions/{session}/queue/{item}
-    POST   /api/chat/sessions/{session}/asks/{ask_id}/answers
-    POST   /api/chat/sessions/{session}/asks/{ask_id}/cancel
-    POST   /api/chat/task-drafts/generate
+7.2 TaskDraft
+-------------
+TaskDraft is transient planning data, not a durable Task and not fake runtime state.
 
-Streaming/event projection should distinguish at least:
-    assistant text,
-    thinking/tool activity,
-    Ask request,
-    Queue update,
-    turn status/completion/error,
-    TaskDraft generation result.
+Minimum concept:
+- title
+- current Project reference
+- ordered items[]
+- per item: title/spec, Workflow, Project, execution options
+- optional prompt/validation/file inputs when required
 
-Runner boundary:
-- Normal Chat messages MUST NOT be routed through FlowEngine/StageExecutor merely to reuse execution code.
-- Runner starts owning work only when a durable Task is started.
-- TaskDraft generation is planning/service logic, not a new Stage graph.
-- Runner changes should be limited to consuming frozen Task inputs, workspace/path ownership and exposing canonical runtime projection.
-- Queue/Ask are Chat/Agent interaction concerns and must not contaminate RunState retry/recovery semantics.
+Chat shows only a compact preview:
+- Edit
+- Create Task
+- Dismiss
+
+Edit reuses the canonical Task Editor / Task List Drawer. Do not build a second Chat-only Task form.
+
+Create Task creates New/idle only. It does not automatically Run.
+
+7.3 @goal
+---------
+@goal is the explicit fast path for Create + Run.
+It must still:
+- create a durable Task first;
+- use the same Task schema/default resolution;
+- use the same backend Run action/guards;
+- appear in Tasks/Ongoing;
+- never be inferred from ordinary Chat text.
 
 
-End of new future roadmap.
+8. TASK PRODUCT MODEL
+=====================
+
+8.1 Durable Task
+----------------
+- Task is a durable work record, not the current worker process.
+- Old/Closed Tasks remain visible until Delete.
+- Runtime attempts/history attach to Task identity.
+- Existing legacy Runner run history must remain inspectable; do not fabricate old durable Tasks from it.
+
+8.2 Board lifecycle
+-------------------
+Keep exactly:
+- New
+- Ongoing
+- Paused
+- Closed
+
+Runtime/recovery/workspace detail is secondary state, not extra Board columns.
+
+State changes/actions remain backend guarded.
+UI disabling is UX only.
+
+8.3 Board + List views
+----------------------
+- Tasks supports Board and dense List views.
+- Cards/rows prioritize title/status/project/progress; long descriptions truncate with ellipsis.
+- Drag/drop is preferred for Task List child ordering.
+- Remove redundant Move Up/Move Down actions when drag reorder is available.
+- Task state drag/transition must call canonical backend actions, never mutate frontend truth only.
+
+8.4 Delete
+----------
+- Delete requires confirmation.
+- Active/running/recovering Task delete is disabled and backend rejected.
+- Delete removes Task product records/history references according to retention policy.
+- Source-control integration is never hidden inside Delete.
+
+
+9. ONE TASK DRAWER / TASK WORKSPACE
+==================================
+
+9.1 Single shell
+----------------
+Task details and editing use one right-side Task Drawer shell.
+Do not stack large modal-on-modal flows.
+
+The Drawer owns:
+- Info shell with fixed tabs:
+  - Overview
+  - Runtime
+  - Output
+  - History
+- Task List workspace
+- Task Editor subview
+- YAML subview
+
+"Steps" is obsolete terminology and must not return as a separate tab/page.
+
+9.2 Info
+--------
+- Info is inspection-first.
+- Shows Task identity, Project, Workflow, runtime projection, progress, history and workspace/result detail.
+- Open Workflow only when a selected item has one.
+- Reset/Rerun/Resume actions use existing backend runtime/action guards.
+
+9.3 New Task behavior
+---------------------
+- Clicking + New creates/opens a transient creation workspace, not a durable Task immediately.
+- Opening Task List must not create a Task as a side effect.
+- Create is enabled only when valid Task content exists.
+- After successful Create, open the newly created Task Info.
+
+For a New durable Task opened later, Task List is the default editable workspace; provide Back to Info.
+
+9.4 Source-aware Back
+---------------------
+Examples:
+- Info -> Add/Edit child -> Editor -> Back to Info/Task List as appropriate
+- Task List -> Editor -> Back to Task List
+- Chat TaskDraft -> Editor/List -> Back to Chat Draft
+
+Do not hardcode all Back actions to the same destination.
+
+9.5 Dirty-state ownership
+-------------------------
+- Task Editor and YAML have local unsaved snapshots.
+- Back / X / Escape / navigation must confirm before discarding.
+- Child Editor dirty state is resolved before discarding a parent Task List Draft.
+- Escape is owned by the top-most active layer; child picker/context/confirm dialogs handle it before Drawer close.
+- Restore focus to the initiating control after close/cancel where practical.
+
+
+10. CANONICAL TASK EDITOR
+========================
+
+One Task Editor markup/controller is reused by:
+- New Task
+- existing Task edit
+- Task List child Add/Edit
+- Chat TaskDraft single edit
+- Chat TaskDraft list child edit
+
+Do not fork forms by entry point.
+
+Layout target:
+- compact Project + Workflow + optional Title basics row
+- Task Prompt is primary visual surface
+- File Validator / AI Validation shown only when required/configured
+- Workspace/execution settings remain secondary
+- source mode selectors keep stable horizontal geometry
+- mixed File Validator + AI Validation cards align consistently
+- narrow view falls back cleanly without changing the field model
+
+Task execution selectors reuse common catalogs/preferences:
+- Agent
+- Model
+- Mode
+- Reasoning
+where Task-level override is supported by the final backend contract.
+
+
+11. TASK LIST / YAML
+====================
+
+- Reuse the existing ordered YAML/CLI task capability; do not build another scheduler.
+- One parent Task owns ordered child items.
+- Task List owns list identity/order; child Project/Workflow/Prompt/validation/execution settings stay on each child.
+- Child Add/Edit reuses the canonical Task Editor.
+- YAML is an advanced view of the same Task List model.
+- YAML edit has Validate / Apply and dirty-discard protection.
+- New/Ongoing/Paused/Closed mutation rules prevent rewriting completed execution history.
+- Ongoing is observation-only.
+- Paused may allow only safe future/current edits according to restart semantics.
+- Closed is read-only except explicit lifecycle actions.
+
+
+12. TASK FILE INPUT / UPLOAD CONTRACT
+=====================================
+
+For Task goal/prompt file, File Validator and AI validator prompt file where upload is supported:
+
+- UI action is Upload file, not a fake path-only browser chooser.
+- Browser-selected file is staged transiently.
+- Backend returns/displays a full managed destination path in the same Task path field.
+- Create/Save atomically copies/materializes the staged bytes to the managed Task location.
+- Canonical Task data stores the managed path, not Browser File objects or fakepath.
+- If the user manually edits the path field, manual path wins and staged upload for that field is discarded.
+- Copy failure fails closed; never persist a Task pointing at a missing staged file.
+- TaskDraft and Task List editing preserve staged upload state until Create/Save or explicit discard.
+
+
+13. BACKEND / DATA OWNERSHIP
+============================
+
+13.1 Chat service
+-----------------
+Add one shared backend/service boundary for:
+- Project Chat sessions/messages
+- active turn status/stream
+- Queue
+- pending Ask
+- TaskDraft generation
+
+Do not route ordinary Chat through FlowEngine/StageExecutor merely to reuse execution code.
+
+13.2 Task service/store
+-----------------------
+One backend owner for:
+- durable Task / Task List records
+- lifecycle/status
+- ordered child items
+- source-aware editor data
+- Task -> Runner run requests
+- allowed actions
+
+Do not use frontend/localStorage as production Task truth.
+
+13.3 Preferences/settings
+-------------------------
+One backend/config owner for:
+- Global Settings
+- Global Defaults
+- Project preferences
+
+Prototype localStorage behavior is not the production owner.
+
+13.4 Runtime projection
+-----------------------
+Reuse main's Runner-owned runtime projection/action guards.
+Task Info consumes this projection; it does not derive a second runtime state machine.
+
+13.5 Existing Runner files
+--------------------------
+Do not overload runner/workspace.py with future Git worktree orchestration.
+Runner safety/project-instruction behavior stays Runner-owned.
+
+
+14. PRODUCTION UI IMPLEMENTATION RULES
+=====================================
+
+- Port interaction/design from feature/ui into the existing main UI source architecture.
+- Do not copy the prototype into production as one giant HTML/JS file.
+- Split production modules by responsibility:
+  - Project/Chat navigation
+  - Chat sessions
+  - Composer/capability palette
+  - Queue
+  - Ask
+  - TaskDraft
+  - Task Board/List
+  - Task Drawer
+  - Task Editor/List/YAML
+  - Settings
+- One owner per action/render path; remove wrapper/override chains after migration.
+- Reuse current main theme/i18n/dialog/accessibility helpers.
+- Do not edit generated Workflow Studio bundle as source.
+- Preserve current Workflows/Prompts surfaces unless the target interaction explicitly requires a link/handoff.
+
+
+15. TEST / ACCEPTANCE DIRECTION
+==============================
+
+Production migration requires:
+- backend/unit contract tests
+- API tests
+- browser E2E
+- deterministic mock fixtures
+- Runner regression
+- focused live tests when shared Agent/backend/runtime code changes
+
+Critical browser flows:
+- Project -> Project Chat
+- multiple Chat sessions + delete confirmation
+- Project settings persistence
+- @ and / capability palettes
+- active turn -> automatic Queue; Queue Edit/Delete/FIFO
+- Ask multi-question/Other/free text/Cancel
+- @task / @task-single / @task-list -> Draft -> Edit -> Create
+- @goal -> durable Task + Run
+- + New Task from Composer/Tasks
+- single Drawer shell / source-aware Back / dirty confirmations
+- New Task does not exist before Create
+- Task Board/List state guards
+- Task List drag reorder + YAML Validate/Apply
+- Upload file -> managed full path -> Create/Save
+- current main Workflow/Prompt Studio remains green
+
+Runtime gates:
+- current deterministic Python suites remain green
+- current Browser E2E/Studio build checks remain green
+- dry-run/live consistency remains green
+- re-run focused/long soak only when the implementation touches runtime/recovery/backend paths that require it
+
+
+16. FINAL DEFERRED PHASE: GIT WORKTREE / MAIN DELIVERY
+======================================================
+
+This is intentionally the last large feature phase after Chat/Task production migration is stable.
+
+Detailed and authoritative contract:
+    feature/git-worktree-todo.md
+
+High-level target only:
+
+Physical boundary
+-----------------
+- Add a NEW top-level workspace/ backend package for Git worktree/merge orchestration.
+- Do not place it under runner/ or ui/.
+- Do not confuse it with existing runner/workspace.py.
+- Current UI/Task flow prepares a Task worktree first, then calls Runner(project_root=worktree).
+- CLI/standalone Runner remains caller-project_root driven and worktree-unaware.
+- workspace/ and Runner do not import each other's internals; Task Backend/Orchestrator coordinates them.
+
+Modes
+-----
+- Auto
+- Main
+- Isolated Worktree
+
+All current UI Task executions use isolated Task worktrees.
+Mode controls delivery after Runner completion.
+
+Main completion
+---------------
+- Runner Complete is not Main Task completion.
+- Snapshot/commit the local Task result.
+- Serialize delivery per repository + captured target branch.
+- Direct normal merge uses the current merge source into the captured Project branch.
+- Main becomes Closed only after merge commit succeeds.
+- no_changes is the normal exception with nothing to deliver.
+
+Merge/recovery
+--------------
+- Use ancestry-preserving direct merge, not old candidate/integration/squash designs.
+- Keep merge abortable until required post-merge validation passes.
+- Post-merge validation is needed when target moved beyond the base against which the current merge source was validated.
+- Validation is verdict-only/source-non-mutating.
+- Real source conflict/failure increments Task merge_failure_count.
+- Read Global merge_failure_limit after each real failure.
+- Within limit: create latest-target recovery workspace and call the existing Runner again.
+- Recovery result becomes the new current merge source.
+- Above limit: stop automatic Main delivery and retain latest result as Isolated Worktree / worktree_ready.
+- Target/history/worktree ownership anomalies fail closed and do not become fake source failures.
+
+Global Execution settings
+-------------------------
+- Auto workspace policy
+- Merge failure limit
+- Allow concurrent Main tasks
+
+Concurrent Main allows parallel Runner execution in separate worktrees while same-target delivery remains serialized.
+
+The root future.txt intentionally does not duplicate the full Git transaction contract.
+When implementing this phase, feature/git-worktree-todo.md is the source of truth.
+
+
+17. NON-GOALS
+=============
+
+- Do not redesign the proven Runner runtime to implement Chat/Tasks.
+- Do not create a second Workflow engine, Runner, retry engine, recovery engine or runtime state store.
+- Do not turn normal Chat into Runner execution.
+- Do not create a separate Task scheduler when existing ordered YAML/CLI behavior is sufficient.
+- Do not copy prototype mocks/hardcoded models/skills into production.
+- Do not keep obsolete UI handlers after the replacement is covered.
+- Do not restore old Git integration/candidate/squash contracts.
+- Do not let Git worktree functionality leak into Runner/CLI contracts.
+
+
+18. DEFINITION OF TARGET COMPLETE
+=================================
+
+The future migration is complete only when:
+- main production UI matches the agreed Project Chat / Tasks / Drawer / Settings interaction model;
+- normal Chat and durable Runner Tasks are separate but connected through explicit commands/actions;
+- Project/Global preferences are backend-owned;
+- Queue/Ask/capability discovery are production-backed;
+- TaskDraft/Task Editor/Task List/YAML reuse one canonical product model;
+- current Workflow/Prompt Studio and Runner reliability remain intact;
+- browser/API/runtime regression gates are green;
+- legacy replaced UI paths are removed;
+- final Git worktree/Main-delivery phase is implemented and verified per feature/git-worktree-todo.md.
