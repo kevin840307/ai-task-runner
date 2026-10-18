@@ -1659,7 +1659,17 @@ document.getElementById('confirmTaskListDraft')?.addEventListener('click',()=>{
   const items=(newTaskListDraft.items||[]).map(x=>({...x}));
   if(!items.length){showToast(uiText('taskListDraft.needTask'));renderNewTaskListDraftWorkspace();return}
   if(createButton){createButton.dataset.submitting='true';createButton.disabled=true;createButton.textContent=uiText('taskListDraft.creating')}
-  const id='T-'+(++taskSequence),first=items[0];
+  const id='T-'+(++taskSequence);
+  for(let i=0;i<items.length;i++){
+    const item=items[i],projectKey=projectKeyFromPath(item.project,project),resolved=resolveTaskWorkspace(projectKey,`${id}-I${i+1}`,item.workspacePolicy||'auto');
+    if(!resolved.ok){
+      taskSequence--;
+      if(createButton){delete createButton.dataset.submitting;createButton.disabled=false;createButton.textContent=uiText('taskListDraft.create')}
+      showToast(resolved.reason);return;
+    }
+    item.workspaceKind=resolved.kind;item.branch=resolved.branch;item.executionRoot=resolved.root;item.itemId=`${id}-I${i+1}`;
+  }
+  const first=items[0];
   const t={id,kind:'task_list',status:'new',title,runtime:'idle',desc:items.length===1?'1 task':`${items.length} ordered tasks`,tags:[`${items.length} task${items.length===1?'':'s'}`],workflow:items.length===1?first.workflow:'Tasks',projectContext:project,project,progress:[0,items.length],elapsed:'—',stage:'Draft',session:'—',goal:items.length===1?first.prompt:`${items.length} ordered tasks`,items,listItems:items,workspacePolicy:items.length===1?first.workspacePolicy:'per_item',workspaceKind:items.length===1?first.workspaceKind:'per_item',branch:items.length===1?first.branch:'—',executionRoot:items.length===1?first.executionRoot:'Per-task workspaces'};
   newTaskListDraft=null;syncTaskListDraftActions(false);
   document.getElementById('planInfoHeading').textContent=uiText('taskListDraft.listInfo');
