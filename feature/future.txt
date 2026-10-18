@@ -81,9 +81,9 @@ Global Settings -> Execution:
   - Always Main: Auto => Main.
   - Always Worktree: Auto => Isolated Worktree.
 - Merge failure limit:
-  - Read `global_merge_failure_limit` from the single Global Settings owner; default 3.
+  - Read `Global Settings.merge_failure_limit` from the single Global Settings owner; default 3.
   - Maintain one Task-local `merge_failure_count` containing the actual real merge/semantic/validation failure count.
-  - When `merge_failure_count > global_merge_failure_limit`, stop automatic Main delivery, preserve Task branch/worktree, and close as Isolated Worktree / worktree_ready fallback.
+  - When `merge_failure_count > Global Settings.merge_failure_limit`, stop automatic Main delivery, preserve Task branch/worktree, and close as Isolated Worktree / worktree_ready fallback.
 - Allow concurrent Main tasks:
   - Default Off: preserve current Main-busy disabled/block behavior.
   - On: a Task that resolves/selects Main may run concurrently in a separate Task worktree.
@@ -109,7 +109,7 @@ Rules:
   - Normal Git merge Task branch into candidate so Git can detect conflicts using shared ancestry.
   - Conflict/code repair reuses existing Runner; Integration Manager does not become another code-repair engine.
   - Validate candidate, then `git merge --squash candidate` into captured target branch and create exactly one Project-branch commit.
-  - Main becomes Closed only after that Project-branch commit succeeds, or when `merge_failure_count > global_merge_failure_limit` and delivery falls back to Isolated Worktree close.
+  - Main becomes Closed only after that Project-branch commit succeeds, or when `merge_failure_count > Global Settings.merge_failure_limit` and delivery falls back to Isolated Worktree close.
 - effective Isolated Worktree:
   - Runner Completed => snapshot/commit result locally.
   - Preserve branch/worktree and do not auto-modify target branch.
