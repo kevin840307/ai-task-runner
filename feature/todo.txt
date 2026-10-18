@@ -429,20 +429,21 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
 [ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
 [ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
-[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行。
-[ ] Main 直接 normal Git merge Task source branch 到 captured Project branch；merge success 才 Closed · merged。
-[ ] real merge conflict：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
+[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序。
+[ ] Main 直接在 captured target worktree 執行 `git merge --no-ff --no-commit <merge_source_branch>`；保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
+[ ] merge validation 統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR：Git conflict 或 SOURCE_FAIL 才算 real merge fail；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count，沿用既有 technical retry/backoff / Needs Attention。
+[ ] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
 [ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
-[ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → retry normal merge。
-[ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留 Task branch/worktree，fallback=isolated_worktree，Closed · worktree_ready。
+[ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
+[ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
 [ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
 [ ] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
 [ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
 [ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
 [ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
 [ ] 不得自動 git switch 使用者 Project checkout。
-[ ] Main completion boundary：merged source commit 已成為 target branch ancestry 且 merged target SHA 已持久化。
-[ ] Restart 時若 task_snapshot_sha / final recovery source commit 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge。
+[ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
+[ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
 [ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
 [ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
 [ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
