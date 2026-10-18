@@ -100,3 +100,4 @@ window.addEventListener('resize',hideProjectActionMenu);window.addEventListener(
 const ensureProjectFromInputBeforeMenu=ensureProjectFromInput;
 ensureProjectFromInput=function(raw){const key=ensureProjectFromInputBeforeMenu(raw);syncProjectRowMenus();return key};
 syncProjectRowMenus();
+selectProject(currentProjectKey);
