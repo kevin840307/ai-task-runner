@@ -770,9 +770,11 @@ function finalizeAskFlow(session,{freeform=''}={}){
     const answer=String(flow.answers[String(i)]||'').trim();
     return answer?`${i+1}. ${x.header}: ${answer}`:'';
   }).filter(Boolean);
-  if(direct)answered.push(`Direct answer: ${direct}`);
-  const summary=answered.join('\n')||direct;
-  session.messages.push(['user',direct||`Clarification answers\n${summary}`]);
+  const structured=answered.join('\n');
+  const userMessage=direct
+    ?(structured?`Clarification answers\n${structured}\nDirect answer: ${direct}`:direct)
+    :`Clarification answers\n${structured}`;
+  session.messages.push(['user',userMessage]);
   session.messages.push(['assistant','Mock Agent 已收到 clarification，正式版會把回答回傳給目前 Agent tool call，然後繼續原本 turn。']);
   session.askFlow=null;session.turnState='idle';
   if(activeChat()===session)renderChatSession();drainChatQueue(session);
@@ -781,8 +783,6 @@ function finalizeAskFlow(session,{freeform=''}={}){
 function submitAskFromComposer(session,text){
   const value=String(text||'').trim();
   if(!session?.askFlow||!value)return false;
-  const flow=session.askFlow,key=String(flow.index);
-  flow.answers[key]=value;flow.selected[key]='__composer__';
   return finalizeAskFlow(session,{freeform:value});
 }
 function advanceAskFlow(session=activeChat()){
