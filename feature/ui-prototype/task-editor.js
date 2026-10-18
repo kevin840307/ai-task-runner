@@ -132,12 +132,8 @@ function addPlanTask(t,{openPlan=true}={}){
   if(openPlan)openFullPlanPage(t.id);
 }
 function openFullPlanPage(id=currentTaskId){
-  const t=taskMap[id];if(!t)return;
-  currentTaskId=id;setPlanDraftForTask(t);
-  document.getElementById('taskOverlay').classList.remove('open');
-  showView('plan');
-  document.querySelectorAll('.navbtn[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view==='tasks'));
-  renderFullPlan(t);
+  if(typeof openPlanDialog==='function')return openPlanDialog(id,{returnTarget:'close'});
+  const t=taskMap[id];if(!t)return;showView('tasks');openTaskById(id);
 }
 document.getElementById('openFullPlan').onclick=()=>openFullPlanPage(currentTaskId);
 document.getElementById('planBackToTask').onclick=()=>{const id=currentTaskId;showView('tasks');openTaskById(id)};
