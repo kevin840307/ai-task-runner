@@ -18,7 +18,7 @@ html[data-appearance="light"],html[data-appearance="dark"]{--pass:#22a559;--run:
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:rgba(100,116,139,.4) transparent}
 *::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-thumb{background:rgba(100,116,139,.34);border:3px solid transparent;background-clip:content-box;border-radius:999px}
 html,body{height:100%;margin:0}body{font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden}
-button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button,input,textarea,select{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* Stable first paint: pre-hydrate persisted UI state, then reveal the app behind one light loading transition. */
 html.ui-booting .app{
@@ -423,6 +423,7 @@ textarea:focus,.code:focus,.composer textarea:focus,.field textarea:focus,.sourc
 .field-help{display:block;margin-top:4px;color:var(--muted);font-size:7.5px}
 #planFormList [data-plan-up],#planFormList [data-plan-down]{display:none!important}
 .plan-row-compact[draggable="true"]{cursor:grab}.plan-row-compact.dragging{opacity:.5}.plan-row-compact.drag-over{outline:2px solid color-mix(in srgb,var(--accent) 28%,transparent);outline-offset:2px}
+.draft-plan-row{transition:border-color .12s,background .12s,opacity .12s}.draft-plan-row:hover{border-color:color-mix(in srgb,var(--accent) 36%,var(--line))}.draft-plan-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.draft-row-controls .danger-item{color:var(--fail)}.draft-row-controls button:disabled{opacity:.35;cursor:not-allowed}
 .plan-row-compact.selected,.drawer-plan-row.selected{border-color:color-mix(in srgb,var(--accent) 56%,var(--line))!important;background:var(--accent-softer)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)}
 .plan-row-num .drag-grip{margin-right:5px;color:var(--muted);font-weight:900}
 .project-combobox-new{font-weight:800}
