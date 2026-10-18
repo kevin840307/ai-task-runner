@@ -319,6 +319,29 @@ Runner does **not** need to own:
 - integration queue
 - remote push
 
+### Hard invariant: do not modify Runner architecture for Git integration
+
+Git worktree/integration support is an orchestration layer around the existing Runner, not a new Runner execution subsystem.
+
+Do not add:
+
+- a Git Integration Stage
+- a second Runner state machine
+- a second recovery engine
+- Git branch/worktree ownership inside FlowEngine / StageExecutor / Supervisor
+- special Git-aware behavior inside normal Workflow execution
+
+The existing Runner API remains conceptually:
+
+```text
+Runner(project_root, task/workflow input)
+→ Workflow / Agent
+→ Review / Validate
+→ Completed
+```
+
+If integration later needs code changes, it calls this same Runner contract again with a recovery worktree and recovery task context.
+
 ---
 
 ## 9. Every completed Main Task enters Integration Queue
@@ -583,6 +606,35 @@ Runner(project_root = recovery_worktree)
 → retry integration transaction
 ```
 
+### Any failure that requires changing code goes back through Runner
+
+Integration Manager may retry deterministic Git operations itself, but it must not become another code-repair agent.
+
+Examples that stay inside Integration Manager:
+
+```text
+lock contention
+temporary worktree creation failure
+branch moved before transaction started
+retryable Git command failure with no code change required
+cleanup retry
+```
+
+Examples that must call the existing Runner again:
+
+```text
+merge/rebase conflict requiring source edits
+latest target changed architecture and old patch no longer applies
+validation/test failure after replay
+review failure caused by integration result
+generated code no longer matches latest interfaces/contracts
+semantic conflict even when Git has no textual conflict
+```
+
+The recovery Runner may repair the existing candidate or re-do the affected part from the latest integrated code. It must still run the normal Review / Validate path before integration is retried.
+
+Do not bypass Runner validation by directly accepting AI-edited conflict files from Integration Manager.
+
 ---
 
 ## 15. Prefer a temporary integration/recovery worktree
@@ -718,34 +770,169 @@ Do not mix remote publishing into normal local Task integration.
 
 ---
 
-## 19. UI/runtime projection
+## 19. UI / Task status model
 
-Do not add another Runner state machine.
+Do not add another Board lifecycle column just for Git integration.
 
-UI may project integration status separately from Runner execution.
+Keep the existing Board lifecycle meanings:
+
+```text
+New
+Ongoing
+Paused
+Closed
+```
+
+Git integration is a secondary Task projection shown inside the Task card / Info Drawer / runtime detail.
+
+### Recommended lifecycle mapping
+
+| Situation | Board status | Integration status / detail |
+| --- | --- | --- |
+| Task created, Runner not started | New | preparing / not_started |
+| Runner executing | Ongoing | execution_running |
+| Runner Review / Validate | Ongoing | execution_validating |
+| Main delivery: Runner Completed, waiting in Integration Queue | Ongoing | pending |
+| Main delivery: replay/squash transaction running | Ongoing | integrating |
+| Main delivery: conflict is being repaired by Runner | Ongoing | conflict_recovery |
+| Main delivery: target branch dirty | Ongoing | waiting_target_clean + Needs Attention |
+| Main delivery: validation fails and Runner is redoing/fixing | Ongoing | recovery |
+| Main delivery: squash commit created successfully | Closed | integrated |
+| Worktree delivery: Runner Completed and isolated result is intentionally kept | Closed | worktree_ready / not_required |
+| User explicitly stops a resumable running Task | Paused | integration must not start until execution is completed/resumed |
+| Integration irrecoverable / requires user action | Ongoing | failed / Needs Attention; do not mark Closed |
+
+### Important completion rule
+
+For `delivery: main`:
+
+> **Runner Completed is not Task Closed.**
+
+The Task remains `Ongoing` until the integration transaction successfully creates the target-branch squash commit.
+
+```text
+Runner Completed
+→ Integration pending/integrating/recovery
+→ target squash commit succeeds
+→ Closed
+```
+
+This prevents a false “Completed/Closed” UI while the requested result has not yet reached the selected Project branch.
+
+For `delivery: worktree`:
+
+```text
+Runner Completed
+→ worktree result intentionally retained
+→ Closed
+```
+
+because retaining the isolated worktree is the requested delivery result.
+
+### Paused is not an integration waiting bucket
+
+Do not overload `Paused` for:
+
+- waiting in Integration Queue
+- waiting for target branch to become clean
+- Git conflict recovery
+- automatic integration retry
+
+`Paused` keeps its existing meaning: a user-stopped/resumable Task execution.
+
+Integration waiting/recovery should remain `Ongoing` with a secondary status or Needs Attention reason.
+
+### Suggested UI placement
+
+#### Board card
+
+Keep the normal lifecycle column and add one compact secondary line/badge when relevant:
+
+```text
+T-001  Ongoing
+Integrating · feature/ui
+
+T-002  Ongoing
+Needs Attention · target has uncommitted changes
+
+T-003  Ongoing
+Conflict recovery · Runner retry 2
+
+T-004  Closed
+Integrated · feature/ui
+```
+
+Do not add Git controls directly to every card.
+
+#### Task Info Drawer
+
+Add an `Integration` section only when the Task uses Git worktree delivery metadata.
 
 Example:
 
 ```text
-Execution
-- queued
-- running
-- validating
-- completed
-
 Integration
-- not_required
-- pending
-- integrating
-- conflict_recovery
-- waiting_target_clean
-- integrated
-- failed
+Target branch     feature/ui
+Delivery          Main
+Task branch       local/task/T-001
+Base              abc123
+State             Integrating
+Latest target     def456
+Attempt           2
+Attention         —
 ```
 
-The Board lifecycle can remain its own existing concept.
+When blocked:
 
-Do not infer Git integration state from raw Runner runtime flags.
+```text
+State             Waiting for target clean
+Attention         feature/ui has uncommitted changes
+Action            Commit/stash/revert those changes, then integration can continue
+```
+
+#### Task List / child items
+
+Do not give every child its own integration state if the Board Task is the delivery unit.
+
+The parent Task owns:
+
+- Task worktree
+- integration transaction
+- target squash commit
+- integration status
+
+Child execution progress remains Runner/Task List execution detail.
+
+### Runtime / projection separation
+
+Keep three concepts separate:
+
+```text
+Board lifecycle
+New / Ongoing / Paused / Closed
+
+Runner runtime
+idle / running / recovering / stopped / completed / attention / ...
+
+Git integration
+not_started / pending / integrating / conflict_recovery /
+waiting_target_clean / recovery / integrated / failed / not_required
+```
+
+UI composes these into one readable Task view, but no layer re-derives or replaces another owner's state machine.
+
+### Allowed actions during integration
+
+Initial policy:
+
+- While `pending/integrating/conflict_recovery/recovery`: disable destructive Reset/Rerun/Delete that could invalidate the integration transaction.
+- `Open Info`, logs, worktree path, target branch and conflict details remain available.
+- While `waiting_target_clean`: show the blocking reason; execution remains finished and integration waits.
+- After `integrated`: normal Closed actions apply.
+- For `worktree_ready`: normal Closed actions apply while retaining the worktree according to retention policy.
+
+Exact action guards must come from one backend-owned Task projection, not duplicated button logic.
+
 
 ---
 
@@ -764,6 +951,8 @@ git:
   task_branch: local/task/T-001
   worktree: .worktrees/T-001
   integration_status: pending
+  integration_attempt: 0
+  integration_attention: null
 ```
 
 For Worktree delivery:
@@ -895,6 +1084,8 @@ T-002 then repeats against the latest committed target.
 
 ### Phase A — contracts / metadata
 
+- [ ] Lock the architecture invariant: Git worktree/integration orchestration must not modify Runner / FlowEngine / StageExecutor / Supervisor execution structure.
+- [ ] Define that any integration failure requiring source-code changes re-enters the existing Runner using a recovery worktree; Integration Manager itself never repairs application code.
 - [ ] Define delivery semantics: all Tasks execute in worktrees; Main means auto-integrate to target, Worktree means keep isolated output.
 - [ ] Add/derive `target_branch` from the Project's current/original selected branch; do not hardcode main.
 - [ ] Define minimal Git metadata for Task base SHA, Task branch, worktree path, and integration status.
@@ -950,6 +1141,13 @@ T-002 then repeats against the latest committed target.
 
 ### Phase G — UI
 
+- [ ] Keep Board columns as New / Ongoing / Paused / Closed; do not add an Integration column.
+- [ ] Main-delivery Task stays Ongoing after Runner Completed until target squash commit succeeds; only then move to Closed.
+- [ ] Worktree-delivery Task may move to Closed when Runner Completed because the retained worktree is the requested output.
+- [ ] Add secondary integration badge/detail: pending / integrating / conflict_recovery / waiting_target_clean / recovery / integrated / failed / not_required.
+- [ ] Keep Paused reserved for explicit user-stopped/resumable execution; do not use Paused for Git waiting/recovery.
+- [ ] Add Integration details to Task Info Drawer (target, delivery, Task branch, base/latest SHA, state, attempt, attention reason).
+- [ ] Disable destructive Reset/Rerun/Delete during active integration/recovery through one backend-owned allowed-actions projection.
 - [ ] Clarify Workspace wording: every mode uses an isolated worktree.
 - [ ] Main description: develop in worktree, then auto-integrate/squash into selected target branch.
 - [ ] Worktree description: develop in worktree and keep isolated result.
@@ -993,6 +1191,9 @@ T-002 then repeats against the latest committed target.
 
 ### Conflict recovery
 
+- [ ] Force a textual merge/rebase conflict and confirm Integration Manager does not edit code itself; it calls the existing Runner with a recovery worktree.
+- [ ] Force a no-text-conflict validation failure caused by latest target changes and confirm the existing Runner redoes/fixes the affected implementation.
+- [ ] Confirm recovery still passes the normal Runner Review / Validate path before integration continues.
 - [ ] Two Tasks modify the same lines.
 - [ ] Confirm conflict context is generated.
 - [ ] Confirm existing Runner is called against the recovery worktree.
