@@ -59,7 +59,7 @@ def _load_main_ui_document(page, html: str) -> None:
 def _install_main_ui_scripts(page, static_root: Path) -> None:
     # app.js is a real ES module. Route the module graph through the same HTTP
     # origin as the document instead of injecting app.js as a classic script.
-    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js", "js/task-workspace.js"):
+    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js", "js/task-workspace.js", "js/tasks-board.js"):
         source = static_root / relative
         page.route(
             f"http://local.test/{relative}",
@@ -145,6 +145,8 @@ def _bridge_for(state: UIState):
                     }
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
+                elif path == "/api/tasks":
+                    data = state.tasks.list(project)
                 elif path == "/api/chat/ask":
                     session_id = query.get("session_id", [""])[0]
                     data = state.chat_service.ask(project, session_id)
@@ -380,6 +382,15 @@ def _bridge_for(state: UIState):
                         Path(body["project"]),
                         body.get("draft"),
                         request_id=str(body.get("request_id", "")),
+                        project_id=state.project_identity(Path(body["project"]))["project_id"],
+                    )
+                elif path == "/api/tasks/update":
+                    data = state.tasks.update(
+                        Path(body["project"]),
+                        str(body.get("task_id", "")),
+                        body.get("draft"),
+                        request_id=str(body.get("request_id", "")),
+                        expected_updated_at=body.get("expected_updated_at"),
                     )
                 elif path == "/api/chat/ask/demo":
                     session_id = str(body.get("session_id", ""))
@@ -679,6 +690,8 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
             )
 
             page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
             page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.wait_for_function("window.__staleRuntimeStarted === true", timeout=5000)
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
@@ -756,8 +769,12 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
-            # Runner options belong to Tasks, not the default Project Chat.
+            # Tasks opens the durable Board; the legacy Runner console remains a Tasks subview.
             page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            assert page.locator("#chatView").is_hidden()
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
             page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
 
             # Environment diagnostics stay readable but the completed checklist can collapse.
@@ -954,6 +971,21 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-empty-panel").get_by_text("No Runner runtime yet").is_visible()
             page.locator("#taskWorkspaceClose").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            # Tasks nav now projects canonical durable Tasks into Board/List views.
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
+            assert page.locator("#tasksBoardNewCount").inner_text() == "1"
+            assert page.locator("#tasksProjectFilterSummary").inner_text() in {"All", "Fixture Project"}
+            page.locator("[data-tasks-view-mode='list']").click()
+            assert page.locator("#tasksListRows .tasks-list-row").count() == 1
+            page.locator("#tasksListRows .tasks-list-row").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.locator("#taskWorkspaceClose").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.locator("#projectList .project-root").first.click()
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
 
             page.fill("#projectChatInput", "@task-single browser one")
             page.click("#projectChatSendButton")
@@ -1658,6 +1690,9 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
             _boot_main_ui(page)
 
             page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
             page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.locator("#optionsButton").click()
             assert page.locator("#activeRunDetails").count() == 0

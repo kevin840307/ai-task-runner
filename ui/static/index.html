@@ -142,6 +142,46 @@
       </div>
     </section>
 
+    <section id="tasksBoardView" class="tasks-board-page" hidden aria-label="Tasks Board">
+      <header class="header">
+        <div class="title-block">
+          <div class="title-line"><h1>Tasks</h1></div>
+          <p>Durable Task Board · lifecycle is separate from Runner runtime.</p>
+        </div>
+        <div class="tasks-board-header-actions">
+          <button id="tasksCurrentRuntimeButton" class="action-button" type="button">Current Runtime</button>
+        </div>
+      </header>
+      <div class="tasks-board-toolbar">
+        <div class="tasks-board-toolbar-left">
+          <div class="tasks-project-filter">
+            <button id="tasksProjectFilterButton" class="tasks-project-trigger" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong id="tasksProjectFilterSummary">—</strong></button>
+            <div id="tasksProjectFilterMenu" class="tasks-project-menu" hidden>
+              <div class="tasks-project-menu-head"><strong>Show Tasks from</strong><div><button id="tasksProjectFilterAll" type="button">Select all</button><button id="tasksProjectFilterClear" type="button">Clear</button></div></div>
+              <div id="tasksProjectFilterOptions" class="tasks-project-options"></div>
+            </div>
+          </div>
+          <input id="tasksBoardSearch" class="tasks-board-search" type="search" placeholder="Search Task, Workflow, Prompt…" />
+        </div>
+        <div class="tasks-board-toolbar-right">
+          <div class="tasks-view-toggle" aria-label="Task view">
+            <button type="button" class="active" data-tasks-view-mode="board" aria-pressed="true">Board</button>
+            <button type="button" data-tasks-view-mode="list" aria-pressed="false">List</button>
+          </div>
+        </div>
+      </div>
+      <div class="tasks-board-content">
+        <div id="tasksBoardColumns" class="tasks-board-columns">
+          <section class="tasks-board-column" data-status="new"><div class="tasks-board-column-head"><strong>New</strong><span id="tasksBoardNewCount">0</span></div><div id="tasksBoardNew" class="tasks-board-dropzone"></div></section>
+          <section class="tasks-board-column" data-status="ongoing"><div class="tasks-board-column-head"><strong>Ongoing</strong><span id="tasksBoardOngoingCount">0</span></div><div id="tasksBoardOngoing" class="tasks-board-dropzone"></div></section>
+          <section class="tasks-board-column" data-status="paused"><div class="tasks-board-column-head"><strong>Paused</strong><span id="tasksBoardPausedCount">0</span></div><div id="tasksBoardPaused" class="tasks-board-dropzone"></div></section>
+          <section class="tasks-board-column" data-status="closed"><div class="tasks-board-column-head"><strong>Closed</strong><span id="tasksBoardClosedCount">0</span></div><div id="tasksBoardClosed" class="tasks-board-dropzone"></div></section>
+        </div>
+        <div id="tasksListView" class="tasks-list-view" hidden><div id="tasksListRows"></div></div>
+        <div id="tasksBoardEmpty" class="tasks-board-empty" hidden>No Tasks match the current Project filter.</div>
+      </div>
+    </section>
+
     <section id="chatView" class="view-shell" hidden>
       <header class="header">
         <div class="title-block">
@@ -150,6 +190,7 @@
           <p id="runtimeHeadline" class="runtime-headline" hidden></p>
         </div>
         <div class="runtime-actions">
+          <button id="tasksRuntimeBackButton" class="action-button" type="button">← Tasks</button>
           <button id="clearHistoryButton" class="action-button clear-history-button" type="button" title="清除聊天紀錄" data-i18n-title="history.clear" data-i18n="history.clear">清除紀錄</button>
           <span id="statusBadge" class="runtime-badge" data-i18n="status.idle">閒置</span>
         </div>

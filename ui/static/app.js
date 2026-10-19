@@ -2,6 +2,7 @@ import { autosizeTextarea, setControlLocked, createLatestActionGate } from "./js
 import { createWorkflowGenerator } from "./js/workflow-generator.js";
 import { createProjectChatController } from "./js/project-chat.js";
 import { createTaskWorkspaceController } from "./js/task-workspace.js";
+import { createTasksBoardController } from "./js/tasks-board.js";
 const $ = (id) => document.getElementById(id);
 const t = (key, fallback = "") => window.I18n?.t(key, fallback) ?? fallback ?? key;
 const tf = (key, values = {}, fallback = "") => window.I18n?.format?.(key, values, fallback) ?? fallback ?? key;
@@ -279,6 +280,13 @@ const choiceDialog = (options) => window.UiDialogs.choice(options);
 const taskWorkspace = createTaskWorkspaceController({
   api,
   confirmDialog,
+  showError: showActionError,
+});
+const tasksBoard = createTasksBoardController({
+  api,
+  openTask: (task, options) => taskWorkspace.openTask(task, options),
+  getProjects: () => state.projects,
+  getCurrentProject: () => state.project,
   showError: showActionError,
 });
 const projectChat = createProjectChatController({
@@ -564,7 +572,7 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
-  state.view = "project-chat"; $("projectChatView").hidden = false; $("chatView").hidden = true; $("workflowView").hidden = true; projectChat.clearProject();
+  state.view = "project-chat"; $("projectChatView").hidden = false; $("tasksBoardView").hidden = true; $("chatView").hidden = true; $("workflowView").hidden = true; projectChat.clearProject();
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
@@ -1152,6 +1160,7 @@ async function switchView(view) {
     state.view = view;
     state.studioSourceKind = kind;
     $("projectChatView").hidden = true;
+    $("tasksBoardView").hidden = true;
     $("chatView").hidden = true;
     $("workflowView").hidden = false;
     $("chatNav").classList.remove("active");
@@ -1169,6 +1178,7 @@ async function switchView(view) {
   if (view === "project-chat") {
     state.view = "project-chat";
     $("workflowView").hidden = true;
+    $("tasksBoardView").hidden = true;
     $("chatView").hidden = true;
     $("projectChatView").hidden = false;
     $("chatNav").classList.remove("active");
@@ -1176,21 +1186,35 @@ async function switchView(view) {
     $("promptNav").classList.remove("active");
     return true;
   }
+  if (view === "tasks-runtime") {
+    state.view = "tasks-runtime";
+    $("workflowView").hidden = true;
+    $("projectChatView").hidden = true;
+    $("tasksBoardView").hidden = true;
+    $("chatView").hidden = false;
+    $("chatNav").classList.add("active");
+    $("workflowNav").classList.remove("active");
+    $("promptNav").classList.remove("active");
+    if (state.project) {
+      $("emptyState").hidden = true;
+      $("summary").hidden = false;
+      $("messages").hidden = false;
+      $("composePanel").hidden = false;
+      try { await Promise.all([refreshMessages({ projectPath: state.project.path }), refreshRuntime({ projectPath: state.project.path })]); }
+      catch (error) { showActionError(error.message, "Runtime view loading failed"); }
+    }
+    return true;
+  }
   state.view = "tasks";
   $("workflowView").hidden = true;
   $("projectChatView").hidden = true;
-  $("chatView").hidden = false;
+  $("chatView").hidden = true;
+  $("tasksBoardView").hidden = false;
   $("chatNav").classList.add("active");
   $("workflowNav").classList.remove("active");
   $("promptNav").classList.remove("active");
-  if (state.project) {
-    $("emptyState").hidden = true;
-    $("summary").hidden = false;
-    $("messages").hidden = false;
-    $("composePanel").hidden = false;
-    try { await Promise.all([refreshMessages({ projectPath: state.project.path }), refreshRuntime({ projectPath: state.project.path })]); }
-    catch (error) { showActionError(error.message, "Task view loading failed"); }
-  }
+  try { await tasksBoard.refresh(); }
+  catch (error) { showActionError(error.message, "Task Board loading failed"); }
   return true;
 }
 function visibleStudioFiles() { return state.studioSourceKind === "prompt" ? (state.studioFiles.prompts || []) : (state.studioFiles.workflows || []); }
@@ -2089,6 +2113,8 @@ $("emptyOpenProjectButton").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("tasks");
+$("tasksCurrentRuntimeButton").onclick = () => switchView("tasks-runtime");
+$("tasksRuntimeBackButton").onclick = () => switchView("tasks");
 $("workflowNav").onclick = () => switchView("workflow");
 $("promptNav").onclick = () => switchView("prompt");
 $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceKind] = $("studioSearchInput").value; renderStudioFiles(); }; $("studioSearchClear").onclick = () => { state.studioFilters[state.studioSourceKind] = ""; renderStudioFiles(); $("studioSearchInput").focus(); };
@@ -2233,11 +2259,11 @@ window.addEventListener("resize", () => {
 }); Promise.allSettled([loadGlobalSettings(), refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
   await restoreWorkflowStudioNavigation();
   await restoreActiveWorkflowGenerator();
-}); refreshPromptTags(); startNonOverlappingPoll(() => state.view === "tasks" ? refreshRuntime() : Promise.resolve(), 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
+}); refreshPromptTags(); startNonOverlappingPoll(() => state.view === "tasks-runtime" ? refreshRuntime() : Promise.resolve(), 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   const work = [refreshProjectStatuses()];
-  if (state.view === "tasks") work.push(refreshRuntime());
+  if (state.view === "tasks-runtime") work.push(refreshRuntime());
   if (state.view === "workflow" || state.view === "prompt") work.push(refreshStudioGuard());
   Promise.allSettled(work);
 });
