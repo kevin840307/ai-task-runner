@@ -193,9 +193,60 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (state?.kind === "task") state.saveRequestId = "";
   }
 
+  function fieldErrorKey(name, index = state?.index || 0) {
+    return name === "draftTitle" ? "draftTitle" : String(index) + ":" + name;
+  }
+
+  function clearFieldError(name, index = state?.index || 0) {
+    if (!state?.fieldErrors) return;
+    delete state.fieldErrors[fieldErrorKey(name, index)];
+    state.error = "";
+  }
+
+  function appendFieldError(field, control, name, index = state?.index || 0) {
+    const message = String(state?.fieldErrors?.[fieldErrorKey(name, index)] || "");
+    if (!message) return;
+    field.classList.add("has-error");
+    control.setAttribute("aria-invalid", "true");
+    const error = document.createElement("small");
+    error.className = "task-workspace-field-error";
+    error.id = "taskWorkspaceFieldError-" + fieldErrorKey(name, index).replace(/[^A-Za-z0-9_-]/g, "-");
+    error.textContent = message;
+    control.setAttribute("aria-describedby", error.id);
+    field.appendChild(error);
+  }
+
+  function mapFieldError(message) {
+    if (!state) return false;
+    const text = String(message || "").trim();
+    if (!text) return false;
+    const itemMatch = text.match(/Task item\s+(\d+)/i);
+    const index = itemMatch ? Math.max(0, Number(itemMatch[1]) - 1) : (state.index || 0);
+    let field = "";
+    if (/TaskDraft title/i.test(text)) field = "draftTitle";
+    else if (/Task item\s+\d+\s+title/i.test(text)) field = "title";
+    else if (/Task item\s+\d+\s+prompt/i.test(text)) field = "prompt";
+    else if (/AI Validator Prompt/i.test(text)) field = "ai_validator_prompt_file";
+    else if (/File Validator/i.test(text)) field = "validator";
+    else if (/Workflow/i.test(text)) field = "workflow";
+    else if (/Project/i.test(text)) field = "project";
+    else if (/workspace/i.test(text)) field = "workspace";
+    if (!field) {
+      state.fieldErrors = {};
+      return false;
+    }
+    state.fieldErrors = { [fieldErrorKey(field, index)]: text };
+    if (field !== "draftTitle") {
+      state.index = index;
+      if (state.route === "list") state.route = "editor";
+    }
+    return true;
+  }
+
   function updateItem(index, key, value) {
     const item = editorDraft()?.items?.[index];
     if (item) {
+      clearFieldError(key, index);
       item[key] = value;
       touchEditor();
     }
@@ -232,10 +283,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     input.value = String(draft?.title || "");
     input.maxLength = 240;
     input.addEventListener("input", () => {
+      clearFieldError("draftTitle");
       draft.title = input.value;
       touchEditor();
     });
     wrap.append(label, input);
+    appendFieldError(wrap, input, "draftTitle");
     return wrap;
   }
 
@@ -370,10 +423,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     grid.className = "task-workspace-grid";
 
     const fields = [
-      ["Item title", "taskWorkspaceItemTitle", "input", String(item.title || "")],
-      ["Project", "taskWorkspaceProject", "input", String(item.project || state.project || "")],
+      ["Item title", "taskWorkspaceItemTitle", "input", "title", String(item.title || "")],
+      ["Project", "taskWorkspaceProject", "input", "project", String(item.project || state.project || "")],
     ];
-    for (const [labelText, id, kind, value] of fields) {
+    for (const [labelText, id, kind, key, value] of fields) {
       const field = document.createElement("label");
       field.className = "task-workspace-field";
       const label = document.createElement("span");
@@ -386,9 +439,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         control.title = "Task stays scoped to the selected Project";
       } else {
         control.maxLength = 240;
-        control.addEventListener("input", () => updateItem(state.index, "title", control.value));
+        control.addEventListener("input", () => updateItem(state.index, key, control.value));
       }
       field.append(label, control);
+      appendFieldError(field, control, key);
       grid.appendChild(field);
     }
 
@@ -413,6 +467,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       render();
     });
     workflowField.appendChild(workflow);
+    appendFieldError(workflowField, workflow, "workflow");
 
     const workspaceField = document.createElement("label");
     workspaceField.className = "task-workspace-field";
@@ -428,6 +483,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workspace.value = String(item.workspace || "auto");
     workspace.addEventListener("change", () => updateItem(state.index, "workspace", workspace.value));
     workspaceField.appendChild(workspace);
+    appendFieldError(workspaceField, workspace, "workspace");
     grid.append(workflowField, workspaceField);
     body.appendChild(grid);
 
@@ -440,6 +496,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     prompt.value = String(item.prompt || "");
     prompt.addEventListener("input", () => updateItem(state.index, "prompt", prompt.value));
     promptField.appendChild(prompt);
+    appendFieldError(promptField, prompt, "prompt");
     body.appendChild(promptField);
 
     const capability = workflowMeta(item.workflow);
@@ -457,6 +514,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.placeholder = "Enter file path";
       input.addEventListener("input", () => updateItem(state.index, key, input.value));
       field.append(label, input);
+      appendFieldError(field, input, key);
       validationGrid.appendChild(field);
     }
     if (capability?.requires_python_validator) {
@@ -619,6 +677,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.draft.items.push(blankItem(state.project, workflow));
     state.index = state.draft.items.length - 1;
     state.error = "";
+    state.fieldErrors = {};
     state.route = "editor";
     render();
   }
@@ -799,6 +858,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.index = Math.max(0, Math.min(Number(index) || 0, state.editDraft.items.length - 1));
     state.saveRequestId = "";
     state.error = "";
+    state.fieldErrors = {};
     state.route = "editor";
     render();
   }
@@ -975,12 +1035,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       render();
     } catch (error) {
       state.error = String(error?.message || "Task save failed");
+      mapFieldError(state.error);
       render();
-      const errorNode = byId("taskWorkspaceError");
-      if (errorNode) {
-        errorNode.hidden = false;
-        errorNode.textContent = state.error;
-      }
       showError?.(error.message, "Save Task failed");
     } finally {
       if (button && document.contains(button)) {
@@ -1036,10 +1092,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       closeNow();
     } catch (error) {
       state.error = String(error?.message || "TaskDraft validation failed");
-      if (state.route === "list") { state.route = "editor"; state.index = 0; }
+      const mapped = mapFieldError(state.error);
+      if (!mapped && state.route === "list") { state.route = "editor"; state.index = 0; }
       render();
-      const errorNode = byId("taskWorkspaceError");
-      if (errorNode) { errorNode.hidden = false; errorNode.textContent = state.error; }
       showError?.(error.message, "Save TaskDraft failed");
     } finally {
       if (button && document.contains(button)) {
@@ -1081,6 +1136,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       route: list ? "list" : "editor",
       index: 0,
       error: "",
+      fieldErrors: {},
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
@@ -1107,6 +1163,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       route: value.items.length > 1 ? "list" : "editor",
       index: 0,
       error: "",
+      fieldErrors: {},
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
@@ -1134,6 +1191,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       editorReturn: "info",
       saveRequestId: "",
       error: "",
+      fieldErrors: {},
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",

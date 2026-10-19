@@ -904,6 +904,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
         # every Task item requires a Workflow. Give the fixture a real saved
         # Project selection instead of weakening the production validator.
         state.project_preferences.update(root, {"workflow": "workflow.yaml"})
+        # Keep Workflow capability behavior deterministic in this browser fixture.
+        # Production resolves these flags from the real Workflow catalog.
+        def task_requirements(_project: Path, workflow: str) -> dict:
+            mixed = Path(str(workflow or "")).name == "mixed.yaml"
+            return {"requires_python_validator": mixed, "has_ai_validator": mixed}
+        state.tasks._workflow_requirements = task_requirements
+        state.task_drafts._workflow_requirements = task_requirements
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
@@ -938,6 +945,23 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.fill("#taskWorkspaceDraftTitle", "Standalone browser task")
             page.fill("#taskWorkspaceItemTitle", "Standalone child")
             page.fill("#taskWorkspacePrompt", "Standalone task prompt")
+
+            # X, Escape, backdrop and footer Cancel share the same dirty guard
+            # and must preserve the editor while the user chooses Keep editing.
+            for close_kind in ("x", "escape", "backdrop", "cancel"):
+                if close_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                elif close_kind == "escape":
+                    page.keyboard.press("Escape")
+                elif close_kind == "backdrop":
+                    page.locator("#taskWorkspaceOverlay").click(position={"x": 8, "y": 8})
+                else:
+                    page.click("#taskWorkspaceFooterBack")
+                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                assert page.locator(".ui-dialog-body").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
+                page.locator("[data-dialog-cancel]").click()
+                assert page.locator("#taskWorkspacePrompt").input_value() == "Standalone task prompt"
+
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             created = state.tasks.list(state.repo_root)["tasks"]
@@ -969,11 +993,31 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").is_visible()
-            page.fill("#taskWorkspaceValidator", str(state.repo_root / "validate.py"))
-            page.fill("#taskWorkspaceAiValidatorPrompt", str(state.repo_root / "review.md"))
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.fill("#taskWorkspaceDraftTitle", "Chat browser list")
+
+            # Backend validation must route the error back to the exact field
+            # without dropping the user's prompt/title.
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceValidator").get_attribute("aria-invalid") == "true"
+            assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
+            assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
+            page.fill("#taskWorkspaceValidator", str(state.repo_root / "validate.py"))
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").get_attribute("aria-invalid") == "true"
+            assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt is required", exact=False).is_visible()
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+            page.fill("#taskWorkspaceAiValidatorPrompt", str(state.repo_root / "review.md"))
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
+
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             created = state.tasks.list(state.repo_root)["tasks"]
