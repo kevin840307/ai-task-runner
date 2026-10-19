@@ -1416,7 +1416,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.fill("#projectChatInput", "@ask-demo")
             page.click("#projectChatSendButton")
             page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
-            assert page.locator(".project-chat-ask-head").get_by_text("1 / 2").is_visible()
+            assert page.locator(".project-chat-ask-head").get_by_text("1 / 3").is_visible()
 
             # Ask and Queue are Chat-session scoped while Agent/Model/Mode remain Project scoped.
             for queued_text in ("queued while ask 1", "queued while ask 2", "queued while ask 3"):
@@ -1474,7 +1474,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.get_by_role("button", name="Other / custom answer").click()
             assert page.locator(".project-chat-ask-input[aria-label='Custom answer']").input_value() == "Custom browser approach"
             page.get_by_role("button", name="Next", exact=True).click()
-            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('2 / 2')")
+            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('2 / 3')")
+            page.locator(".project-chat-ask-option").filter(has_text="Queue").first.click()
+            page.locator(".project-chat-ask-option").filter(has_text="Ask").first.click()
+            page.get_by_role("button", name="Other / custom answer").click()
+            page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Docs")
+            page.get_by_role("button", name="Next", exact=True).click()
+            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('3 / 3')")
             assert page.get_by_role("button", name="Submit", exact=True).is_disabled()
             page.fill(".project-chat-ask-input[aria-label='Ask text answer']", "Browser reason")
             assert page.get_by_role("button", name="Submit", exact=True).is_enabled()
@@ -1492,6 +1498,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             answered_ask = state.chat_service.ask(state.repo_root, state.chat_service.sessions(state.repo_root)["active_session_id"])["ask"]
             assert answered_ask["status"] == "answered"
             assert answered_ask["answers"]["approach"]["other"] == "Custom browser approach"
+            assert answered_ask["answers"]["features"] == {
+                "values": ["queue", "ask"],
+                "other": "Docs",
+            }
             assert answered_ask["answers"]["reason"] == "Browser reason"
 
             # Cancel is explicit and also releases next-turn Queue processing.
