@@ -75,10 +75,11 @@ def _install_main_ui_scripts(page, static_root: Path) -> None:
     page.add_script_tag(url="http://local.test/app.js", type="module")
 
 
-def _boot_main_ui(page) -> None:
+def _boot_main_ui(page, expected_project: str = "Fixture Project") -> None:
     # app.js performs its production bootstrap immediately as an ES module.
     page.wait_for_function(
-        "document.querySelector('#projectName')?.textContent === 'Fixture Project'",
+        "(name) => document.querySelector('#projectName')?.textContent === name",
+        arg=expected_project,
         timeout=8000,
     )
 
@@ -296,7 +297,11 @@ def _bridge_for(state: UIState):
                         ],
                     }
                 elif path == "/api/backends":
-                    data = state.backend_catalog()
+                    data = {
+                        "backends": ["qwen", "opencode"],
+                        "default": "qwen",
+                        "models": {},
+                    }
                 elif path == "/api/studio/files":
                     data = state.studio_files(project)
                 elif path == "/api/studio/file":
@@ -1185,7 +1190,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
-        def install(page) -> None:
+        def install(page, expected_project: str = "Fixture Project") -> None:
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
                     const method = (options.method || 'GET').toUpperCase();
@@ -1200,7 +1205,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
             _install_main_ui_scripts(page, static_root)
-            _boot_main_ui(page)
+            _boot_main_ui(page, expected_project)
 
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright)
@@ -1290,7 +1295,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert last_message["y"] + last_message["height"] <= messages_box["y"] + messages_box["height"] + 1
 
             page.reload(wait_until="domcontentloaded")
-            install(page)
+            install(page, "Second Project")
             assert page.locator("html").get_attribute("data-theme") == "violet"
             assert page.locator("html").get_attribute("data-appearance-preference") == "system"
             assert page.locator("html").get_attribute("data-appearance") == "dark"
@@ -1298,11 +1303,6 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert not errors
             browser.close()
 
-
-@pytest.mark.skipif(
-    _browser_unavailable(),
-    reason="Playwright/Chromium unavailable outside browser CI",
-)
 
 @pytest.mark.skipif(
     _browser_unavailable(),
@@ -1330,7 +1330,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
-        def install(page) -> None:
+        def install(page, expected_project: str = "Fixture Project") -> None:
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
                     const method = (options.method || 'GET').toUpperCase();
@@ -1345,7 +1345,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
             _install_main_ui_scripts(page, static_root)
-            _boot_main_ui(page)
+            _boot_main_ui(page, expected_project)
 
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright)
@@ -1421,7 +1421,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             assert state.chat_service.sessions(added_project)["active_session_id"] == second_session
 
             page.reload(wait_until="domcontentloaded")
-            install(page)
+            install(page, "Renamed Default Project")
             page.wait_for_function(
                 "() => document.querySelector('#projectChatName')?.textContent === 'Renamed Default Project'"
             )
