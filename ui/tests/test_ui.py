@@ -298,6 +298,30 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(rows[0]["project_id"], original_id)
         self.assertEqual(rows[0]["name"], "Login Worktree")
         self.assertEqual(Path(rows[0]["path"]).resolve(), self.project.resolve())
+        self.assertEqual(self.state.project_identity(self.project)["project_id"], original_id)
+
+    def test_durable_task_keeps_project_identity_when_display_name_changes(self) -> None:
+        added = self.state.add_project(str(self.project))
+        draft = {
+            "title": "Identity task",
+            "items": [{
+                "title": "Only",
+                "prompt": "Keep identity",
+                "workflow": "workflow.yaml",
+                "project": str(self.project),
+                "workspace": "auto",
+            }],
+        }
+        created = self.state.tasks.create(
+            self.project,
+            draft,
+            request_id="identity-task",
+            project_id=added["project_id"],
+        )
+        self.state.rename_project(str(self.project), "Renamed Project")
+        persisted = self.state.tasks.get(self.project, created["task_id"])
+        self.assertEqual(persisted["project_id"], added["project_id"])
+        self.assertEqual(self.state.project_identity(self.project)["project_id"], added["project_id"])
 
     def test_readding_project_preserves_stable_project_id(self) -> None:
         first = self.state.add_project(str(self.project))
