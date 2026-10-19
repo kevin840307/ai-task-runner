@@ -443,30 +443,17 @@ class Handler(SimpleHTTPRequestHandler):
                     turn_id=str(body.get("request_id", "")),
                     questions=demo_questions(),
                 ))
-            if parsed.path == "/api/chat/ask/submit":
+            if parsed.path in {"/api/chat/ask/submit", "/api/chat/ask/cancel"}:
                 project = self._project(body)
                 session_id = str(body.get("session_id", ""))
-                value = self.state.chat_service.submit_ask(
-                    project,
-                    session_id,
-                    str(body.get("ask_id", "")),
-                    body.get("answers"),
-                    request_id=str(body.get("request_id", "")),
-                )
-                queue = self.state.chat_agent.drain(
+                value = self.state.chat_agent.complete_ask(
                     project,
                     self.state.chat_service,
                     session_id=session_id,
-                )
-                return self._json({**value, **queue})
-            if parsed.path == "/api/chat/ask/cancel":
-                project = self._project(body)
-                session_id = str(body.get("session_id", ""))
-                value = self.state.chat_service.cancel_ask(
-                    project,
-                    session_id,
-                    str(body.get("ask_id", "")),
+                    ask_id=str(body.get("ask_id", "")),
                     request_id=str(body.get("request_id", "")),
+                    answers=body.get("answers"),
+                    cancelled=parsed.path.endswith("/cancel"),
                 )
                 queue = self.state.chat_agent.drain(
                     project,
