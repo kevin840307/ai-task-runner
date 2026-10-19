@@ -402,6 +402,12 @@ def _bridge_for(state: UIState):
                         request_id=str(body.get("request_id", "")),
                         expected_updated_at=body.get("expected_updated_at"),
                     )
+                elif path == "/api/tasks/delete":
+                    data = state.tasks.delete(
+                        Path(body["project"]),
+                        str(body.get("task_id", "")),
+                        request_id=str(body.get("request_id", "")),
+                    )
                 elif path == "/api/chat/ask/demo":
                     session_id = str(body.get("session_id", ""))
                     data = state.chat_service.create_ask(
@@ -1099,8 +1105,15 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#tasksListRows .tasks-list-row").count() == 1
             page.locator("#tasksListRows .tasks-list-row").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.locator("#taskWorkspaceClose").click()
+            page.click("#taskWorkspaceDeleteTask")
+            assert page.locator(".ui-dialog-body").get_by_text("Task ID:", exact=False).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
+            page.click("#taskWorkspaceDeleteTask")
+            page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.wait_for_function("document.querySelectorAll('#tasksListRows .tasks-list-row').length === 0")
+            assert state.tasks.list(state.repo_root)["tasks"] == []
             page.locator("#projectList .project-root").first.click()
             page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
 

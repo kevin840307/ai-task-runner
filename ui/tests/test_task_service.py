@@ -242,6 +242,33 @@ def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> No
         )
 
 
+def test_task_service_delete_is_idempotent_and_blocks_non_new(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+    draft = {
+        "title": "Delete me",
+        "items": [
+            {"title": "A", "prompt": "A", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+        ],
+    }
+    created = service.create(project, draft, request_id="delete-create")
+    deleted = service.delete(project, created["task_id"], request_id="delete-1")
+    assert deleted == {"task_id": created["task_id"], "deleted": True, "duplicate": False}
+    assert service.list(project)["tasks"] == []
+    duplicate = TaskService().delete(project, created["task_id"], request_id="delete-1")
+    assert duplicate == {"task_id": created["task_id"], "deleted": True, "duplicate": True}
+
+    blocked = service.create(project, draft, request_id="delete-blocked-create")
+    path = service._state_path(project)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["tasks"][0]["status"] = "ongoing"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="Only New Tasks"):
+        service.delete(project, blocked["task_id"], request_id="delete-blocked")
+    assert service.get(project, blocked["task_id"])["status"] == "ongoing"
+
+
 def test_task_service_rejects_invalid_project_items_and_workspace(tmp_path: Path) -> None:
     project = tmp_path / "project"
     other = tmp_path / "other"
@@ -366,6 +393,18 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert updated["title"] == "Updated over HTTP"
         assert updated["items"][0]["prompt"] == "Edited through API"
         assert updated["items"][0]["item_id"] == created["items"][0]["item_id"]
+
+        deleted = _json_request(
+            f"{base}/api/tasks/delete",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": created["task_id"],
+                "request_id": "http-delete-1",
+            },
+        )
+        assert deleted["deleted"] is True
+        assert server.state.tasks.list(project)["tasks"] == []
     finally:
         server.shutdown()
         server.server_close()

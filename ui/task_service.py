@@ -20,7 +20,16 @@ except ImportError:
 STATE_VERSION = 1
 CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
+DELETE_REQUEST_LIMIT = 512
 TASK_YAML_LIMIT = 256 * 1024
+
+
+def _safe_task_id(value: str) -> bool:
+    try:
+        validate_task_id(value)
+        return True
+    except ValueError:
+        return False
 
 
 class TaskService:
@@ -224,6 +233,40 @@ class TaskService:
             self._write(project, state)
             return {**deepcopy(task), "duplicate": False}
 
+    def delete(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        task_key = validate_task_id(task_id)
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        with self._lock:
+            state = self._load(project)
+            existing = state["delete_requests"].get(request)
+            if existing:
+                if existing != task_key:
+                    raise ValueError("request_id belongs to another Task")
+                return {"task_id": task_key, "deleted": True, "duplicate": True}
+
+            index = next((i for i, row in enumerate(state["tasks"]) if row["task_id"] == task_key), -1)
+            if index < 0:
+                raise ValueError("Task does not exist")
+            task = state["tasks"][index]
+            if task.get("status") != "new":
+                raise ValueError("Only New Tasks can be deleted safely; cleanup runtime state first")
+            state["tasks"].pop(index)
+            state["delete_requests"][request] = task_key
+            while len(state["delete_requests"]) > DELETE_REQUEST_LIMIT:
+                state["delete_requests"].pop(next(iter(state["delete_requests"])))
+            self._write(project, state)
+            return {"task_id": task_key, "deleted": True, "duplicate": False}
+
     def _load(self, project: Path) -> dict[str, Any]:
         path = self._state_path(project)
         if not path.exists():
@@ -232,6 +275,7 @@ class TaskService:
                 "tasks": [],
                 "create_requests": {},
                 "update_requests": {},
+                "delete_requests": {},
             }
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -242,7 +286,13 @@ class TaskService:
         tasks = raw.get("tasks")
         requests = raw.get("create_requests")
         update_requests = raw.get("update_requests", {})
-        if not isinstance(tasks, list) or not isinstance(requests, dict) or not isinstance(update_requests, dict):
+        delete_requests = raw.get("delete_requests", {})
+        if (
+            not isinstance(tasks, list)
+            or not isinstance(requests, dict)
+            or not isinstance(update_requests, dict)
+            or not isinstance(delete_requests, dict)
+        ):
             raise ValueError("Task store is invalid")
         ids: set[str] = set()
         normalized: list[dict[str, Any]] = []
@@ -268,6 +318,11 @@ class TaskService:
                 str(key): str(value)
                 for key, value in update_requests.items()
                 if str(key).strip() and str(value) in ids
+            },
+            "delete_requests": {
+                str(key): str(value)
+                for key, value in delete_requests.items()
+                if str(key).strip() and _safe_task_id(str(value))
             },
         }
 

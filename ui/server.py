@@ -342,6 +342,13 @@ class Handler(SimpleHTTPRequestHandler):
                     request_id=str(body.get("request_id", "")),
                     expected_updated_at=expected_updated_at,
                 ))
+            if parsed.path == "/api/tasks/delete":
+                project = self._project(body)
+                return self._json(self.state.tasks.delete(
+                    project,
+                    str(body.get("task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
                 preferences = self.state.project_preferences.get(project)

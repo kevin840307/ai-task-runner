@@ -4,7 +4,7 @@ function cloneDraft(value) {
 }
 function draftSignature(value) { return JSON.stringify(value || {}); }
 
-export function createTaskWorkspaceController({ api, confirmDialog, showError }) {
+export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged }) {
   let state = null;
   let overlay = null;
   let restoreFocus = null;
@@ -405,6 +405,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     if (String(task.status || "") === "new") {
       const actions = document.createElement("div");
       actions.className = "task-workspace-info-actions";
+      const remove = document.createElement("button");
+      remove.id = "taskWorkspaceDeleteTask";
+      remove.type = "button";
+      remove.className = "danger";
+      remove.textContent = "Delete Task";
+      remove.onclick = () => void deleteTask();
+      actions.appendChild(remove);
       if (Array.isArray(task.items) && task.items.length > 1) {
         const openList = document.createElement("button");
         openList.id = "taskWorkspaceOpenList";
@@ -511,6 +518,36 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       error.className = "task-workspace-error";
       error.textContent = state.error;
       body.appendChild(error);
+    }
+  }
+
+  async function deleteTask() {
+    const task = state?.task;
+    if (!task || String(task.status || "") !== "new") return;
+    const ok = await confirmDialog?.({
+      title: "Delete Task?",
+      message:
+        "Task ID: " + String(task.task_id || "") + "\n" +
+        "Name: " + String(task.title || "") + "\n" +
+        "Project: " + String(task.project || "") + "\n\n" +
+        "This deletes the durable Task record. It does not delete Project files.",
+      confirmLabel: "Delete Task",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api("/api/tasks/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          project: task.project,
+          task_id: task.task_id,
+          request_id: "task-delete-" + task.task_id,
+        }),
+      });
+      closeNow();
+      await onTaskChanged?.();
+    } catch (error) {
+      showError?.(error.message, "Delete Task failed");
     }
   }
 

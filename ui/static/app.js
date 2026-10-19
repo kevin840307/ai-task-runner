@@ -277,12 +277,14 @@ async function withButtonBusy(button, busyLabel, action) {
 const confirmDialog = (options) => window.UiDialogs.confirm(options);
 const inputDialog = (options) => window.UiDialogs.input(options);
 const choiceDialog = (options) => window.UiDialogs.choice(options);
+let tasksBoard = null;
 const taskWorkspace = createTaskWorkspaceController({
   api,
   confirmDialog,
   showError: showActionError,
+  onTaskChanged: () => tasksBoard?.refresh(),
 });
-const tasksBoard = createTasksBoardController({
+tasksBoard = createTasksBoardController({
   api,
   openTask: (task, options) => taskWorkspace.openTask(task, options),
   getProjects: () => state.projects,
