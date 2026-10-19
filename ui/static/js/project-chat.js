@@ -1141,7 +1141,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       );
       await refreshMessages();
       showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
-      openTask?.(task, { returnFocus });
+      openTask?.(task, { returnFocus, workflows: settingsCatalog.workflows });
     } catch (error) {
       showError?.(error.message, "Create Task failed");
     }
