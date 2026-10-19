@@ -313,10 +313,12 @@ class Handler(SimpleHTTPRequestHandler):
                 ))
             if parsed.path == "/api/tasks/create":
                 project = self._project(body)
+                identity = self.state.project_identity(project)
                 return self._json(self.state.tasks.create(
                     project,
                     body.get("draft"),
                     request_id=str(body.get("request_id", "")),
+                    project_id=identity["project_id"],
                 ))
             if parsed.path == "/api/tasks/update":
                 project = self._project(body)
