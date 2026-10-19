@@ -385,32 +385,13 @@ def _bridge_for(state: UIState):
                 elif path == "/api/chat/task-draft/update":
                     project_path = Path(body["project"])
                     session_id = str(body.get("session_id", ""))
-                    draft_id = str(body.get("draft_id", ""))
                     state.chat_service.messages(project_path, session_id)
-                    before = state.task_drafts.get(
-                        project_path,
-                        draft_id,
-                        session_id=session_id,
-                    )
                     data = state.task_drafts.update(
                         project_path,
-                        draft_id,
+                        str(body.get("draft_id", "")),
                         body.get("draft"),
                         session_id=session_id,
                     )
-                    after = state.task_drafts.get(
-                        project_path,
-                        draft_id,
-                        session_id=session_id,
-                    )
-                    state._browser_task_draft_update_debug = {
-                        "session_id": session_id,
-                        "draft_id": draft_id,
-                        "input_prompt": (body.get("draft") or {}).get("items", [{}])[0].get("prompt"),
-                        "before_prompt": before["draft"]["items"][0]["prompt"],
-                        "result_prompt": data["draft"]["items"][0]["prompt"],
-                        "after_prompt": after["draft"]["items"][0]["prompt"],
-                    }
                 elif path == "/api/chat/task-draft/dismiss":
                     project_path = Path(body["project"])
                     session_id = str(body.get("session_id", ""))
@@ -1109,9 +1090,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 state.repo_root,
                 active_draft_id,
                 session_id=draft_session_id,
-            )["draft"]["items"][0]["prompt"] == "Edited browser item one", getattr(
-                state, "_browser_task_draft_update_debug", {}
-            )
+            )["draft"]["items"][0]["prompt"] == "Edited browser item one"
 
             page.get_by_role("button", name="Create Task", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
@@ -1210,7 +1189,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".project-chat-task-draft-item").get_by_text("Edited single draft").is_visible()
             page.get_by_role("button", name="Dismiss", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
-            assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
+            assert state.tasks.list(state.repo_root)["tasks"] == []
 
             page.fill("#projectChatInput", "@task browser auto")
             page.click("#projectChatSendButton")
