@@ -69,9 +69,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
 [x] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
-[ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
-[ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
-[ ] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
+[x] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
+[x] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
+[x] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
 [x] Chat history 與 Task runtime history 分開儲存與顯示。
 
 
@@ -249,7 +249,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 從 Chat Draft 進入編輯時，Task Editor 必須是 viewport 上層的右側 overlay；Chat 留在背景、不縮窄、不位移。
 [x] 單筆 Editor 的 Back / Cancel / 遮罩關閉回到原 Chat Draft。
 [x] 多筆 Task List 關閉回到原 Chat Draft；從 List 進 child Editor，Back 先回 List，關閉 List 再回 Chat Draft。
-[ ] 由 Task Info 進入 Add / Edit 時 Back 回 Info；由 Task List 進入時 Back 回 Task List。返回目的地由來源狀態決定，不可一律回 YAML。
+[x] 由 Task Info 進入 Add / Edit 時 Back 回 Info；由 Task List 進入時 Back 回 Task List。返回目的地由來源狀態決定，不可一律回 YAML。
 [x] Create Task 前再次驗證 items 不為空、Prompt / Project / Workflow / workspace policy 合法。
 [x] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
 [x] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
@@ -263,15 +263,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 10. Task、Task List、狀態與編輯政策
 ---------------------------------
 
-[ ] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
+[x] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
 [ ] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
 [ ] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
 [ ] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
-[ ] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
+[x] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
 [ ] Edit Task 的 Back 依來源回 Info / Task List / Chat Draft；關閉按鈕、Cancel、Escape 與遮罩關閉行為需一致。
-[ ] Delete Task 前顯示確認視窗，指出 Task ID、名稱、Project 與刪除後果。
-[ ] Delete 不可在使用者確認前改動資料；Cancel 不改資料。
-[ ] 刪除正在執行、Recovering、或有不可安全刪除狀態的 Task 時必須阻擋，並顯示原因。
+[x] Delete Task 前顯示確認視窗，指出 Task ID、名稱、Project 與刪除後果。
+[x] Delete 不可在使用者確認前改動資料；Cancel 不改資料。
+[x] 刪除正在執行、Recovering、或有不可安全刪除狀態的 Task 時必須阻擋，並顯示原因。
 [x] Paused / Closed 重設回 New 必須確認；Paused Reset 明確轉 New + idle + progress 0，已完成 Run 保留 History，舊的 resumable run 標記 abandoned。
 [x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
 [ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
