@@ -1277,9 +1277,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert abs(chat_before["width"] - chat_during["width"]) <= 1
 
             page.locator(".task-workspace-row-edit").first.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspacePrompt", "Edited browser item one")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 2")
+            assert page.locator(".task-workspace-list-row").first.locator("p").inner_text() == "Edited browser item one"
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             draft_card = page.locator(".project-chat-task-draft").first
