@@ -52,7 +52,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
 
   function isDraftState() { return state?.kind === "draft"; }
   function editorDraft() { return state?.kind === "task" ? state.editDraft : state?.draft; }
+  function yamlDirty() {
+    return state?.route === "yaml" && String(state.yamlText || "") !== String(state.yamlOriginal || "");
+  }
+
   function isDirty() {
+    if (yamlDirty()) return true;
     if (isDraftState()) return draftSignature(state.draft) !== state.original;
     return state?.kind === "task"
       && !!state.editDraft
@@ -222,6 +227,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     return list;
   }
 
+  function appendYamlAction(body) {
+    const actions = document.createElement("div");
+    actions.className = "task-workspace-info-actions";
+    const yaml = document.createElement("button");
+    yaml.id = "taskWorkspaceYamlButton";
+    yaml.type = "button";
+    yaml.textContent = "Edit YAML";
+    yaml.onclick = () => void openYaml();
+    actions.appendChild(yaml);
+    body.appendChild(actions);
+  }
+
   function renderList() {
     const body = byId("taskWorkspaceBody");
     body.innerHTML = "";
@@ -231,6 +248,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     intro.innerHTML = "<strong>Task order</strong><span>Tasks run top-to-bottom inside this Task List.</span>";
     body.appendChild(intro);
     body.appendChild(renderTaskRows(state.draft.items, { editable: true }));
+    appendYamlAction(body);
   }
 
   function renderEditor() {
@@ -479,7 +497,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       add.type = "button";
       add.textContent = "+ Add task";
       add.onclick = addTaskListItem;
-      actions.appendChild(add);
+      const yaml = document.createElement("button");
+      yaml.id = "taskWorkspaceYamlButton";
+      yaml.type = "button";
+      yaml.textContent = "Edit YAML";
+      yaml.onclick = () => void openYaml();
+      actions.append(add, yaml);
       body.appendChild(actions);
     }
     if (state.error) {
@@ -488,6 +511,92 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       error.className = "task-workspace-error";
       error.textContent = state.error;
       body.appendChild(error);
+    }
+  }
+
+  async function openYaml() {
+    if (state?.kind === "task" && !ensureTaskEditDraft()) return;
+    const draft = editorDraft();
+    if (!draft) return;
+    try {
+      const project = state.kind === "task" ? state.task.project : state.project;
+      const data = await api("/api/tasks/yaml/dump", {
+        method: "POST",
+        body: JSON.stringify({ project, draft }),
+      });
+      state.yamlText = String(data.content || "");
+      state.yamlOriginal = state.yamlText;
+      state.yamlReturn = "list";
+      state.error = "";
+      state.route = "yaml";
+      render();
+    } catch (error) {
+      showError?.(error.message, "Open Task YAML failed");
+    }
+  }
+
+  function renderYaml() {
+    const body = byId("taskWorkspaceBody");
+    body.innerHTML = "";
+    const intro = document.createElement("div");
+    intro.className = "task-workspace-intro";
+    intro.innerHTML = "<strong>Task YAML</strong><span>Apply updates the same canonical items[]; Save persists from Task List.</span>";
+    body.appendChild(intro);
+    const field = document.createElement("label");
+    field.className = "task-workspace-field task-workspace-prompt";
+    const textarea = document.createElement("textarea");
+    textarea.id = "taskWorkspaceYamlText";
+    textarea.rows = 22;
+    textarea.spellcheck = false;
+    textarea.value = String(state.yamlText || "");
+    textarea.addEventListener("input", () => {
+      state.yamlText = textarea.value;
+      state.error = "";
+    });
+    field.appendChild(textarea);
+    body.appendChild(field);
+    if (state.error) {
+      const error = document.createElement("div");
+      error.id = "taskWorkspaceError";
+      error.className = "task-workspace-error";
+      error.textContent = state.error;
+      body.appendChild(error);
+    }
+    requestAnimationFrame(() => textarea.focus());
+  }
+
+  async function applyYaml() {
+    if (state?.route !== "yaml") return;
+    const project = state.kind === "task" ? state.task.project : state.project;
+    const button = byId("taskWorkspaceSave");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      const data = await api("/api/tasks/yaml/parse", {
+        method: "POST",
+        body: JSON.stringify({ project, content: state.yamlText }),
+      });
+      const parsed = cloneDraft(data.draft || data);
+      if (state.kind === "task") {
+        state.editDraft = parsed;
+        touchEditor();
+      } else {
+        state.draft = parsed;
+      }
+      state.yamlOriginal = state.yamlText;
+      state.yamlText = "";
+      state.route = state.yamlReturn || "list";
+      state.error = "";
+      render();
+    } catch (error) {
+      state.error = String(error?.message || "Task YAML is invalid");
+      render();
+      showError?.(error.message, "Apply Task YAML failed");
+    } finally {
+      if (button && document.contains(button)) {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+      }
     }
   }
 
@@ -510,23 +619,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     if (state.kind === "task") {
       const listRoute = state.route === "list";
       const editorRoute = state.route === "editor";
-      if (footer) footer.hidden = !(listRoute || editorRoute);
+      const yamlRoute = state.route === "yaml";
+      if (footer) footer.hidden = !(listRoute || editorRoute || yamlRoute);
       if (save) {
         const canSaveList = listRoute && String(state.task?.status || "") === "new" && !!state.editDraft;
-        save.hidden = !(editorRoute || canSaveList);
-        save.textContent = canSaveList ? "Save Task List" : "Save Task";
+        save.hidden = !(editorRoute || canSaveList || yamlRoute);
+        save.textContent = yamlRoute ? "Apply YAML" : (canSaveList ? "Save Task List" : "Save Task");
       }
       if (back) back.hidden = false;
-      byId("taskWorkspaceEyebrow").textContent = editorRoute ? "TASK EDITOR" : (listRoute ? "TASK LIST" : "TASK INFO");
-      byId("taskWorkspaceTitle").textContent = editorRoute
-        ? String(state.editDraft?.items?.[state.index]?.title || state.task?.title || "Edit Task")
-        : String(state.task?.title || "Task");
-      byId("taskWorkspaceMeta").textContent = editorRoute
-        ? "Task " + (state.index + 1) + " of " + String(state.editDraft?.items?.length || 0)
-        : listRoute
-          ? String(state.task?.items?.length || 0) + " ordered tasks"
-          : String(state.task?.task_id || "");
-      if (editorRoute) {
+      byId("taskWorkspaceEyebrow").textContent = yamlRoute ? "TASK YAML" : (editorRoute ? "TASK EDITOR" : (listRoute ? "TASK LIST" : "TASK INFO"));
+      byId("taskWorkspaceTitle").textContent = yamlRoute
+        ? String(state.editDraft?.title || state.task?.title || "Task YAML")
+        : editorRoute
+          ? String(state.editDraft?.items?.[state.index]?.title || state.task?.title || "Edit Task")
+          : String(state.task?.title || "Task");
+      byId("taskWorkspaceMeta").textContent = yamlRoute
+        ? "Same canonical items[]"
+        : editorRoute
+          ? "Task " + (state.index + 1) + " of " + String(state.editDraft?.items?.length || 0)
+          : listRoute
+            ? String((state.editDraft?.items || state.task?.items || []).length) + " ordered tasks"
+            : String(state.task?.task_id || "");
+      if (yamlRoute) {
+        byId("taskWorkspaceFooterBack").textContent = "Back to Task List";
+        renderYaml();
+      } else if (editorRoute) {
         byId("taskWorkspaceFooterBack").textContent = state.editorReturn === "list" ? "Back to Task List" : "Back to Info";
         renderEditor();
         requestAnimationFrame(() => byId("taskWorkspaceItemTitle")?.focus());
@@ -542,22 +659,45 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     if (back) back.hidden = false;
     if (save) save.hidden = false;
     const listRoute = state.route === "list";
+    const yamlRoute = state.route === "yaml";
     const count = state.draft.items.length;
-    byId("taskWorkspaceEyebrow").textContent = listRoute ? "TASK LIST" : "TASK EDITOR";
-    byId("taskWorkspaceTitle").textContent = listRoute
-      ? String(state.draft.title || "Task List")
-      : String(state.draft.items[state.index]?.title || state.draft.title || "Edit Task");
-    byId("taskWorkspaceMeta").textContent = listRoute
-      ? count + " ordered task" + (count === 1 ? "" : "s")
-      : "Task " + (state.index + 1) + " of " + count;
-    byId("taskWorkspaceFooterBack").textContent = listRoute ? "Back to Chat" : (count > 1 ? "Back to Task List" : "Back to Chat");
-    byId("taskWorkspaceSave").hidden = !listRoute && count > 1;
-    if (listRoute) renderList(); else renderEditor();
-    requestAnimationFrame(() => (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus());
+    byId("taskWorkspaceEyebrow").textContent = yamlRoute ? "TASK YAML" : (listRoute ? "TASK LIST" : "TASK EDITOR");
+    byId("taskWorkspaceTitle").textContent = yamlRoute
+      ? String(state.draft.title || "Task YAML")
+      : listRoute
+        ? String(state.draft.title || "Task List")
+        : String(state.draft.items[state.index]?.title || state.draft.title || "Edit Task");
+    byId("taskWorkspaceMeta").textContent = yamlRoute
+      ? "Same canonical items[]"
+      : listRoute
+        ? count + " ordered task" + (count === 1 ? "" : "s")
+        : "Task " + (state.index + 1) + " of " + count;
+    byId("taskWorkspaceFooterBack").textContent = yamlRoute ? "Back to Task List" : (listRoute ? "Back to Chat" : (count > 1 ? "Back to Task List" : "Back to Chat"));
+    byId("taskWorkspaceSave").hidden = !yamlRoute && !listRoute && count > 1;
+    byId("taskWorkspaceSave").textContent = yamlRoute ? "Apply YAML" : "Save draft";
+    if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
+    if (!yamlRoute) requestAnimationFrame(() => (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus());
   }
 
   async function handleBack() {
     if (!state) return;
+    if (state.route === "yaml") {
+      if (yamlDirty()) {
+        const ok = await confirmDialog?.({
+          title: "Discard unapplied YAML changes?",
+          message: "YAML text that has not been applied will be lost.",
+          confirmLabel: "Discard",
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      state.yamlText = "";
+      state.yamlOriginal = "";
+      state.route = state.yamlReturn || "list";
+      state.error = "";
+      render();
+      return;
+    }
     if (state.kind === "task") {
       if (state.route === "editor") {
         if (state.editorReturn === "list") {
@@ -597,6 +737,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   }
 
   async function saveWorkspace() {
+    if (state?.route === "yaml") return applyYaml();
     if (state?.kind === "task") return saveTaskEdit();
     return saveDraft();
   }
@@ -700,6 +841,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       route: value.items.length > 1 ? "list" : "editor",
       index: 0,
       error: "",
+      yamlText: "",
+      yamlOriginal: "",
+      yamlReturn: "list",
     };
     overlay.hidden = false;
     render();
@@ -724,6 +868,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       editorReturn: "info",
       saveRequestId: "",
       error: "",
+      yamlText: "",
+      yamlOriginal: "",
+      yamlReturn: "list",
     };
     overlay.hidden = false;
     render();

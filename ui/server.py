@@ -311,6 +311,18 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     body.get("draft"),
                 ))
+            if parsed.path == "/api/tasks/yaml/dump":
+                project = self._project(body)
+                return self._json(self.state.tasks.dump_yaml(
+                    project,
+                    body.get("draft"),
+                ))
+            if parsed.path == "/api/tasks/yaml/parse":
+                project = self._project(body)
+                return self._json(self.state.tasks.parse_yaml(
+                    project,
+                    body.get("content"),
+                ))
             if parsed.path == "/api/tasks/create":
                 project = self._project(body)
                 identity = self.state.project_identity(project)

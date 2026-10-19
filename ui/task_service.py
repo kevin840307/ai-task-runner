@@ -10,6 +10,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 try:
     from .task_models import validate_task_draft_for_create, validate_task_id
 except ImportError:
@@ -18,6 +20,7 @@ except ImportError:
 STATE_VERSION = 1
 CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
+TASK_YAML_LIMIT = 256 * 1024
 
 
 class TaskService:
@@ -41,6 +44,57 @@ class TaskService:
     def validate(self, project: Path, draft: Any) -> dict[str, Any]:
         """Validate transient editor data without creating durable Task state."""
         return {"draft": validate_task_draft_for_create(draft, project)}
+
+    def dump_yaml(self, project: Path, draft: Any) -> dict[str, Any]:
+        """Serialize the canonical editable Task fields without runtime state."""
+        validated = validate_task_draft_for_create(draft, project)
+        raw_items = draft.get("items") if isinstance(draft, dict) else []
+        items: list[dict[str, Any]] = []
+        for index, item in enumerate(validated["items"]):
+            raw = raw_items[index] if isinstance(raw_items, list) and index < len(raw_items) and isinstance(raw_items[index], dict) else {}
+            row: dict[str, Any] = {}
+            item_id = str(raw.get("item_id") or "").strip()
+            if item_id:
+                row["item_id"] = item_id
+            row.update(item)
+            items.append(row)
+        payload = {
+            "title": validated["title"],
+            "items": items,
+        }
+        content = yaml.safe_dump(
+            payload,
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        return {"content": content}
+
+    def parse_yaml(self, project: Path, content: Any) -> dict[str, Any]:
+        text = str(content or "")
+        if not text.strip():
+            raise ValueError("Task YAML is empty")
+        if len(text.encode("utf-8")) > TASK_YAML_LIMIT:
+            raise ValueError("Task YAML is too large")
+        try:
+            payload = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Task YAML is invalid: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Task YAML must contain an object")
+        validated = validate_task_draft_for_create(payload, project)
+        raw_items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        items: list[dict[str, Any]] = []
+        for index, item in enumerate(validated["items"]):
+            raw = raw_items[index] if index < len(raw_items) and isinstance(raw_items[index], dict) else {}
+            item_id = str(raw.get("item_id") or "").strip()
+            items.append(({"item_id": item_id} if item_id else {}) | item)
+        return {
+            "draft": {
+                **validated,
+                "items": items,
+            }
+        }
 
     def create(
         self,

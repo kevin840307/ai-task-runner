@@ -132,6 +132,37 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     assert duplicate["task_id"] == created["task_id"]
 
 
+def test_task_yaml_roundtrip_uses_canonical_draft_validation_and_preserves_ids(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+    draft = {
+        "title": "YAML list",
+        "items": [
+            {"item_id": "keep-a", "title": "A", "prompt": "A\nline 2", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+            {"item_id": "keep-b", "title": "B", "prompt": "B", "workflow": "workflow.yaml", "project": str(project), "workspace": "main"},
+        ],
+    }
+
+    dumped = service.dump_yaml(project, draft)
+    assert "title: YAML list" in dumped["content"]
+    assert "item_id: keep-a" in dumped["content"]
+    parsed = service.parse_yaml(project, dumped["content"])["draft"]
+    assert parsed["title"] == "YAML list"
+    assert [item["item_id"] for item in parsed["items"]] == ["keep-a", "keep-b"]
+    assert parsed["items"][0]["prompt"] == "A\nline 2"
+
+    with pytest.raises(ValueError, match="invalid"):
+        service.parse_yaml(project, "title: [")
+    with pytest.raises(ValueError, match="at least one"):
+        service.parse_yaml(project, "title: Empty\nitems: []\n")
+    with pytest.raises(ValueError, match="workspace policy"):
+        service.parse_yaml(
+            project,
+            "title: Bad\nitems:\n  - title: A\n    prompt: A\n    workflow: workflow.yaml\n    workspace: magic\n",
+        )
+
+
 def test_task_service_updates_new_task_idempotently_and_preserves_item_identity(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
@@ -304,6 +335,18 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert created["status"] == "new"
         assert created["project_id"] == registered["project_id"]
         assert server.state.tasks.list(project)["tasks"][0]["task_id"] == created["task_id"]
+
+        dumped = _json_request(
+            f"{base}/api/tasks/yaml/dump",
+            method="POST",
+            body={"project": str(project), "draft": created},
+        )
+        parsed_yaml = _json_request(
+            f"{base}/api/tasks/yaml/parse",
+            method="POST",
+            body={"project": str(project), "content": dumped["content"]},
+        )
+        assert parsed_yaml["draft"]["items"][0]["item_id"] == created["items"][0]["item_id"]
 
         updated_draft = json.loads(json.dumps(generated["draft"]))
         updated_draft["title"] = "Updated over HTTP"

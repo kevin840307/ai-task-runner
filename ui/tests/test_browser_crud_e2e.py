@@ -374,6 +374,16 @@ def _bridge_for(state: UIState):
                         Path(body["project"]),
                         body.get("draft"),
                     )
+                elif path == "/api/tasks/yaml/dump":
+                    data = state.tasks.dump_yaml(
+                        Path(body["project"]),
+                        body.get("draft"),
+                    )
+                elif path == "/api/tasks/yaml/parse":
+                    data = state.tasks.parse_yaml(
+                        Path(body["project"]),
+                        body.get("content"),
+                    )
                 elif path == "/api/tasks/create":
                     state._browser_last_task_create_draft = json.loads(
                         json.dumps(body.get("draft"))
@@ -1057,6 +1067,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert durable_items[0]["prompt"] == "Durably edited browser item one"
             assert [item["title"] for item in durable_items] == ["Browser item 1", "Added browser child"]
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
+
+            page.click("#taskWorkspaceYamlButton")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
+            yaml_text = page.locator("#taskWorkspaceYamlText").input_value()
+            page.fill("#taskWorkspaceYamlText", yaml_text.replace("title: Browser generated draft", "title: YAML renamed list", 1))
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert state.tasks.list(state.repo_root)["tasks"][0]["title"] == "YAML renamed list"
+            assert [item["item_id"] for item in state.tasks.list(state.repo_root)["tasks"][0]["items"]] == [
+                item["item_id"] for item in durable_items
+            ]
+
             page.click("#taskWorkspaceFooterBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             assert page.locator(".task-workspace-tabs .task-workspace-tab").count() == 4
