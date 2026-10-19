@@ -1033,7 +1033,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             page.get_by_role("button", name="Other / custom answer").click()
             page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Stale custom answer")
-            page.get_by_role("button", name="Safe", exact=True).click()
+            page.locator(".project-chat-ask-option").filter(has_text="Safe").first.click()
             page.get_by_role("button", name="Other / custom answer").click()
             assert page.locator(".project-chat-ask-input[aria-label='Custom answer']").input_value() == ""
             page.fill(".project-chat-ask-input[aria-label='Custom answer']", "Custom browser approach")
