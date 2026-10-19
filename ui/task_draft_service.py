@@ -36,7 +36,7 @@ class TaskDraftService:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self._runner = runner or self._run_tool
         self._lock = threading.RLock()
-        self._requests: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self._requests: dict[tuple[str, str, str], str] = {}
         self._drafts: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     def generate(
@@ -61,12 +61,12 @@ class TaskDraftService:
         session = str(session_id or "").strip()
         key = (str(project.resolve()), session, request)
         with self._lock:
-            cached = self._requests.get(key)
-            if cached is not None:
-                draft_id = str(cached.get("draft_id") or "")
-                if draft_id:
-                    self._drafts[(key[0], key[1], draft_id)] = deepcopy(cached)
-                return {**deepcopy(cached), "duplicate": True}
+            draft_id = str(self._requests.get(key) or "")
+            if draft_id:
+                cached = self._drafts.get((key[0], key[1], draft_id))
+                if cached is not None:
+                    return {**deepcopy(cached), "duplicate": True}
+                self._requests.pop(key, None)
 
         generated = self._runner(
             project=project,
@@ -91,12 +91,11 @@ class TaskDraftService:
             "duplicate": False,
         }
         with self._lock:
-            self._requests[key] = deepcopy(value)
+            self._requests[key] = value["draft_id"]
             self._drafts[(key[0], key[1], value["draft_id"])] = deepcopy(value)
             while len(self._requests) > CACHE_LIMIT:
                 oldest_key = next(iter(self._requests))
-                evicted = self._requests.pop(oldest_key)
-                evicted_id = str(evicted.get("draft_id") or "")
+                evicted_id = str(self._requests.pop(oldest_key) or "")
                 if evicted_id:
                     self._drafts.pop((oldest_key[0], oldest_key[1], evicted_id), None)
         return value
@@ -134,14 +133,6 @@ class TaskDraftService:
                 raise ValueError("TaskDraft is no longer available")
             value = {**current, "draft": deepcopy(validated), "duplicate": False}
             self._drafts[key] = deepcopy(value)
-            for request_key, cached in self._requests.items():
-                if (
-                    request_key[0] == project_key
-                    and request_key[1] == session
-                    and cached.get("draft_id") == key[2]
-                ):
-                    self._requests[request_key] = deepcopy(value)
-                    break
             return deepcopy(value)
 
     def dismiss(self, project: Path, draft_id: str, *, session_id: str = "") -> dict[str, Any]:
@@ -150,11 +141,11 @@ class TaskDraftService:
         key = (project_key, session, self._draft_id(draft_id))
         with self._lock:
             existed = self._drafts.pop(key, None) is not None
-            for request_key, cached in list(self._requests.items()):
+            for request_key, cached_draft_id in list(self._requests.items()):
                 if (
                     request_key[0] == project_key
                     and request_key[1] == session
-                    and cached.get("draft_id") == key[2]
+                    and cached_draft_id == key[2]
                 ):
                     del self._requests[request_key]
             return {"draft_id": key[2], "dismissed": True, "duplicate": not existed}
