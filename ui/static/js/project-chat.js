@@ -837,6 +837,10 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (!question) return false;
     const value = askAnswers[question.question_id];
     if (question.kind === "text") return !!String(value || "").trim();
+    if (question.kind === "multi_choice") {
+      const values = value && typeof value === "object" && Array.isArray(value.values) ? value.values : [];
+      return values.length > 0 || !!String(value?.other || "").trim();
+    }
     if (value && typeof value === "object" && "other" in value) return !!String(value.other || "").trim();
     return !!(value && typeof value === "object" && String(value.value || "").trim());
   }
@@ -869,7 +873,83 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
     const body = document.createElement("div");
     body.className = "project-chat-ask-body";
-    if (question.kind === "choice") {
+    if (question.kind === "multi_choice") {
+      const selected = askAnswers[question.question_id];
+      const values = Array.isArray(selected?.values) ? selected.values : [];
+      for (const option of (Array.isArray(question.options) ? question.options : [])) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "project-chat-ask-option";
+        button.classList.toggle("selected", values.includes(option.value));
+        button.setAttribute("aria-pressed", String(values.includes(option.value)));
+        const label = document.createElement("strong");
+        label.textContent = String(option.label || option.value || "");
+        button.appendChild(label);
+        if (option.description) {
+          const description = document.createElement("small");
+          description.textContent = String(option.description);
+          button.appendChild(description);
+        }
+        button.onclick = () => {
+          const current = askAnswers[question.question_id];
+          const nextValues = Array.isArray(current?.values) ? current.values.slice() : [];
+          const index = nextValues.indexOf(option.value);
+          if (index >= 0) nextValues.splice(index, 1);
+          else nextValues.push(option.value);
+          askAnswers = {
+            ...askAnswers,
+            [question.question_id]: {
+              values: nextValues,
+              ...(String(current?.other || "").trim() ? { other: String(current.other) } : {}),
+            },
+          };
+          askError = "";
+          renderMessages();
+        };
+        body.appendChild(button);
+      }
+      const other = document.createElement("button");
+      other.type = "button";
+      other.className = "project-chat-ask-option";
+      other.classList.toggle("selected", !!(selected && typeof selected === "object" && "other" in selected));
+      other.setAttribute("aria-pressed", String(!!(selected && typeof selected === "object" && "other" in selected)));
+      other.textContent = "Other / custom answer";
+      other.onclick = () => {
+        const current = askAnswers[question.question_id];
+        askAnswers = {
+          ...askAnswers,
+          [question.question_id]: {
+            values: Array.isArray(current?.values) ? current.values.slice() : [],
+            other: String(current?.other || ""),
+          },
+        };
+        askError = "";
+        renderMessages();
+      };
+      body.appendChild(other);
+      if (selected && typeof selected === "object" && "other" in selected) {
+        const custom = document.createElement("textarea");
+        custom.className = "project-chat-ask-input";
+        custom.rows = 2;
+        custom.placeholder = "Type another answer…";
+        custom.setAttribute("aria-label", "Custom answer");
+        custom.value = String(selected.other || "");
+        custom.oninput = () => {
+          askAnswers = {
+            ...askAnswers,
+            [question.question_id]: {
+              values: Array.isArray(selected?.values) ? selected.values.slice() : [],
+              other: custom.value,
+            },
+          };
+          askError = "";
+          const next = card.querySelector(".project-chat-ask-primary");
+          if (next) next.disabled = !askAnswerValid(question);
+        };
+        body.appendChild(custom);
+        requestAnimationFrame(() => custom.focus());
+      }
+    } else if (question.kind === "choice") {
       const selected = askAnswers[question.question_id];
       for (const option of (Array.isArray(question.options) ? question.options : [])) {
         const button = document.createElement("button");
