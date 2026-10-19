@@ -1065,7 +1065,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             durable_items = state.tasks.list(state.repo_root)["tasks"][0]["items"]
             assert durable_items[0]["prompt"] == "Durably edited browser item one"
-            assert [item["title"] for item in durable_items] == ["Browser item 1", "Added browser child"]
+            assert [item["title"] for item in durable_items] == ["Draft item 1", "Added browser child"]
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
 
             page.click("#taskWorkspaceYamlButton")
