@@ -711,6 +711,83 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        second = root / "second-project"
+        second.mkdir()
+        state._write_projects([
+            {"name": "Fixture Project", "path": str(root)},
+            {"name": "Second Project", "path": str(second)},
+        ])
+        projects = state.projects()
+        root_row = next(row for row in projects if row["name"] == "Fixture Project")
+        draft = {
+            "title": "Cross-project parent",
+            "items": [{
+                "title": "Child",
+                "prompt": "Child belongs to second filter",
+                "workflow": "workflow.yaml",
+                "project": str(root),
+                "workspace": "auto",
+            }],
+        }
+        created = state.tasks.create(
+            root,
+            draft,
+            request_id="board-cross-project",
+            project_id=root_row["project_id"],
+        )
+        task_path = state.tasks._state_path(root)
+        raw = json.loads(task_path.read_text(encoding="utf-8"))
+        raw["tasks"][0]["items"][0]["project"] = str(second.resolve())
+        task_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
+            page.click("#tasksProjectFilterButton")
+            second_option = page.locator(".tasks-project-option").filter(has_text="Second Project")
+            root_option = page.locator(".tasks-project-option").filter(has_text="Fixture Project")
+            second_option.locator("input").check()
+            root_option.locator("input").uncheck()
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
+            page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
+            assert page.locator("#tasksBoardNew .tasks-board-card").get_by_text("Cross-project parent").is_visible()
+            assert page.locator("#projectChatName").inner_text() == "Fixture Project"
+            assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:

@@ -196,7 +196,7 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
     initializeSelection();
     renderFilter();
     const token = ++refreshToken;
-    const rows = selectedProjects();
+    const rows = projects();
     if (!rows.length) {
       tasks = [];
       render();
