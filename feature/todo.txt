@@ -202,12 +202,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Submit 將所有答案組成一份結構化 answers object，回傳給原本等待中的 Agent tool call，然後續跑同一個 turn。
 [ ] Cancel 必須回覆明確的 cancel / deny 給待處理的 Agent question，不能捏造答案，也不能讓 turn 永久掛起。
 [x] 正式版 Ask 卡片嵌入 Chat 訊息流，選項清單有獨立捲動區，不使用遮住訊息的浮層。
-[ ] Ask 是否可用由 Agent capability 決定；不支援時隱藏或 disabled，並說明原因。
+[x] Ask 是否可用由 Agent adapter capability 決定；Project Chat Settings 顯示 Native / Unavailable 與原因。Qwen 依已驗證 native Ask 版本契約判定，OpenCode probe question.list；不再由前端假設支援。
 [ ] OpenCode adapter 對應原生 question tool 的 header / question / options / custom answer 與多題 Submit 行為。
 [ ] Qwen Code adapter 對應 ask_user_question 的 questions[] 與按索引對應的 answers；若當前版本能力不同，依實際 Agent contract 調整。
 [x] Ask request 綁定目前 Chat session、Agent turn 與 request ID，避免使用者切換 session 後答案送錯 turn。
 [ ] Prototype 的一般訊息可以隨機觸發 Ask；@ask-demo 可以強制觸發，不依賴機率。
-[ ] Mock 至少覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session。
+[x] Deterministic Browser fixture 已覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session；此勾選只代表 Mock/UI contract，不代表 native Agent Ask continuation 已完成。
 [x] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
 [ ] 正式版需處理等待中的 Ask timeout、Agent turn cancel、session reconnect 與重送答案的冪等性。
 
@@ -487,15 +487,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [ ] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
 [ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
-[ ] Agent 原生能力不可用時，回報不支援；不要在 UI 假裝可用或以不同語義硬模擬。
+[x] Agent native Ask 能力不可用時由 adapter 回報 unsupported，Project Chat 顯示 Unavailable；不得用 @ask-demo 或其他 Mock 冒充 native Ask。
 [ ] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
 [ ] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
 [ ] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
-[ ] Model 列表與預設值由 Adapter 回傳；不要在 production frontend 硬編碼模型名稱。
-[ ] Mode profile 是產品層抽象；Adapter 回報 native mapping、支援狀態與安全描述。
+[x] Model 列表與預設值由既有 Backend adapter/catalog 回傳；production frontend 不硬編碼 Qwen/OpenCode model 名稱。
+[x] Mode profile 由 Backend adapter 的 interaction_modes 回報 native mapping、支援狀態與安全描述；Project Chat 共用該 projection。
 [ ] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
-[ ] Queue 優先使用 Agent 原生 queued-next-turn；無原生能力時由共用 Chat service 提供 FIFO Queue。
-[ ] Slash skill 只顯示 Agent 實際解析且允許使用的能力；保留原生權限與 user-invocable 限制。
+[x] Queue 產品契約使用共用 durable Chat service FIFO；Qwen Ctrl+Q 僅作 queued-next-turn UX 參考，不注入 CLI 鍵盤事件。Native Queue transport 未宣告時明確落在 service_fifo。
+[x] Slash skill / command 由 Qwen daemon 與 OpenCode native registry projection 提供，只顯示 Agent 實際解析且允許使用的能力，保留 permission / user-invocable / availability。
 [ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
 [ ] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
 
