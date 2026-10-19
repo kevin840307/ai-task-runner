@@ -270,6 +270,26 @@ class BaseBackend(ABC):
         return ChatFeatureSpec(detail=f"{cls.name} does not expose native interactive Chat features")
 
     @classmethod
+    def ensure_native_session(cls, root: Path, session_id: str) -> str:
+        return str(session_id or "").strip()
+
+    @classmethod
+    def pending_native_ask(cls, root: Path, session_id: str) -> dict[str, Any] | None:
+        return None
+
+    @classmethod
+    def resolve_native_ask(
+        cls,
+        root: Path,
+        session_id: str,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> None:
+        raise BackendError(f"{cls.name} does not support native Ask transport")
+
+    @classmethod
     def normalize_ask_request(cls, payload: Any) -> list[dict[str, Any]]:
         raise BackendError(f"{cls.name} does not support native Ask mapping")
 
@@ -589,6 +609,36 @@ def chat_features(name: str, root: Path) -> ChatFeatureSpec:
     return _backend_type(name).chat_features(root)
 
 
+def ensure_native_session(name: str, root: Path, session_id: str = "") -> str:
+    return _backend_type(name).ensure_native_session(root, session_id)
+
+
+def pending_native_ask(
+    name: str,
+    root: Path,
+    session_id: str,
+) -> dict[str, Any] | None:
+    return _backend_type(name).pending_native_ask(root, session_id)
+
+
+def resolve_native_ask(
+    name: str,
+    root: Path,
+    session_id: str,
+    payload: Any,
+    answers: dict[str, Any] | None,
+    *,
+    cancelled: bool = False,
+) -> None:
+    _backend_type(name).resolve_native_ask(
+        root,
+        session_id,
+        payload,
+        answers,
+        cancelled=cancelled,
+    )
+
+
 def normalize_ask_request(name: str, payload: Any) -> list[dict[str, Any]]:
     return _backend_type(name).normalize_ask_request(payload)
 
@@ -671,9 +721,12 @@ __all__ = [
     "default_command",
     "discover_capabilities",
     "encode_ask_response",
+    "ensure_native_session",
     "interaction_modes",
     "normalize_ask_request",
+    "pending_native_ask",
     "reasoning_options",
+    "resolve_native_ask",
     "model_from_args",
     "register_backend",
     "sandbox_supported",
