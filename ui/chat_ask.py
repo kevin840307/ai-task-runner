@@ -190,6 +190,17 @@ def demo_questions() -> list[dict[str, Any]]:
             ],
         },
         {
+            "id": "features",
+            "header": "Features",
+            "question": "Which areas should the Agent prioritize?",
+            "kind": "multi_choice",
+            "options": [
+                {"value": "queue", "label": "Queue", "description": "Preserve queued-next-turn behavior."},
+                {"value": "ask", "label": "Ask", "description": "Preserve clarification flow."},
+                {"value": "tasks", "label": "Tasks", "description": "Preserve Task creation flow."},
+            ],
+        },
+        {
             "id": "reason",
             "header": "Reason",
             "question": "Add any context the Agent should consider.",
