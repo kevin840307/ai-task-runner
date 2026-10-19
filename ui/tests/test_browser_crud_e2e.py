@@ -1432,6 +1432,10 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             browser.close()
 
 
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
