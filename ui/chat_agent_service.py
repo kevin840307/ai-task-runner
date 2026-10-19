@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from runner.agent import (
+from tool.chat_agent import (
     chat_features,
     ensure_native_session,
     normalize_ask_request,

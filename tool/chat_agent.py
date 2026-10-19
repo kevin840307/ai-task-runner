@@ -13,9 +13,14 @@ if str(ROOT) not in sys.path:
 
 from runner.agent import (
     BackendError,
+    chat_features,
     configure_interaction_args,
     configure_model_args,
     create_backend,
+    ensure_native_session,
+    normalize_ask_request,
+    pending_native_ask,
+    resolve_native_ask,
 )
 
 

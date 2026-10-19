@@ -290,7 +290,17 @@ class OpenCodeBackend(BaseBackend):
         if not isinstance(value, list):
             raise BackendError("OpenCode session.question.list returned invalid data")
         return next(
-            (item for item in value if isinstance(item, dict)),
+            (
+                item
+                for item in value
+                if isinstance(item, dict)
+                and str(
+                    item.get("sessionID")
+                    or item.get("sessionId")
+                    or item.get("session_id")
+                    or ""
+                ).strip() == native_session
+            ),
             None,
         )
 

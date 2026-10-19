@@ -13,7 +13,7 @@ from runner.agent import ChatFeatureSpec
 from ui.agent_capability_service import AgentCapabilityService
 from ui.agent_settings_service import AgentSettingsService
 from ui.chat_agent_service import ChatAgentService
-from ui.chat_service import ChatService
+from ui.chat_service import ChatService, STATE_VERSION
 from ui.server import UIServer
 
 
@@ -1349,7 +1349,7 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     # Loading is migration-only; persisted rewrite happens on the next state mutation.
     restarted.recover_dispatching(project, session_id)
     normalized = json.loads(restarted._state_path(project).read_text(encoding="utf-8"))
-    assert normalized["version"] == 5
+    assert normalized["version"] == STATE_VERSION
     assert normalized["sessions"][0]["queue"][0]["status"] == "queued"
     assert normalized["turn_requests"]["legacy-status-1"]["status"] == "queued"
 
