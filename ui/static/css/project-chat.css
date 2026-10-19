@@ -241,6 +241,10 @@
   margin: 0 auto;
 }
 .project-chat-turn-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 7px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--radius-md);
@@ -248,6 +252,12 @@
   color: var(--text);
   font-size: 10px;
   font-weight: 750;
+}
+.project-chat-turn-status[hidden] { display: none !important; }
+.project-chat-turn-status button {
+  min-height: 26px;
+  padding: 3px 9px;
+  font-size: 9px;
 }
 .project-chat-queue {
   overflow: hidden;

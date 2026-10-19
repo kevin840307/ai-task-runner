@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from pathlib import Path
 
@@ -24,7 +25,22 @@ from runner.agent import (
 )
 
 
+class _ChatTurnCancelled(Exception):
+    pass
+
+
+def _cancel_turn_signal(_signum, _frame) -> None:
+    raise _ChatTurnCancelled()
+
+
+def _install_cancel_handlers() -> None:
+    signal.signal(signal.SIGTERM, _cancel_turn_signal)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, _cancel_turn_signal)
+
+
 def main(argv: list[str] | None = None) -> int:
+    _install_cancel_handlers()
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--backend", required=True)
@@ -54,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
         backend.configure_interaction(args.mode)
         backend.configure_reasoning(args.reasoning)
         result = backend.ask(prompt, args.session)
+    except _ChatTurnCancelled:
+        print(json.dumps({"cancelled": True}))
+        return 130
     except (BackendError, OSError, ValueError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 1

@@ -210,7 +210,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Deterministic Browser fixture 已覆蓋：多選項題、文字題、Other 自訂答案、Next、最後 Submit、Cancel、空白驗證、切換 Agent / session；此勾選只代表 Mock/UI contract，不代表 native Agent Ask continuation 已完成。
 [x] 測試切換 Other 時要清掉舊答案；再次點擊已選 Other 不應意外刪掉已輸入文字。
 [x] 等待中的 Ask timeout：durable expires_at 到期後沿用 ChatAgentService 的既有 cancel/deny owner，解除 Queue 阻塞；不新增背景 scheduler。
-[ ] Agent turn cancel：補一般 in-flight Chat turn 的明確 Stop/Cancel contract，不把 Ask Cancel 當成整個 turn cancel。
+[x] Agent turn cancel：一般 in-flight Chat turn 由 ChatAgentService 擁有 cancel intent；正式 tool child 收到中斷訊號後沿既有 backend/process cleanup 回收 Agent process tree，當前 item 記 cancelled，後續 Queue 繼續執行；Ask Cancel 仍是獨立 question deny contract。
 [x] Session reconnect：resolving Ask 若沒有目前 process owner，會安全回復 waiting，保留原 native request identity。
 [x] 重送答案冪等性：answer request_id 綁定 durable Ask resolution；同 request 重送不會再次呼叫 native reply/reject。
 

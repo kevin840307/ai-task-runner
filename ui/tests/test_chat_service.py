@@ -1481,3 +1481,160 @@ def test_restart_recovers_unowned_inflight_ask_resolution(tmp_path: Path) -> Non
     restored = chat.ask(project, session_id)["ask"]
     assert restored["status"] == "waiting"
     assert chat.ask_context(project, session_id, restored["ask_id"])["answer_request_id"] == ""
+
+
+def test_chat_turn_cancel_marks_current_item_cancelled_and_runs_queued_next_turn(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    started = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+    result_box: dict[str, dict] = {}
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(),
+    )
+
+    def fake_runner(**kwargs):
+        prompt = str(kwargs["prompt"])
+        calls.append(prompt)
+        if prompt == "first":
+            started.set()
+            assert release.wait(timeout=4)
+        return {"text": f"reply {prompt}", "session_id": "agent-session"}
+
+    service = ChatAgentService(repo, runner=fake_runner)
+    worker = threading.Thread(
+        target=lambda: result_box.setdefault(
+            "value",
+            service.turn(
+                project,
+                chat,
+                session_id=session_id,
+                message="first",
+                backend="qwen",
+                request_id="turn-cancel-first",
+            ),
+        ),
+        daemon=True,
+    )
+    worker.start()
+    assert started.wait(timeout=2)
+
+    queued = service.turn(
+        project,
+        chat,
+        session_id=session_id,
+        message="second",
+        backend="qwen",
+        request_id="turn-cancel-second",
+    )
+    assert queued["status"] == "queued"
+
+    first_cancel = service.cancel_turn(project, chat, session_id=session_id)
+    repeated_cancel = service.cancel_turn(project, chat, session_id=session_id)
+    assert first_cancel["cancelled"] is True
+    assert first_cancel["duplicate"] is False
+    assert repeated_cancel["duplicate"] is True
+
+    release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert result_box["value"]["status"] == "idle"
+    assert len(result_box["value"]["cancelled"]) == 1
+    assert calls == ["first", "second"]
+    assert chat.queue(project, session_id)["items"] == []
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
+        "first",
+        "Agent turn cancelled.",
+        "second",
+        "reply second",
+    ]
+
+
+def test_chat_turn_cancel_http_endpoint_is_non_blocking_and_idempotent(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+    started = threading.Event()
+    release = threading.Event()
+    response_box: dict[str, dict] = {}
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(),
+    )
+
+    def fake_runner(**kwargs):
+        started.set()
+        assert release.wait(timeout=4)
+        return {"text": "should be discarded", "session_id": "agent-session"}
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    server.state.chat_agent = ChatAgentService(repo, runner=fake_runner)
+    server.state.project_preferences.update(project, {"agent": "qwen"})
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+
+    turn_thread = threading.Thread(
+        target=lambda: response_box.setdefault(
+            "turn",
+            _json_request(
+                f"{base}/api/chat/turn",
+                method="POST",
+                body={
+                    "project": str(project),
+                    "session_id": session_id,
+                    "message": "long turn",
+                    "request_id": "http-cancel-turn",
+                },
+            ),
+        ),
+        daemon=True,
+    )
+    try:
+        turn_thread.start()
+        assert started.wait(timeout=2)
+        cancelled = _json_request(
+            f"{base}/api/chat/turn/cancel",
+            method="POST",
+            body={"project": str(project), "session_id": session_id, "request_id": "http-cancel-request"},
+        )
+        repeated = _json_request(
+            f"{base}/api/chat/turn/cancel",
+            method="POST",
+            body={"project": str(project), "session_id": session_id, "request_id": "http-cancel-request"},
+        )
+        assert cancelled["status"] == "cancelling"
+        assert cancelled["cancelled"] is True
+        assert cancelled["duplicate"] is False
+        assert repeated["duplicate"] is True
+
+        release.set()
+        turn_thread.join(timeout=5)
+        assert not turn_thread.is_alive()
+        assert response_box["turn"]["status"] == "idle"
+        assert len(response_box["turn"]["cancelled"]) == 1
+        assert [row["content"] for row in server.state.chat_service.messages(project, session_id)["messages"]] == [
+            "long turn",
+            "Agent turn cancelled.",
+        ]
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

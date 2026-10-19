@@ -434,6 +434,13 @@ class Handler(SimpleHTTPRequestHandler):
                     reasoning=str(preferences.get("reasoning") or ""),
                     request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/chat/turn/cancel":
+                project = self._project(body)
+                return self._json(self.state.chat_agent.cancel_turn(
+                    project,
+                    self.state.chat_service,
+                    session_id=str(body.get("session_id", "")),
+                ))
             if parsed.path == "/api/chat/ask/demo":
                 project = self._project(body)
                 return self._json(self.state.chat_service.create_ask(

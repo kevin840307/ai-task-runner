@@ -543,6 +543,22 @@ def _bridge_for(state: UIState):
                             Path(body["project"]), session_id, "assistant", "Browser Chat reply"
                         )
                         data = {"session_id": session_id, "messages": [user, assistant], "items": [], "busy": False}
+                elif path == "/api/chat/turn/cancel":
+                    session_id = str(body.get("session_id", ""))
+                    queues = getattr(state, "_browser_chat_queue", {})
+                    busy_map = getattr(state, "_browser_chat_busy", {})
+                    was_busy = bool(busy_map.get(session_id, False))
+                    busy_map[session_id] = False
+                    state._browser_chat_busy = busy_map
+                    data = {
+                        "session_id": session_id,
+                        "items": list(queues.get(session_id, [])),
+                        "dispatching": None,
+                        "busy": False,
+                        "status": "idle",
+                        "cancelled": was_busy,
+                        "duplicate": not was_busy,
+                    }
                 elif path in {"/api/chat/ask/submit", "/api/chat/ask/cancel"}:
                     session_id = str(body.get("session_id", ""))
                     if path.endswith("/submit"):
@@ -1521,6 +1537,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1")
             assert page.locator("#projectChatQueue").is_visible()
             assert page.locator("#projectChatTurnStatus").is_visible()
+            assert page.locator("#projectChatStopButton").is_visible()
+            assert page.locator("#projectChatQueueList").get_by_text("queue browser message").is_visible()
+            page.locator("#projectChatStopButton").click()
+            page.wait_for_function("document.querySelector('#projectChatTurnStatus')?.hidden === true")
             assert page.locator("#projectChatQueueList").get_by_text("queue browser message").is_visible()
             page.locator("#projectChatQueueList .project-chat-queue-item button").filter(has_text="Edit").click()
             page.wait_for_function("document.querySelector('#projectChatQueueList .project-chat-queue-item.editing textarea') !== null")

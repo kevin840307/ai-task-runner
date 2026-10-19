@@ -16,6 +16,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   const taskDraftsBySession = new Map();
   let queueItems = [];
   let queueBusy = false;
+  let turnCancelPending = false;
   let queuePollTimer = 0;
   let settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], features: {}, default_agent: "" };
   let settingsLoading = false;
@@ -471,9 +472,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   function renderTurnState() {
     const status = byId("projectChatTurnStatus");
+    const stop = byId("projectChatStopButton");
     const send = byId("projectChatSendButton");
     const input = byId("projectChatInput");
+    if (!queueBusy) turnCancelPending = false;
     if (status) status.hidden = !queueBusy;
+    if (stop) stop.disabled = !project || !activeSessionId || !queueBusy || turnCancelPending;
     if (send) {
       send.disabled = !project;
       send.setAttribute("aria-busy", String(queueBusy));
@@ -1388,6 +1392,35 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
+  async function cancelTurn() {
+    const expectedProject = projectPath();
+    const expectedSession = activeSessionId;
+    if (!expectedProject || !expectedSession || !queueBusy || turnCancelPending) return;
+    turnCancelPending = true;
+    renderTurnState();
+    try {
+      const data = await api("/api/chat/turn/cancel", {
+        method: "POST",
+        body: JSON.stringify({
+          project: expectedProject,
+          session_id: expectedSession,
+          request_id: requestId(),
+        }),
+      });
+      if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+      applyQueueState(data);
+      await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
+    } catch (error) {
+      if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
+      turnCancelPending = false;
+      showError?.(error.message, "Stop Chat turn failed");
+    } finally {
+      if (projectPath() === expectedProject && activeSessionId === expectedSession) {
+        renderTurnState();
+      }
+    }
+  }
+
   async function createSession() {
     const path = projectPath();
     if (!path) return;
@@ -1550,6 +1583,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   });
   window.addEventListener("resize", positionSettingsPopover);
   byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
+  byId("projectChatStopButton")?.addEventListener("click", () => void cancelTurn());
   byId("projectChatInput")?.addEventListener("input", (event) => {
     autosizeTextarea?.(event.currentTarget, { minHeight: 46, maxHeight: 180 });
     suggestionIndex = 0;
