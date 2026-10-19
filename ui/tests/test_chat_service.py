@@ -449,6 +449,52 @@ def test_chat_agent_busy_turns_queue_and_drain_fifo(tmp_path: Path) -> None:
     ]
 
 
+
+@pytest.mark.parametrize("outcome", ["completed", "failed", "cancelled"])
+def test_chat_queue_terminal_outcome_is_durable_and_idempotent(
+    tmp_path: Path,
+    outcome: str,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    request_id = f"terminal-{outcome}"
+    queued = chat.enqueue_turn(
+        project,
+        session_id,
+        "terminal item",
+        request_id=request_id,
+        backend="qwen",
+    )
+    claimed = chat.claim_next(project, session_id)
+    assert claimed is not None
+    assert claimed["status"] == "dispatching"
+
+    chat.complete_queue_item(
+        project,
+        session_id,
+        queued["queue_id"],
+        outcome=outcome,
+    )
+    assert chat.queue(project, session_id) == {
+        "session_id": session_id,
+        "items": [],
+        "dispatching": None,
+    }
+
+    duplicate = ChatService().enqueue_turn(
+        project,
+        session_id,
+        "terminal item",
+        request_id=request_id,
+        backend="qwen",
+    )
+    assert duplicate["duplicate"] is True
+    assert duplicate["request_status"] == outcome
+    assert duplicate["queue_id"] == queued["queue_id"]
+
+
 def test_chat_queue_recovers_dispatching_item_after_restart(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
