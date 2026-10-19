@@ -6,6 +6,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from ui.agent_capability_service import AgentCapabilityService
 from ui.agent_settings_service import AgentSettingsService
 from ui.chat_agent_service import ChatAgentService
