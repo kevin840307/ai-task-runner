@@ -68,6 +68,51 @@ class ProjectRuntimeMixin:
             return 10000
         return 8000
 
+    @staticmethod
+    def _normalize_project_id(value: object) -> str:
+        text = str(value or "").strip().lower()
+        if not text.startswith("project-"):
+            return ""
+        token = text[len("project-"):]
+        if len(token) != 32:
+            return ""
+        try:
+            int(token, 16)
+        except ValueError:
+            return ""
+        return text
+
+    @staticmethod
+    def _new_project_id() -> str:
+        return f"project-{uuid.uuid4().hex}"
+
+    def ensure_project_ids(self) -> None:
+        """Migrate legacy sidebar rows to stable opaque Project identities."""
+        with self._projects_lock, project_file_lock(self.projects_file):
+            try:
+                rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return
+            if not isinstance(rows, list):
+                return
+            seen: set[str] = set()
+            changed = False
+            migrated: list[dict] = []
+            for raw in rows:
+                if not isinstance(raw, dict):
+                    migrated.append(raw)
+                    continue
+                item = dict(raw)
+                project_id = self._normalize_project_id(item.get("project_id"))
+                if not project_id or project_id in seen:
+                    project_id = self._new_project_id()
+                    item["project_id"] = project_id
+                    changed = True
+                seen.add(project_id)
+                migrated.append(item)
+            if changed:
+                self._write_projects_unlocked(migrated)
+
     def projects(self, *, exclude_runtime_path: str = "") -> list[dict]:
         try:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
@@ -99,6 +144,7 @@ class ProjectRuntimeMixin:
                 else self._project_runtime_summary(project_path, alive_pids)
             )
             result.append({
+                "project_id": self._normalize_project_id(item.get("project_id")),
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
                 "exists": project_path.is_dir(),
@@ -227,8 +273,14 @@ class ProjectRuntimeMixin:
             if not resolved.is_dir():
                 raise ValueError("Project folder does not exist")
             key = self._project_path_key(resolved)
-            items = [p for p in self.projects() if self._project_path_key(p["path"]) != key]
-            project = {"name": resolved.name or str(resolved), "path": str(resolved)}
+            current = self.projects()
+            existing = next((p for p in current if self._project_path_key(p["path"]) == key), None)
+            items = [p for p in current if self._project_path_key(p["path"]) != key]
+            project = {
+                "project_id": self._normalize_project_id(existing.get("project_id") if existing else "") or self._new_project_id(),
+                "name": resolved.name or str(resolved),
+                "path": str(resolved),
+            }
             items.insert(0, project)
             self._write_projects_unlocked(items)
             return project
@@ -255,7 +307,11 @@ class ProjectRuntimeMixin:
                 if self._project_path_key(item["path"]) != key:
                     continue
                 item["name"] = label
-                renamed = {"name": label, "path": item["path"]}
+                renamed = {
+                    "project_id": self._normalize_project_id(item.get("project_id")),
+                    "name": label,
+                    "path": item["path"],
+                }
                 break
             if not renamed:
                 raise ValueError("Project is not in the sidebar")
@@ -270,6 +326,7 @@ class ProjectRuntimeMixin:
         # Persist identity only; existence/runtime status are live filesystem data.
         rows = []
         seen: set[str] = set()
+        seen_ids: set[str] = set()
         for item in items:
             path = str(item.get("path") or "").strip()
             if not path:
@@ -279,7 +336,15 @@ class ProjectRuntimeMixin:
             if key in seen:
                 continue
             seen.add(key)
-            rows.append({"name": str(item.get("name") or Path(display_path).name), "path": display_path})
+            project_id = self._normalize_project_id(item.get("project_id"))
+            if not project_id or project_id in seen_ids:
+                project_id = self._new_project_id()
+            seen_ids.add(project_id)
+            rows.append({
+                "project_id": project_id,
+                "name": str(item.get("name") or Path(display_path).name),
+                "path": display_path,
+            })
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
