@@ -21,6 +21,7 @@ try:
     from .chat_system_capabilities import system_capabilities
     from .task_draft_service import TaskDraftService
     from .task_service import TaskService
+    from .task_upload_service import TaskUploadService
     from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
@@ -35,6 +36,7 @@ except ImportError:
     from chat_system_capabilities import system_capabilities
     from task_draft_service import TaskDraftService
     from task_service import TaskService
+    from task_upload_service import TaskUploadService
     from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
@@ -95,7 +97,11 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
             self.repo_root,
             workflow_requirements=self._task_workflow_requirements,
         )
-        self.tasks = TaskService(workflow_requirements=self._task_workflow_requirements)
+        self.task_uploads = TaskUploadService()
+        self.tasks = TaskService(
+            workflow_requirements=self._task_workflow_requirements,
+            uploads=self.task_uploads,
+        )
         if not self.projects_file.exists():
             self._write_projects([])
         self.ensure_project_ids()
@@ -275,6 +281,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         try:
+            if parsed.path == "/api/tasks/upload/stage":
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                if length > 12 * 1024 * 1024:
+                    raise ValueError("Uploaded file is too large")
             body = self._body()
             if parsed.path == "/api/settings":
                 return self._json(self.state.global_settings.update(body))
@@ -304,6 +314,21 @@ class Handler(SimpleHTTPRequestHandler):
                     project=str(body.get("project", "")),
                     current=str(body.get("current", "")),
                 )
+            if parsed.path == "/api/tasks/upload/stage":
+                project = self._project(body)
+                return self._json(self.state.task_uploads.stage(
+                    project,
+                    item_id=body.get("item_id"),
+                    kind=body.get("kind"),
+                    filename=body.get("filename"),
+                    content_base64=body.get("content_base64"),
+                ))
+            if parsed.path == "/api/tasks/upload/cancel":
+                project = self._project(body)
+                return self._json(self.state.task_uploads.cancel(
+                    project,
+                    body.get("path"),
+                ))
             if parsed.path == "/api/project/preferences":
                 project = self._project(body)
                 before = self.state.project_preferences.get(project)

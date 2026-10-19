@@ -37,9 +37,11 @@ class TaskService:
         self,
         *,
         workflow_requirements: Callable[[Path, str], dict[str, Any]] | None = None,
+        uploads: Any | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._workflow_requirements = workflow_requirements
+        self._uploads = uploads
 
     def list(self, project: Path) -> dict[str, Any]:
         with self._lock:
@@ -135,10 +137,11 @@ class TaskService:
 
             now = time.time()
             task_id = f"task-{uuid.uuid4().hex}"
-            items = [
-                {"item_id": f"{task_id}-item-{index + 1}", **item}
-                for index, item in enumerate(validated["items"])
-            ]
+            items: list[dict[str, Any]] = []
+            for index, item in enumerate(validated["items"]):
+                item_id = str(item.get("item_id") or f"{task_id}-item-{index + 1}")
+                payload = {key: value for key, value in item.items() if key != "item_id"}
+                items.append({"item_id": item_id, **payload})
             task = {
                 "schema_version": 1,
                 "task_id": task_id,
@@ -153,11 +156,14 @@ class TaskService:
                 "created_at": now,
                 "updated_at": now,
             }
+            materialized = self._uploads.materialize_items(project, items) if self._uploads else []
             state["tasks"].append(task)
             state["create_requests"][request] = task_id
             while len(state["create_requests"]) > CREATE_REQUEST_LIMIT:
                 state["create_requests"].pop(next(iter(state["create_requests"])))
             self._write(project, state)
+            if self._uploads:
+                self._uploads.finalize(project, materialized)
             return {**deepcopy(task), "duplicate": False}
 
     def update(
@@ -219,15 +225,17 @@ class TaskService:
             items: list[dict[str, Any]] = []
             for index, item in enumerate(validated["items"]):
                 raw = raw_items[index] if isinstance(raw_items, list) and index < len(raw_items) and isinstance(raw_items[index], dict) else {}
-                item_id = str(raw.get("item_id") or "")
-                if item_id not in existing_ids or item_id in used:
+                item_id = str(item.get("item_id") or raw.get("item_id") or "")
+                if not item_id or item_id in used:
                     while f"{prefix}{next_index}" in existing_ids or f"{prefix}{next_index}" in used:
                         next_index += 1
                     item_id = f"{prefix}{next_index}"
                     next_index += 1
                 used.add(item_id)
-                items.append({"item_id": item_id, **item})
+                payload = {key: value for key, value in item.items() if key != "item_id"}
+                items.append({"item_id": item_id, **payload})
 
+            materialized = self._uploads.materialize_items(project, items) if self._uploads else []
             task["title"] = validated["title"]
             task["kind"] = "task" if len(items) == 1 else "task_list"
             task["items"] = items
@@ -236,6 +244,8 @@ class TaskService:
             while len(state["update_requests"]) > UPDATE_REQUEST_LIMIT:
                 state["update_requests"].pop(next(iter(state["update_requests"])))
             self._write(project, state)
+            if self._uploads:
+                self._uploads.finalize(project, materialized)
             return {**deepcopy(task), "duplicate": False}
 
     def delete(

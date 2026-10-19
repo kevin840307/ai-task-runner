@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import urllib.request
@@ -10,6 +11,7 @@ import pytest
 from ui.server import UIServer
 from ui.task_draft_service import TaskDraftService
 from ui.task_service import TaskService
+from ui.task_upload_service import TaskUploadService
 
 
 def _json_request(url: str, *, method: str = "GET", body: dict | None = None) -> dict:
@@ -176,6 +178,98 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     duplicate = restarted.create(project, draft, request_id="create-1")
     assert duplicate["duplicate"] is True
     assert duplicate["task_id"] == created["task_id"]
+
+
+def test_task_upload_materializes_before_task_commit_and_is_fail_closed(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    uploads = TaskUploadService()
+    service = TaskService(uploads=uploads)
+    item_id = "item-upload-1"
+    staged = uploads.stage(
+        project,
+        item_id=item_id,
+        kind="validator",
+        filename="validate.py",
+        content_base64=base64.b64encode(b"print('ok')\n").decode("ascii"),
+    )
+    draft = {
+        "title": "Upload task",
+        "items": [{
+            "item_id": item_id,
+            "title": "A",
+            "prompt": "Do A",
+            "workflow": "workflow.yaml",
+            "project": str(project),
+            "workspace": "auto",
+            "validator": staged["path"],
+        }],
+    }
+    created = service.create(project, draft, request_id="upload-create")
+    assert created["items"][0]["item_id"] == item_id
+    assert created["items"][0]["validator"] == staged["path"]
+    assert Path(staged["path"]).read_bytes() == b"print('ok')\n"
+    assert uploads.staged_exists(project, staged["path"]) is False
+
+    failed = uploads.stage(
+        project,
+        item_id="item-upload-fail",
+        kind="validator",
+        filename="broken.py",
+        content_base64=base64.b64encode(b"broken").decode("ascii"),
+    )
+    bad_draft = json.loads(json.dumps(draft))
+    bad_draft["title"] = "Fail closed"
+    bad_draft["items"][0]["item_id"] = "item-upload-fail"
+    bad_draft["items"][0]["validator"] = failed["path"]
+    original_copy = uploads._atomic_copy
+    uploads._atomic_copy = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("copy blocked"))
+    try:
+        with pytest.raises(ValueError, match="materialize"):
+            service.create(project, bad_draft, request_id="upload-fail")
+    finally:
+        uploads._atomic_copy = original_copy
+    assert [row["title"] for row in service.list(project)["tasks"]] == ["Upload task"]
+    assert uploads.staged_exists(project, failed["path"]) is True
+
+
+def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    server.state.add_project(str(project))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    try:
+        staged = _json_request(
+            f"{base}/api/tasks/upload/stage",
+            method="POST",
+            body={
+                "project": str(project),
+                "item_id": "item-http-upload",
+                "kind": "ai-validator",
+                "filename": "review.md",
+                "content_base64": base64.b64encode(b"review me").decode("ascii"),
+            },
+        )
+        assert ".ai-task-runner" in staged["path"]
+        assert server.state.task_uploads.staged_exists(project, staged["path"]) is True
+        cancelled = _json_request(
+            f"{base}/api/tasks/upload/cancel",
+            method="POST",
+            body={"project": str(project), "path": staged["path"]},
+        )
+        assert cancelled["cancelled"] is True
+        assert server.state.task_uploads.staged_exists(project, staged["path"]) is False
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_task_service_enforces_workflow_capability_inputs(tmp_path: Path) -> None:
