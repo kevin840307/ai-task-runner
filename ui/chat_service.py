@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - script import compatibility
 
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 5
+STATE_VERSION = 6
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
@@ -194,6 +194,10 @@ class ChatService:
         request_id: str,
         questions: Any,
         turn_id: str = "",
+        source: str = "local",
+        backend: str = "",
+        agent_session_id: str = "",
+        native_request_id: str = "",
     ) -> dict[str, Any]:
         request = self._request_id(request_id)
         normalized_questions = normalize_questions(questions)
@@ -221,6 +225,11 @@ class ChatService:
                 "questions": normalized_questions,
                 "answers": None,
                 "answer_request_id": "",
+                "resolution_kind": "",
+                "source": str(source or "local").strip() or "local",
+                "backend": str(backend or "").strip(),
+                "agent_session_id": str(agent_session_id or "").strip(),
+                "native_request_id": str(native_request_id or "").strip(),
                 "created_at": now,
                 "resolved_at": 0.0,
             }
@@ -233,12 +242,60 @@ class ChatService:
                 "duplicate": False,
             }
 
-    def submit_ask(
+    def begin_ask_resolution(
         self,
         project: Path,
         session_id: str,
         ask_id: str,
         answers: Any,
+        *,
+        request_id: str,
+        cancelled: bool = False,
+    ) -> dict[str, Any]:
+        request = self._request_id(request_id)
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            ask = self._require_ask(session, ask_id)
+            terminal = "cancelled" if cancelled else "answered"
+            if ask["status"] == terminal and ask.get("answer_request_id") == request:
+                return {
+                    "session_id": session["session_id"],
+                    "ask": self._public_ask(ask),
+                    "duplicate": True,
+                    "in_flight": False,
+                }
+            if ask["status"] == "resolving":
+                if ask.get("answer_request_id") == request:
+                    return {
+                        "session_id": session["session_id"],
+                        "ask": self._public_ask(ask),
+                        "duplicate": True,
+                        "in_flight": True,
+                    }
+                raise ValueError("Ask resolution is already in progress")
+            if ask["status"] != "waiting":
+                raise ValueError("Ask is no longer waiting for a response")
+            ask["answers"] = None if cancelled else validate_answers(
+                ask["questions"], answers
+            )
+            ask["answer_request_id"] = request
+            ask["resolution_kind"] = "cancel" if cancelled else "answer"
+            ask["status"] = "resolving"
+            session["updated_at"] = time.time()
+            self._write(project, state)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(ask),
+                "duplicate": False,
+                "in_flight": True,
+            }
+
+    def finish_ask_resolution(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
         *,
         request_id: str,
     ) -> dict[str, Any]:
@@ -247,19 +304,21 @@ class ChatService:
             state = self._load(project)
             session = self._require_session(state, session_id)
             ask = self._require_ask(session, ask_id)
-            if ask["status"] == "answered":
+            if ask["status"] in {"answered", "cancelled"}:
                 if ask.get("answer_request_id") == request:
                     return {
                         "session_id": session["session_id"],
                         "ask": self._public_ask(ask),
                         "duplicate": True,
                     }
-                raise ValueError("Ask has already been answered")
-            if ask["status"] != "waiting":
-                raise ValueError("Ask is no longer waiting for an answer")
-            ask["answers"] = validate_answers(ask["questions"], answers)
-            ask["answer_request_id"] = request
-            ask["status"] = "answered"
+                raise ValueError("Ask has already been resolved")
+            if ask["status"] != "resolving" or ask.get("answer_request_id") != request:
+                raise ValueError("Ask resolution request does not match")
+            ask["status"] = (
+                "cancelled"
+                if ask.get("resolution_kind") == "cancel"
+                else "answered"
+            )
             ask["resolved_at"] = time.time()
             session["updated_at"] = ask["resolved_at"]
             self._write(project, state)
@@ -269,7 +328,7 @@ class ChatService:
                 "duplicate": False,
             }
 
-    def cancel_ask(
+    def abort_ask_resolution(
         self,
         project: Path,
         session_id: str,
@@ -282,27 +341,88 @@ class ChatService:
             state = self._load(project)
             session = self._require_session(state, session_id)
             ask = self._require_ask(session, ask_id)
-            if ask["status"] == "cancelled":
-                if ask.get("answer_request_id") == request:
-                    return {
-                        "session_id": session["session_id"],
-                        "ask": self._public_ask(ask),
-                        "duplicate": True,
-                    }
-                raise ValueError("Ask has already been cancelled")
-            if ask["status"] != "waiting":
-                raise ValueError("Ask is no longer waiting for a response")
-            ask["answers"] = None
-            ask["answer_request_id"] = request
-            ask["status"] = "cancelled"
-            ask["resolved_at"] = time.time()
-            session["updated_at"] = ask["resolved_at"]
-            self._write(project, state)
+            if ask["status"] == "resolving" and ask.get("answer_request_id") == request:
+                ask["status"] = "waiting"
+                ask["answers"] = None
+                ask["answer_request_id"] = ""
+                ask["resolution_kind"] = ""
+                session["updated_at"] = time.time()
+                self._write(project, state)
             return {
                 "session_id": session["session_id"],
                 "ask": self._public_ask(ask),
-                "duplicate": False,
             }
+
+    def ask_context(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            ask = self._require_ask(session, ask_id)
+            return {
+                "ask_id": ask["ask_id"],
+                "source": ask.get("source", "local"),
+                "backend": ask.get("backend", ""),
+                "agent_session_id": ask.get("agent_session_id", ""),
+                "native_request_id": ask.get("native_request_id", ""),
+                "turn_id": ask["turn_id"],
+                "status": ask["status"],
+                "answers": ask.get("answers"),
+            }
+
+    def submit_ask(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+        answers: Any,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        started = self.begin_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            answers,
+            request_id=request_id,
+        )
+        if started["duplicate"] and not started["in_flight"]:
+            return started
+        return self.finish_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            request_id=request_id,
+        )
+
+    def cancel_ask(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        started = self.begin_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            None,
+            request_id=request_id,
+            cancelled=True,
+        )
+        if started["duplicate"] and not started["in_flight"]:
+            return started
+        return self.finish_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            request_id=request_id,
+        )
 
     def queue(self, project: Path, session_id: str) -> dict[str, Any]:
         with self._lock:
@@ -476,7 +596,7 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, 5, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
         source_version = int(state.get("version"))
         legacy_v1 = source_version == 1
@@ -646,12 +766,15 @@ class ChatService:
             not _ASK_ID.fullmatch(ask_id)
             or not request_id
             or not turn_id
-            or status not in {"waiting", "answered", "cancelled"}
+            or status not in {"waiting", "resolving", "answered", "cancelled"}
         ):
             raise ValueError("Chat state contains an invalid Ask")
         questions = normalize_questions(raw.get("questions"))
         answers = None
-        if status == "answered":
+        resolution_kind = str(raw.get("resolution_kind") or "")
+        if status == "answered" or (
+            status == "resolving" and resolution_kind == "answer"
+        ):
             answers = validate_answers(questions, raw.get("answers"))
         return {
             "ask_id": ask_id,
@@ -661,6 +784,11 @@ class ChatService:
             "questions": questions,
             "answers": answers,
             "answer_request_id": str(raw.get("answer_request_id") or ""),
+            "resolution_kind": resolution_kind,
+            "source": str(raw.get("source") or "local"),
+            "backend": str(raw.get("backend") or ""),
+            "agent_session_id": str(raw.get("agent_session_id") or ""),
+            "native_request_id": str(raw.get("native_request_id") or ""),
             "created_at": float(raw.get("created_at") or 0),
             "resolved_at": float(raw.get("resolved_at") or 0),
         }
@@ -676,6 +804,7 @@ class ChatService:
             "status": raw["status"],
             "questions": [dict(item) for item in raw["questions"]],
             "answers": raw.get("answers"),
+            "source": raw.get("source", "local"),
             "created_at": raw["created_at"],
             "resolved_at": raw["resolved_at"],
         }
