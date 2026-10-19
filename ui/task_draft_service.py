@@ -36,8 +36,8 @@ class TaskDraftService:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self._runner = runner or self._run_tool
         self._lock = threading.RLock()
-        self._requests: dict[tuple[str, str], dict[str, Any]] = {}
-        self._drafts: dict[tuple[str, str], dict[str, Any]] = {}
+        self._requests: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self._drafts: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     def generate(
         self,
@@ -50,6 +50,7 @@ class TaskDraftService:
         reasoning: str = "",
         workflow: str = "",
         request_id: str,
+        session_id: str = "",
     ) -> dict[str, Any]:
         mode = str(draft_mode or "").strip().lower()
         if mode not in DRAFT_MODES:
@@ -57,13 +58,14 @@ class TaskDraftService:
         text = bounded_text(spec, "TaskDraft spec", 24000)
         agent = bounded_text(backend, "TaskDraft Agent", 120)
         request = bounded_text(request_id, "request_id", 240)
-        key = (str(project.resolve()), request)
+        session = str(session_id or "").strip()
+        key = (str(project.resolve()), session, request)
         with self._lock:
             cached = self._requests.get(key)
             if cached is not None:
                 draft_id = str(cached.get("draft_id") or "")
                 if draft_id:
-                    self._drafts[(key[0], draft_id)] = deepcopy(cached)
+                    self._drafts[(key[0], key[1], draft_id)] = deepcopy(cached)
                 return {**deepcopy(cached), "duplicate": True}
 
         generated = self._runner(
@@ -84,18 +86,19 @@ class TaskDraftService:
             "draft_id": f"draft-{uuid.uuid4().hex}",
             "mode": mode,
             "spec": text,
+            "session_id": session,
             "draft": draft,
             "duplicate": False,
         }
         with self._lock:
             self._requests[key] = deepcopy(value)
-            self._drafts[(key[0], value["draft_id"])] = deepcopy(value)
+            self._drafts[(key[0], key[1], value["draft_id"])] = deepcopy(value)
             while len(self._requests) > CACHE_LIMIT:
                 oldest_key = next(iter(self._requests))
                 evicted = self._requests.pop(oldest_key)
                 evicted_id = str(evicted.get("draft_id") or "")
                 if evicted_id:
-                    self._drafts.pop((oldest_key[0], evicted_id), None)
+                    self._drafts.pop((oldest_key[0], oldest_key[1], evicted_id), None)
         return value
 
     @staticmethod
@@ -105,17 +108,25 @@ class TaskDraftService:
             raise ValueError("Invalid TaskDraft id")
         return draft_id
 
-    def get(self, project: Path, draft_id: str) -> dict[str, Any]:
-        key = (str(project.resolve()), self._draft_id(draft_id))
+    def get(self, project: Path, draft_id: str, *, session_id: str = "") -> dict[str, Any]:
+        key = (str(project.resolve()), str(session_id or "").strip(), self._draft_id(draft_id))
         with self._lock:
             value = self._drafts.get(key)
             if value is None:
                 raise ValueError("TaskDraft is no longer available")
             return deepcopy(value)
 
-    def update(self, project: Path, draft_id: str, draft: Any) -> dict[str, Any]:
+    def update(
+        self,
+        project: Path,
+        draft_id: str,
+        draft: Any,
+        *,
+        session_id: str = "",
+    ) -> dict[str, Any]:
         project_key = str(project.resolve())
-        key = (project_key, self._draft_id(draft_id))
+        session = str(session_id or "").strip()
+        key = (project_key, session, self._draft_id(draft_id))
         validated = validate_task_draft_for_create(draft, project)
         with self._lock:
             current = self._drafts.get(key)
@@ -124,20 +135,29 @@ class TaskDraftService:
             value = {**current, "draft": deepcopy(validated), "duplicate": False}
             self._drafts[key] = deepcopy(value)
             for request_key, cached in self._requests.items():
-                if request_key[0] == project_key and cached.get("draft_id") == key[1]:
+                if (
+                    request_key[0] == project_key
+                    and request_key[1] == session
+                    and cached.get("draft_id") == key[2]
+                ):
                     self._requests[request_key] = deepcopy(value)
                     break
             return deepcopy(value)
 
-    def dismiss(self, project: Path, draft_id: str) -> dict[str, Any]:
+    def dismiss(self, project: Path, draft_id: str, *, session_id: str = "") -> dict[str, Any]:
         project_key = str(project.resolve())
-        key = (project_key, self._draft_id(draft_id))
+        session = str(session_id or "").strip()
+        key = (project_key, session, self._draft_id(draft_id))
         with self._lock:
             existed = self._drafts.pop(key, None) is not None
             for request_key, cached in list(self._requests.items()):
-                if request_key[0] == project_key and cached.get("draft_id") == key[1]:
+                if (
+                    request_key[0] == project_key
+                    and request_key[1] == session
+                    and cached.get("draft_id") == key[2]
+                ):
                     del self._requests[request_key]
-            return {"draft_id": key[1], "dismissed": True, "duplicate": not existed}
+            return {"draft_id": key[2], "dismissed": True, "duplicate": not existed}
 
     def _run_tool(
         self,

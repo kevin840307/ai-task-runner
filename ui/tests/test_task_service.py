@@ -70,6 +70,51 @@ def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> 
     assert duplicate["duplicate"] is True
     assert duplicate["draft_id"] == value["draft_id"]
 
+def test_task_draft_edit_is_backend_owned_and_session_scoped(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    service = TaskDraftService(
+        repo,
+        runner=lambda **kwargs: {
+            "draft": {
+                "title": "Draft",
+                "items": [{"title": "A", "prompt": "Original"}],
+            }
+        },
+    )
+    value = service.generate(
+        project,
+        spec="edit me",
+        draft_mode="single",
+        backend="qwen",
+        request_id="draft-edit-1",
+        session_id="session-a",
+    )
+    edited = json.loads(json.dumps(value["draft"]))
+    edited["items"][0]["prompt"] = "Backend canonical edit"
+    updated = service.update(
+        project,
+        value["draft_id"],
+        edited,
+        session_id="session-a",
+    )
+    assert updated["draft"]["items"][0]["prompt"] == "Backend canonical edit"
+    assert service.get(
+        project,
+        value["draft_id"],
+        session_id="session-a",
+    )["draft"]["items"][0]["prompt"] == "Backend canonical edit"
+
+    with pytest.raises(ValueError, match="no longer available"):
+        service.get(project, value["draft_id"], session_id="session-b")
+    dismissed = service.dismiss(project, value["draft_id"], session_id="session-a")
+    assert dismissed["dismissed"] is True
+    assert dismissed["duplicate"] is False
+    with pytest.raises(ValueError, match="no longer available"):
+        service.get(project, value["draft_id"], session_id="session-a")
+
+
     single = TaskDraftService(
         repo,
         runner=lambda **kwargs: {
@@ -337,7 +382,22 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
             },
         )
         assert generated["draft"]["items"][0]["workflow"] == "workflow.yaml"
+        assert generated["session_id"] == session_id
         assert server.state.tasks.list(project)["tasks"] == []
+
+        edited_transient = json.loads(json.dumps(generated["draft"]))
+        edited_transient["items"][0]["prompt"] = "Edited transient draft"
+        transient = _json_request(
+            f"{base}/api/chat/task-draft/update",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "draft_id": generated["draft_id"],
+                "draft": edited_transient,
+            },
+        )
+        assert transient["draft"]["items"][0]["prompt"] == "Edited transient draft"
 
         validated = _json_request(
             f"{base}/api/tasks/validate-draft",
@@ -351,17 +411,30 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert server.state.tasks.list(project)["tasks"] == []
 
         created = _json_request(
-            f"{base}/api/tasks/create",
+            f"{base}/api/tasks/create-from-draft",
             method="POST",
             body={
                 "project": str(project),
-                "draft": generated["draft"],
+                "session_id": session_id,
+                "draft_id": generated["draft_id"],
                 "request_id": "http-create-1",
             },
         )
         assert created["status"] == "new"
         assert created["project_id"] == registered["project_id"]
+        assert created["items"][0]["prompt"] == "Edited transient draft"
         assert server.state.tasks.list(project)["tasks"][0]["task_id"] == created["task_id"]
+
+        dismissed = _json_request(
+            f"{base}/api/chat/task-draft/dismiss",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "draft_id": generated["draft_id"],
+            },
+        )
+        assert dismissed["dismissed"] is True
 
         dumped = _json_request(
             f"{base}/api/tasks/yaml/dump",

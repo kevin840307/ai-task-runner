@@ -786,8 +786,17 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         draft: current.draft,
         workflows: settingsCatalog.workflows,
         returnFocus: edit,
-        onSave: (nextDraft) => {
-          if (!updateTaskDraftModel(originSession, entry.draft_id, nextDraft)) return;
+        onSave: async (nextDraft) => {
+          const data = await api("/api/chat/task-draft/update", {
+            method: "POST",
+            body: JSON.stringify({
+              project: originProject,
+              session_id: originSession,
+              draft_id: entry.draft_id,
+              draft: nextDraft,
+            }),
+          });
+          if (!updateTaskDraftModel(originSession, entry.draft_id, data.draft)) return;
           if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
         },
       });
@@ -800,7 +809,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const dismiss = document.createElement("button");
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
-    dismiss.onclick = () => dismissTaskDraft(entry.draft_id);
+    dismiss.onclick = () => void dismissTaskDraft(entry.draft_id);
     actions.append(edit, create, dismiss);
     card.append(head, items, actions);
     root.appendChild(card);
@@ -1109,10 +1118,25 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     return { mode, spec: String(match[2] || "").trim(), token: "@" + match[1].toLowerCase() };
   }
 
-  function dismissTaskDraft(draftId) {
-    const rows = activeDrafts().filter((row) => row.draft_id !== draftId);
-    taskDraftsBySession.set(activeSessionId, rows);
-    void refreshMessages();
+  async function dismissTaskDraft(draftId) {
+    const path = projectPath();
+    const session = activeSessionId;
+    if (!path || !session) return;
+    try {
+      await api("/api/chat/task-draft/dismiss", {
+        method: "POST",
+        body: JSON.stringify({
+          project: path,
+          session_id: session,
+          draft_id: draftId,
+        }),
+      });
+      const rows = (taskDraftsBySession.get(session) || []).filter((row) => row.draft_id !== draftId);
+      taskDraftsBySession.set(session, rows);
+      if (projectPath() === path && activeSessionId === session) await refreshMessages();
+    } catch (error) {
+      showError?.(error.message, "Dismiss TaskDraft failed");
+    }
   }
 
   async function createTaskFromDraft(draftId, returnFocus = null) {
@@ -1124,23 +1148,29 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       showError?.("TaskDraft is no longer available in this Chat.", "Create Task failed");
       return;
     }
-    const draft = globalThis.structuredClone
-      ? globalThis.structuredClone(entry.draft)
-      : JSON.parse(JSON.stringify(entry.draft));
     try {
-      const task = await api("/api/tasks/create", {
+      const task = await api("/api/tasks/create-from-draft", {
         method: "POST",
         body: JSON.stringify({
           project: path,
-          draft,
+          session_id: session,
+          draft_id: entry.draft_id,
           request_id: "create-" + entry.draft_id,
         }),
       });
+      try {
+        await api("/api/chat/task-draft/dismiss", {
+          method: "POST",
+          body: JSON.stringify({
+            project: path,
+            session_id: session,
+            draft_id: entry.draft_id,
+          }),
+        });
+      } catch (_) {}
+      const rows = (taskDraftsBySession.get(session) || []).filter((row) => row.draft_id !== entry.draft_id);
+      taskDraftsBySession.set(session, rows);
       if (projectPath() !== path || activeSessionId !== session) return;
-      taskDraftsBySession.set(
-        session,
-        activeDrafts().filter((row) => row.draft_id !== entry.draft_id),
-      );
       await refreshMessages();
       showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
       openTask?.(task, { returnFocus, workflows: settingsCatalog.workflows });

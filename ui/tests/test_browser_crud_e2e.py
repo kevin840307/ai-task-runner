@@ -12,6 +12,7 @@ import pytest
 
 from ui.chat_ask import demo_questions
 from ui.server import UIState
+from ui.task_draft_service import TaskDraftService
 
 try:
     from playwright.sync_api import sync_playwright
@@ -122,7 +123,35 @@ def _write_fixture_repo(root: Path) -> UIState:
         "import json; print(json.dumps({'closed':True,'valid':True,'paths_passed':1,'paths_total':1}))\n",
         encoding="utf-8",
     )
-    return UIState(root)
+    state = UIState(root)
+
+    def browser_task_draft_runner(**kwargs):
+        spec = str(kwargs.get("spec", ""))
+        if spec == "mock:error":
+            raise ValueError("Browser TaskDraft backend failure")
+        if spec == "mock:invalid":
+            raise ValueError("TaskDraft generator returned invalid structured data")
+        count = 2 if kwargs.get("draft_mode") == "list" else 1
+        return {
+            "draft": {
+                "schema_version": 1,
+                "title": "Browser generated draft",
+                "project": str(root),
+                "items": [
+                    {
+                        "title": f"Draft item {index + 1}",
+                        "prompt": f"Do browser item {index + 1}",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "auto",
+                    }
+                    for index in range(count)
+                ],
+            }
+        }
+
+    state.task_drafts = TaskDraftService(root, runner=browser_task_draft_runner)
+    return state
 
 
 def _bridge_for(state: UIState):
@@ -341,34 +370,37 @@ def _bridge_for(state: UIState):
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
                 elif path == "/api/chat/task-draft":
-                    mode = str(body.get("mode", "auto"))
-                    spec = str(body.get("spec", ""))
-                    if spec == "mock:error":
-                        raise ValueError("Browser TaskDraft backend failure")
-                    if spec == "mock:invalid":
-                        raise ValueError("TaskDraft generator returned invalid structured data")
-                    count = 2 if mode == "list" else 1
-                    data = {
-                        "draft_id": "draft-" + "a" * 32,
-                        "mode": mode,
-                        "spec": str(body.get("spec", "")),
-                        "duplicate": False,
-                        "draft": {
-                            "schema_version": 1,
-                            "title": "Browser generated draft",
-                            "project": str(body["project"]),
-                            "items": [
-                                {
-                                    "title": f"Draft item {index + 1}",
-                                    "prompt": f"Do browser item {index + 1}",
-                                    "workflow": "workflow.yaml",
-                                    "project": str(body["project"]),
-                                    "workspace": "auto",
-                                }
-                                for index in range(count)
-                            ],
-                        },
-                    }
+                    project_path = Path(body["project"])
+                    session_id = str(body.get("session_id", ""))
+                    state.chat_service.messages(project_path, session_id)
+                    data = state.task_drafts.generate(
+                        project_path,
+                        spec=str(body.get("spec", "")),
+                        draft_mode=str(body.get("mode", "auto")),
+                        backend="qwen",
+                        workflow="workflow.yaml",
+                        request_id=str(body.get("request_id", "")),
+                        session_id=session_id,
+                    )
+                elif path == "/api/chat/task-draft/update":
+                    project_path = Path(body["project"])
+                    session_id = str(body.get("session_id", ""))
+                    state.chat_service.messages(project_path, session_id)
+                    data = state.task_drafts.update(
+                        project_path,
+                        str(body.get("draft_id", "")),
+                        body.get("draft"),
+                        session_id=session_id,
+                    )
+                elif path == "/api/chat/task-draft/dismiss":
+                    project_path = Path(body["project"])
+                    session_id = str(body.get("session_id", ""))
+                    state.chat_service.messages(project_path, session_id)
+                    data = state.task_drafts.dismiss(
+                        project_path,
+                        str(body.get("draft_id", "")),
+                        session_id=session_id,
+                    )
                 elif path == "/api/tasks/validate-draft":
                     data = state.tasks.validate(
                         Path(body["project"]),
@@ -393,6 +425,24 @@ def _bridge_for(state: UIState):
                         body.get("draft"),
                         request_id=str(body.get("request_id", "")),
                         project_id=state.project_identity(Path(body["project"]))["project_id"],
+                    )
+                elif path == "/api/tasks/create-from-draft":
+                    project_path = Path(body["project"])
+                    session_id = str(body.get("session_id", ""))
+                    state.chat_service.messages(project_path, session_id)
+                    canonical = state.task_drafts.get(
+                        project_path,
+                        str(body.get("draft_id", "")),
+                        session_id=session_id,
+                    )
+                    state._browser_last_task_create_draft = json.loads(
+                        json.dumps(canonical["draft"])
+                    )
+                    data = state.tasks.create(
+                        project_path,
+                        canonical["draft"],
+                        request_id=str(body.get("request_id", "")),
+                        project_id=state.project_identity(project_path)["project_id"],
                     )
                 elif path == "/api/tasks/update":
                     data = state.tasks.update(

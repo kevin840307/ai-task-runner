@@ -304,6 +304,42 @@ class Handler(SimpleHTTPRequestHandler):
                     reasoning=str(preferences.get("reasoning") or ""),
                     workflow=str(preferences.get("workflow") or ""),
                     request_id=str(body.get("request_id", "")),
+                    session_id=session_id,
+                ))
+            if parsed.path == "/api/chat/task-draft/update":
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                self.state.chat_service.messages(project, session_id)
+                return self._json(self.state.task_drafts.update(
+                    project,
+                    str(body.get("draft_id", "")),
+                    body.get("draft"),
+                    session_id=session_id,
+                ))
+            if parsed.path == "/api/chat/task-draft/dismiss":
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                self.state.chat_service.messages(project, session_id)
+                return self._json(self.state.task_drafts.dismiss(
+                    project,
+                    str(body.get("draft_id", "")),
+                    session_id=session_id,
+                ))
+            if parsed.path == "/api/tasks/create-from-draft":
+                project = self._project(body)
+                session_id = str(body.get("session_id", ""))
+                self.state.chat_service.messages(project, session_id)
+                draft = self.state.task_drafts.get(
+                    project,
+                    str(body.get("draft_id", "")),
+                    session_id=session_id,
+                )
+                identity = self.state.project_identity(project)
+                return self._json(self.state.tasks.create(
+                    project,
+                    draft.get("draft"),
+                    request_id=str(body.get("request_id", "")),
+                    project_id=identity["project_id"],
                 ))
             if parsed.path == "/api/tasks/validate-draft":
                 project = self._project(body)
