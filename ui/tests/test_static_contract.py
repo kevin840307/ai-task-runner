@@ -8,7 +8,8 @@ class StaticContractTests(unittest.TestCase):
         self.html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
         self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
         self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
-        self.js = self.app_js + "\n" + self.generator_js
+        self.task_workspace_js = (self.root / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
+        self.js = self.app_js + "\n" + self.generator_js + "\n" + self.task_workspace_js
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
 
@@ -276,6 +277,14 @@ class StaticContractTests(unittest.TestCase):
         self.assertNotIn("/api/project/trace", self.app_js)
         self.assertIn("function renderRuntimeActivity(", self.app_js)
 
+
+    def test_task_info_drawer_has_fixed_four_tab_contract(self):
+        self.assertIn('for (const id of ["overview", "runtime", "output", "history"])', self.task_workspace_js)
+        self.assertIn('state.kind === "task"', self.task_workspace_js)
+        self.assertIn('"No Runner runtime yet"', self.task_workspace_js)
+        self.assertIn('"This Task is New. Runtime data appears only after an explicit Run action."', self.task_workspace_js)
+        self.assertNotIn('["overview", "steps",', self.task_workspace_js)
+        self.assertNotIn('textContent = "Steps"', self.task_workspace_js)
 
     def test_prompt_used_by_height_is_bounded(self):
         css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
