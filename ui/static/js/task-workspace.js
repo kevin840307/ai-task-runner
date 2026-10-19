@@ -526,11 +526,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (!task || String(task.status || "") !== "new") return;
     const ok = await confirmDialog?.({
       title: "Delete Task?",
-      message:
-        "Task ID: " + String(task.task_id || "") + "\n" +
-        "Name: " + String(task.title || "") + "\n" +
-        "Project: " + String(task.project || "") + "\n\n" +
-        "This deletes the durable Task record. It does not delete Project files.",
+      message: "This deletes the durable Task record. It does not delete Project files.",
+      details: [
+        { label: "Task ID:", value: String(task.task_id || "") },
+        { label: "Name:", value: String(task.title || "") },
+        { label: "Project:", value: String(task.project || "") },
+      ],
       confirmLabel: "Delete Task",
       danger: true,
     });

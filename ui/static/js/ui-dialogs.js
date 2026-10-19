@@ -23,8 +23,33 @@
       }
     });
   }
-  function confirm({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false }) {
-    return new Promise((resolve) => { const box = shell({ title, message }), actions = box.querySelector(".ui-dialog-actions"); actions.innerHTML = `<button type="button" data-dialog-cancel>${escapeHtml(cancelLabel)}</button><button type="button" data-dialog-ok class="${danger ? "designer-danger-button" : "primary"}">${escapeHtml(confirmLabel)}</button>`; const finish = (value) => finishDialog(box, value, resolve); box.querySelectorAll("[data-dialog-close], [data-dialog-cancel]").forEach((button) => button.onclick = () => finish(false)); box.querySelector("[data-dialog-ok]").onclick = () => finish(true); box.addEventListener("click", (event) => { if (event.target === box) finish(false); }); closeOnEscape(box, () => finish(false)); box.querySelector("[data-dialog-ok]").focus(); });
+  function confirm({ title, message, details = [], confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false }) {
+    return new Promise((resolve) => {
+      const box = shell({ title, message });
+      const body = box.querySelector(".ui-dialog-body");
+      const actions = box.querySelector(".ui-dialog-actions");
+      if (Array.isArray(details) && details.length) {
+        const list = document.createElement("div");
+        list.className = "ui-dialog-details";
+        for (const item of details) {
+          const row = document.createElement("div");
+          const label = document.createElement("strong");
+          const value = document.createElement("span");
+          label.textContent = String(item?.label || "");
+          value.textContent = String(item?.value || "");
+          row.append(label, value);
+          list.appendChild(row);
+        }
+        body.appendChild(list);
+      }
+      actions.innerHTML = `<button type="button" data-dialog-cancel>${escapeHtml(cancelLabel)}</button><button type="button" data-dialog-ok class="${danger ? "designer-danger-button" : "primary"}">${escapeHtml(confirmLabel)}</button>`;
+      const finish = (value) => finishDialog(box, value, resolve);
+      box.querySelectorAll("[data-dialog-close], [data-dialog-cancel]").forEach((button) => button.onclick = () => finish(false));
+      box.querySelector("[data-dialog-ok]").onclick = () => finish(true);
+      box.addEventListener("click", (event) => { if (event.target === box) finish(false); });
+      closeOnEscape(box, () => finish(false));
+      box.querySelector("[data-dialog-ok]").focus();
+    });
   }
   function input({ title, message, label = "Name", value = "", confirmLabel = "Save" }) {
     return new Promise((resolve) => { const box = shell({ title, message }), body = box.querySelector(".ui-dialog-body"), actions = box.querySelector(".ui-dialog-actions"); body.innerHTML = `<label class="designer-form-row"><span class="designer-label">${escapeHtml(label)}</span><input class="designer-input ui-dialog-input" value="${escapeHtml(value)}" autocomplete="off" spellcheck="false" /></label><div class="modal-hint ui-dialog-hint"></div>`; actions.innerHTML = `<button type="button" data-dialog-cancel>Cancel</button><button type="button" data-dialog-ok class="primary">${escapeHtml(confirmLabel)}</button>`; const field = box.querySelector(".ui-dialog-input"), finish = (result) => finishDialog(box, result, resolve); const accept = () => { const next = field.value.trim(); if (!next) { const hint = box.querySelector(".ui-dialog-hint"); hint.textContent = `${label} is required.`; hint.classList.add("error"); field.focus(); return; } finish(next); }; box.querySelectorAll("[data-dialog-close], [data-dialog-cancel]").forEach((button) => button.onclick = () => finish(null)); box.querySelector("[data-dialog-ok]").onclick = accept; box.addEventListener("click", (event) => { if (event.target === box) finish(null); }); closeOnEscape(box, () => finish(null)); field.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); accept(); } }); requestAnimationFrame(() => { field.focus(); field.select(); }); });
