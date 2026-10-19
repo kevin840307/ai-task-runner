@@ -113,6 +113,31 @@ class ProjectRuntimeMixin:
             if changed:
                 self._write_projects_unlocked(migrated)
 
+    def project_identity(self, project: Path) -> dict[str, str]:
+        """Resolve one registered Project without consulting runtime state."""
+        key = self._project_path_key(project)
+        with self._projects_lock, project_file_lock(self.projects_file):
+            try:
+                rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("Project registry is unavailable") from exc
+            if not isinstance(rows, list):
+                raise ValueError("Project registry is invalid")
+            for raw in rows:
+                if not isinstance(raw, dict):
+                    continue
+                path = str(raw.get("path") or "").strip()
+                if not path or self._project_path_key(path) != key:
+                    continue
+                project_id = self._normalize_project_id(raw.get("project_id"))
+                if not project_id:
+                    raise ValueError("Project registry is missing a stable Project ID")
+                return {
+                    "project_id": project_id,
+                    "path": self._project_display_path(path),
+                }
+        raise ValueError("Project is not registered in the sidebar")
+
     def projects(self, *, exclude_runtime_path: str = "") -> list[dict]:
         try:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
