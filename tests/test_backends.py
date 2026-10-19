@@ -1092,6 +1092,7 @@ def test_qwen_capabilities_use_native_daemon_projection(monkeypatch, tmp_path):
             {
                 "availableCommands": [
                     {"name": "btw", "description": "Side question", "_meta": {"source": "builtin"}},
+                    {"name": "ext", "description": "Extension command", "_meta": {"source": "extension"}},
                 ],
                 "availableSkills": ["review"],
             },
@@ -1103,6 +1104,13 @@ def test_qwen_capabilities_use_native_daemon_projection(monkeypatch, tmp_path):
                             "description": "Review code",
                             "level": "project",
                             "status": "ok",
+                            "userInvocable": True,
+                        },
+                        {
+                            "name": "gated",
+                            "description": "Path gated",
+                            "level": "project",
+                            "status": "path_mismatch",
                             "userInvocable": True,
                         },
                         {
@@ -1121,10 +1129,17 @@ def test_qwen_capabilities_use_native_daemon_projection(monkeypatch, tmp_path):
     assert all(isinstance(item, CapabilitySpec) for item in values)
     assert [(item.token, item.kind, item.enabled) for item in values] == [
         ("/btw", "command", True),
+        ("/ext", "command", True),
+        ("/gated", "skill", False),
         ("/hidden", "skill", False),
         ("/review", "skill", True),
     ]
-    assert values[-1].source == "project"
+    by_token = {(item.token, item.kind): item for item in values}
+    assert by_token[("/btw", "command")].source == "builtin"
+    assert by_token[("/ext", "command")].source == "extension"
+    assert by_token[("/gated", "skill")].availability == "path_mismatch"
+    assert by_token[("/hidden", "skill")].user_invocable is False
+    assert by_token[("/review", "skill")].source == "project"
 
 
 def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
@@ -1149,6 +1164,14 @@ def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
                 "description": "Private skill",
                 "metadata": {},
                 "permission": "allow",
+                "source": "global",
+            },
+            {
+                "name": "denied",
+                "description": "Denied skill",
+                "metadata": {"opencode/slash": "true"},
+                "permission": "deny",
+                "source": "project",
             },
         ]
 
@@ -1159,6 +1182,10 @@ def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
     assert by_token[("/deploy", "skill")].user_invocable is True
     assert by_token[("/deploy", "skill")].permission == "ask"
     assert by_token[("/private", "skill")].enabled is False
+    assert by_token[("/private", "skill")].source == "global"
+    assert by_token[("/denied", "skill")].user_invocable is True
+    assert by_token[("/denied", "skill")].permission == "deny"
+    assert by_token[("/denied", "skill")].enabled is False
 
 
 
