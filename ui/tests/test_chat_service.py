@@ -907,8 +907,9 @@ def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
             },
         )
         ask_id = created["ask"]["ask_id"]
-        assert len(created["ask"]["questions"]) == 2
+        assert len(created["ask"]["questions"]) == 3
         assert created["ask"]["questions"][0]["kind"] == "choice"
+        assert created["ask"]["questions"][1]["kind"] == "multi_choice"
 
         pending = _json_request(
             f"{base}/api/chat/ask?project={project_query}&session_id={session_id}"
