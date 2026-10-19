@@ -940,6 +940,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-info-row").count() == 2
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
+            page.locator(".task-workspace-durable-edit").first.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspacePrompt", "Durably edited browser item one")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Durably edited browser item one"
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             page.click("#taskWorkspaceFooterBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             assert page.locator(".task-workspace-tabs .task-workspace-tab").count() == 4
