@@ -132,6 +132,85 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     assert duplicate["task_id"] == created["task_id"]
 
 
+def test_task_service_updates_new_task_idempotently_and_preserves_item_identity(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+    base = {
+        "title": "List",
+        "items": [
+            {"title": "A", "prompt": "A", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+            {"title": "B", "prompt": "B", "workflow": "workflow.yaml", "project": str(project), "workspace": "main"},
+        ],
+    }
+    created = service.create(project, base, request_id="create-update")
+    first_id, second_id = [item["item_id"] for item in created["items"]]
+    edited = {
+        "title": "Reordered",
+        "items": [
+            {**created["items"][1], "prompt": "B edited"},
+            {**created["items"][0], "prompt": "A edited"},
+        ],
+    }
+
+    updated = service.update(
+        project,
+        created["task_id"],
+        edited,
+        request_id="update-1",
+        expected_updated_at=created["updated_at"],
+    )
+    assert updated["duplicate"] is False
+    assert updated["title"] == "Reordered"
+    assert [item["item_id"] for item in updated["items"]] == [second_id, first_id]
+    assert [item["prompt"] for item in updated["items"]] == ["B edited", "A edited"]
+
+    duplicate = TaskService().update(
+        project,
+        created["task_id"],
+        edited,
+        request_id="update-1",
+        expected_updated_at=created["updated_at"],
+    )
+    assert duplicate["duplicate"] is True
+    assert duplicate["updated_at"] == updated["updated_at"]
+
+
+def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+    draft = {
+        "title": "One",
+        "items": [
+            {"title": "A", "prompt": "A", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+        ],
+    }
+    created = service.create(project, draft, request_id="create-stale")
+
+    with pytest.raises(ValueError, match="changed since"):
+        service.update(
+            project,
+            created["task_id"],
+            draft,
+            request_id="stale-update",
+            expected_updated_at=created["updated_at"] - 1,
+        )
+
+    state_path = service._state_path(project)
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    raw["tasks"][0]["status"] = "ongoing"
+    state_path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="must be New"):
+        service.update(
+            project,
+            created["task_id"],
+            draft,
+            request_id="ongoing-update",
+            expected_updated_at=created["updated_at"],
+        )
+
+
 def test_task_service_rejects_invalid_project_items_and_workspace(tmp_path: Path) -> None:
     project = tmp_path / "project"
     other = tmp_path / "other"
@@ -223,6 +302,25 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         )
         assert created["status"] == "new"
         assert server.state.tasks.list(project)["tasks"][0]["task_id"] == created["task_id"]
+
+        updated_draft = json.loads(json.dumps(generated["draft"]))
+        updated_draft["title"] = "Updated over HTTP"
+        updated_draft["items"][0]["item_id"] = created["items"][0]["item_id"]
+        updated_draft["items"][0]["prompt"] = "Edited through API"
+        updated = _json_request(
+            f"{base}/api/tasks/update",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": created["task_id"],
+                "draft": updated_draft,
+                "request_id": "http-update-1",
+                "expected_updated_at": created["updated_at"],
+            },
+        )
+        assert updated["title"] == "Updated over HTTP"
+        assert updated["items"][0]["prompt"] == "Edited through API"
+        assert updated["items"][0]["item_id"] == created["items"][0]["item_id"]
     finally:
         server.shutdown()
         server.server_close()
