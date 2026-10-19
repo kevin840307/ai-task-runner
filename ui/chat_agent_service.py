@@ -360,6 +360,50 @@ class ChatAgentService:
             raise RuntimeError("Chat Agent returned invalid result")
         return value
 
+    def complete_ask(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+        ask_id: str,
+        request_id: str,
+        answers: Any = None,
+        cancelled: bool = False,
+    ) -> dict[str, Any]:
+        started = chat.begin_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            answers,
+            request_id=request_id,
+            cancelled=cancelled,
+        )
+        if started.get("duplicate"):
+            return started
+        try:
+            self.resolve_ask(
+                project,
+                chat,
+                session_id=session_id,
+                ask_id=ask_id,
+                cancelled=cancelled,
+            )
+        except Exception:
+            chat.abort_ask_resolution(
+                project,
+                session_id,
+                ask_id,
+                request_id=request_id,
+            )
+            raise
+        return chat.finish_ask_resolution(
+            project,
+            session_id,
+            ask_id,
+            request_id=request_id,
+        )
+
     def resolve_ask(
         self,
         project: Path,
