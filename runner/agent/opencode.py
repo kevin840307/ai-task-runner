@@ -80,23 +80,29 @@ def _configured_opencode_models(root: Path) -> set[str]:
 
 
 
-def _opencode_api_payload(root: Path, operation: str) -> list[dict[str, Any]]:
+def _opencode_api_request(
+    root: Path,
+    operation: str,
+    *,
+    data: dict[str, Any] | None = None,
+    timeout: int = 15,
+) -> Any:
+    command = [DEFAULT_OPENCODE_COMMAND, "api", operation]
+    if data is not None:
+        command.extend([
+            "--data",
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+        ])
     try:
-        result = run_process(
-            [DEFAULT_OPENCODE_COMMAND, "api", operation],
-            root,
-            15,
-        )
+        result = run_process(command, root, timeout)
     except Exception as exc:
-        raise BackendError(
-            f"OpenCode capability discovery failed: {exc}"
-        ) from exc
+        raise BackendError(f"OpenCode API {operation} failed: {exc}") from exc
     if result.return_code or result.timed_out:
         detail = result.output.strip() or f"exit {result.return_code}"
-        raise BackendError(
-            f"OpenCode capability discovery {operation} failed: {detail[-2000:]}"
-        )
+        raise BackendError(f"OpenCode API {operation} failed: {detail[-2000:]}")
     raw = result.output.strip()
+    if not raw:
+        return None
     value: Any = None
     try:
         value = json.loads(raw)
@@ -107,11 +113,18 @@ def _opencode_api_payload(root: Path, operation: str) -> list[dict[str, Any]]:
                 break
             except json.JSONDecodeError:
                 continue
-    if not isinstance(value, dict) or not isinstance(value.get("data"), list):
+    if not isinstance(value, dict) or "data" not in value:
+        raise BackendError(f"OpenCode API {operation} returned invalid JSON")
+    return value.get("data")
+
+
+def _opencode_api_payload(root: Path, operation: str) -> list[dict[str, Any]]:
+    value = _opencode_api_request(root, operation)
+    if not isinstance(value, list):
         raise BackendError(
             f"OpenCode capability discovery {operation} returned invalid JSON"
         )
-    return [item for item in value["data"] if isinstance(item, dict)]
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _opencode_capability_specs(
@@ -237,6 +250,84 @@ class OpenCodeBackend(BaseBackend):
             ask=True,
             ask_transport="question_api",
             detail="OpenCode native question.list/reply/reject API is available.",
+        )
+
+    @classmethod
+    def ensure_native_session(cls, root: Path, session_id: str) -> str:
+        existing = str(session_id or "").strip()
+        if existing:
+            return existing
+        value = _opencode_api_request(
+            root,
+            "session.create",
+            data={"title": "AI Task Runner Chat"},
+        )
+        if not isinstance(value, dict):
+            raise BackendError("OpenCode session.create returned invalid data")
+        created = str(
+            value.get("id")
+            or value.get("sessionID")
+            or value.get("sessionId")
+            or ""
+        ).strip()
+        if not created:
+            raise BackendError("OpenCode session.create did not return a session id")
+        return created
+
+    @classmethod
+    def pending_native_ask(cls, root: Path, session_id: str) -> dict[str, Any] | None:
+        native_session = str(session_id or "").strip()
+        if not native_session:
+            return None
+        value = _opencode_api_request(root, "question.list")
+        if not isinstance(value, list):
+            raise BackendError("OpenCode question.list returned invalid data")
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            owner = str(
+                item.get("sessionID")
+                or item.get("sessionId")
+                or item.get("session_id")
+                or ""
+            ).strip()
+            if owner == native_session:
+                return item
+        return None
+
+    @classmethod
+    def resolve_native_ask(
+        cls,
+        root: Path,
+        session_id: str,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> None:
+        if not isinstance(payload, dict):
+            raise BackendError("OpenCode question payload must be an object")
+        question_id = str(
+            payload.get("id")
+            or payload.get("questionID")
+            or payload.get("questionId")
+            or payload.get("requestID")
+            or ""
+        ).strip()
+        if not question_id:
+            raise BackendError("OpenCode question payload is missing id")
+        if cancelled:
+            _opencode_api_request(
+                root,
+                "question.reject",
+                data={"questionID": question_id},
+            )
+            return
+        response = cls.encode_ask_response(payload, answers)
+        _opencode_api_request(
+            root,
+            "question.reply",
+            data={"questionID": question_id, "response": response},
         )
 
     @classmethod
