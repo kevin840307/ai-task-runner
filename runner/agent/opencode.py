@@ -85,9 +85,12 @@ def _opencode_api_request(
     operation: str,
     *,
     data: dict[str, Any] | None = None,
+    params: dict[str, str] | None = None,
     timeout: int = 15,
 ) -> Any:
     command = [DEFAULT_OPENCODE_COMMAND, "api", operation]
+    for key, value in (params or {}).items():
+        command.extend(["--param", f"{key}={value}"])
     if data is not None:
         command.extend([
             "--data",
@@ -243,7 +246,7 @@ class OpenCodeBackend(BaseBackend):
     @classmethod
     def chat_features(cls, root: Path) -> ChatFeatureSpec:
         try:
-            _opencode_api_payload(root, "question.list")
+            _opencode_api_payload(root, "question.request.list")
         except BackendError as exc:
             return ChatFeatureSpec(detail=f"OpenCode question API unavailable: {exc}")
         return ChatFeatureSpec(
@@ -279,21 +282,17 @@ class OpenCodeBackend(BaseBackend):
         native_session = str(session_id or "").strip()
         if not native_session:
             return None
-        value = _opencode_api_request(root, "question.list")
+        value = _opencode_api_request(
+            root,
+            "session.question.list",
+            params={"sessionID": native_session},
+        )
         if not isinstance(value, list):
-            raise BackendError("OpenCode question.list returned invalid data")
-        for item in value:
-            if not isinstance(item, dict):
-                continue
-            owner = str(
-                item.get("sessionID")
-                or item.get("sessionId")
-                or item.get("session_id")
-                or ""
-            ).strip()
-            if owner == native_session:
-                return item
-        return None
+            raise BackendError("OpenCode session.question.list returned invalid data")
+        return next(
+            (item for item in value if isinstance(item, dict)),
+            None,
+        )
 
     @classmethod
     def resolve_native_ask(
@@ -319,15 +318,22 @@ class OpenCodeBackend(BaseBackend):
         if cancelled:
             _opencode_api_request(
                 root,
-                "question.reject",
-                data={"questionID": question_id},
+                "session.question.reject",
+                params={
+                    "sessionID": str(session_id),
+                    "requestID": question_id,
+                },
             )
             return
         response = cls.encode_ask_response(payload, answers)
         _opencode_api_request(
             root,
-            "question.reply",
-            data={"questionID": question_id, "response": response},
+            "session.question.reply",
+            params={
+                "sessionID": str(session_id),
+                "requestID": question_id,
+            },
+            data=response,
         )
 
     @classmethod
