@@ -11,3 +11,22 @@
 .task-workspace-list-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}.task-workspace-list-number{display:inline-grid;place-items:center;width:25px;height:25px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:900}.task-workspace-list-copy{min-width:0;display:grid;gap:2px}.task-workspace-list-copy strong{overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.task-workspace-list-copy small,.task-workspace-list-copy p{overflow:hidden;color:var(--muted);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.task-workspace-list-copy p{margin:2px 0 0}.task-workspace-list-actions{display:inline-flex;gap:4px}.task-workspace-list-actions button{min-height:27px;padding:3px 7px;font-size:9px}
 .task-workspace-error{margin-top:10px;padding:8px 9px;border:1px solid color-mix(in srgb,var(--fail) 32%,var(--line));border-radius:var(--radius-md);background:var(--danger-soft);color:var(--fail);font-size:10px;line-height:1.45}
 @media(max-width:760px){.task-workspace-shell{width:min(100%,620px)}.task-workspace-grid{grid-template-columns:1fr}.task-workspace-list-row{grid-template-columns:auto minmax(0,1fr)}.task-workspace-list-actions{grid-column:2;justify-content:flex-end}}
+
+/* Durable Task Info is another route inside the same right-side shell.
+   Runtime/Output/History remain truthful projections; New Tasks show no fake data. */
+.task-workspace-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:0 0 14px;padding:4px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}
+.task-workspace-tab{min-width:0;min-height:30px;padding:5px 8px;border:0;border-radius:calc(var(--radius-md) - 3px);background:transparent;color:var(--muted);box-shadow:none;font-size:10px;font-weight:800}
+.task-workspace-tab:hover{background:color-mix(in srgb,var(--accent) 7%,transparent);color:var(--text)}
+.task-workspace-tab.active{background:var(--panel);color:var(--accent);box-shadow:var(--shadow-sm)}
+.task-workspace-overview{display:grid;gap:12px}
+.task-workspace-status{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.task-workspace-status code{min-width:0;overflow:hidden;color:var(--muted);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.task-workspace-status-pill{display:inline-flex;align-items:center;min-height:24px;padding:0 8px;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--line));border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.04em}
+.task-workspace-meta-grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 12px;margin:0;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}
+.task-workspace-meta-grid dt{color:var(--muted);font-size:9px;font-weight:800}
+.task-workspace-meta-grid dd{min-width:0;margin:0;overflow:hidden;color:var(--text);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.task-workspace-info-row{grid-template-columns:auto minmax(0,1fr)}
+.task-workspace-empty-panel{display:grid;gap:6px;place-items:center;min-height:190px;padding:24px;border:1px dashed var(--line);border-radius:var(--radius-md);background:var(--panel-2);text-align:center}
+.task-workspace-empty-panel strong{color:var(--text);font-size:12px}
+.task-workspace-empty-panel p{max-width:380px;margin:0;color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:560px){.task-workspace-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.task-workspace-status{align-items:flex-start;flex-direction:column}.task-workspace-meta-grid{grid-template-columns:1fr}}
