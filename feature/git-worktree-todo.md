@@ -675,7 +675,7 @@ merge_failure_count > merge_failure_limit ?
 
 ### What counts as merge fail
 
-Count only a real merge attempt that fails because the Task result cannot be merged/accepted without source-code redo.
+Count only a real merge attempt that fails because the Task result cannot be merged/accepted without source-code integration repair.
 
 Examples:
 
@@ -753,7 +753,7 @@ merge_source_base_sha = task_base_sha
 merge_source_worktree = .worktrees/T-001-r1
 ```
 
-After a real merge failure that requires source redo, create a system-owned recovery branch/worktree from latest target HEAD:
+After a real merge failure that requires source integration repair, create a system-owned recovery branch/worktree from latest target HEAD:
 
 ```text
 latest target branch
@@ -1167,7 +1167,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Pass Task worktree to Runner as project_root in the current UI/Task flow; standalone/CLI Runner remains caller-project_root driven and workspace-independent.
 - [ ] Support unique Task + Run identity.
 - [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch, expected source-base ancestry and absence of active Git operation; fail closed on mismatch.
-- [ ] Create recovery worktree only after a merge failure that needs source redo.
+- [ ] Create recovery worktree only after a merge failure that needs source integration repair.
 - [ ] Ownership-safe cleanup.
 
 ### Phase C — Runner Complete snapshot
@@ -1253,7 +1253,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Merge A first.
 - [ ] Merge B into latest target and confirm real Git conflict.
 - [ ] Confirm merge abort + `merge_failure_count += 1` exactly once.
-- [ ] Confirm existing Runner redoes B against latest target.
+- [ ] Confirm existing Runner incrementally integrates B's committed changes with latest target, without rerunning original development.
 - [ ] Confirm recovery updates merge_source_branch/SHA/worktree and stale original Task source is not merged again.
 - [ ] Confirm recovery branch merges successfully when fixed.
 - [ ] Confirm fallback retains latest recovery source after repeated failures.
@@ -1339,7 +1339,7 @@ real merge fail
            read Global merge_failure_limit
              ↓
            count <= limit
-           → existing Runner redo against latest Project
+           → existing Runner incremental integration repair of completed Task source against latest Project
            → commit recovery result
            → retry current merge source
 
