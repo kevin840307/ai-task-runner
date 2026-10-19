@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -383,28 +384,53 @@ class ChatAgentService:
         session_id: str,
     ) -> dict[str, Any] | None:
         pending = chat.ask(project, session_id).get("ask")
-        if not isinstance(pending, dict) or pending.get("status") != "resolving":
+        if not isinstance(pending, dict):
             return pending
-        context = chat.ask_context(
-            project,
-            session_id,
-            str(pending.get("ask_id") or ""),
-        )
-        key = self._resolution_key(
-            project,
-            session_id,
-            context["ask_id"],
-            str(context.get("answer_request_id") or ""),
-        )
-        with self._ask_resolution_guard:
-            active = key in self._ask_resolutions
-        if active:
-            return pending
-        return chat.recover_ask_resolution(
-            project,
-            session_id,
-            context["ask_id"],
-        ).get("ask")
+        if pending.get("status") == "resolving":
+            context = chat.ask_context(
+                project,
+                session_id,
+                str(pending.get("ask_id") or ""),
+            )
+            key = self._resolution_key(
+                project,
+                session_id,
+                context["ask_id"],
+                str(context.get("answer_request_id") or ""),
+            )
+            with self._ask_resolution_guard:
+                active = key in self._ask_resolutions
+            if active:
+                return pending
+            pending = chat.recover_ask_resolution(
+                project,
+                session_id,
+                context["ask_id"],
+            ).get("ask")
+        if (
+            isinstance(pending, dict)
+            and pending.get("status") == "waiting"
+            and float(pending.get("expires_at") or 0.0) > 0.0
+            and float(pending["expires_at"]) <= time.time()
+        ):
+            request_id = f"timeout-{pending['ask_id']}"
+            result = self._complete_ask(
+                project,
+                chat,
+                session_id=session_id,
+                ask_id=str(pending["ask_id"]),
+                request_id=request_id,
+                cancelled=True,
+            )
+            if not result.get("duplicate"):
+                chat.append_message(
+                    project,
+                    session_id,
+                    "system",
+                    "Ask timed out; the pending Agent question was cancelled.",
+                )
+            return result.get("ask")
+        return pending
 
     def complete_ask(
         self,
@@ -418,6 +444,27 @@ class ChatAgentService:
         cancelled: bool = False,
     ) -> dict[str, Any]:
         self._recover_stale_ask(project, chat, session_id)
+        return self._complete_ask(
+            project,
+            chat,
+            session_id=session_id,
+            ask_id=ask_id,
+            request_id=request_id,
+            answers=answers,
+            cancelled=cancelled,
+        )
+
+    def _complete_ask(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+        ask_id: str,
+        request_id: str,
+        answers: Any = None,
+        cancelled: bool = False,
+    ) -> dict[str, Any]:
         key = self._resolution_key(
             project,
             session_id,
@@ -493,10 +540,14 @@ class ChatAgentService:
             native_session,
         )
         if not isinstance(payload, dict):
+            if cancelled:
+                return
             raise RuntimeError(
                 "Native Ask is no longer pending in the Agent service"
             )
         if self._native_request_id(payload) != native_request:
+            if cancelled:
+                return
             raise RuntimeError(
                 "Native Ask request no longer matches the durable Chat state"
             )

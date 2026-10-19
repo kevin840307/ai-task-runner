@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -1351,3 +1352,132 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     assert normalized["version"] == 5
     assert normalized["sessions"][0]["queue"][0]["status"] == "queued"
     assert normalized["turn_requests"]["legacy-status-1"]["status"] == "queued"
+
+
+def test_waiting_ask_timeout_is_durable_and_unblocks_queue(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="timeout-question",
+        turn_id="timeout-turn",
+        questions=[{
+            "id": "confirm",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["yes", "no"],
+        }],
+        timeout_seconds=0.01,
+    )
+    chat.enqueue_turn(
+        project,
+        session_id,
+        "queued after timeout",
+        request_id="timeout-queued-turn",
+        backend="qwen",
+    )
+    time.sleep(0.02)
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(),
+    )
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: {
+            "text": "continued after timeout",
+            "session_id": "session-after-timeout",
+        },
+    )
+    result = service.drain(project, chat, session_id=session_id)
+
+    assert result["status"] == "idle"
+    assert chat.ask(project, session_id)["ask"]["ask_id"] == created["ask"]["ask_id"]
+    assert chat.ask(project, session_id)["ask"]["status"] == "cancelled"
+    assert chat.queue(project, session_id)["items"] == []
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
+        "Ask timed out; the pending Agent question was cancelled.",
+        "queued after timeout",
+        "continued after timeout",
+    ]
+
+
+def test_expired_native_ask_cancel_is_idempotent_when_agent_request_is_already_gone(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="native-timeout-question",
+        turn_id="native-timeout-turn",
+        questions=[{
+            "id": "confirm",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["yes", "no"],
+        }],
+        source="native",
+        backend="opencode",
+        agent_session_id="ses-native",
+        native_request_id="native-timeout-request",
+        timeout_seconds=0.01,
+    )
+    time.sleep(0.02)
+    monkeypatch.setattr(
+        "ui.chat_agent_service.pending_native_ask",
+        lambda *args, **kwargs: None,
+    )
+
+    service = ChatAgentService(repo, runner=lambda **kwargs: {})
+    status = service.status(project, chat, session_id=session_id)
+
+    assert status["status"] == "idle"
+    assert status["waiting_ask"] is False
+    assert chat.ask(project, session_id)["ask"]["ask_id"] == created["ask"]["ask_id"]
+    assert chat.ask(project, session_id)["ask"]["status"] == "cancelled"
+
+
+def test_restart_recovers_unowned_inflight_ask_resolution(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="restart-question",
+        turn_id="restart-turn",
+        questions=[{
+            "id": "confirm",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["yes", "no"],
+        }],
+    )
+    chat.begin_ask_resolution(
+        project,
+        session_id,
+        created["ask"]["ask_id"],
+        {"confirm": {"value": "yes"}},
+        request_id="restart-answer",
+    )
+
+    restarted = ChatAgentService(repo, runner=lambda **kwargs: {})
+    status = restarted.status(project, chat, session_id=session_id)
+
+    assert status["status"] == "waiting_ask"
+    assert status["waiting_ask"] is True
+    restored = chat.ask(project, session_id)["ask"]
+    assert restored["status"] == "waiting"
+    assert chat.ask_context(project, session_id, restored["ask_id"])["answer_request_id"] == ""

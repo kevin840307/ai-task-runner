@@ -27,6 +27,7 @@ MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
 QUEUE_LIMIT = 100
+DEFAULT_ASK_TIMEOUT_SECONDS = 7200.0
 _SESSION_ID = re.compile(r"^chat-[0-9a-f]{32}$")
 _MESSAGE_ID = re.compile(r"^msg-[0-9a-f]{32}$")
 _QUEUE_ID = re.compile(r"^queue-[0-9a-f]{32}$")
@@ -198,8 +199,10 @@ class ChatService:
         backend: str = "",
         agent_session_id: str = "",
         native_request_id: str = "",
+        timeout_seconds: float = DEFAULT_ASK_TIMEOUT_SECONDS,
     ) -> dict[str, Any]:
         request = self._request_id(request_id)
+        timeout = max(0.0, float(timeout_seconds or 0.0))
         normalized_questions = normalize_questions(questions)
         turn = str(turn_id or "").strip() or f"turn-{uuid.uuid4().hex}"
         if len(turn) > 160:
@@ -231,6 +234,7 @@ class ChatService:
                 "agent_session_id": str(agent_session_id or "").strip(),
                 "native_request_id": str(native_request_id or "").strip(),
                 "created_at": now,
+                "expires_at": now + timeout if timeout else 0.0,
                 "resolved_at": 0.0,
             }
             session["ask"] = value
@@ -814,6 +818,7 @@ class ChatService:
             "agent_session_id": str(raw.get("agent_session_id") or ""),
             "native_request_id": str(raw.get("native_request_id") or ""),
             "created_at": float(raw.get("created_at") or 0),
+            "expires_at": float(raw.get("expires_at") or 0),
             "resolved_at": float(raw.get("resolved_at") or 0),
         }
 
@@ -830,6 +835,7 @@ class ChatService:
             "answers": raw.get("answers"),
             "source": raw.get("source", "local"),
             "created_at": raw["created_at"],
+            "expires_at": raw.get("expires_at", 0.0),
             "resolved_at": raw["resolved_at"],
         }
 
