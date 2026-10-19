@@ -50,7 +50,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     return overlay;
   }
 
-  function isDirty() { return !!state && draftSignature(state.draft) !== state.original; }
+  function isDraftState() { return state?.kind === "draft"; }
+  function isDirty() { return isDraftState() && draftSignature(state.draft) !== state.original; }
 
   async function requestClose() {
     if (!state) return closeNow();
@@ -256,8 +257,112 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     body.appendChild(error);
   }
 
+  function renderTaskInfo() {
+    const task = state.task || {};
+    const body = byId("taskWorkspaceBody");
+    body.innerHTML = "";
+
+    const tabs = document.createElement("div");
+    tabs.className = "task-workspace-tabs";
+    for (const id of ["overview", "runtime", "output", "history"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "task-workspace-tab";
+      button.textContent = id.charAt(0).toUpperCase() + id.slice(1);
+      button.classList.toggle("active", state.tab === id);
+      button.setAttribute("aria-pressed", String(state.tab === id));
+      button.onclick = () => { state.tab = id; render(); };
+      tabs.appendChild(button);
+    }
+    body.appendChild(tabs);
+
+    if (state.tab !== "overview") {
+      const empty = document.createElement("section");
+      empty.className = "task-workspace-empty-panel";
+      const title = document.createElement("strong");
+      title.textContent = state.tab === "runtime"
+        ? "No Runner runtime yet"
+        : state.tab === "output"
+          ? "No Runner output yet"
+          : "No run history yet";
+      const copy = document.createElement("p");
+      copy.textContent = "This Task is New. Runtime data appears only after an explicit Run action.";
+      empty.append(title, copy);
+      body.appendChild(empty);
+      return;
+    }
+
+    const overview = document.createElement("section");
+    overview.className = "task-workspace-overview";
+    const status = document.createElement("div");
+    status.className = "task-workspace-status";
+    const lifecycle = document.createElement("span");
+    lifecycle.className = "task-workspace-status-pill";
+    lifecycle.textContent = String(task.status || "new").toUpperCase();
+    const identity = document.createElement("code");
+    identity.textContent = String(task.task_id || "");
+    status.append(lifecycle, identity);
+    overview.appendChild(status);
+
+    const meta = document.createElement("dl");
+    meta.className = "task-workspace-meta-grid";
+    for (const [label, value] of [
+      ["Project", String(task.project || "")],
+      ["Type", task.kind === "task_list" ? "Task List" : "Task"],
+      ["Items", String(Array.isArray(task.items) ? task.items.length : 0)],
+    ]) {
+      const dt = document.createElement("dt"); dt.textContent = label;
+      const dd = document.createElement("dd"); dd.textContent = value;
+      meta.append(dt, dd);
+    }
+    overview.appendChild(meta);
+
+    const heading = document.createElement("div");
+    heading.className = "task-workspace-intro";
+    heading.innerHTML = "<strong>Tasks</strong><span>Canonical ordered items</span>";
+    overview.appendChild(heading);
+
+    const list = document.createElement("div");
+    list.className = "task-workspace-list";
+    (Array.isArray(task.items) ? task.items : []).forEach((item, index) => {
+      const row = document.createElement("article");
+      row.className = "task-workspace-list-row task-workspace-info-row";
+      const number = document.createElement("span");
+      number.className = "task-workspace-list-number";
+      number.textContent = String(index + 1);
+      const copy = document.createElement("div");
+      copy.className = "task-workspace-list-copy";
+      const title = document.createElement("strong");
+      title.textContent = String(item.title || "Task " + (index + 1));
+      const detail = document.createElement("small");
+      detail.textContent = [String(item.workflow || "Workflow"), String(item.workspace || "auto").toUpperCase()].join(" · ");
+      const prompt = document.createElement("p");
+      prompt.textContent = String(item.prompt || "");
+      copy.append(title, detail, prompt);
+      row.append(number, copy);
+      list.appendChild(row);
+    });
+    overview.appendChild(list);
+    body.appendChild(overview);
+  }
+
   function render() {
     if (!state || !overlay) return;
+    const footer = byId("taskWorkspaceFooterBack")?.closest("footer");
+    const save = byId("taskWorkspaceSave");
+    const back = byId("taskWorkspaceHeaderBack");
+    if (state.kind === "task") {
+      if (footer) footer.hidden = true;
+      if (back) back.hidden = false;
+      byId("taskWorkspaceEyebrow").textContent = "TASK INFO";
+      byId("taskWorkspaceTitle").textContent = String(state.task?.title || "Task");
+      byId("taskWorkspaceMeta").textContent = String(state.task?.task_id || "");
+      renderTaskInfo();
+      return;
+    }
+    if (footer) footer.hidden = false;
+    if (back) back.hidden = false;
+    if (save) save.hidden = false;
     const listRoute = state.route === "list";
     const count = state.draft.items.length;
     byId("taskWorkspaceEyebrow").textContent = listRoute ? "TASK LIST" : "TASK EDITOR";
@@ -275,6 +380,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
 
   async function handleBack() {
     if (!state) return;
+    if (state.kind === "task") {
+      closeNow();
+      return;
+    }
     if (state.route === "editor" && state.draft.items.length > 1) {
       state.route = "list";
       render();
@@ -284,7 +393,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   }
 
   async function saveDraft() {
-    if (!state) return;
+    if (!isDraftState()) return;
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
@@ -322,6 +431,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     }
     restoreFocus = returnFocus || document.activeElement;
     state = {
+      kind: "draft",
       project: String(project || value.project || ""),
       draft: value,
       original: draftSignature(value),
@@ -335,5 +445,22 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     render();
   }
 
-  return { openDraft, close: requestClose };
+  function openTask(task, { returnFocus } = {}) {
+    ensureMounted();
+    const value = cloneDraft(task || {});
+    if (!value.task_id || !Array.isArray(value.items) || !value.items.length) {
+      showError?.("Task record is invalid", "Open Task failed");
+      return;
+    }
+    restoreFocus = returnFocus || document.activeElement;
+    state = {
+      kind: "task",
+      task: value,
+      tab: "overview",
+    };
+    overlay.hidden = false;
+    render();
+  }
+
+  return { openDraft, openTask, close: requestClose };
 }
