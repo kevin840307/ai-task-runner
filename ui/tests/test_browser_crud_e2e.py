@@ -863,6 +863,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        # This flow intentionally exercises production Task validation, where
+        # every Task item requires a Workflow. Give the fixture a real saved
+        # Project selection instead of weakening the production validator.
+        state.project_preferences.update(root, {"workflow": "workflow.yaml"})
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
