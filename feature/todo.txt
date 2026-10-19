@@ -181,9 +181,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Edit 使用 inline editor 或精簡的同一區塊，不再開一個大型 Modal；Save / Cancel 都要有效。
 [x] Queue 項目不能為空；儲存失敗時顯示明確錯誤並保留原值。
 [x] 預設 FIFO，除非 Agent 原生介面明確提供不同順序契約。
-[ ] 以 Qwen Code 原生 queued-next-turn 行為為參考（例如 Ctrl+Q）；由 adapter 決定是否支援原生快捷鍵。
+[x] 以 Qwen Code 原生 queued-next-turn / Ctrl+Q 為 UX 參考；正式 Web Chat 在 Agent busy 時以 Ctrl+Q 重用同一 Chat turn → Backend FIFO Queue contract，不模擬或注入 CLI 鍵盤事件，也不另造 Queue scheduler。
 [x] Prototype 不提供 Queue 按鈕；Mock 模擬 Agent busy，連續按傳送會自動排隊，並可編輯／刪除多筆 Queue。Ctrl+Q 只保留為 busy 時的可選快捷鍵。
-[ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
+[x] Deterministic Browser/API fixture 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session，並驗證舊 session Queue 不被新 Chat 污染。
 [x] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
 [x] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
 [x] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。

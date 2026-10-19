@@ -391,6 +391,20 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
     assert [row["content"] for row in restarted.queue(project, first)["items"]] == ["two"]
     assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
 
+    with pytest.raises(ValueError, match="empty"):
+        restarted.update_queue_item(
+            project,
+            first,
+            restarted.queue(project, first)["items"][0]["queue_id"],
+            "   ",
+        )
+
+    long_message = "queued-" + ("x" * 4096)
+    remaining = restarted.queue(project, first)["items"][0]
+    restarted.update_queue_item(project, first, remaining["queue_id"], long_message)
+    assert ChatService().queue(project, first)["items"][0]["content"] == long_message
+    assert [row["content"] for row in ChatService().queue(project, second)["items"]] == ["other"]
+
 
 def test_chat_agent_busy_turns_queue_and_drain_fifo(tmp_path: Path) -> None:
     repo = tmp_path / "repo"

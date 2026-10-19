@@ -469,6 +469,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       send.disabled = !project;
       send.setAttribute("aria-busy", String(queueBusy));
       send.textContent = queueBusy ? "Queue" : "Send";
+      send.title = queueBusy ? "Queue for next turn (Ctrl+Q)" : "Send message";
     }
     if (input) input.disabled = !project;
     scheduleQueuePoll();
@@ -1479,6 +1480,20 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         panelHideSuggestions();
         return;
       }
+    }
+    if (
+      queueBusy &&
+      event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      event.key.toLowerCase() === "q" &&
+      !event.isComposing
+    ) {
+      if (String(event.currentTarget.value || "").trim()) {
+        event.preventDefault();
+        void sendMessage();
+      }
+      return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();

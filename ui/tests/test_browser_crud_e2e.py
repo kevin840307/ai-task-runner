@@ -491,21 +491,25 @@ def _bridge_for(state: UIState):
                             "busy": True,
                             "status": "waiting_ask",
                         }
-                    elif message == "queue browser message":
-                        queue = getattr(state, "_browser_chat_queue", {})
-                        queue.setdefault(session_id, []).append({
-                            "queue_id": "queue-" + "1" * 32,
+                    elif (
+                        message == "queue browser message"
+                        or bool(getattr(state, "_browser_chat_busy", {}).get(session_id, False))
+                    ):
+                        queues = getattr(state, "_browser_chat_queue", {})
+                        queue = queues.setdefault(session_id, [])
+                        queue.append({
+                            "queue_id": f"queue-{len(queue) + 1:032x}",
                             "content": message,
-                            "created_at": 1,
+                            "created_at": len(queue) + 1,
                             "status": "queued",
                         })
-                        state._browser_chat_queue = queue
+                        state._browser_chat_queue = queues
                         busy_map = getattr(state, "_browser_chat_busy", {})
                         busy_map[session_id] = True
                         state._browser_chat_busy = busy_map
                         data = {
                             "session_id": session_id,
-                            "items": list(queue[session_id]),
+                            "items": list(queue),
                             "dispatching": None,
                             "busy": True,
                             "status": "queued",
@@ -1599,6 +1603,49 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert messages_box and compose_box and last_message
             assert messages_box["y"] + messages_box["height"] <= compose_box["y"] + 1
             assert last_message["y"] + last_message["height"] <= messages_box["y"] + messages_box["height"] + 1
+
+            # Qwen-style queued-next-turn UX reuses the canonical Chat Queue.
+            input_box.fill("queue browser message")
+            page.click("#projectChatSendButton")
+            page.wait_for_function(
+                "document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1"
+            )
+            assert page.locator("#projectChatSendButton").inner_text() == "Queue"
+            assert "Ctrl+Q" in (page.locator("#projectChatSendButton").get_attribute("title") or "")
+
+            input_box.fill("queued by ctrl q")
+            input_box.press("Control+q")
+            page.wait_for_function(
+                "document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 2"
+            )
+
+            first_queue = page.locator("#projectChatQueueList .project-chat-queue-item").first
+            first_queue.get_by_role("button", name="Edit").click()
+            queue_editor = first_queue.locator("textarea")
+            queue_editor.fill("changed but cancelled")
+            first_queue.get_by_role("button", name="Cancel").click()
+            assert "queue browser message" in first_queue.inner_text()
+
+            first_queue.get_by_role("button", name="Edit").click()
+            queue_editor = first_queue.locator("textarea")
+            queue_editor.fill("   ")
+            first_queue.get_by_role("button", name="Save").click()
+            assert "Queued message cannot be empty." in first_queue.inner_text()
+
+            long_queue_message = "long queued message " + ("x" * 4096)
+            queue_editor = first_queue.locator("textarea")
+            queue_editor.fill(long_queue_message)
+            first_queue.get_by_role("button", name="Save").click()
+            page.wait_for_function(
+                "(value) => document.querySelector('#projectChatQueueList .project-chat-queue-item .project-chat-queue-copy')?.textContent === value",
+                arg=long_queue_message,
+            )
+
+            old_session_id = state.chat_service.sessions(second)["active_session_id"]
+            assert len(getattr(state, "_browser_chat_queue", {})[old_session_id]) == 2
+            page.click("#newProjectChatButton")
+            page.wait_for_function("document.querySelector('#projectChatQueue')?.hidden === true")
+            assert len(getattr(state, "_browser_chat_queue", {})[old_session_id]) == 2
 
             page.reload(wait_until="domcontentloaded")
             install(page, "Second Project")
