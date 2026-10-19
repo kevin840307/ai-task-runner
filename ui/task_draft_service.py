@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -12,11 +13,22 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .task_models import DRAFT_MODES, bounded_text, validate_generated_draft
+    from .task_models import (
+        DRAFT_MODES,
+        bounded_text,
+        validate_generated_draft,
+        validate_task_draft_for_create,
+    )
 except ImportError:
-    from task_models import DRAFT_MODES, bounded_text, validate_generated_draft
+    from task_models import (
+        DRAFT_MODES,
+        bounded_text,
+        validate_generated_draft,
+        validate_task_draft_for_create,
+    )
 
 CACHE_LIMIT = 128
+_DRAFT_ID = re.compile(r"^draft-[0-9a-f]{32}$")
 
 
 class TaskDraftService:
@@ -25,6 +37,7 @@ class TaskDraftService:
         self._runner = runner or self._run_tool
         self._lock = threading.RLock()
         self._requests: dict[tuple[str, str], dict[str, Any]] = {}
+        self._drafts: dict[tuple[str, str], dict[str, Any]] = {}
 
     def generate(
         self,
@@ -48,6 +61,9 @@ class TaskDraftService:
         with self._lock:
             cached = self._requests.get(key)
             if cached is not None:
+                draft_id = str(cached.get("draft_id") or "")
+                if draft_id:
+                    self._drafts[(key[0], draft_id)] = deepcopy(cached)
                 return {**deepcopy(cached), "duplicate": True}
 
         generated = self._runner(
@@ -73,9 +89,55 @@ class TaskDraftService:
         }
         with self._lock:
             self._requests[key] = deepcopy(value)
+            self._drafts[(key[0], value["draft_id"])] = deepcopy(value)
             while len(self._requests) > CACHE_LIMIT:
-                self._requests.pop(next(iter(self._requests)))
+                oldest_key = next(iter(self._requests))
+                evicted = self._requests.pop(oldest_key)
+                evicted_id = str(evicted.get("draft_id") or "")
+                if evicted_id:
+                    self._drafts.pop((oldest_key[0], evicted_id), None)
         return value
+
+    @staticmethod
+    def _draft_id(value: str) -> str:
+        draft_id = str(value or "").strip()
+        if not _DRAFT_ID.fullmatch(draft_id):
+            raise ValueError("Invalid TaskDraft id")
+        return draft_id
+
+    def get(self, project: Path, draft_id: str) -> dict[str, Any]:
+        key = (str(project.resolve()), self._draft_id(draft_id))
+        with self._lock:
+            value = self._drafts.get(key)
+            if value is None:
+                raise ValueError("TaskDraft is no longer available")
+            return deepcopy(value)
+
+    def update(self, project: Path, draft_id: str, draft: Any) -> dict[str, Any]:
+        project_key = str(project.resolve())
+        key = (project_key, self._draft_id(draft_id))
+        validated = validate_task_draft_for_create(draft, project)
+        with self._lock:
+            current = self._drafts.get(key)
+            if current is None:
+                raise ValueError("TaskDraft is no longer available")
+            value = {**current, "draft": deepcopy(validated), "duplicate": False}
+            self._drafts[key] = deepcopy(value)
+            for request_key, cached in self._requests.items():
+                if request_key[0] == project_key and cached.get("draft_id") == key[1]:
+                    self._requests[request_key] = deepcopy(value)
+                    break
+            return deepcopy(value)
+
+    def dismiss(self, project: Path, draft_id: str) -> dict[str, Any]:
+        project_key = str(project.resolve())
+        key = (project_key, self._draft_id(draft_id))
+        with self._lock:
+            existed = self._drafts.pop(key, None) is not None
+            for request_key, cached in list(self._requests.items()):
+                if request_key[0] == project_key and cached.get("draft_id") == key[1]:
+                    del self._requests[request_key]
+            return {"draft_id": key[1], "dismissed": True, "duplicate": not existed}
 
     def _run_tool(
         self,
