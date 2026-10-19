@@ -1638,3 +1638,81 @@ def test_chat_turn_cancel_http_endpoint_is_non_blocking_and_idempotent(
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_stale_stop_after_item_execution_does_not_cancel_next_queue_item(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    finalize_started = threading.Event()
+    release_finalize = threading.Event()
+    calls: list[str] = []
+    result_box: dict[str, dict] = {}
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(),
+    )
+
+    def fake_runner(**kwargs):
+        prompt = str(kwargs["prompt"])
+        calls.append(prompt)
+        return {"text": f"reply {prompt}", "session_id": "agent-session"}
+
+    original_complete = chat.complete_queue_item
+
+    def blocking_complete(project_arg, session_arg, queue_id, *, outcome="completed"):
+        if outcome == "completed" and not finalize_started.is_set():
+            finalize_started.set()
+            assert release_finalize.wait(timeout=4)
+        return original_complete(project_arg, session_arg, queue_id, outcome=outcome)
+
+    chat.complete_queue_item = blocking_complete
+    service = ChatAgentService(repo, runner=fake_runner)
+    worker = threading.Thread(
+        target=lambda: result_box.setdefault(
+            "value",
+            service.turn(
+                project,
+                chat,
+                session_id=session_id,
+                message="first",
+                backend="qwen",
+                request_id="stale-stop-first",
+            ),
+        ),
+        daemon=True,
+    )
+    worker.start()
+    assert finalize_started.wait(timeout=2)
+
+    queued = service.turn(
+        project,
+        chat,
+        session_id=session_id,
+        message="second",
+        backend="qwen",
+        request_id="stale-stop-second",
+    )
+    assert queued["status"] == "queued"
+
+    stale = service.cancel_turn(project, chat, session_id=session_id)
+    assert stale["cancelled"] is False
+    assert stale["status"] == "idle"
+
+    release_finalize.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert result_box["value"]["cancelled"] == []
+    assert calls == ["first", "second"]
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
+        "first",
+        "reply first",
+        "second",
+        "reply second",
+    ]

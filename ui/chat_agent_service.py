@@ -42,8 +42,9 @@ class ChatAgentService:
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
         self._turn_guard = threading.Lock()
-        self._active_processes: dict[tuple[str, str], subprocess.Popen[str]] = {}
-        self._cancelled_turns: set[tuple[str, str]] = set()
+        self._active_items: dict[tuple[str, str], str] = {}
+        self._active_processes: dict[tuple[str, str, str], subprocess.Popen[str]] = {}
+        self._cancelled_turns: set[tuple[str, str, str]] = set()
         self._ask_resolution_guard = threading.Lock()
         self._ask_resolutions: set[tuple[str, str, str, str]] = set()
 
@@ -163,7 +164,6 @@ class ChatAgentService:
         session_id: str,
     ) -> dict[str, Any]:
         key = self._turn_key(project, session_id)
-        lock = self._lock_for(key)
         pending = self._recover_stale_ask(project, chat, session_id)
         ask_cancelled = False
         if isinstance(pending, dict) and pending.get("status") == "waiting":
@@ -177,17 +177,20 @@ class ChatAgentService:
             )
             ask_cancelled = result.get("ask", {}).get("status") == "cancelled"
 
-        active = lock.locked()
         duplicate = False
         process: subprocess.Popen[str] | None = None
-        if active:
-            with self._turn_guard:
-                duplicate = key in self._cancelled_turns
-                self._cancelled_turns.add(key)
-                process = self._active_processes.get(key)
-            if process is not None:
-                self._signal_cancel(process)
+        execution_key: tuple[str, str, str] | None = None
+        with self._turn_guard:
+            queue_id = self._active_items.get(key, "")
+            if queue_id:
+                execution_key = (*key, queue_id)
+                duplicate = execution_key in self._cancelled_turns
+                self._cancelled_turns.add(execution_key)
+                process = self._active_processes.get(execution_key)
+        if process is not None:
+            self._signal_cancel(process)
 
+        active = execution_key is not None
         return {
             **chat.queue(project, session_id),
             "status": "cancelling" if active else ("cancelled" if ask_cancelled else "idle"),
@@ -203,52 +206,73 @@ class ChatAgentService:
         session_id: str,
     ) -> dict[str, Any]:
         chat.recover_dispatching(project, session_id)
-        key = self._turn_key(project, session_id)
+        session_key = self._turn_key(project, session_id)
         processed: list[str] = []
         cancelled: list[str] = []
         failure = ""
-        try:
-            while True:
-                item = chat.claim_next(project, session_id)
-                if item is None:
-                    break
-                try:
-                    self._execute_item(project, chat, session_id, item)
-                except ChatTurnCancelled:
-                    chat.append_message(
-                        project,
-                        session_id,
-                        "system",
-                        "Agent turn cancelled.",
-                    )
-                    chat.complete_queue_item(
-                        project,
-                        session_id,
-                        item["queue_id"],
-                        outcome="cancelled",
-                    )
-                    cancelled.append(item["queue_id"])
-                    self._clear_turn_cancel(key)
-                    continue
-                except Exception as exc:
-                    failure = str(exc) or exc.__class__.__name__
-                    chat.append_message(
-                        project,
-                        session_id,
-                        "system",
-                        f"Agent error: {failure}",
-                    )
-                    chat.complete_queue_item(
-                        project,
-                        session_id,
-                        item["queue_id"],
-                        outcome="failed",
-                    )
-                    break
-                chat.complete_queue_item(project, session_id, item["queue_id"])
-                processed.append(item["queue_id"])
-        finally:
-            self._clear_turn_cancel(key)
+        while True:
+            item = chat.claim_next(project, session_id)
+            if item is None:
+                break
+            execution_key = (*session_key, str(item["queue_id"]))
+            self._begin_execution(session_key, execution_key)
+            try:
+                self._execute_item(
+                    project,
+                    chat,
+                    session_id,
+                    item,
+                    execution_key=execution_key,
+                )
+            except ChatTurnCancelled:
+                self._close_execution(session_key, execution_key)
+                chat.append_message(
+                    project,
+                    session_id,
+                    "system",
+                    "Agent turn cancelled.",
+                )
+                chat.complete_queue_item(
+                    project,
+                    session_id,
+                    item["queue_id"],
+                    outcome="cancelled",
+                )
+                cancelled.append(item["queue_id"])
+                continue
+            except Exception as exc:
+                self._close_execution(session_key, execution_key)
+                failure = str(exc) or exc.__class__.__name__
+                chat.append_message(
+                    project,
+                    session_id,
+                    "system",
+                    f"Agent error: {failure}",
+                )
+                chat.complete_queue_item(
+                    project,
+                    session_id,
+                    item["queue_id"],
+                    outcome="failed",
+                )
+                break
+            if self._close_execution(session_key, execution_key):
+                chat.append_message(
+                    project,
+                    session_id,
+                    "system",
+                    "Agent turn cancelled.",
+                )
+                chat.complete_queue_item(
+                    project,
+                    session_id,
+                    item["queue_id"],
+                    outcome="cancelled",
+                )
+                cancelled.append(item["queue_id"])
+                continue
+            chat.complete_queue_item(project, session_id, item["queue_id"])
+            processed.append(item["queue_id"])
         return {
             **chat.queue(project, session_id),
             "status": "error" if failure else "idle",
@@ -264,6 +288,8 @@ class ChatAgentService:
         chat: ChatService,
         session_id: str,
         item: dict[str, Any],
+        *,
+        execution_key: tuple[str, str, str],
     ) -> None:
         agent = str(item.get("backend") or "").strip()
         if not agent:
@@ -273,7 +299,6 @@ class ChatAgentService:
             raise ValueError("Queued Chat turn has unsupported mode")
         model = str(item.get("model") or "").strip()
         reasoning = str(item.get("reasoning") or "").strip()
-        turn_key = self._turn_key(project, session_id)
         previous_session = chat.agent_session(project, session_id, agent)
         chat.append_message(project, session_id, "user", str(item["content"]))
         features = chat_features(agent, project)
@@ -302,11 +327,11 @@ class ChatAgentService:
                 mode=mode,
                 reasoning=reasoning,
                 native_session=native_session,
-                turn_key=turn_key,
+                execution_key=execution_key,
             )
         else:
             result = self._invoke_runner(
-                turn_key,
+                execution_key,
                 project=project,
                 backend=agent,
                 model=model,
@@ -348,7 +373,7 @@ class ChatAgentService:
         mode: str,
         reasoning: str,
         native_session: str,
-        turn_key: tuple[str, str],
+        execution_key: tuple[str, str, str],
     ) -> dict[str, Any]:
         result_box: dict[str, Any] = {}
         done = threading.Event()
@@ -356,7 +381,7 @@ class ChatAgentService:
         def worker() -> None:
             try:
                 result_box["value"] = self._invoke_runner(
-                    turn_key,
+                    execution_key,
                     project=project,
                     backend=backend,
                     model=model,
@@ -379,7 +404,7 @@ class ChatAgentService:
         seen: set[str] = set()
         bridge_error: Exception | None = None
         while not done.wait(0.5):
-            if self._is_turn_cancelled(turn_key):
+            if self._is_turn_cancelled(execution_key):
                 continue
             try:
                 payload = pending_native_ask(
@@ -643,28 +668,45 @@ class ChatAgentService:
     def _turn_key(project: Path, session_id: str) -> tuple[str, str]:
         return (str(project.resolve()), str(session_id))
 
+    def _begin_execution(
+        self,
+        session_key: tuple[str, str],
+        execution_key: tuple[str, str, str],
+    ) -> None:
+        with self._turn_guard:
+            self._active_items[session_key] = execution_key[2]
+
+    def _close_execution(
+        self,
+        session_key: tuple[str, str],
+        execution_key: tuple[str, str, str],
+    ) -> bool:
+        with self._turn_guard:
+            cancelled = execution_key in self._cancelled_turns
+            if self._active_items.get(session_key) == execution_key[2]:
+                self._active_items.pop(session_key, None)
+            self._active_processes.pop(execution_key, None)
+            self._cancelled_turns.discard(execution_key)
+            return cancelled
+
     def _invoke_runner(
         self,
-        turn_key: tuple[str, str],
+        execution_key: tuple[str, str, str],
         **kwargs: Any,
     ) -> dict[str, Any]:
-        if self._is_turn_cancelled(turn_key):
+        if self._is_turn_cancelled(execution_key):
             raise ChatTurnCancelled()
         if self._runner is None:
-            result = self._run_tool(turn_key=turn_key, **kwargs)
+            result = self._run_tool(execution_key=execution_key, **kwargs)
         else:
             result = self._runner(**kwargs)
-        if self._is_turn_cancelled(turn_key):
+        if self._is_turn_cancelled(execution_key):
             raise ChatTurnCancelled()
         return result
 
-    def _is_turn_cancelled(self, key: tuple[str, str]) -> bool:
+    def _is_turn_cancelled(self, key: tuple[str, str, str]) -> bool:
         with self._turn_guard:
             return key in self._cancelled_turns
-
-    def _clear_turn_cancel(self, key: tuple[str, str]) -> None:
-        with self._turn_guard:
-            self._cancelled_turns.discard(key)
 
     @staticmethod
     def _signal_cancel(process: subprocess.Popen[str]) -> None:
@@ -685,7 +727,7 @@ class ChatAgentService:
     def _run_tool(
         self,
         *,
-        turn_key: tuple[str, str],
+        execution_key: tuple[str, str, str],
         project: Path,
         backend: str,
         model: str,
@@ -723,8 +765,8 @@ class ChatAgentService:
             options["start_new_session"] = True
         process = subprocess.Popen(command, **options)
         with self._turn_guard:
-            self._active_processes[turn_key] = process
-            cancel_now = turn_key in self._cancelled_turns
+            self._active_processes[execution_key] = process
+            cancel_now = execution_key in self._cancelled_turns
         if cancel_now:
             self._signal_cancel(process)
         try:
@@ -739,10 +781,10 @@ class ChatAgentService:
             raise RuntimeError("Chat Agent timed out after 7260 seconds") from exc
         finally:
             with self._turn_guard:
-                if self._active_processes.get(turn_key) is process:
-                    self._active_processes.pop(turn_key, None)
+                if self._active_processes.get(execution_key) is process:
+                    self._active_processes.pop(execution_key, None)
 
-        if self._is_turn_cancelled(turn_key):
+        if self._is_turn_cancelled(execution_key):
             raise ChatTurnCancelled()
         raw = stdout.strip()
         try:
