@@ -57,6 +57,14 @@ class ReasoningOptionSpec:
     default: bool = False
 
 
+@dataclass(frozen=True)
+class ChatFeatureSpec:
+    ask: bool = False
+    ask_transport: str = ""
+    queue_mode: str = "service_fifo"
+    detail: str = ""
+
+
 class BackendError(RunnerError):
     def __init__(
         self,
@@ -256,6 +264,10 @@ class BaseBackend(ABC):
         model: str,
     ) -> tuple[ReasoningOptionSpec, ...]:
         return ()
+
+    @classmethod
+    def chat_features(cls, root: Path) -> ChatFeatureSpec:
+        return ChatFeatureSpec(detail=f"{cls.name} does not expose native interactive Chat features")
 
     def configure_reasoning(self, reasoning: str) -> None:
         value = str(reasoning or "").strip()
@@ -559,6 +571,10 @@ def reasoning_options(
     return _backend_type(name).reasoning_options(root, model)
 
 
+def chat_features(name: str, root: Path) -> ChatFeatureSpec:
+    return _backend_type(name).chat_features(root)
+
+
 def configure_interaction_args(
     name: str,
     mode: InteractionMode,
@@ -607,12 +623,14 @@ __all__ = [
     "BackendMode",
     "BackendResult",
     "CapabilitySpec",
+    "ChatFeatureSpec",
     "ReasoningOptionSpec",
     "InteractionMode",
     "InteractionModeSpec",
     "BaseBackend",
     "available_models",
     "backend_names",
+    "chat_features",
     "configure_backend_args",
     "configure_model_args",
     "configure_interaction_args",
