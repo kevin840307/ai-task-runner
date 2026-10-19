@@ -858,6 +858,89 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_shared_new_task_menu_creates_task_and_task_list() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.click("#tasksNewButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            assert page.locator("#taskCreateMenu [data-task-create-kind]").count() == 2
+            page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
+            page.fill("#taskWorkspaceDraftTitle", "Standalone browser task")
+            page.fill("#taskWorkspaceItemTitle", "Standalone child")
+            page.fill("#taskWorkspacePrompt", "Standalone task prompt")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            created = state.tasks.list(state.repo_root)["tasks"]
+            assert len(created) == 1
+            assert created[0]["title"] == "Standalone browser task"
+            assert created[0]["items"][0]["prompt"] == "Standalone task prompt"
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            page.locator("#projectList .project-root").first.click()
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+            page.click("#projectChatNewTaskButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
+            assert page.locator(".task-workspace-list-row").count() == 1
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "Second list child")
+            page.fill("#taskWorkspacePrompt", "Second list prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 2
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            page.fill("#taskWorkspaceItemTitle", "First list child")
+            page.fill("#taskWorkspacePrompt", "First list prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.fill("#taskWorkspaceDraftTitle", "Chat browser list")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            created = state.tasks.list(state.repo_root)["tasks"]
+            assert len(created) == 2
+            assert created[1]["kind"] == "task_list"
+            assert [item["prompt"] for item in created[1]["items"]] == ["First list prompt", "Second list prompt"]
+            assert created[1]["project"] == str(state.repo_root.resolve())
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_task_info_explains_non_new_delete_block() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:

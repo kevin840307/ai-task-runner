@@ -8,6 +8,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let state = null;
   let overlay = null;
   let restoreFocus = null;
+  let createMenu = null;
+  let createContext = null;
   const byId = (id) => document.getElementById(id);
 
   function ensureMounted() {
@@ -48,6 +50,99 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       void requestClose();
     }, true);
     return overlay;
+  }
+
+  function newRequestId(prefix) {
+    return prefix + "-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
+  }
+
+  function blankItem(project, workflow) {
+    return {
+      title: "",
+      prompt: "",
+      workflow: String(workflow || ""),
+      project: String(project || ""),
+      workspace: "auto",
+    };
+  }
+
+  function closeCreateMenu() {
+    if (createMenu) createMenu.hidden = true;
+    createContext = null;
+  }
+
+  function ensureCreateMenu() {
+    if (createMenu) return createMenu;
+    createMenu = document.createElement("div");
+    createMenu.id = "taskCreateMenu";
+    createMenu.className = "task-create-menu";
+    createMenu.hidden = true;
+    createMenu.setAttribute("role", "menu");
+    for (const [kind, label, description] of [
+      ["task", "Task", "Create one durable Task"],
+      ["list", "Task List", "Create ordered child Tasks"],
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.taskCreateKind = kind;
+      button.setAttribute("role", "menuitem");
+      const strong = document.createElement("strong");
+      strong.textContent = label;
+      const small = document.createElement("small");
+      small.textContent = description;
+      button.append(strong, small);
+      button.addEventListener("click", () => {
+        const context = createContext;
+        closeCreateMenu();
+        if (!context) return;
+        openNew({ ...context, list: kind === "list" });
+      });
+      createMenu.appendChild(button);
+    }
+    document.body.appendChild(createMenu);
+    document.addEventListener("mousedown", (event) => {
+      if (!createMenu || createMenu.hidden) return;
+      if (createMenu.contains(event.target) || createContext?.anchor?.contains?.(event.target)) return;
+      closeCreateMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && createMenu && !createMenu.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        const anchor = createContext?.anchor;
+        closeCreateMenu();
+        anchor?.focus?.();
+      }
+    }, true);
+    return createMenu;
+  }
+
+  function openCreateMenu({ anchor, project, workflows = [], workflow = "" }) {
+    const projectPath = String(project || "").trim();
+    if (!projectPath) {
+      showError?.("Select a Project before creating a Task.", "New Task unavailable");
+      return;
+    }
+    const menu = ensureCreateMenu();
+    if (!menu.hidden && createContext?.anchor === anchor) {
+      closeCreateMenu();
+      return;
+    }
+    createContext = {
+      anchor,
+      project: projectPath,
+      workflows: Array.isArray(workflows) ? workflows.slice() : [],
+      workflow: String(workflow || ""),
+      returnFocus: anchor,
+    };
+    menu.hidden = false;
+    const rect = anchor?.getBoundingClientRect?.() || { left: 16, bottom: 16, right: 160 };
+    const width = 220;
+    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
+    const top = Math.min(window.innerHeight - menu.offsetHeight - 8, rect.bottom + 6);
+    menu.style.left = left + "px";
+    menu.style.top = Math.max(8, top) + "px";
+    menu.querySelector("button")?.focus();
   }
 
   function isDraftState() { return state?.kind === "draft"; }
@@ -227,15 +322,20 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return list;
   }
 
-  function appendYamlAction(body) {
+  function appendDraftListActions(body) {
     const actions = document.createElement("div");
     actions.className = "task-workspace-info-actions";
+    const add = document.createElement("button");
+    add.id = "taskWorkspaceAddTask";
+    add.type = "button";
+    add.textContent = "+ Add task";
+    add.onclick = addDraftListItem;
     const yaml = document.createElement("button");
     yaml.id = "taskWorkspaceYamlButton";
     yaml.type = "button";
     yaml.textContent = "Edit YAML";
     yaml.onclick = () => void openYaml();
-    actions.appendChild(yaml);
+    actions.append(add, yaml);
     body.appendChild(actions);
   }
 
@@ -248,7 +348,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     intro.innerHTML = "<strong>Task order</strong><span>Tasks run top-to-bottom inside this Task List.</span>";
     body.appendChild(intro);
     body.appendChild(renderTaskRows(state.draft.items, { editable: true }));
-    appendYamlAction(body);
+    appendDraftListActions(body);
   }
 
   function renderEditor() {
@@ -473,17 +573,22 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     render();
   }
 
+  function addDraftListItem() {
+    if (!isDraftState()) return;
+    const first = state.draft.items[0] || {};
+    const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
+    state.draft.items.push(blankItem(state.project, workflow));
+    state.index = state.draft.items.length - 1;
+    state.error = "";
+    state.route = "editor";
+    render();
+  }
+
   function addTaskListItem() {
     if (!ensureTaskEditDraft()) return;
     const first = state.editDraft.items[0] || {};
     const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
-    state.editDraft.items.push({
-      title: "",
-      prompt: "",
-      workflow,
-      project: String(state.task?.project || ""),
-      workspace: "auto",
-    });
+    state.editDraft.items.push(blankItem(state.task?.project || "", workflow));
     touchEditor();
     state.index = state.editDraft.items.length - 1;
     state.editorReturn = "list";
@@ -709,20 +814,25 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const listRoute = state.route === "list";
     const yamlRoute = state.route === "yaml";
     const count = state.draft.items.length;
+    const creating = !!state.createOnSave;
     byId("taskWorkspaceEyebrow").textContent = yamlRoute ? "TASK YAML" : (listRoute ? "TASK LIST" : "TASK EDITOR");
     byId("taskWorkspaceTitle").textContent = yamlRoute
       ? String(state.draft.title || "Task YAML")
       : listRoute
-        ? String(state.draft.title || "Task List")
-        : String(state.draft.items[state.index]?.title || state.draft.title || "Edit Task");
+        ? String(state.draft.title || (creating ? "New Task List" : "Task List"))
+        : String(state.draft.items[state.index]?.title || state.draft.title || (creating ? "New Task" : "Edit Task"));
     byId("taskWorkspaceMeta").textContent = yamlRoute
       ? "Same canonical items[]"
       : listRoute
         ? count + " ordered task" + (count === 1 ? "" : "s")
         : "Task " + (state.index + 1) + " of " + count;
-    byId("taskWorkspaceFooterBack").textContent = yamlRoute ? "Back to Task List" : (listRoute ? "Back to Chat" : (count > 1 ? "Back to Task List" : "Back to Chat"));
+    byId("taskWorkspaceFooterBack").textContent = yamlRoute ? "Back to Task List" : (listRoute ? (creating ? "Cancel" : "Back to Chat") : (count > 1 ? "Back to Task List" : (creating ? "Cancel" : "Back to Chat")));
     byId("taskWorkspaceSave").hidden = !yamlRoute && !listRoute && count > 1;
-    byId("taskWorkspaceSave").textContent = yamlRoute ? "Apply YAML" : "Save draft";
+    byId("taskWorkspaceSave").textContent = yamlRoute
+      ? "Apply YAML"
+      : creating
+        ? (listRoute ? "Create Task List" : "Create Task")
+        : "Save draft";
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
     if (!yamlRoute) requestAnimationFrame(() => (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus());
   }
@@ -852,6 +962,35 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         body: JSON.stringify({ project: state.project, draft: state.draft }),
       });
       const normalized = cloneDraft(data.draft || data);
+      if (state.createOnSave) {
+        const task = await api("/api/tasks/create", {
+          method: "POST",
+          body: JSON.stringify({
+            project: state.project,
+            draft: normalized,
+            request_id: state.createRequestId,
+          }),
+        });
+        const workflows = state.workflows;
+        state = {
+          kind: "task",
+          task: cloneDraft(task),
+          workflows,
+          route: "info",
+          tab: "overview",
+          editDraft: null,
+          editOriginal: "",
+          editorReturn: "info",
+          saveRequestId: "",
+          error: "",
+          yamlText: "",
+          yamlOriginal: "",
+          yamlReturn: "list",
+        };
+        onTaskChanged?.(task);
+        render();
+        return;
+      }
       await state.onSave?.(normalized);
       state.draft = normalized;
       state.original = draftSignature(normalized);
@@ -869,6 +1008,46 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         button.removeAttribute("aria-busy");
       }
     }
+  }
+
+  function openNew({ project, workflows = [], workflow = "", list = false, returnFocus = null }) {
+    ensureMounted();
+    closeCreateMenu();
+    const projectPath = String(project || "").trim();
+    const rows = Array.isArray(workflows) ? workflows.slice() : [];
+    const defaultWorkflow = String(
+      workflow
+      || rows.find((row) => !row?.hidden)?.path
+      || rows.find((row) => !row?.hidden)?.id
+      || rows[0]?.path
+      || rows[0]?.id
+      || ""
+    );
+    const draft = {
+      schema_version: 1,
+      title: list ? "New Task List" : "New Task",
+      project: projectPath,
+      items: [blankItem(projectPath, defaultWorkflow)],
+    };
+    restoreFocus = returnFocus || document.activeElement;
+    state = {
+      kind: "draft",
+      project: projectPath,
+      draft,
+      original: draftSignature(draft),
+      workflows: rows,
+      onSave: null,
+      createOnSave: true,
+      createRequestId: newRequestId("task-create"),
+      route: list ? "list" : "editor",
+      index: 0,
+      error: "",
+      yamlText: "",
+      yamlOriginal: "",
+      yamlReturn: "list",
+    };
+    overlay.hidden = false;
+    render();
   }
 
   function openDraft({ project, draft, workflows = [], onSave, returnFocus }) {
@@ -924,5 +1103,5 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     render();
   }
 
-  return { openDraft, openTask, close: requestClose };
+  return { openDraft, openTask, openNew, openCreateMenu, close: requestClose };
 }

@@ -3,7 +3,7 @@ function requestId() {
   return "chat-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, openTaskDraft, openTask, onPreferencesChanged }) {
+export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, openTaskDraft, openTask, openTaskCreateMenu, onPreferencesChanged }) {
   let project = null;
   let sessions = [];
   let activeSessionId = "";
@@ -1401,6 +1401,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     ]);
     const newChat = byId("newProjectChatButton");
     if (newChat) newChat.disabled = !project;
+    const newTask = byId("projectChatNewTaskButton");
+    if (newTask) newTask.disabled = !project;
     renderQueue();
     renderTurnState();
     if (!project) {
@@ -1418,6 +1420,14 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   byId("newProjectChatButton")?.addEventListener("click", () => void createSession());
+  byId("projectChatNewTaskButton")?.addEventListener("click", (event) => {
+    openTaskCreateMenu?.({
+      anchor: event.currentTarget,
+      project: projectPath(),
+      workflows: settingsCatalog.workflows,
+      workflow: preferences.workflow,
+    });
+  });
   byId("projectChatSettingsButton")?.addEventListener("click", toggleSettingsPopover);
   byId("projectChatSettingsClose")?.addEventListener("click", closeSettingsPopover);
   byId("projectChatAgentSelect")?.addEventListener("change", (event) => {

@@ -304,6 +304,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task Drawer mock 補 focus return、基本 Tab containment、select / tabindex focus-visible；正式 React 再補完整 dialog/focus primitives。
 [x] Chat AI TaskDraft 產生時不再 eager 寫入 taskMap；未 Create 前保持 transient，Edit 才暫掛到共用 Editor surface，Create 才轉正式 Task。
 [x] Board 建立入口改為「+ New → Task / Task List」同層；Task List 先進 transient Draft，不分配正式 Task ID、不寫 taskMap/Board；按 Create Task List 後才建立 items=[] 的正式 Task。
+[x] 正式版 Tasks + New 與 Chat Mode 旁 New Task 共用同一 create menu、Task Workspace Editor/List 與 /api/tasks/create；Create 使用 backend request_id 冪等，成功後直接留在 Task Info。
 [x] Task List 內的「+ Add task」直接切到同一個 canonical Task Editor subview；Move existing 保留為次要小 chooser，不再和 Create new 共用一個大型 dialog。
 [x] planModal / newTaskModal 視覺層級已收斂成單一 Task Workspace Shell：newTaskModal 不再是 fixed overlay，只是 shell 內的 Editor View；List / Editor 切換不改外框位置、寬度、陰影。
 [x] Task Info / Task List / Task Editor / YAML 再收斂成同一個 #taskOverlay Drawer；只保留一份 drawerhead。
@@ -393,7 +394,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Browser 測試 reload：Dark + 非 Teal palette、非預設 Project、Task filter 單選/多選/全選/空選擇時不得出現 Light flash、錯誤 summary 或 layout jump。
 [ ] 正式 React 在 mount 前 pre-hydrate Theme / Project / persisted UI filter；禁止 first render 使用假預設值後再由 useEffect 修正。
 [ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
-[ ] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
+[x] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
 
 
 11. Workspace / Worktree

@@ -300,6 +300,7 @@ const projectChat = createProjectChatController({
   autosizeTextarea,
   openTaskDraft: (options) => taskWorkspace.openDraft(options),
   openTask: (task, options) => taskWorkspace.openTask(task, options),
+  openTaskCreateMenu: (options) => taskWorkspace.openCreateMenu(options),
   onPreferencesChanged: (data) => {
     state.projectPreferences = projectPreferencesProjection(data);
     renderBackendPicker();
@@ -2115,6 +2116,12 @@ $("emptyOpenProjectButton").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("tasks");
+$("tasksNewButton").onclick = (event) => taskWorkspace.openCreateMenu({
+  anchor: event.currentTarget,
+  project: state.project?.path || "",
+  workflows: state.studioFiles.workflows || [],
+  workflow: currentProjectPreferences().workflow || "",
+});
 $("tasksCurrentRuntimeButton").onclick = () => switchView("tasks-runtime");
 $("tasksRuntimeBackButton").onclick = () => switchView("tasks");
 $("workflowNav").onclick = () => switchView("workflow");
