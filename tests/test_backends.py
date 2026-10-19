@@ -20,11 +20,14 @@ from runner.agent import (
     create_backend,
     discover_capabilities,
     encode_ask_response,
+    ensure_native_session,
     is_session_invalid_error,
     is_transient_service_error,
     interaction_modes,
     normalize_ask_request,
+    pending_native_ask,
     reasoning_options,
+    resolve_native_ask,
     sandbox_supported,
     split_command,
 )
@@ -1314,6 +1317,83 @@ def test_opencode_native_question_mapping_round_trip():
         "answers": [["Core", "UI", "Docs"], ["Needed for release"]]
     }
     assert encode_ask_response("opencode", payload, None, cancelled=True) is None
+
+
+def test_opencode_native_ask_transport_reuses_shared_api(monkeypatch, tmp_path):
+    from runner.agent import opencode as opencode_module
+    from runner.runtime.process_runner import ProcessResult
+
+    calls = []
+    responses = [
+        {"data": {"id": "ses_native"}},
+        {"data": [
+            {"id": "q-other", "sessionID": "ses_other", "questions": []},
+            {
+                "id": "q-native",
+                "sessionID": "ses_native",
+                "questions": [{
+                    "header": "Pick",
+                    "question": "Choose",
+                    "options": [{"label": "Safe"}],
+                }],
+            },
+        ]},
+        {"data": True},
+        {"data": True},
+    ]
+
+    def fake_run(command, root, timeout, *args, **kwargs):
+        calls.append(list(command))
+        payload = responses.pop(0)
+        return ProcessResult(json.dumps(payload), 0)
+
+    monkeypatch.setattr(opencode_module, "run_process", fake_run)
+    session_id = ensure_native_session("opencode", tmp_path, "")
+    assert session_id == "ses_native"
+    pending = pending_native_ask("opencode", tmp_path, session_id)
+    assert pending["id"] == "q-native"
+
+    resolve_native_ask(
+        "opencode",
+        tmp_path,
+        session_id,
+        pending,
+        {"q1": {"value": "Safe"}},
+    )
+    resolve_native_ask(
+        "opencode",
+        tmp_path,
+        session_id,
+        pending,
+        None,
+        cancelled=True,
+    )
+
+    assert calls[0][:3] == ["opencode", "api", "session.create"]
+    assert json.loads(calls[0][calls[0].index("--data") + 1])["title"] == "AI Task Runner Chat"
+    assert calls[1] == ["opencode", "api", "question.list"]
+    assert calls[2][:3] == ["opencode", "api", "question.reply"]
+    assert json.loads(calls[2][calls[2].index("--data") + 1]) == {
+        "questionID": "q-native",
+        "response": {"answers": [["Safe"]]},
+    }
+    assert calls[3][:3] == ["opencode", "api", "question.reject"]
+    assert json.loads(calls[3][calls[3].index("--data") + 1]) == {
+        "questionID": "q-native"
+    }
+
+
+def test_opencode_native_session_preserves_existing_id(monkeypatch, tmp_path):
+    from runner.agent import opencode as opencode_module
+
+    monkeypatch.setattr(
+        opencode_module,
+        "run_process",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("existing session must not call OpenCode API")
+        ),
+    )
+    assert ensure_native_session("opencode", tmp_path, "ses_existing") == "ses_existing"
 
 
 def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_path, monkeypatch):
