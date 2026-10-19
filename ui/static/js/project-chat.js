@@ -792,7 +792,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     create.type = "button";
     create.className = "primary";
     create.textContent = "Create Task";
-    create.onclick = () => void createTaskFromDraft(entry.draft_id);
+    create.onclick = () => void createTaskFromDraft(entry.draft_id, draft);
     const dismiss = document.createElement("button");
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
@@ -1111,7 +1111,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     void refreshMessages();
   }
 
-  async function createTaskFromDraft(draftId) {
+  async function createTaskFromDraft(draftId, visibleDraft) {
     const path = projectPath();
     const session = activeSessionId;
     if (!path || !session) return;
@@ -1120,14 +1120,15 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       showError?.("TaskDraft is no longer available in this Chat.", "Create Task failed");
       return;
     }
+    const draft = globalThis.structuredClone
+      ? globalThis.structuredClone(visibleDraft)
+      : JSON.parse(JSON.stringify(visibleDraft));
     try {
       const task = await api("/api/tasks/create", {
         method: "POST",
         body: JSON.stringify({
           project: path,
-          draft: globalThis.structuredClone
-            ? globalThis.structuredClone(entry.draft)
-            : JSON.parse(JSON.stringify(entry.draft)),
+          draft,
           request_id: "create-" + entry.draft_id,
         }),
       });
