@@ -353,6 +353,28 @@ class ChatService:
                 "ask": self._public_ask(ask),
             }
 
+    def recover_ask_resolution(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            ask = self._require_ask(session, ask_id)
+            if ask["status"] == "resolving":
+                ask["status"] = "waiting"
+                ask["answers"] = None
+                ask["answer_request_id"] = ""
+                ask["resolution_kind"] = ""
+                session["updated_at"] = time.time()
+                self._write(project, state)
+            return {
+                "session_id": session["session_id"],
+                "ask": self._public_ask(ask),
+            }
+
     def ask_context(
         self,
         project: Path,
@@ -372,6 +394,8 @@ class ChatService:
                 "turn_id": ask["turn_id"],
                 "status": ask["status"],
                 "answers": ask.get("answers"),
+                "answer_request_id": ask.get("answer_request_id", ""),
+                "resolution_kind": ask.get("resolution_kind", ""),
             }
 
     def submit_ask(
