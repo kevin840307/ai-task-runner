@@ -1369,17 +1369,17 @@ def test_opencode_native_ask_transport_reuses_shared_api(monkeypatch, tmp_path):
         cancelled=True,
     )
 
-    assert calls[0][:3] == ["opencode", "api", "session.create"]
+    assert [Path(calls[0][0]).stem, *calls[0][1:3]] == ["opencode", "api", "session.create"]
     assert json.loads(calls[0][calls[0].index("--data") + 1])["title"] == "AI Task Runner Chat"
-    assert calls[1][:3] == ["opencode", "api", "session.question.list"]
+    assert [Path(calls[1][0]).stem, *calls[1][1:3]] == ["opencode", "api", "session.question.list"]
     assert "sessionID=ses_native" in calls[1]
-    assert calls[2][:3] == ["opencode", "api", "session.question.reply"]
+    assert [Path(calls[2][0]).stem, *calls[2][1:3]] == ["opencode", "api", "session.question.reply"]
     assert "sessionID=ses_native" in calls[2]
     assert "requestID=q-native" in calls[2]
     assert json.loads(calls[2][calls[2].index("--data") + 1]) == {
         "answers": [["Safe"]]
     }
-    assert calls[3][:3] == ["opencode", "api", "session.question.reject"]
+    assert [Path(calls[3][0]).stem, *calls[3][1:3]] == ["opencode", "api", "session.question.reject"]
     assert "sessionID=ses_native" in calls[3]
     assert "requestID=q-native" in calls[3]
     assert "--data" not in calls[3]
