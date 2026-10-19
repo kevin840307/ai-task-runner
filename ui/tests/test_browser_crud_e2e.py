@@ -936,6 +936,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             ]
             assert page.locator(".task-workspace-status-pill").inner_text() == "NEW"
             assert page.locator(".task-workspace-info-row").count() == 2
+            page.click("#taskWorkspaceOpenList")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-info-row").count() == 2
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            assert page.locator(".task-workspace-tabs .task-workspace-tab").count() == 4
             page.get_by_role("button", name="Runtime", exact=True).click()
             assert page.locator(".task-workspace-empty-panel").get_by_text("No Runner runtime yet").is_visible()
             page.locator("#taskWorkspaceClose").click()
