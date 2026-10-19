@@ -794,7 +794,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     create.type = "button";
     create.className = "primary";
     create.textContent = "Create Task";
-    create.onclick = () => void createTaskFromDraft(entry.draft_id);
+    create.onclick = () => void createTaskFromDraft(entry.draft_id, create);
     const dismiss = document.createElement("button");
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
@@ -1113,7 +1113,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     void refreshMessages();
   }
 
-  async function createTaskFromDraft(draftId) {
+  async function createTaskFromDraft(draftId, returnFocus = null) {
     const path = projectPath();
     const session = activeSessionId;
     if (!path || !session) return;
@@ -1141,7 +1141,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       );
       await refreshMessages();
       showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
-      openTask?.(task, { returnFocus: create });
+      openTask?.(task, { returnFocus });
     } catch (error) {
       showError?.(error.message, "Create Task failed");
     }
