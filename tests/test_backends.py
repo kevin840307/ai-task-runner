@@ -19,9 +19,11 @@ from runner.agent import (
     create_ai_client,
     create_backend,
     discover_capabilities,
+    encode_ask_response,
     is_session_invalid_error,
     is_transient_service_error,
     interaction_modes,
+    normalize_ask_request,
     reasoning_options,
     sandbox_supported,
     split_command,
@@ -1230,6 +1232,88 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
     unavailable_features = chat_features("opencode", tmp_path)
     assert unavailable_features.ask is False
     assert "unavailable" in unavailable_features.detail.lower()
+
+
+def test_qwen_native_ask_mapping_round_trip():
+    payload = {
+        "toolCall": {
+            "kind": "ask_user_question",
+            "rawInput": {
+                "questions": [
+                    {
+                        "header": "Approach",
+                        "question": "Choose one",
+                        "options": [
+                            {"label": "Safe", "description": "Narrow"},
+                            {"label": "Clean", "description": "Broad"},
+                        ],
+                    },
+                    {
+                        "header": "Why",
+                        "question": "Explain",
+                        "options": [],
+                    },
+                ]
+            },
+        },
+        "options": [
+            {"optionId": "reject", "kind": "reject_once"},
+            {"optionId": "once", "kind": "allow_once"},
+        ],
+    }
+    questions = normalize_ask_request("qwen", payload)
+    assert [item["kind"] for item in questions] == ["choice", "text"]
+    assert questions[0]["options"][0]["value"] == "Safe"
+    response = encode_ask_response(
+        "qwen",
+        payload,
+        {"q1": {"value": "Safe"}, "q2": "Because it is safer"},
+    )
+    assert response == {
+        "outcome": {"outcome": "selected", "optionId": "once"},
+        "answers": {"0": "Safe", "1": "Because it is safer"},
+    }
+    assert encode_ask_response("qwen", payload, None, cancelled=True) == {
+        "outcome": {"outcome": "cancelled"}
+    }
+
+
+def test_opencode_native_question_mapping_round_trip():
+    payload = {
+        "id": "question-1",
+        "sessionID": "ses_1",
+        "questions": [
+            {
+                "header": "Packages",
+                "question": "Pick packages",
+                "multiple": True,
+                "options": [
+                    {"label": "Core", "description": "Core only"},
+                    {"label": "UI", "description": "UI package"},
+                ],
+            },
+            {
+                "header": "Reason",
+                "question": "Explain",
+                "options": [],
+                "custom": True,
+            },
+        ],
+    }
+    questions = normalize_ask_request("opencode", payload)
+    assert [item["kind"] for item in questions] == ["multi_choice", "text"]
+    response = encode_ask_response(
+        "opencode",
+        payload,
+        {
+            "q1": {"values": ["Core", "UI"], "other": "Docs"},
+            "q2": "Needed for release",
+        },
+    )
+    assert response == {
+        "answers": [["Core", "UI", "Docs"], ["Needed for release"]]
+    }
+    assert encode_ask_response("opencode", payload, None, cancelled=True) is None
 
 
 def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_path, monkeypatch):
