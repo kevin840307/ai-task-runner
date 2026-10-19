@@ -787,6 +787,99 @@ class QwenBackend(BaseBackend):
         )
 
     @classmethod
+    def normalize_ask_request(cls, payload: Any) -> list[dict[str, Any]]:
+        if not isinstance(payload, dict):
+            raise BackendError("Qwen Ask payload must be an object")
+        tool_call = payload.get("toolCall")
+        raw = tool_call.get("rawInput") if isinstance(tool_call, dict) else None
+        if not isinstance(raw, dict):
+            raw = payload.get("rawInput")
+        if not isinstance(raw, dict):
+            raw = payload
+        questions = raw.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise BackendError("Qwen Ask payload is missing questions")
+        result: list[dict[str, Any]] = []
+        for index, question in enumerate(questions):
+            if not isinstance(question, dict):
+                raise BackendError("Qwen Ask question must be an object")
+            options = question.get("options")
+            rows: list[dict[str, str]] = []
+            if isinstance(options, list):
+                for option in options:
+                    if not isinstance(option, dict):
+                        raise BackendError("Qwen Ask option must be an object")
+                    label = str(option.get("label") or "").strip()
+                    if not label:
+                        raise BackendError("Qwen Ask option label is required")
+                    rows.append({
+                        "value": label,
+                        "label": label,
+                        "description": str(option.get("description") or "").strip(),
+                    })
+            result.append({
+                "id": f"q{index + 1}",
+                "header": str(question.get("header") or f"Question {index + 1}"),
+                "question": str(question.get("question") or ""),
+                "kind": "choice" if rows else "text",
+                "options": rows,
+            })
+        return result
+
+    @classmethod
+    def encode_ask_response(
+        cls,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> dict[str, Any]:
+        if cancelled:
+            return {"outcome": {"outcome": "cancelled"}}
+        if not isinstance(answers, dict):
+            raise BackendError("Qwen Ask answers are required")
+        questions = cls.normalize_ask_request(payload)
+        encoded: dict[str, str] = {}
+        for index, question in enumerate(questions):
+            key = question["id"]
+            if key not in answers:
+                raise BackendError(f"Qwen Ask answer is missing: {key}")
+            value = answers[key]
+            if question["kind"] == "text":
+                text = str(value or "").strip()
+            elif isinstance(value, dict) and str(value.get("other") or "").strip():
+                text = str(value["other"]).strip()
+            elif isinstance(value, dict):
+                text = str(value.get("value") or "").strip()
+            else:
+                text = str(value or "").strip()
+            if not text:
+                raise BackendError(f"Qwen Ask answer is empty: {key}")
+            encoded[str(index)] = text
+        options = payload.get("options") if isinstance(payload, dict) else None
+        option_id = ""
+        if isinstance(options, list):
+            allowed = [
+                row for row in options
+                if isinstance(row, dict)
+                and str(row.get("kind") or "") not in {"reject_once", "reject"}
+            ]
+            preferred = next(
+                (row for row in allowed if str(row.get("kind") or "") == "allow_once"),
+                None,
+            )
+            selected = preferred or (allowed[0] if allowed else None)
+            if isinstance(selected, dict):
+                option_id = str(selected.get("optionId") or "")
+        return {
+            "outcome": {
+                "outcome": "selected",
+                "optionId": option_id or "proceed_once",
+            },
+            "answers": encoded,
+        }
+
+    @classmethod
     def configure_interaction_args(
         cls,
         mode: InteractionMode,
