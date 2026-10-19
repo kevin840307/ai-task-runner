@@ -34,6 +34,8 @@ class ChatAgentService:
         self._runner = runner or self._run_tool
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
+        self._ask_resolution_guard = threading.Lock()
+        self._ask_resolutions: set[tuple[str, str, str, str]] = set()
 
     def turn(
         self,
@@ -75,7 +77,7 @@ class ChatAgentService:
             "mode": mode,
             "reasoning": str(reasoning or "").strip(),
         }
-        pending_ask = chat.ask(project, session_id).get("ask")
+        pending_ask = self._recover_stale_ask(project, chat, session_id)
         if isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting":
             return {
                 **queued,
@@ -106,7 +108,7 @@ class ChatAgentService:
         *,
         session_id: str,
     ) -> dict[str, Any]:
-        pending_ask = chat.ask(project, session_id).get("ask")
+        pending_ask = self._recover_stale_ask(project, chat, session_id)
         if isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting":
             return {
                 **chat.queue(project, session_id),
@@ -133,7 +135,7 @@ class ChatAgentService:
         key = (str(project.resolve()), str(session_id))
         lock = self._lock_for(key)
         snapshot = chat.queue(project, session_id)
-        pending_ask = chat.ask(project, session_id).get("ask")
+        pending_ask = self._recover_stale_ask(project, chat, session_id)
         waiting_ask = isinstance(pending_ask, dict) and pending_ask.get("status") == "waiting"
         busy = lock.locked() or waiting_ask
         return {
@@ -360,6 +362,50 @@ class ChatAgentService:
             raise RuntimeError("Chat Agent returned invalid result")
         return value
 
+    def _resolution_key(
+        self,
+        project: Path,
+        session_id: str,
+        ask_id: str,
+        request_id: str,
+    ) -> tuple[str, str, str, str]:
+        return (
+            str(project.resolve()),
+            str(session_id),
+            str(ask_id),
+            str(request_id),
+        )
+
+    def _recover_stale_ask(
+        self,
+        project: Path,
+        chat: ChatService,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        pending = chat.ask(project, session_id).get("ask")
+        if not isinstance(pending, dict) or pending.get("status") != "resolving":
+            return pending
+        context = chat.ask_context(
+            project,
+            session_id,
+            str(pending.get("ask_id") or ""),
+        )
+        key = self._resolution_key(
+            project,
+            session_id,
+            context["ask_id"],
+            str(context.get("answer_request_id") or ""),
+        )
+        with self._ask_resolution_guard:
+            active = key in self._ask_resolutions
+        if active:
+            return pending
+        return chat.recover_ask_resolution(
+            project,
+            session_id,
+            context["ask_id"],
+        ).get("ask")
+
     def complete_ask(
         self,
         project: Path,
@@ -371,38 +417,54 @@ class ChatAgentService:
         answers: Any = None,
         cancelled: bool = False,
     ) -> dict[str, Any]:
-        started = chat.begin_ask_resolution(
+        self._recover_stale_ask(project, chat, session_id)
+        key = self._resolution_key(
             project,
             session_id,
             ask_id,
-            answers,
-            request_id=request_id,
-            cancelled=cancelled,
+            request_id,
         )
-        if started.get("duplicate"):
-            return started
+        with self._ask_resolution_guard:
+            owned = key not in self._ask_resolutions
+            if owned:
+                self._ask_resolutions.add(key)
         try:
-            self.resolve_ask(
+            started = chat.begin_ask_resolution(
                 project,
-                chat,
-                session_id=session_id,
-                ask_id=ask_id,
+                session_id,
+                ask_id,
+                answers,
+                request_id=request_id,
                 cancelled=cancelled,
             )
-        except Exception:
-            chat.abort_ask_resolution(
+            if started.get("duplicate"):
+                return started
+            try:
+                self.resolve_ask(
+                    project,
+                    chat,
+                    session_id=session_id,
+                    ask_id=ask_id,
+                    cancelled=cancelled,
+                )
+            except Exception:
+                chat.abort_ask_resolution(
+                    project,
+                    session_id,
+                    ask_id,
+                    request_id=request_id,
+                )
+                raise
+            return chat.finish_ask_resolution(
                 project,
                 session_id,
                 ask_id,
                 request_id=request_id,
             )
-            raise
-        return chat.finish_ask_resolution(
-            project,
-            session_id,
-            ask_id,
-            request_id=request_id,
-        )
+        finally:
+            if owned:
+                with self._ask_resolution_guard:
+                    self._ask_resolutions.discard(key)
 
     def resolve_ask(
         self,
