@@ -314,6 +314,23 @@ def _bridge_for(state: UIState):
             else:
                 if path == "/api/settings":
                     data = state.global_settings.update(body)
+                elif path == "/api/projects/add":
+                    data = state.add_project(str(body.get("path", "")))
+                    added_project = Path(data["path"]).resolve()
+                    if not state.project_preferences.get(added_project).get("exists"):
+                        defaults = state.global_settings.get()["defaults"]
+                        state.project_preferences.update(added_project, {
+                            "agent": defaults["agent"],
+                            "model": defaults["model"],
+                            "mode": defaults["mode"],
+                            "reasoning": defaults["reasoning"],
+                            "workflow": defaults["workflow"],
+                        })
+                elif path == "/api/projects/rename":
+                    data = state.rename_project(str(body.get("path", "")), str(body.get("name", "")))
+                elif path == "/api/projects/remove":
+                    state.remove_project(str(body.get("path", "")))
+                    data = {"ok": True}
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.update(Path(body["project"]), body)
                 elif path == "/api/chat/task-draft":
@@ -1286,6 +1303,135 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        workflow = str(root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml")
+        old_project_preferences = {
+            "agent": "qwen",
+            "model": "qwen/model-a",
+            "mode": "auto",
+            "reasoning": "medium",
+            "workflow": workflow,
+        }
+        state.project_preferences.update(root, old_project_preferences)
+        added_project = root / "new-default-project"
+        added_project.mkdir()
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        def install(page) -> None:
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            install(page)
+
+            page.click("#themeButton")
+            page.select_option("#globalDefaultAgent", "opencode")
+            page.fill("#globalDefaultModel", "openai/gpt-5.2")
+            page.locator("#globalDefaultModel").press("Tab")
+            page.select_option("#globalDefaultMode", "read")
+            page.select_option("#globalDefaultReasoning", "high")
+            page.fill("#globalDefaultWorkflow", workflow)
+            page.locator("#globalDefaultWorkflow").press("Tab")
+            page.wait_for_function(
+                """() => document.querySelector('#globalDefaultAgent')?.value === 'opencode'
+                    && document.querySelector('#globalDefaultMode')?.value === 'read'"""
+            )
+            defaults = state.global_settings.get()["defaults"]
+            assert defaults == {
+                "agent": "opencode",
+                "model": "openai/gpt-5.2",
+                "mode": "read",
+                "reasoning": "high",
+                "workflow": workflow,
+            }
+            # Existing Project remains independently owned.
+            current_old = state.project_preferences.get(root)
+            for key, value in old_project_preferences.items():
+                assert current_old[key] == value
+
+            page.click("#themeCloseButton")
+            page.click("#openProject")
+            page.fill("#projectPathInput", str(added_project))
+            page.click("#projectModalConfirm")
+            page.wait_for_function(
+                "(name) => document.querySelector('#projectChatName')?.textContent === name",
+                arg=added_project.name,
+            )
+            new_preferences = state.project_preferences.get(added_project)
+            for key, value in defaults.items():
+                assert new_preferences[key] == value
+            assert state.project_preferences.get(root)["agent"] == "qwen"
+
+            # New Chat has no independent defaults; it projects the Project settings.
+            first_session = state.chat_service.sessions(added_project)["active_session_id"]
+            page.click("#newProjectChatButton")
+            page.wait_for_function(
+                "document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2"
+            )
+            second_session = state.chat_service.sessions(added_project)["active_session_id"]
+            assert second_session != first_session
+            assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
+            assert page.locator("#projectChatModeQuick").input_value() == "read"
+
+            # Display-name rename must not retarget Project path or Chat identity.
+            row = page.locator("#projectList .project-tree").filter(has_text=added_project.name)
+            row.locator(".project-menu-button").click()
+            page.get_by_role("button", name="Rename project", exact=True).click()
+            page.locator(".ui-dialog-input").fill("Renamed Default Project")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => Array.from(document.querySelectorAll('#projectList .project-root strong')).some((n) => n.textContent === 'Renamed Default Project')"
+            )
+            project_rows = state.projects()
+            renamed = next(item for item in project_rows if item["name"] == "Renamed Default Project")
+            assert Path(renamed["path"]).resolve() == added_project.resolve()
+            assert state.chat_service.sessions(added_project)["active_session_id"] == second_session
+
+            page.reload(wait_until="domcontentloaded")
+            install(page)
+            page.wait_for_function(
+                "() => document.querySelector('#projectChatName')?.textContent === 'Renamed Default Project'"
+            )
+            assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
+            assert page.locator("#projectChatModeQuick").input_value() == "read"
+            assert state.project_preferences.get(root)["agent"] == "qwen"
+            assert not errors
+            browser.close()
+
+
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
