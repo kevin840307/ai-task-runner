@@ -42,7 +42,14 @@ class TaskService:
         """Validate transient editor data without creating durable Task state."""
         return {"draft": validate_task_draft_for_create(draft, project)}
 
-    def create(self, project: Path, draft: Any, *, request_id: str) -> dict[str, Any]:
+    def create(
+        self,
+        project: Path,
+        draft: Any,
+        *,
+        request_id: str,
+        project_id: str = "",
+    ) -> dict[str, Any]:
         request = str(request_id or "").strip()
         if not request:
             raise ValueError("request_id is required")
@@ -69,6 +76,7 @@ class TaskService:
                 "task_id": task_id,
                 "kind": "task" if len(items) == 1 else "task_list",
                 "title": validated["title"],
+                "project_id": str(project_id or "").strip(),
                 "project": str(project.resolve()),
                 "status": "new",
                 "items": items,
