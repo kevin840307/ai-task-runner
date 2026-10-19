@@ -83,4 +83,6 @@ class AgentSettingsService:
         for key in ("models", "modes", "reasoning"):
             if not isinstance(payload.get(key), list):
                 raise ValueError(f"Agent settings catalog is missing {key}")
+        if not isinstance(payload.get("features"), dict):
+            raise ValueError("Agent settings catalog is missing features")
         return payload
