@@ -116,19 +116,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     render();
   }
 
-  function renderList() {
-    const body = byId("taskWorkspaceBody");
-    body.innerHTML = "";
-    body.appendChild(renderDraftTitleField());
-    const intro = document.createElement("div");
-    intro.className = "task-workspace-intro";
-    intro.innerHTML = "<strong>Task order</strong><span>Tasks run top-to-bottom inside this Task List.</span>";
-    body.appendChild(intro);
+  function renderTaskRows(items, { editable = false } = {}) {
+    const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
     list.className = "task-workspace-list";
-    state.draft.items.forEach((item, index) => {
+    values.forEach((item, index) => {
       const row = document.createElement("article");
-      row.className = "task-workspace-list-row";
+      row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
       const number = document.createElement("span");
       number.className = "task-workspace-list-number";
       number.textContent = String(index + 1);
@@ -141,37 +135,51 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       const prompt = document.createElement("p");
       prompt.textContent = String(item.prompt || "");
       copy.append(title, meta, prompt);
-      const actions = document.createElement("div");
-      actions.className = "task-workspace-list-actions";
-      for (const [label, titleText, delta] of [["↑", "Move up", -1], ["↓", "Move down", 1]]) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = label;
-        button.title = titleText;
-        button.disabled = delta < 0 ? index === 0 : index === state.draft.items.length - 1;
-        button.onclick = () => moveItem(index, delta);
-        actions.appendChild(button);
+      row.append(number, copy);
+      if (editable) {
+        const actions = document.createElement("div");
+        actions.className = "task-workspace-list-actions";
+        for (const [label, titleText, delta] of [["↑", "Move up", -1], ["↓", "Move down", 1]]) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = label;
+          button.title = titleText;
+          button.disabled = delta < 0 ? index === 0 : index === values.length - 1;
+          button.onclick = () => moveItem(index, delta);
+          actions.appendChild(button);
+        }
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "task-workspace-row-edit";
+        edit.textContent = "Edit";
+        edit.onclick = () => { state.route = "editor"; state.index = index; render(); };
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.disabled = values.length <= 1;
+        remove.onclick = () => {
+          if (values.length <= 1) return;
+          state.draft.items.splice(index, 1);
+          state.index = Math.min(state.index, state.draft.items.length - 1);
+          render();
+        };
+        actions.append(edit, remove);
+        row.appendChild(actions);
       }
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "task-workspace-row-edit";
-      edit.textContent = "Edit";
-      edit.onclick = () => { state.route = "editor"; state.index = index; render(); };
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.textContent = "Remove";
-      remove.disabled = state.draft.items.length <= 1;
-      remove.onclick = () => {
-        if (state.draft.items.length <= 1) return;
-        state.draft.items.splice(index, 1);
-        state.index = Math.min(state.index, state.draft.items.length - 1);
-        render();
-      };
-      actions.append(edit, remove);
-      row.append(number, copy, actions);
       list.appendChild(row);
     });
-    body.appendChild(list);
+    return list;
+  }
+
+  function renderList() {
+    const body = byId("taskWorkspaceBody");
+    body.innerHTML = "";
+    body.appendChild(renderDraftTitleField());
+    const intro = document.createElement("div");
+    intro.className = "task-workspace-intro";
+    intro.innerHTML = "<strong>Task order</strong><span>Tasks run top-to-bottom inside this Task List.</span>";
+    body.appendChild(intro);
+    body.appendChild(renderTaskRows(state.draft.items, { editable: true }));
   }
 
   function renderEditor() {
@@ -321,29 +329,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     heading.className = "task-workspace-intro";
     heading.innerHTML = "<strong>Tasks</strong><span>Canonical ordered items</span>";
     overview.appendChild(heading);
+    overview.appendChild(renderTaskRows(task.items));
 
-    const list = document.createElement("div");
-    list.className = "task-workspace-list";
-    (Array.isArray(task.items) ? task.items : []).forEach((item, index) => {
-      const row = document.createElement("article");
-      row.className = "task-workspace-list-row task-workspace-info-row";
-      const number = document.createElement("span");
-      number.className = "task-workspace-list-number";
-      number.textContent = String(index + 1);
-      const copy = document.createElement("div");
-      copy.className = "task-workspace-list-copy";
-      const title = document.createElement("strong");
-      title.textContent = String(item.title || "Task " + (index + 1));
-      const detail = document.createElement("small");
-      detail.textContent = [String(item.workflow || "Workflow"), String(item.workspace || "auto").toUpperCase()].join(" · ");
-      const prompt = document.createElement("p");
-      prompt.textContent = String(item.prompt || "");
-      copy.append(title, detail, prompt);
-      row.append(number, copy);
-      list.appendChild(row);
-    });
-    overview.appendChild(list);
+    if (Array.isArray(task.items) && task.items.length > 1) {
+      const actions = document.createElement("div");
+      actions.className = "task-workspace-info-actions";
+      const openList = document.createElement("button");
+      openList.id = "taskWorkspaceOpenList";
+      openList.type = "button";
+      openList.textContent = "Open Task List";
+      openList.onclick = () => { state.route = "list"; render(); };
+      actions.appendChild(openList);
+      overview.appendChild(actions);
+    }
     body.appendChild(overview);
+  }
+
+  function renderDurableTaskList() {
+    const task = state.task || {};
+    const body = byId("taskWorkspaceBody");
+    body.innerHTML = "";
+    const intro = document.createElement("div");
+    intro.className = "task-workspace-intro";
+    intro.innerHTML = "<strong>Task order</strong><span>Canonical ordered items</span>";
+    body.appendChild(intro);
+    body.appendChild(renderTaskRows(task.items));
   }
 
   function render() {
@@ -352,12 +362,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     const save = byId("taskWorkspaceSave");
     const back = byId("taskWorkspaceHeaderBack");
     if (state.kind === "task") {
-      if (footer) footer.hidden = true;
+      const listRoute = state.route === "list";
+      if (footer) footer.hidden = !listRoute;
+      if (save) save.hidden = true;
       if (back) back.hidden = false;
-      byId("taskWorkspaceEyebrow").textContent = "TASK INFO";
+      byId("taskWorkspaceEyebrow").textContent = listRoute ? "TASK LIST" : "TASK INFO";
       byId("taskWorkspaceTitle").textContent = String(state.task?.title || "Task");
-      byId("taskWorkspaceMeta").textContent = String(state.task?.task_id || "");
-      renderTaskInfo();
+      byId("taskWorkspaceMeta").textContent = listRoute
+        ? String(state.task?.items?.length || 0) + " ordered tasks"
+        : String(state.task?.task_id || "");
+      if (listRoute) {
+        byId("taskWorkspaceFooterBack").textContent = "Back to Info";
+        renderDurableTaskList();
+      } else {
+        renderTaskInfo();
+      }
       return;
     }
     if (footer) footer.hidden = false;
@@ -381,6 +400,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   async function handleBack() {
     if (!state) return;
     if (state.kind === "task") {
+      if (state.route === "list") {
+        state.route = "info";
+        state.tab = "overview";
+        render();
+        return;
+      }
       closeNow();
       return;
     }
@@ -456,6 +481,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     state = {
       kind: "task",
       task: value,
+      route: "info",
       tab: "overview",
     };
     overlay.hidden = false;
