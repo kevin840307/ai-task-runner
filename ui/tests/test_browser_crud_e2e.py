@@ -1091,7 +1091,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatQueue").is_hidden()
 
             page.click("#newProjectChatButton")
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 3")
             active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
             active_chat.locator("button[title='Rename Chat']").click()
             page.locator(".ui-dialog-input").fill("Implementation Chat")
