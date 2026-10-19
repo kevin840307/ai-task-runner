@@ -240,6 +240,86 @@ class OpenCodeBackend(BaseBackend):
         )
 
     @classmethod
+    def normalize_ask_request(cls, payload: Any) -> list[dict[str, Any]]:
+        if not isinstance(payload, dict):
+            raise BackendError("OpenCode question payload must be an object")
+        questions = payload.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise BackendError("OpenCode question payload is missing questions")
+        result: list[dict[str, Any]] = []
+        for index, question in enumerate(questions):
+            if not isinstance(question, dict):
+                raise BackendError("OpenCode question must be an object")
+            raw_options = question.get("options")
+            rows: list[dict[str, str]] = []
+            if isinstance(raw_options, list):
+                for option in raw_options:
+                    if not isinstance(option, dict):
+                        raise BackendError("OpenCode question option must be an object")
+                    label = str(option.get("label") or "").strip()
+                    if not label:
+                        raise BackendError("OpenCode question option label is required")
+                    rows.append({
+                        "value": label,
+                        "label": label,
+                        "description": str(option.get("description") or "").strip(),
+                    })
+            result.append({
+                "id": f"q{index + 1}",
+                "header": str(question.get("header") or f"Question {index + 1}"),
+                "question": str(question.get("question") or ""),
+                "kind": (
+                    "multi_choice"
+                    if question.get("multiple") is True
+                    else ("choice" if rows else "text")
+                ),
+                "options": rows,
+            })
+        return result
+
+    @classmethod
+    def encode_ask_response(
+        cls,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> dict[str, Any] | None:
+        if cancelled:
+            return None
+        if not isinstance(answers, dict):
+            raise BackendError("OpenCode question answers are required")
+        questions = cls.normalize_ask_request(payload)
+        encoded: list[list[str]] = []
+        for question in questions:
+            key = question["id"]
+            if key not in answers:
+                raise BackendError(f"OpenCode question answer is missing: {key}")
+            value = answers[key]
+            values: list[str] = []
+            if question["kind"] == "text":
+                text = str(value or "").strip()
+                if text:
+                    values.append(text)
+            elif question["kind"] == "multi_choice":
+                if not isinstance(value, dict):
+                    raise BackendError(f"OpenCode multi-choice answer is invalid: {key}")
+                raw_values = value.get("values", [])
+                if isinstance(raw_values, list):
+                    values.extend(str(item).strip() for item in raw_values if str(item).strip())
+                custom = str(value.get("other") or "").strip()
+                if custom:
+                    values.append(custom)
+            elif isinstance(value, dict) and str(value.get("other") or "").strip():
+                values.append(str(value["other"]).strip())
+            elif isinstance(value, dict) and str(value.get("value") or "").strip():
+                values.append(str(value["value"]).strip())
+            if not values:
+                raise BackendError(f"OpenCode question answer is empty: {key}")
+            encoded.append(values)
+        return {"answers": encoded}
+
+    @classmethod
     def configure_interaction_args(
         cls,
         mode: InteractionMode,
