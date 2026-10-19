@@ -55,7 +55,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   function isDirty() {
     if (isDraftState()) return draftSignature(state.draft) !== state.original;
     return state?.kind === "task"
-      && state.route === "editor"
+      && !!state.editDraft
+      && (state.route === "list" || state.route === "editor")
       && draftSignature(state.editDraft) !== state.editOriginal;
   }
 
@@ -131,10 +132,33 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   }
 
   function moveItem(index, delta) {
+    const draft = editorDraft();
+    const items = draft?.items;
     const next = index + delta;
-    if (!state || next < 0 || next >= state.draft.items.length) return;
-    const [item] = state.draft.items.splice(index, 1);
-    state.draft.items.splice(next, 0, item);
+    if (!Array.isArray(items) || next < 0 || next >= items.length) return;
+    const [item] = items.splice(index, 1);
+    items.splice(next, 0, item);
+    touchEditor();
+    render();
+  }
+
+  function removeItem(index) {
+    const draft = editorDraft();
+    const items = draft?.items;
+    if (!Array.isArray(items) || items.length <= 1) return;
+    items.splice(index, 1);
+    state.index = Math.min(state.index, items.length - 1);
+    touchEditor();
+    render();
+  }
+
+  function editItem(index) {
+    if (state?.kind === "task") {
+      beginTaskEdit(index, "list");
+      return;
+    }
+    state.route = "editor";
+    state.index = index;
     render();
   }
 
@@ -174,17 +198,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
         edit.type = "button";
         edit.className = "task-workspace-row-edit";
         edit.textContent = "Edit";
-        edit.onclick = () => { state.route = "editor"; state.index = index; render(); };
+        edit.onclick = () => editItem(index);
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Remove";
         remove.disabled = values.length <= 1;
-        remove.onclick = () => {
-          if (values.length <= 1) return;
-          state.draft.items.splice(index, 1);
-          state.index = Math.min(state.index, state.draft.items.length - 1);
-          render();
-        };
+        remove.onclick = () => removeItem(index);
         actions.append(edit, remove);
         row.appendChild(actions);
       } else if (typeof onEdit === "function") {
@@ -373,7 +392,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
         openList.id = "taskWorkspaceOpenList";
         openList.type = "button";
         openList.textContent = "Open Task List";
-        openList.onclick = () => { state.route = "list"; render(); };
+        openList.onclick = () => beginTaskListEdit();
         actions.appendChild(openList);
       } else {
         const edit = document.createElement("button");
@@ -388,29 +407,93 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     body.appendChild(overview);
   }
 
+  function taskDraftFromRecord(task) {
+    return {
+      title: String(task?.title || ""),
+      project: String(task?.project || ""),
+      items: cloneDraft(task?.items || []),
+    };
+  }
+
+  function ensureTaskEditDraft() {
+    const task = state?.task;
+    if (!task || String(task.status || "") !== "new") return false;
+    if (!state.editDraft) {
+      state.editDraft = taskDraftFromRecord(task);
+      state.editOriginal = draftSignature(state.editDraft);
+      state.saveRequestId = "";
+    }
+    return true;
+  }
+
+  function beginTaskListEdit() {
+    if (!ensureTaskEditDraft()) {
+      state.route = "list";
+      render();
+      return;
+    }
+    state.editorReturn = "list";
+    state.error = "";
+    state.route = "list";
+    render();
+  }
+
+  function addTaskListItem() {
+    if (!ensureTaskEditDraft()) return;
+    const first = state.editDraft.items[0] || {};
+    const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
+    state.editDraft.items.push({
+      title: "",
+      prompt: "",
+      workflow,
+      project: String(state.task?.project || ""),
+      workspace: "auto",
+    });
+    touchEditor();
+    state.index = state.editDraft.items.length - 1;
+    state.editorReturn = "list";
+    state.error = "";
+    state.route = "editor";
+    render();
+  }
+
   function renderDurableTaskList() {
     const task = state.task || {};
     const body = byId("taskWorkspaceBody");
     body.innerHTML = "";
+    const editable = String(task.status || "") === "new" && ensureTaskEditDraft();
+    if (editable) body.appendChild(renderDraftTitleField());
     const intro = document.createElement("div");
     intro.className = "task-workspace-intro";
-    intro.innerHTML = "<strong>Task order</strong><span>Canonical ordered items</span>";
+    intro.innerHTML = editable
+      ? "<strong>Task order</strong><span>Add, edit, remove or reorder before Save.</span>"
+      : "<strong>Task order</strong><span>Canonical ordered items</span>";
     body.appendChild(intro);
-    const editable = String(task.status || "") === "new";
-    body.appendChild(renderTaskRows(task.items, {
-      onEdit: editable ? (index) => beginTaskEdit(index, "list") : null,
-    }));
+    body.appendChild(renderTaskRows(editable ? state.editDraft.items : task.items, { editable }));
+
+    if (editable) {
+      const actions = document.createElement("div");
+      actions.className = "task-workspace-info-actions";
+      const add = document.createElement("button");
+      add.id = "taskWorkspaceAddTask";
+      add.type = "button";
+      add.textContent = "+ Add task";
+      add.onclick = addTaskListItem;
+      actions.appendChild(add);
+      body.appendChild(actions);
+    }
+    if (state.error) {
+      const error = document.createElement("div");
+      error.id = "taskWorkspaceError";
+      error.className = "task-workspace-error";
+      error.textContent = state.error;
+      body.appendChild(error);
+    }
   }
 
   function beginTaskEdit(index, returnRoute) {
     const task = state?.task;
-    if (!task || String(task.status || "") !== "new") return;
-    state.editDraft = {
-      title: String(task.title || ""),
-      project: String(task.project || ""),
-      items: cloneDraft(task.items || []),
-    };
-    state.editOriginal = draftSignature(state.editDraft);
+    if (!task || String(task.status || "") !== "new" || !ensureTaskEditDraft()) return;
     state.editorReturn = returnRoute === "list" ? "list" : "info";
     state.index = Math.max(0, Math.min(Number(index) || 0, state.editDraft.items.length - 1));
     state.saveRequestId = "";
@@ -429,8 +512,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       const editorRoute = state.route === "editor";
       if (footer) footer.hidden = !(listRoute || editorRoute);
       if (save) {
-        save.hidden = !editorRoute;
-        save.textContent = "Save Task";
+        const canSaveList = listRoute && String(state.task?.status || "") === "new" && !!state.editDraft;
+        save.hidden = !(editorRoute || canSaveList);
+        save.textContent = canSaveList ? "Save Task List" : "Save Task";
       }
       if (back) back.hidden = false;
       byId("taskWorkspaceEyebrow").textContent = editorRoute ? "TASK EDITOR" : (listRoute ? "TASK LIST" : "TASK INFO");
@@ -476,16 +560,26 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
     if (!state) return;
     if (state.kind === "task") {
       if (state.route === "editor") {
+        if (state.editorReturn === "list") {
+          state.route = "list";
+          state.error = "";
+          render();
+          return;
+        }
         if (!(await confirmDiscardIfDirty())) return;
         state.editDraft = null;
         state.editOriginal = "";
         state.saveRequestId = "";
-        state.route = state.editorReturn === "list" ? "list" : "info";
+        state.route = "info";
         state.tab = "overview";
         render();
         return;
       }
       if (state.route === "list") {
+        if (!(await confirmDiscardIfDirty())) return;
+        state.editDraft = null;
+        state.editOriginal = "";
+        state.saveRequestId = "";
         state.route = "info";
         state.tab = "overview";
         render();
@@ -508,13 +602,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
   }
 
   async function saveTaskEdit() {
-    if (state?.kind !== "task" || state.route !== "editor" || !state.editDraft) return;
+    if (state?.kind !== "task" || !["list", "editor"].includes(state.route) || !state.editDraft) return;
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     if (!state.saveRequestId) {
       state.saveRequestId = "task-update-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
     }
+    const returnRoute = state.route === "list"
+      ? "list"
+      : (state.editorReturn === "list" ? "list" : "info");
     try {
       const task = await api("/api/tasks/update", {
         method: "POST",
@@ -530,7 +627,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError })
       state.editDraft = null;
       state.editOriginal = "";
       state.saveRequestId = "";
-      state.route = state.editorReturn === "list" && state.task.items.length > 1 ? "list" : "info";
+      state.route = returnRoute === "list" && state.task.items.length > 1 ? "list" : "info";
+      if (state.route === "list" && String(state.task.status || "") === "new") {
+        state.editDraft = taskDraftFromRecord(state.task);
+        state.editOriginal = draftSignature(state.editDraft);
+      }
       state.tab = "overview";
       state.error = "";
       render();

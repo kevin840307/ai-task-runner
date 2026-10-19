@@ -1032,14 +1032,30 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-info-row").count() == 2
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator(".task-workspace-info-row").count() == 2
+            assert page.locator(".task-workspace-list-row").count() == 2
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
-            page.locator(".task-workspace-durable-edit").first.click()
+            page.locator(".task-workspace-row-edit").first.click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspacePrompt", "Durably edited browser item one")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 2
+
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "Added browser child")
+            page.fill("#taskWorkspacePrompt", "Added child prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 3
+            page.locator(".task-workspace-list-row").nth(2).get_by_title("Move up").click()
+            page.locator(".task-workspace-list-row").nth(2).get_by_text("Remove", exact=True).click()
+            assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Durably edited browser item one"
+            durable_items = state.tasks.list(state.repo_root)["tasks"][0]["items"]
+            assert durable_items[0]["prompt"] == "Durably edited browser item one"
+            assert [item["title"] for item in durable_items] == ["Browser item 1", "Added browser child"]
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             page.click("#taskWorkspaceFooterBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
