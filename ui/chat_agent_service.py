@@ -10,6 +10,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from runner.agent import (
+    chat_features,
+    ensure_native_session,
+    normalize_ask_request,
+    pending_native_ask,
+    resolve_native_ask,
+)
+
 from .chat_service import ChatService
 
 
@@ -192,22 +200,208 @@ class ChatAgentService:
         reasoning = str(item.get("reasoning") or "").strip()
         previous_session = chat.agent_session(project, session_id, agent)
         chat.append_message(project, session_id, "user", str(item["content"]))
-        result = self._runner(
-            project=project,
-            backend=agent,
-            model=model,
-            mode=mode,
-            reasoning=reasoning,
-            session_id=previous_session,
-            prompt=str(item["content"]),
+        features = chat_features(agent, project)
+        native_bridge = (
+            features.ask
+            and features.ask_transport == "question_api"
         )
+        if native_bridge:
+            native_session = ensure_native_session(
+                agent,
+                project,
+                previous_session,
+            )
+            if not native_session:
+                raise RuntimeError(
+                    f"{agent} native Ask requires a stable Agent session"
+                )
+            chat.set_agent_session(project, session_id, agent, native_session)
+            result = self._run_with_native_ask_bridge(
+                project,
+                chat,
+                session_id,
+                item,
+                backend=agent,
+                model=model,
+                mode=mode,
+                reasoning=reasoning,
+                native_session=native_session,
+            )
+        else:
+            result = self._runner(
+                project=project,
+                backend=agent,
+                model=model,
+                mode=mode,
+                reasoning=reasoning,
+                session_id=previous_session,
+                prompt=str(item["content"]),
+            )
         answer = str(result.get("text") or "").strip()
         if not answer:
             raise RuntimeError("Chat Agent returned an empty response")
-        next_session = str(result.get("session_id") or previous_session).strip()
+        next_session = str(
+            result.get("session_id")
+            or (native_session if native_bridge else previous_session)
+        ).strip()
         if next_session:
             chat.set_agent_session(project, session_id, agent, next_session)
         chat.append_message(project, session_id, "assistant", answer)
+
+    @staticmethod
+    def _native_request_id(payload: dict[str, Any]) -> str:
+        return str(
+            payload.get("id")
+            or payload.get("questionID")
+            or payload.get("questionId")
+            or payload.get("requestID")
+            or ""
+        ).strip()
+
+    def _run_with_native_ask_bridge(
+        self,
+        project: Path,
+        chat: ChatService,
+        session_id: str,
+        item: dict[str, Any],
+        *,
+        backend: str,
+        model: str,
+        mode: str,
+        reasoning: str,
+        native_session: str,
+    ) -> dict[str, Any]:
+        result_box: dict[str, Any] = {}
+        done = threading.Event()
+
+        def worker() -> None:
+            try:
+                result_box["value"] = self._runner(
+                    project=project,
+                    backend=backend,
+                    model=model,
+                    mode=mode,
+                    reasoning=reasoning,
+                    session_id=native_session,
+                    prompt=str(item["content"]),
+                )
+            except BaseException as exc:  # hand back to the owning Chat turn
+                result_box["error"] = exc
+            finally:
+                done.set()
+
+        thread = threading.Thread(
+            target=worker,
+            name=f"chat-{backend}-turn",
+            daemon=True,
+        )
+        thread.start()
+        seen: set[str] = set()
+        bridge_error: Exception | None = None
+        while not done.wait(0.5):
+            try:
+                payload = pending_native_ask(
+                    backend,
+                    project,
+                    native_session,
+                )
+            except Exception:
+                # Discovery can be transient while the native client/server changes
+                # state. The owning Agent process retains its own timeout/cleanup.
+                continue
+            if not isinstance(payload, dict):
+                continue
+            native_request = self._native_request_id(payload)
+            if not native_request or native_request in seen:
+                continue
+            try:
+                questions = normalize_ask_request(backend, payload)
+                ask_request = "native-" + uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"{backend}:{native_session}:{native_request}",
+                ).hex
+                chat.create_ask(
+                    project,
+                    session_id,
+                    request_id=ask_request,
+                    turn_id=str(item.get("request_id") or ask_request),
+                    questions=questions,
+                    source="native",
+                    backend=backend,
+                    agent_session_id=native_session,
+                    native_request_id=native_request,
+                )
+                seen.add(native_request)
+            except Exception as exc:
+                bridge_error = exc
+                try:
+                    resolve_native_ask(
+                        backend,
+                        project,
+                        native_session,
+                        payload,
+                        None,
+                        cancelled=True,
+                    )
+                except Exception:
+                    pass
+                seen.add(native_request)
+
+        thread.join(timeout=1)
+        error = result_box.get("error")
+        if isinstance(error, BaseException):
+            raise error
+        if bridge_error is not None:
+            raise RuntimeError(
+                f"Native Ask bridge failed: {bridge_error}"
+            ) from bridge_error
+        value = result_box.get("value")
+        if not isinstance(value, dict):
+            raise RuntimeError("Chat Agent returned invalid result")
+        return value
+
+    def resolve_ask(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+        ask_id: str,
+        cancelled: bool = False,
+    ) -> None:
+        context = chat.ask_context(project, session_id, ask_id)
+        if context.get("source") != "native":
+            return
+        backend = str(context.get("backend") or "").strip()
+        native_session = str(
+            context.get("agent_session_id") or ""
+        ).strip()
+        native_request = str(
+            context.get("native_request_id") or ""
+        ).strip()
+        if not backend or not native_session or not native_request:
+            raise RuntimeError("Native Ask context is incomplete")
+        payload = pending_native_ask(
+            backend,
+            project,
+            native_session,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError(
+                "Native Ask is no longer pending in the Agent service"
+            )
+        if self._native_request_id(payload) != native_request:
+            raise RuntimeError(
+                "Native Ask request no longer matches the durable Chat state"
+            )
+        resolve_native_ask(
+            backend,
+            project,
+            native_session,
+            payload,
+            context.get("answers"),
+            cancelled=cancelled,
+        )
 
     def _lock_for(self, key: tuple[str, str]) -> threading.Lock:
         with self._locks_guard:
