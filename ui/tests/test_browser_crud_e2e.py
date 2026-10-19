@@ -1011,7 +1011,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             queue_rows = page.locator("#projectChatQueueList .project-chat-queue-item")
             queue_rows.first.get_by_role("button", name="Edit", exact=True).click()
             page.fill("#projectChatQueueList .project-chat-queue-item.editing textarea", "temporary edit")
-            page.get_by_role("button", name="Cancel", exact=True).click()
+            page.locator("#projectChatQueueList .project-chat-queue-item.editing").get_by_role("button", name="Cancel", exact=True).click()
             assert [
                 node.inner_text()
                 for node in page.locator("#projectChatQueueList .project-chat-queue-copy").all()
@@ -1409,7 +1409,8 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             # Display-name rename must not retarget Project path or Chat identity.
             row = page.locator("#projectList .project-tree").filter(has_text=added_project.name)
             row.locator(".project-menu-button").click()
-            page.get_by_role("button", name="Rename project", exact=True).click()
+            project_menu = page.locator(".project-action-menu:not([hidden])")
+            project_menu.locator("button").first.click()
             page.locator(".ui-dialog-input").fill("Renamed Default Project")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function(
