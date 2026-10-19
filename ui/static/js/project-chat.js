@@ -17,7 +17,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let queueItems = [];
   let queueBusy = false;
   let queuePollTimer = 0;
-  let settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], default_agent: "" };
+  let settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], features: {}, default_agent: "" };
   let settingsLoading = false;
   let editingQueueId = "";
   let editingQueueValue = "";
@@ -107,7 +107,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   async function refreshSettingsCatalog({ refresh = false, agent = "", model = "" } = {}) {
     const path = projectPath();
     if (!path) {
-      settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], default_agent: "" };
+      settingsCatalog = { agents: [], models: [], modes: [], reasoning: [], workflows: [], features: {}, default_agent: "" };
       renderSettingsControls();
       return;
     }
@@ -129,6 +129,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         modes: Array.isArray(data.modes) ? data.modes : [],
         reasoning: Array.isArray(data.reasoning) ? data.reasoning : [],
         workflows: Array.isArray(data.workflows) ? data.workflows : [],
+        features: data.features && typeof data.features === "object" ? data.features : {},
         default_agent: String(data.default_agent || ""),
       };
     } catch (error) {
@@ -224,6 +225,14 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       description.textContent = selectedMode
         ? selectedMode.description + (selectedMode.unsafe ? " · Automatically approves tools." : "")
         : "Permission / approval mode";
+    }
+    const askCapability = byId("projectChatAskCapability");
+    const askDescription = byId("projectChatAskDescription");
+    const askSupported = settingsCatalog.features?.ask === true;
+    if (askCapability) askCapability.textContent = settingsLoading ? "Checking…" : (askSupported ? "Native" : "Unavailable");
+    if (askDescription) {
+      askDescription.textContent = settingsCatalog.features?.detail || "Native Agent clarification transport";
+      askDescription.title = askDescription.textContent;
     }
     const settingsButton = byId("projectChatSettingsButton");
     if (settingsButton) settingsButton.disabled = settingsLoading || !project;
