@@ -120,7 +120,7 @@ normal Git merge current merge source → captured Project branch
   merge_failure_count > limit ?
   ├─ No
   │   ↓
-  │ existing Runner redo/recovery against latest Project branch
+  │ existing Runner incremental merge-repair against latest Project branch + completed Task result
   │   ↓
   │ Runner Complete
   │   ↓
@@ -233,7 +233,7 @@ post-merge validation required?
           └─ TECHNICAL_ERROR → workspace.abort_merge() → existing technical retry/backoff
 ```
 
-For merge conflict recovery, the orchestrator prepares the latest-target recovery workspace through `workspace/`, then calls the **same existing Runner run API** with that recovery `project_root`.
+For merge conflict recovery, the orchestrator prepares the latest-target recovery workspace through `workspace/`, then calls the **same existing Runner run API** with that recovery `project_root` and a scoped merge-repair instruction to integrate the already-completed Task source (not rerun the original development Task).
 
 Neither `workspace/` nor Runner needs to import the other.
 
@@ -654,7 +654,7 @@ merge_failure_count > merge_failure_limit ?
 │   ↓
 │ collect merge error + latest Project context
 │   ↓
-│ existing Runner redo/recovery
+│ existing Runner incremental merge-repair (preserve completed Task result)
 │   ↓
 │ Runner Complete
 │   ↓
@@ -716,9 +716,10 @@ It does not become another code-repair engine.
 Provide existing Runner with:
 
 ```text
-Original Task prompt / intent
+Original Task prompt / intent (context only; no full redo)
 Original Task base SHA
-Task snapshot SHA
+Immutable completed Task snapshot SHA and committed change/diff
+Current merge source SHA/base SHA (may be an earlier recovery)
 Captured target branch
 Latest target HEAD
 Task branch / commits
@@ -732,9 +733,10 @@ Recovery intent:
 ```text
 Latest Project branch is authoritative.
 
-Redo the original Task against the latest Project code.
-Preserve compatible newer changes.
-Do not merely remove conflict markers.
+Integrate the already-completed Task changes into the latest Project code; do not restart or redo the original Task.
+Use the latest Project branch as the base and the completed Task snapshot/diff as the source to preserve.
+Resolve only changed/conflicting areas; retain unrelated Project changes and compatible Task results.
+Do not merely remove conflict markers; run existing Workflow / Review / Validate on the integrated result.
 Run normal Workflow / Review / Validate.
 ```
 
@@ -758,7 +760,7 @@ latest target branch
 ↓
 local/recovery/T-001-r1-f1
 ↓
-existing Runner redoes original Task
+existing Runner integrates completed Task snapshot into latest Project files
 ↓
 Runner Complete
 ↓
@@ -788,6 +790,19 @@ If the Global failure limit is exceeded, `worktree_ready` must point to/retain t
 Original Task/recovery artifacts may be cleaned only after the latest source pointer and final merge/fallback state are durable.
 
 Recovery branches exist only after real merge failures; they are not a normal integration layer.
+
+### Incremental merge-repair contract (no full Task redo)
+
+The prior `Runner redo/recovery` wording means **integration repair**, not running the original feature-development Task from scratch. The already committed Task result is the delivery payload and must remain available throughout recovery.
+
+1. `workspace/` captures the failed merge's structured conflict report, the original Task base and immutable `task_snapshot_sha`, the current `merge_source_sha`, and the latest target HEAD. After safely aborting the failed target merge, it prepares a **new recovery worktree based on the latest target HEAD**; never modify the user's Project checkout or discard the original Task source.
+2. The orchestrator hands Runner the recovery `project_root` and an explicit **merge-repair task**: compare the completed Task source against its base and the latest Project tree (three-way intent), port the Task's completed changes into the recovery worktree, and resolve conflicts at file/function scope. The original Task prompt is context for intended behavior, **not a command to implement everything again**.
+3. Preserve both sides: latest Project edits are authoritative for current context, while completed Task features must not silently disappear. Unaffected changes and files remain untouched; for conflicting logic, Runner adapts the Task implementation to the latest Project interfaces rather than overwriting newer changes. Do not mechanically replace the entire Project tree with the Task snapshot, re-clone, re-pull, or restart full feature development.
+4. Run the existing Runner review/validation on the **integrated result**. If validation fails, continue repairing the specific integration defects with the same recovery execution path; do not reset to a fresh full Task. Preserve the recovery workspace across ordinary Runner resume/retry.
+5. Commit the successfully integrated recovery tree on its recovery branch; only then atomically update the durable current merge-source branch/SHA/base-SHA/worktree. A failed or interrupted repair must keep the previous committed merge source intact for resume/fallback.
+6. Retry the existing direct merge transaction against the captured target branch. If the target moved since recovery began, apply existing latest-target comparison/validation and real-conflict rules; never silently overwrite that target.
+
+Runner stays Git/worktree-unaware: `workspace/` supplies file/diff/conflict context through the orchestrator, while Runner only sees a `project_root` and a merge-repair instruction. Git three-way data extraction and source pointer updates belong to `workspace/`, not Runner internals.
 
 ---
 
@@ -1123,7 +1138,7 @@ B Runner Complete
 → conflict?
    ├─ no  → merge success → B Closed
    └─ yes → merge_failure_count +1
-            → Runner redo against latest feature/ui
+            → Runner incrementally integrates committed TB changes with latest feature/ui
             → commit recovery result
             → update current merge source
             → retry merge with --no-ff --no-commit
@@ -1181,9 +1196,14 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 - [ ] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
 - [ ] Read current Global `merge_failure_limit` after each real failure.
-- [ ] If count <= limit: call existing Runner against latest target-based recovery worktree, commit recovered result, atomically replace merge_source_branch/SHA/base_SHA/worktree, then retry merge.
+- [ ] If count <= limit: prepare latest-target-based recovery worktree, hand the committed Task result + three-way conflict context to existing Runner for **incremental merge-repair, never full Task redo**, review/validate integrated result, commit recovery source, atomically replace merge_source_branch/SHA/base_SHA/worktree, then retry merge.
 - [ ] If count > limit: stop automatic Main merge, retain latest merge source, and close as Isolated Worktree / worktree_ready with reason merge_failure_limit_exceeded.
 - [ ] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
+
+- [ ] Merge-repair handoff includes original base, committed Task snapshot/diff, latest target HEAD, current merge source, conflict details, and relevant development rules; original Task prompt is intent context only.
+- [ ] Repair incrementally within the latest-target-based recovery worktree: preserve completed Task changes and current Project changes, resolve only integration differences; no full clone/pull/redevelopment or overwrite of the target tree.
+- [ ] Existing Runner reviews/validates the integrated result; resume repairs without discarding prior recovery progress. Publish the replacement merge-source pointer only after a durable recovery commit.
+- [ ] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
 
 ### Phase F — UI
 
