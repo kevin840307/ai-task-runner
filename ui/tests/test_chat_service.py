@@ -687,6 +687,12 @@ def test_agent_settings_service_preserves_native_reasoning_ids(tmp_path: Path, m
                 "native": "openai/gpt-5.2#deep",
                 "description": "variant", "default": False,
             }],
+            "features": {
+                "ask": True,
+                "ask_transport": "question_api",
+                "queue_mode": "service_fifo",
+                "detail": "native",
+            },
         })
 
     monkeypatch.setattr(
@@ -696,6 +702,7 @@ def test_agent_settings_service_preserves_native_reasoning_ids(tmp_path: Path, m
     service = AgentSettingsService(repo, ttl_seconds=60)
     value = service.get(project, "opencode", "openai/gpt-5.2")
     assert value["reasoning"][0]["id"] == "deep"
+    assert value["features"]["ask"] is True
     assert value["models"] == ["openai/gpt-5.2"]
     assert service.get(project, "opencode", "openai/gpt-5.2")["cached"] is True
 
