@@ -253,6 +253,12 @@ def _bridge_for(state: UIState):
                             {"id": "yolo", "native": "native-yolo", "description": "Approve all tools", "supported": True, "unsafe": True},
                         ],
                         "reasoning": reasoning,
+                        "features": {
+                            "ask": selected_agent == "opencode",
+                            "ask_transport": "question_api" if selected_agent == "opencode" else "",
+                            "queue_mode": "service_fifo",
+                            "detail": "Native Ask available" if selected_agent == "opencode" else "Native Ask unavailable",
+                        },
                         "workflows": [
                             {
                                 "id": "wf1",
@@ -1199,6 +1205,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatSettingsPopover").is_visible()
             page.select_option("#projectChatAgentSelect", "opencode")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
+            page.wait_for_function("document.querySelector('#projectChatAskCapability')?.textContent === 'Native'")
             page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
             page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value=\"deep\"]') !== null")
             page.select_option("#projectChatReasoningSelect", "deep")
@@ -1212,6 +1219,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             # Agent switch clears the previous Agent's model ID and loads only legal native options.
             page.select_option("#projectChatAgentSelect", "qwen")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'qwen'")
+            page.wait_for_function("document.querySelector('#projectChatAskCapability')?.textContent === 'Unavailable'")
             page.wait_for_function("document.querySelector('#projectChatModelSelect')?.value === ''")
             assert page.locator("#projectChatModelSelect option[value='openai/gpt-5.2']").count() == 0
             assert page.locator("#projectChatModelSelect option[value='qwen/model-a']").count() == 1
