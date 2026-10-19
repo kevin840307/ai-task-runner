@@ -21,9 +21,10 @@ from ..config.defaults import DEFAULT_QWEN_COMMAND
 from ..runtime.process_runner import run_process
 from ..utils import io_path
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, ChatFeatureSpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
+_QWEN_NATIVE_ASK_MIN_VERSION = (0, 23, 2)
 _QWEN_AUTH_TYPES = {
     "openai",
     "openai-responses",
@@ -154,6 +155,20 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "agent",
     *QWEN_COMPUTER_USE_TOOLS,
 )
+def _qwen_cli_version(root: Path) -> tuple[int, int, int]:
+    try:
+        result = run_process([DEFAULT_QWEN_COMMAND, "--version"], root, 5)
+    except Exception as exc:
+        raise BackendError(f"Qwen version discovery failed: {exc}") from exc
+    if result.return_code or result.timed_out:
+        detail = result.output.strip() or f"exit {result.return_code}"
+        raise BackendError(f"Qwen version discovery failed: {detail[-1000:]}")
+    match = re.search(r"(?<!\d)(\d+)\.(\d+)\.(\d+)", result.output)
+    if not match:
+        raise BackendError("Qwen version discovery returned an unrecognized version")
+    return tuple(int(value) for value in match.groups())
+
+
 def _qwen_settings_paths(root: Path) -> tuple[Path, ...]:
     qwen_home = Path(os.environ.get("QWEN_HOME") or (Path.home() / ".qwen")).expanduser()
     if os.name == "nt":
@@ -751,6 +766,24 @@ class QwenBackend(BaseBackend):
             InteractionModeSpec("read", "plan", "Read-only analysis; no file edits or shell commands."),
             InteractionModeSpec("auto", "auto", "Classifier-approved safe actions with risky actions blocked."),
             InteractionModeSpec("yolo", "yolo", "Automatically approve all tool calls.", unsafe=True),
+        )
+
+    @classmethod
+    def chat_features(cls, root: Path) -> ChatFeatureSpec:
+        try:
+            version = _qwen_cli_version(root)
+        except BackendError as exc:
+            return ChatFeatureSpec(detail=str(exc))
+        supported = version >= _QWEN_NATIVE_ASK_MIN_VERSION
+        version_text = ".".join(str(value) for value in version)
+        return ChatFeatureSpec(
+            ask=supported,
+            ask_transport="daemon_permission_request" if supported else "",
+            detail=(
+                f"Qwen {version_text} exposes ask_user_question through daemon permission requests."
+                if supported
+                else f"Qwen {version_text} is older than the verified native Ask contract 0.23.2."
+            ),
         )
 
     @classmethod
