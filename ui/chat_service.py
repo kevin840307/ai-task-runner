@@ -390,7 +390,7 @@ class ChatService:
             answers,
             request_id=request_id,
         )
-        if started["duplicate"] and not started["in_flight"]:
+        if started["duplicate"]:
             return started
         return self.finish_ask_resolution(
             project,
@@ -415,7 +415,7 @@ class ChatService:
             request_id=request_id,
             cancelled=True,
         )
-        if started["duplicate"] and not started["in_flight"]:
+        if started["duplicate"]:
             return started
         return self.finish_ask_resolution(
             project,
