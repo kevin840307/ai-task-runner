@@ -1082,12 +1082,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             assert page.locator(".project-chat-task-draft-item").first.get_by_text("Edited browser item one").is_visible()
             assert state.tasks.list(state.repo_root)["tasks"] == []
-            active_draft_id = page.locator(".project-chat-task-draft").get_attribute("data-draft-id")
-            active_session_id = state.chat_service.sessions(state.repo_root)["active_session_id"]
+            active_draft = page.locator(".project-chat-task-draft")
+            active_draft_id = active_draft.get_attribute("data-draft-id")
+            draft_session_id = active_draft.get_attribute("data-session-id")
+            assert draft_session_id
             assert state.task_drafts.get(
                 state.repo_root,
                 active_draft_id,
-                session_id=active_session_id,
+                session_id=draft_session_id,
             )["draft"]["items"][0]["prompt"] == "Edited browser item one"
 
             page.get_by_role("button", name="Create Task", exact=True).click()

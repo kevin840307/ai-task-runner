@@ -745,6 +745,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const card = document.createElement("article");
     card.className = "message project-chat-message assistant project-chat-task-draft";
     card.dataset.draftId = entry.draft_id;
+    card.dataset.sessionId = String(entry.session_id || activeSessionId || "");
     const draft = entry.draft || {};
     const head = document.createElement("div");
     head.className = "project-chat-task-draft-head";
@@ -778,9 +779,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     edit.setAttribute("aria-label", "Edit Draft");
     edit.onclick = () => {
       const originProject = projectPath();
-      const originSession = activeSessionId;
-      const current = findTaskDraft(originSession, entry.draft_id);
+      const viewSession = activeSessionId;
+      const current = findTaskDraft(viewSession, entry.draft_id);
       if (!current) return;
+      const ownerSession = String(current.session_id || viewSession || "");
+      if (!ownerSession) return;
       openTaskDraft?.({
         project: originProject,
         draft: current.draft,
@@ -791,13 +794,13 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
             method: "POST",
             body: JSON.stringify({
               project: originProject,
-              session_id: originSession,
+              session_id: ownerSession,
               draft_id: entry.draft_id,
               draft: nextDraft,
             }),
           });
-          if (!updateTaskDraftModel(originSession, entry.draft_id, data.draft)) return;
-          if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
+          if (!updateTaskDraftModel(viewSession, entry.draft_id, data.draft)) return;
+          if (projectPath() === originProject && activeSessionId === viewSession) renderMessages();
         },
       });
     };
@@ -1120,20 +1123,22 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   async function dismissTaskDraft(draftId) {
     const path = projectPath();
-    const session = activeSessionId;
-    if (!path || !session) return;
+    const viewSession = activeSessionId;
+    const entry = findTaskDraft(viewSession, draftId);
+    const ownerSession = String(entry?.session_id || viewSession || "");
+    if (!path || !viewSession || !ownerSession) return;
     try {
       await api("/api/chat/task-draft/dismiss", {
         method: "POST",
         body: JSON.stringify({
           project: path,
-          session_id: session,
+          session_id: ownerSession,
           draft_id: draftId,
         }),
       });
-      const rows = (taskDraftsBySession.get(session) || []).filter((row) => row.draft_id !== draftId);
-      taskDraftsBySession.set(session, rows);
-      if (projectPath() === path && activeSessionId === session) await refreshMessages();
+      const rows = (taskDraftsBySession.get(viewSession) || []).filter((row) => row.draft_id !== draftId);
+      taskDraftsBySession.set(viewSession, rows);
+      if (projectPath() === path && activeSessionId === viewSession) await refreshMessages();
     } catch (error) {
       showError?.(error.message, "Dismiss TaskDraft failed");
     }
@@ -1141,19 +1146,21 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   async function createTaskFromDraft(draftId, returnFocus = null) {
     const path = projectPath();
-    const session = activeSessionId;
-    if (!path || !session) return;
-    const entry = findTaskDraft(session, draftId);
+    const viewSession = activeSessionId;
+    if (!path || !viewSession) return;
+    const entry = findTaskDraft(viewSession, draftId);
     if (!entry) {
       showError?.("TaskDraft is no longer available in this Chat.", "Create Task failed");
       return;
     }
+    const ownerSession = String(entry.session_id || viewSession || "");
+    if (!ownerSession) return;
     try {
       const task = await api("/api/tasks/create-from-draft", {
         method: "POST",
         body: JSON.stringify({
           project: path,
-          session_id: session,
+          session_id: ownerSession,
           draft_id: entry.draft_id,
           request_id: "create-" + entry.draft_id,
         }),
@@ -1163,14 +1170,14 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
           method: "POST",
           body: JSON.stringify({
             project: path,
-            session_id: session,
+            session_id: ownerSession,
             draft_id: entry.draft_id,
           }),
         });
       } catch (_) {}
-      const rows = (taskDraftsBySession.get(session) || []).filter((row) => row.draft_id !== entry.draft_id);
-      taskDraftsBySession.set(session, rows);
-      if (projectPath() !== path || activeSessionId !== session) return;
+      const rows = (taskDraftsBySession.get(viewSession) || []).filter((row) => row.draft_id !== entry.draft_id);
+      taskDraftsBySession.set(viewSession, rows);
+      if (projectPath() !== path || activeSessionId !== viewSession) return;
       await refreshMessages();
       showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
       openTask?.(task, { returnFocus, workflows: settingsCatalog.workflows });

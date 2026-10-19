@@ -88,6 +88,7 @@ def test_task_draft_edit_is_backend_owned_and_session_scoped(tmp_path: Path) -> 
         spec="edit me",
         draft_mode="single",
         backend="qwen",
+        workflow="workflow.yaml",
         request_id="draft-edit-1",
         session_id="session-a",
     )
