@@ -68,6 +68,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.tasks = TaskService()
         if not self.projects_file.exists():
             self._write_projects([])
+        self.ensure_project_ids()
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
 
