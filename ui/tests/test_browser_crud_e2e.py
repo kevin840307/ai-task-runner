@@ -958,7 +958,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 else:
                     page.click("#taskWorkspaceFooterBack")
                 page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
-                assert page.locator(".ui-dialog-body").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
+                assert page.locator(".ui-dialog-card").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
                 page.locator("[data-dialog-cancel]").click()
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Standalone task prompt"
 
