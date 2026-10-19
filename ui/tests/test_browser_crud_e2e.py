@@ -407,20 +407,6 @@ def _bridge_for(state: UIState):
                         body.get("draft"),
                         session_id=session_id,
                     )
-                    trace = getattr(state, "_browser_task_draft_trace", [])
-                    stored = state.task_drafts.get(
-                        project_path,
-                        str(body.get("draft_id", "")),
-                        session_id=session_id,
-                    )
-                    trace.append({
-                        "op": "update",
-                        "input": (body.get("draft") or {}).get("items", [{}])[0].get("prompt"),
-                        "result": data["draft"]["items"][0]["prompt"],
-                        "stored": stored["draft"]["items"][0]["prompt"],
-                        "session": session_id,
-                    })
-                    state._browser_task_draft_trace = trace
                 elif path == "/api/chat/task-draft/dismiss":
                     project_path = Path(body["project"])
                     session_id = str(body.get("session_id", ""))
@@ -467,13 +453,6 @@ def _bridge_for(state: UIState):
                     state._browser_last_create_from_draft = json.loads(
                         json.dumps(canonical["draft"])
                     )
-                    trace = getattr(state, "_browser_task_draft_trace", [])
-                    trace.append({
-                        "op": "create",
-                        "stored": canonical["draft"]["items"][0]["prompt"],
-                        "session": session_id,
-                    })
-                    state._browser_task_draft_trace = trace
                     data = state.tasks.create(
                         project_path,
                         canonical["draft"],
@@ -1297,9 +1276,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             durable = state.tasks.list(state.repo_root)["tasks"]
             assert len(durable) == 1
             assert durable[0]["status"] == "new"
-            assert state._browser_last_create_from_draft["items"][0]["prompt"] == "Edited browser item one", getattr(
-                state, "_browser_task_draft_trace", []
-            )
+            assert state._browser_last_create_from_draft["items"][0]["prompt"] == "Edited browser item one"
             assert durable[0]["items"][0]["prompt"] == "Edited browser item one"
             page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
