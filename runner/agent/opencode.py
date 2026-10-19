@@ -10,7 +10,7 @@ from typing import Any
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
 from ..runtime.process_runner import run_process
 from ..workspace import ensure_instruction_file, update_goal_reference
-from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
+from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, ChatFeatureSpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
 _PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
@@ -225,6 +225,18 @@ class OpenCodeBackend(BaseBackend):
             InteractionModeSpec("read", "permission:read-only", "Read-only project inspection; edits and commands are denied."),
             InteractionModeSpec("auto", "--auto", "Auto-approve permission requests that are not explicitly denied."),
             InteractionModeSpec("yolo", "permission:allow", "Allow all OpenCode permissions for this Chat turn.", unsafe=True),
+        )
+
+    @classmethod
+    def chat_features(cls, root: Path) -> ChatFeatureSpec:
+        try:
+            _opencode_api_payload(root, "question.list")
+        except BackendError as exc:
+            return ChatFeatureSpec(detail=f"OpenCode question API unavailable: {exc}")
+        return ChatFeatureSpec(
+            ask=True,
+            ask_transport="question_api",
+            detail="OpenCode native question.list/reply/reject API is available.",
         )
 
     @classmethod
