@@ -729,13 +729,15 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   function updateTaskDraftModel(sessionId, draftId, nextDraft) {
-    const entry = findTaskDraft(sessionId, draftId);
-    if (!entry || !entry.draft || typeof entry.draft !== "object") return false;
+    const rows = taskDraftsBySession.get(sessionId) || [];
+    const index = rows.findIndex((row) => row.draft_id === draftId);
+    if (index < 0) return false;
     const value = globalThis.structuredClone
       ? globalThis.structuredClone(nextDraft)
       : JSON.parse(JSON.stringify(nextDraft));
-    for (const key of Object.keys(entry.draft)) delete entry.draft[key];
-    Object.assign(entry.draft, value);
+    const next = rows.slice();
+    next[index] = { ...rows[index], draft: value };
+    taskDraftsBySession.set(sessionId, next);
     return true;
   }
 
