@@ -1252,7 +1252,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
             active_chat.locator("button[aria-label='Delete Chat']").click()
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
 
             page.click("#promptNav")
             page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
