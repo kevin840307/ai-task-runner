@@ -1371,16 +1371,18 @@ def test_opencode_native_ask_transport_reuses_shared_api(monkeypatch, tmp_path):
 
     assert calls[0][:3] == ["opencode", "api", "session.create"]
     assert json.loads(calls[0][calls[0].index("--data") + 1])["title"] == "AI Task Runner Chat"
-    assert calls[1] == ["opencode", "api", "question.list"]
-    assert calls[2][:3] == ["opencode", "api", "question.reply"]
+    assert calls[1][:3] == ["opencode", "api", "session.question.list"]
+    assert "sessionID=ses_native" in calls[1]
+    assert calls[2][:3] == ["opencode", "api", "session.question.reply"]
+    assert "sessionID=ses_native" in calls[2]
+    assert "requestID=q-native" in calls[2]
     assert json.loads(calls[2][calls[2].index("--data") + 1]) == {
-        "questionID": "q-native",
-        "response": {"answers": [["Safe"]]},
+        "answers": [["Safe"]]
     }
-    assert calls[3][:3] == ["opencode", "api", "question.reject"]
-    assert json.loads(calls[3][calls[3].index("--data") + 1]) == {
-        "questionID": "q-native"
-    }
+    assert calls[3][:3] == ["opencode", "api", "session.question.reject"]
+    assert "sessionID=ses_native" in calls[3]
+    assert "requestID=q-native" in calls[3]
+    assert "--data" not in calls[3]
 
 
 def test_opencode_native_session_preserves_existing_id(monkeypatch, tmp_path):
