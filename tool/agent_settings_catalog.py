@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 from runner.agent import (
     BackendError,
     available_models,
+    chat_features,
     interaction_modes,
     reasoning_options,
 )
@@ -36,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         except BackendError:
             modes = ()
         reasoning = reasoning_options(args.backend, root, args.model)
+        features = chat_features(args.backend, root)
     except BackendError as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 1
@@ -44,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         "models": models,
         "modes": [asdict(item) for item in modes],
         "reasoning": [asdict(item) for item in reasoning],
+        "features": asdict(features),
     }, ensure_ascii=False))
     return 0
 
