@@ -12,6 +12,7 @@ from runner.agent import (
     BaseBackend,
     available_models,
     backend_names,
+    chat_features,
     configure_backend_args,
     configure_model_args,
     configure_interaction_args,
@@ -1187,6 +1188,48 @@ def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
     assert by_token[("/denied", "skill")].permission == "deny"
     assert by_token[("/denied", "skill")].enabled is False
 
+
+
+def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
+    from runner.agent import opencode as opencode_module
+    from runner.agent import qwen as qwen_module
+    from runner.runtime.process_runner import ProcessResult
+
+    monkeypatch.setattr(
+        qwen_module,
+        "run_process",
+        lambda *args, **kwargs: ProcessResult(0, "qwen-code 0.23.2\n", False, 0.01),
+    )
+    qwen_features = chat_features("qwen", tmp_path)
+    assert qwen_features.ask is True
+    assert qwen_features.ask_transport == "daemon_permission_request"
+    assert qwen_features.queue_mode == "service_fifo"
+
+    monkeypatch.setattr(
+        qwen_module,
+        "run_process",
+        lambda *args, **kwargs: ProcessResult(0, "qwen-code 0.22.9\n", False, 0.01),
+    )
+    old_qwen = chat_features("qwen", tmp_path)
+    assert old_qwen.ask is False
+    assert "0.23.2" in old_qwen.detail
+
+    monkeypatch.setattr(
+        opencode_module,
+        "_opencode_api_payload",
+        lambda root, operation: [],
+    )
+    opencode_features = chat_features("opencode", tmp_path)
+    assert opencode_features.ask is True
+    assert opencode_features.ask_transport == "question_api"
+
+    def unavailable(root, operation):
+        raise BackendError("unknown operation")
+
+    monkeypatch.setattr(opencode_module, "_opencode_api_payload", unavailable)
+    unavailable_features = chat_features("opencode", tmp_path)
+    assert unavailable_features.ask is False
+    assert "unavailable" in unavailable_features.detail.lower()
 
 
 def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_path, monkeypatch):
