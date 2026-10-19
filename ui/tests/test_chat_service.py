@@ -1191,6 +1191,68 @@ def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
 
 
 
+def test_native_ask_http_submit_is_idempotent_and_uses_chat_agent_owner(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+
+    server = UIServer(repo, "127.0.0.1", 0)
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    created = server.state.chat_service.create_ask(
+        project,
+        session_id,
+        request_id="native-http-question",
+        turn_id="native-http-turn",
+        questions=[{
+            "id": "q1",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["Yes", "No"],
+        }],
+        source="native",
+        backend="opencode",
+        agent_session_id="ses-native",
+        native_request_id="native-http-request",
+    )
+    ask_id = created["ask"]["ask_id"]
+    native_calls: list[tuple[str, bool]] = []
+
+    def fake_resolve(project_arg, chat_arg, *, session_id, ask_id, cancelled=False):
+        native_calls.append((ask_id, cancelled))
+
+    server.state.chat_agent.resolve_ask = fake_resolve
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    body = {
+        "project": str(project),
+        "session_id": session_id,
+        "ask_id": ask_id,
+        "answers": {"q1": {"value": "Yes"}},
+        "request_id": "native-http-answer",
+    }
+    try:
+        first = _json_request(
+            f"{base}/api/chat/ask/submit",
+            method="POST",
+            body=body,
+        )
+        assert first["ask"]["status"] == "answered"
+        repeated = _json_request(
+            f"{base}/api/chat/ask/submit",
+            method="POST",
+            body=body,
+        )
+        assert repeated["duplicate"] is True
+        assert native_calls == [(ask_id, False)]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_waiting_ask_blocks_new_turns_into_session_queue_until_resolved(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
