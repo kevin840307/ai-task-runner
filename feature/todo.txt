@@ -49,9 +49,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 用實際瀏覽器驗證單筆 / 多筆 Draft Edit、Save、Back、Create、Dismiss 的完整流程。
 [x] 驗證開啟 Editor 時 Chat 不縮窄、不位移、不被浮層蓋住；Editor / Picker / Suggestion 的層級正確。
 [x] 驗證 @task / @task-single / @task-list 三條路徑與錯誤提示都能直接操作。
-[ ] 驗證 Queue 編輯 / 刪除後順序、計數與切換 Chat session 的資料隔離。
-[ ] 實際瀏覽器測試連續送出至少 3 筆，確認後續訊息自動入 Queue 並按 FIFO 續跑；Ask 等待期間送出也須排隊，Submit / Cancel 後能繼續處理。
-[ ] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
+[x] 驗證 Queue 編輯 / 刪除後順序、計數與切換 Chat session 的資料隔離。
+[x] 實際瀏覽器測試連續送出至少 3 筆，確認後續訊息自動入 Queue 並按 FIFO 續跑；Ask 等待期間送出也須排隊，Submit / Cancel 後能繼續處理。
+[x] 驗證 Ask 的 Other 選項切換不會保留舊答案，必填驗證、Next、Submit、Cancel 都正確。
 [x] 對 Prototype 所有 JavaScript 檔做單檔與依 HTML 載入順序的語法檢查。
 [x] 檢查 TaskDraft 不會出現在 Board、Task count、Preset、歷史紀錄或持久化資料，除非使用者按 Create Task。
 [x] Mock 功能入口可透過 @ 自動提示發現；Ask 測試入口為 @ask-demo。
@@ -67,7 +67,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 點擊左側 Project：選取該 Project 並直接進入該 Project 的 Chat。
 [x] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
 [x] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
-[ ] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
+[x] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
 [ ] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [ ] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
@@ -93,14 +93,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Language 支援繁體中文 / English 的全域 preference，Prototype 保存 preference 並更新 document lang；正式版再接完整 i18n 字串來源。
 [x] 正式版 Global Settings 由單一 Backend/config owner 持久化；前端 localStorage 只屬 Prototype，不可成為正式設定真相來源。
 [x] 正式版設定 schema 需可版本化、驗證、migration，UI / CLI / API 讀同一份設定。
-[ ] Browser 驗證 Settings section 切換、重新整理保存、System appearance 跟隨 OS、5 組 palette 在 Light/Dark 下可讀，Project 切換不影響 Global preference。
+[x] Browser 驗證 Settings section 切換、重新整理保存、System appearance 跟隨 OS、5 組 palette 在 Light/Dark 下可讀，Project 切換不影響 Global preference。
 
 
 3. Composer 與指令自動提示
 --------------------------
 
-[ ] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
-[ ] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
+[x] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
+[x] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
 [ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
 [x] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
 [x] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
@@ -126,7 +126,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Project rename / delete 同步搬移或清除 Project-level Agent / Model / Mode / Reasoning / Workflow 與 Project Chat scope。
 [x] New Chat 不持有 default；永遠使用目前 Project 的 Agent / Model / Mode / Reasoning / Workflow。
 [x] Standalone New Task 的初始 Workflow 改讀目前 Project preference，而不是固定 ralphy_ai_validate.yaml。
-[ ] Browser 測試：Global Defaults 改成 OpenCode 後，新 Project 使用 OpenCode defaults；舊 Project 保持原設定；New Chat 繼承目前 Project；reload 後仍一致。
+[x] Browser 測試：Global Defaults 改成 OpenCode 後，新 Project 使用 OpenCode defaults；舊 Project 保持原設定；New Chat 繼承目前 Project；reload 後仍一致。
 [x] Prototype 將 Workflow / Agent / Model / Reasoning 收進 Chat 設定；Mode 保留 Composer 快速切換，避免常用操作被藏太深。
 [x] Project-level Reasoning prototype 支援固定五種：low / medium / high / xhigh / max；預設 medium，跟 Project localStorage 一起保存。
 [x] Global Defaults 增加 Default Reasoning；新 Project copy 一次，既有 Project 缺欄位時使用 legacy base medium，不受之後 Global Defaults 改動影響。
@@ -141,9 +141,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Adapter 必須回報每個模式是否支援，以及對應的原生設定；不支援的模式需隱藏或 disabled，不可默默模擬。
 [x] Qwen Code：Read 對應原生 Plan / read-only；Auto 與 YOLO 依目前 CLI 支援的 approval mode 映射。
 [x] OpenCode：Read 對應禁止 edit / write / bash 等修改權限的 permission profile；Auto 使用安全預設與必要 Ask；YOLO 只有在 Agent 真正支援時才映射為允許全部工具。
-[ ] UI 顯示目前模式的簡短安全說明，尤其 YOLO 要清楚指出可能自動核准工具。
+[x] UI 顯示目前模式的簡短安全說明，尤其 YOLO 要清楚指出可能自動核准工具。
 [x] 真正的權限設定與工具核准仍由 Agent / Backend adapter 執行；不能只在 UI 顯示文字。
-[ ] 測試切換 Agent 後 Model 是否重設到合法預設，且不會留下另一個 Agent 的 Model ID。
+[x] 測試切換 Agent 後 Model 是否重設到合法預設，且不會留下另一個 Agent 的 Model ID。
 
 
 5. Agent Skills / Slash Commands 的取得方式
@@ -152,13 +152,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增統一的 Agent capability discovery 介面，前端只顯示 Backend 回傳的能力，不自行掃描本機檔案系統。
 [x] 能力資料至少包含：token / name、description、kind、source、user_invocable、enabled、permission / availability。
 [x] Qwen Code adapter 優先使用 Qwen Code 的 SkillManager / slash-command registry 或目前 Agent process 可提供的能力投影。
-[ ] Qwen Code 要尊重內建命令、擴充命令、專案 / 個人 Skills、path-gated Skills 與 user-invocable 設定；不要只用檔名猜測。
+[x] Qwen Code 要尊重內建命令、擴充命令、專案 / 個人 Skills、path-gated Skills 與 user-invocable 設定；不要只用檔名猜測。
 [x] OpenCode adapter 使用其 resolved command / skill registry 或官方 UI/TUI 使用的能力來源。
-[ ] OpenCode 要尊重專案與全域 Skills、命令設定、Agent 的 skill permission、deny / ask / allow 與停用 skill tool 的規則。
-[ ] OpenCode 的 Skills 可能來自 .opencode/skills、.claude/skills、.agents/skills 及使用者全域目錄；由 OpenCode 自己決定解析結果，前端不重做搜尋。
+[x] OpenCode 要尊重專案與全域 Skills、命令設定、Agent 的 skill permission、deny / ask / allow 與停用 skill tool 的規則。
+[x] OpenCode 的 Skills 可能來自 .opencode/skills、.claude/skills、.agents/skills 及使用者全域目錄；由 OpenCode 自己決定解析結果，前端不重做搜尋。
 [x] 不把 Skill 全文塞入前端清單；列表只呈現摘要，使用者選取後交由 Agent 原生機制載入。
 [x] capability 結果可以快取作為 UI 投影，但 Agent、Project、設定或權限改變時必須重新整理。
-[ ] Mock Qwen / OpenCode 的 / 清單應不同，讓使用者可以測試切換 Agent 的效果。
+[x] Mock Qwen / OpenCode 的 / 清單應不同，讓使用者可以測試切換 Agent 的效果。
 [x] 正式版若某個能力取得失敗，要顯示錯誤 / Retry，不可退回一份看似真實的硬編碼清單。
 [x] 保留 /btw 等 Agent 原生 side question 命令；它與本系統 Ask（暫停目前 turn 向使用者詢問）不是同一功能。
 
@@ -186,7 +186,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Mock 支援新增多筆、編輯、取消編輯、刪除、空白驗證、長訊息、切換 Chat session。
 [x] Backend 擁有 Queue 的真實順序、持久化與出隊狀態；UI 只顯示 Backend projection。
 [x] Agent 取消、session 過期、API 錯誤或使用者重啟後，不得無聲遺失未處理 Queue 項目。
-[ ] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。
+[x] 定義 Queue item 狀態（至少 queued / dispatching / completed / failed / cancelled），避免 UI 自行猜測是否已送出。
 
 
 7. AI Ask / Clarification（反問使用者）
