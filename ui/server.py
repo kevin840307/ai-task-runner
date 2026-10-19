@@ -318,6 +318,16 @@ class Handler(SimpleHTTPRequestHandler):
                     body.get("draft"),
                     request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/tasks/update":
+                project = self._project(body)
+                expected_updated_at = body.get("expected_updated_at")
+                return self._json(self.state.tasks.update(
+                    project,
+                    str(body.get("task_id", "")),
+                    body.get("draft"),
+                    request_id=str(body.get("request_id", "")),
+                    expected_updated_at=expected_updated_at,
+                ))
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
                 preferences = self.state.project_preferences.get(project)
