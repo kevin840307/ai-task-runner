@@ -254,7 +254,22 @@ def _bridge_for(state: UIState):
                         ],
                         "reasoning": reasoning,
                         "workflows": [
-                            {"id": "wf1", "name": "ralphy_ai_validate.yaml", "path": str(state.repo_root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"), "scope": "global"}
+                            {
+                                "id": "wf1",
+                                "name": "ralphy_ai_validate.yaml",
+                                "path": str(state.repo_root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"),
+                                "scope": "global",
+                                "requires_python_validator": False,
+                                "has_ai_validator": False,
+                            },
+                            {
+                                "id": "wf2",
+                                "name": "mixed.yaml",
+                                "path": str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml"),
+                                "scope": "global",
+                                "requires_python_validator": True,
+                                "has_ai_validator": True,
+                            },
                         ],
                         "cached": False,
                     }
@@ -928,6 +943,12 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
+            mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
+            page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").is_visible()
+            page.fill("#taskWorkspaceValidator", str(state.repo_root / "validate.py"))
+            page.fill("#taskWorkspaceAiValidatorPrompt", str(state.repo_root / "review.md"))
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.fill("#taskWorkspaceDraftTitle", "Chat browser list")
@@ -937,6 +958,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert len(created) == 2
             assert created[1]["kind"] == "task_list"
             assert [item["prompt"] for item in created[1]["items"]] == ["First list prompt", "Second list prompt"]
+            assert created[1]["items"][0]["validator"].endswith("validate.py")
+            assert created[1]["items"][0]["ai_validator_prompt_file"].endswith("review.md")
             assert created[1]["project"] == str(state.repo_root.resolve())
             browser.close()
 

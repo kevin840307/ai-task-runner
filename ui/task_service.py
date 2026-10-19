@@ -8,7 +8,7 @@ import time
 import uuid
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -33,8 +33,13 @@ def _safe_task_id(value: str) -> bool:
 
 
 class TaskService:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        workflow_requirements: Callable[[Path, str], dict[str, Any]] | None = None,
+    ) -> None:
         self._lock = threading.RLock()
+        self._workflow_requirements = workflow_requirements
 
     def list(self, project: Path) -> dict[str, Any]:
         with self._lock:
@@ -52,11 +57,11 @@ class TaskService:
 
     def validate(self, project: Path, draft: Any) -> dict[str, Any]:
         """Validate transient editor data without creating durable Task state."""
-        return {"draft": validate_task_draft_for_create(draft, project)}
+        return {"draft": validate_task_draft_for_create(draft, project, workflow_requirements=self._workflow_requirements)}
 
     def dump_yaml(self, project: Path, draft: Any) -> dict[str, Any]:
         """Serialize the canonical editable Task fields without runtime state."""
-        validated = validate_task_draft_for_create(draft, project)
+        validated = validate_task_draft_for_create(draft, project, workflow_requirements=self._workflow_requirements)
         raw_items = draft.get("items") if isinstance(draft, dict) else []
         items: list[dict[str, Any]] = []
         for index, item in enumerate(validated["items"]):
@@ -91,7 +96,7 @@ class TaskService:
             raise ValueError(f"Task YAML is invalid: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("Task YAML must contain an object")
-        validated = validate_task_draft_for_create(payload, project)
+        validated = validate_task_draft_for_create(payload, project, workflow_requirements=self._workflow_requirements)
         raw_items = payload.get("items") if isinstance(payload.get("items"), list) else []
         items: list[dict[str, Any]] = []
         for index, item in enumerate(validated["items"]):
@@ -118,7 +123,7 @@ class TaskService:
             raise ValueError("request_id is required")
         if len(request) > 240:
             raise ValueError("request_id is too long")
-        validated = validate_task_draft_for_create(draft, project)
+        validated = validate_task_draft_for_create(draft, project, workflow_requirements=self._workflow_requirements)
         with self._lock:
             state = self._load(project)
             existing_id = state["create_requests"].get(request)
@@ -170,7 +175,7 @@ class TaskService:
             raise ValueError("request_id is required")
         if len(request) > 240:
             raise ValueError("request_id is too long")
-        validated = validate_task_draft_for_create(draft, project)
+        validated = validate_task_draft_for_create(draft, project, workflow_requirements=self._workflow_requirements)
         raw_items = draft.get("items") if isinstance(draft, dict) else []
         with self._lock:
             state = self._load(project)

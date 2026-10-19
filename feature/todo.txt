@@ -275,7 +275,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Paused / Closed 重設回 New 必須確認；Paused Reset 明確轉 New + idle + progress 0，已完成 Run 保留 History，舊的 resumable run 標記 abandoned。
 [x] Prototype Toast 的 z-index 高於 Task Editor / Task List overlay，驗證提示不會被抽屜蓋住。
 [ ] 正式版欄位錯誤需顯示在對應欄位附近，並保留使用者輸入；不能只依賴短暫 Toast。
-[ ] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
+[x] Task 的 Project、Workflow、Prompt、Validator、Workspace 欄位要在手動新增與 AI Draft 編輯時共用同一套驗證與欄位規則。
 [x] File 型欄位統一提供兩種來源：手動輸入 path，或 Upload file；不再提供 built-in validator file / preset path。
 [x] 手動輸入 path：Create / Save 時直接使用原 path，不 upload、不 copy、不改寫。
 [x] Upload file：先以 transient upload metadata / bytes 暫存；Create / Save 時由 backend copy 到 Runner-managed path，再把回傳的新 canonical path 寫入 Task item。
@@ -286,7 +286,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 正式 backend upload API：接收 bytes + filename + target Task/item identity，原子 copy 到 managed storage；copy 失敗時 Create / Save fail closed，保留 staged upload 供重試。
 [ ] Browser 測試 Upload file → Create/Save → managed path 回填；再測 Upload 後手動輸入 path 時 manual path 優先且 staged upload 被取消。
 [x] Composer 的 Ask mock 按鈕與 handler 已移除；@ask-demo 保留作為 Ask flow 測試入口。
-[ ] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
+[x] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。
 [x] + New 與 Chat TaskDraft 的建立/編輯 UI 共用同一份 TaskEditor / TaskListWorkspace HTML；來源只提供 draft data 與 returnTarget，不建立 Chat-only / Board-only form。
 [x] Chat Composer 移除無功能的 Project chip；Project context 由頁面 / Chat session 本身提供，不重複顯示固定 tag。

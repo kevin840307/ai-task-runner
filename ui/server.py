@@ -42,6 +42,33 @@ except ImportError:
 
 
 class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
+    def _task_workflow_requirements(self, project: Path, workflow: str) -> dict:
+        selected = str(workflow or "").strip()
+        default = {"requires_python_validator": False, "has_ai_validator": False}
+        if not selected:
+            return default
+        try:
+            rows = self.studio_files(project).get("workflows", [])
+        except (OSError, ValueError):
+            rows = []
+        for row in rows:
+            aliases = {
+                str(row.get("id") or ""),
+                str(row.get("name") or ""),
+                str(row.get("display_name") or ""),
+                str(row.get("reference") or ""),
+                str(row.get("path") or ""),
+            }
+            if selected in aliases:
+                return {
+                    "requires_python_validator": bool(row.get("requires_python_validator")),
+                    "has_ai_validator": bool(row.get("has_ai_validator")),
+                }
+        candidate = Path(selected).expanduser()
+        if candidate.is_absolute() and candidate.is_file():
+            return self._workflow_requirements(candidate.resolve())
+        return default
+
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.ui_root = self.repo_root / "ui"
@@ -64,8 +91,11 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.agent_capabilities = AgentCapabilityService(self.repo_root)
         self.agent_settings = AgentSettingsService(self.repo_root)
         self.project_preferences = ProjectPreferences()
-        self.task_drafts = TaskDraftService(self.repo_root)
-        self.tasks = TaskService()
+        self.task_drafts = TaskDraftService(
+            self.repo_root,
+            workflow_requirements=self._task_workflow_requirements,
+        )
+        self.tasks = TaskService(workflow_requirements=self._task_workflow_requirements)
         if not self.projects_file.exists():
             self._write_projects([])
         self.ensure_project_ids()

@@ -32,9 +32,16 @@ _DRAFT_ID = re.compile(r"^draft-[0-9a-f]{32}$")
 
 
 class TaskDraftService:
-    def __init__(self, repo_root: Path, *, runner: Callable[..., dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        *,
+        runner: Callable[..., dict[str, Any]] | None = None,
+        workflow_requirements: Callable[[Path, str], dict[str, Any]] | None = None,
+    ) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self._runner = runner or self._run_tool
+        self._workflow_requirements = workflow_requirements
         self._lock = threading.RLock()
         self._requests: dict[tuple[str, str, str], str] = {}
         self._drafts: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -126,7 +133,7 @@ class TaskDraftService:
         project_key = str(project.resolve())
         session = str(session_id or "").strip()
         key = (project_key, session, self._draft_id(draft_id))
-        validated = validate_task_draft_for_create(draft, project)
+        validated = validate_task_draft_for_create(draft, project, workflow_requirements=self._workflow_requirements)
         with self._lock:
             current = self._drafts.get(key)
             if current is None:

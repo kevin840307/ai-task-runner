@@ -178,6 +178,47 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     assert duplicate["task_id"] == created["task_id"]
 
 
+def test_task_service_enforces_workflow_capability_inputs(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def requirements(_project: Path, workflow: str) -> dict:
+        return {
+            "requires_python_validator": workflow == "mixed.workflow.yaml",
+            "has_ai_validator": workflow == "mixed.workflow.yaml",
+        }
+
+    service = TaskService(workflow_requirements=requirements)
+    draft = {
+        "title": "Capability task",
+        "items": [{
+            "title": "A",
+            "prompt": "Do A",
+            "workflow": "mixed.workflow.yaml",
+            "project": str(project),
+            "workspace": "auto",
+        }],
+    }
+
+    with pytest.raises(ValueError, match="File Validator is required"):
+        service.validate(project, draft)
+
+    draft["items"][0]["validator"] = str(project / "validate.py")
+    with pytest.raises(ValueError, match="AI Validator Prompt is required"):
+        service.validate(project, draft)
+
+    draft["items"][0]["ai_validator_prompt_file"] = str(project / "review.md")
+    validated = service.validate(project, draft)["draft"]
+    assert validated["items"][0]["validator"].endswith("validate.py")
+    assert validated["items"][0]["ai_validator_prompt_file"].endswith("review.md")
+
+    plain = json.loads(json.dumps(draft))
+    plain["items"][0]["workflow"] = "plain.workflow.yaml"
+    plain["items"][0]["validator"] = ""
+    plain["items"][0]["ai_validator_prompt_file"] = ""
+    assert service.validate(project, plain)["draft"]["items"][0]["validator"] == ""
+
+
 def test_task_yaml_roundtrip_uses_canonical_draft_validation_and_preserves_ids(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

@@ -201,6 +201,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
   }
 
+  function workflowMeta(value) {
+    const selected = String(value || "");
+    return (Array.isArray(state?.workflows) ? state.workflows : []).find((row) => {
+      const aliases = [row?.path, row?.id, row?.reference, row?.name, row?.display_name].map((entry) => String(entry || ""));
+      return aliases.includes(selected);
+    }) || null;
+  }
+
   function workflowOptions(saved) {
     const result = [], seen = new Set();
     for (const row of (Array.isArray(state?.workflows) ? state.workflows : [])) {
@@ -397,7 +405,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       workflow.appendChild(option);
     }
     workflow.value = String(item.workflow || "");
-    workflow.addEventListener("change", () => updateItem(state.index, "workflow", workflow.value));
+    workflow.addEventListener("change", () => {
+      updateItem(state.index, "workflow", workflow.value);
+      const capability = workflowMeta(workflow.value);
+      if (!capability?.requires_python_validator) updateItem(state.index, "validator", "");
+      if (!capability?.has_ai_validator) updateItem(state.index, "ai_validator_prompt_file", "");
+      render();
+    });
     workflowField.appendChild(workflow);
 
     const workspaceField = document.createElement("label");
@@ -427,6 +441,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     prompt.addEventListener("input", () => updateItem(state.index, "prompt", prompt.value));
     promptField.appendChild(prompt);
     body.appendChild(promptField);
+
+    const capability = workflowMeta(item.workflow);
+    const validationGrid = document.createElement("div");
+    validationGrid.className = "task-workspace-grid";
+    function appendPathField(labelText, id, key, value) {
+      const field = document.createElement("label");
+      field.className = "task-workspace-field";
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      const input = document.createElement("input");
+      input.id = id;
+      input.value = String(value || "");
+      input.maxLength = 4096;
+      input.placeholder = "Enter file path";
+      input.addEventListener("input", () => updateItem(state.index, key, input.value));
+      field.append(label, input);
+      validationGrid.appendChild(field);
+    }
+    if (capability?.requires_python_validator) {
+      appendPathField("File Validator", "taskWorkspaceValidator", "validator", item.validator);
+    }
+    if (capability?.has_ai_validator) {
+      appendPathField("AI Validator Prompt", "taskWorkspaceAiValidatorPrompt", "ai_validator_prompt_file", item.ai_validator_prompt_file);
+    }
+    if (validationGrid.children.length) body.appendChild(validationGrid);
 
     const error = document.createElement("div");
     error.id = "taskWorkspaceError";

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 DRAFT_MODES = {"auto", "single", "list"}
 WORKSPACE_POLICIES = {"auto", "main", "worktree"}
@@ -55,6 +55,8 @@ def validate_generated_draft(
             "workflow": workflow_path,
             "project": project_path,
             "workspace": "auto",
+            "validator": bounded_text(raw.get("validator"), f"TaskDraft item {index + 1} File Validator", 4096, required=False),
+            "ai_validator_prompt_file": bounded_text(raw.get("ai_validator_prompt_file"), f"TaskDraft item {index + 1} AI Validator Prompt", 4096, required=False),
         })
     return {
         "schema_version": 1,
@@ -64,7 +66,12 @@ def validate_generated_draft(
     }
 
 
-def validate_task_draft_for_create(payload: Any, project: Path) -> dict[str, Any]:
+def validate_task_draft_for_create(
+    payload: Any,
+    project: Path,
+    *,
+    workflow_requirements: Callable[[Path, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("TaskDraft must be an object")
     title = bounded_text(payload.get("title"), "TaskDraft title", 240)
@@ -85,12 +92,27 @@ def validate_task_draft_for_create(payload: Any, project: Path) -> dict[str, Any
         workspace = str(raw.get("workspace") or "auto").strip().lower()
         if workspace not in WORKSPACE_POLICIES:
             raise ValueError(f"Unsupported workspace policy: {workspace}")
+        workflow = bounded_text(raw.get("workflow"), f"Task item {index + 1} Workflow", 4096)
+        validator = bounded_text(raw.get("validator"), f"Task item {index + 1} File Validator", 4096, required=False)
+        ai_validator_prompt_file = bounded_text(
+            raw.get("ai_validator_prompt_file"),
+            f"Task item {index + 1} AI Validator Prompt",
+            4096,
+            required=False,
+        )
+        requirements = workflow_requirements(project, workflow) if workflow_requirements else {}
+        if requirements.get("requires_python_validator") and not validator:
+            raise ValueError(f"Task item {index + 1} File Validator is required by the selected Workflow")
+        if requirements.get("has_ai_validator") and not ai_validator_prompt_file:
+            raise ValueError(f"Task item {index + 1} AI Validator Prompt is required by the selected Workflow")
         items.append({
             "title": bounded_text(raw.get("title"), f"Task item {index + 1} title", 240),
             "prompt": bounded_text(raw.get("prompt"), f"Task item {index + 1} prompt", 24000),
-            "workflow": bounded_text(raw.get("workflow"), f"Task item {index + 1} Workflow", 4096),
+            "workflow": workflow,
             "project": project_path,
             "workspace": workspace,
+            "validator": validator,
+            "ai_validator_prompt_file": ai_validator_prompt_file,
         })
     return {
         "schema_version": 1,
