@@ -971,6 +971,30 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 node.inner_text()
                 for node in page.locator("#projectChatQueueList .project-chat-queue-copy").all()
             ] == ["queued while ask 1", "queued while ask 2", "queued while ask 3"]
+            assert page.locator("#projectChatQueueCount").inner_text() == "3"
+
+            queue_rows = page.locator("#projectChatQueueList .project-chat-queue-item")
+            queue_rows.nth(1).get_by_role("button", name="Edit", exact=True).click()
+            page.fill("#projectChatQueueList .project-chat-queue-item.editing textarea", "queued while ask 2 edited")
+            page.get_by_role("button", name="Save", exact=True).click()
+            page.wait_for_function(
+                "document.querySelectorAll('#projectChatQueueList .project-chat-queue-copy')[1]?.textContent === 'queued while ask 2 edited'"
+            )
+            assert [
+                node.inner_text()
+                for node in page.locator("#projectChatQueueList .project-chat-queue-copy").all()
+            ] == ["queued while ask 1", "queued while ask 2 edited", "queued while ask 3"]
+            assert page.locator("#projectChatQueueCount").inner_text() == "3"
+
+            queue_rows = page.locator("#projectChatQueueList .project-chat-queue-item")
+            queue_rows.first.get_by_role("button", name="Edit", exact=True).click()
+            page.fill("#projectChatQueueList .project-chat-queue-item.editing textarea", "temporary edit")
+            page.get_by_role("button", name="Cancel", exact=True).click()
+            assert [
+                node.inner_text()
+                for node in page.locator("#projectChatQueueList .project-chat-queue-copy").all()
+            ] == ["queued while ask 1", "queued while ask 2 edited", "queued while ask 3"]
+            assert page.locator("#projectChatQueueCount").inner_text() == "3"
 
             page.click("#newProjectChatButton")
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
@@ -1006,7 +1030,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             queued_replies = [text for text in queued_replies if "Browser queued reply" in text]
             assert queued_replies[-3:] == [
                 "Browser queued reply · queued while ask 1",
-                "Browser queued reply · queued while ask 2",
+                "Browser queued reply · queued while ask 2 edited",
                 "Browser queued reply · queued while ask 3",
             ]
             answered_ask = state.chat_service.ask(state.repo_root, state.chat_service.sessions(state.repo_root)["active_session_id"])["ask"]
