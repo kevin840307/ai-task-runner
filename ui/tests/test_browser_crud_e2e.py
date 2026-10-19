@@ -1240,14 +1240,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             draft_card = page.locator(".project-chat-task-draft").first
             assert draft_card.get_by_text("Edited browser item one").is_visible()
-            draft_id = draft_card.get_attribute("data-draft-id")
-            owner_session = draft_card.get_attribute("data-session-id")
-            assert draft_id and owner_session
-            assert state.task_drafts.get(
-                state.repo_root,
-                draft_id,
-                session_id=owner_session,
-            )["draft"]["items"][0]["prompt"] == "Edited browser item one"
+            assert draft_card.get_attribute("data-draft-id")
+            assert draft_card.get_attribute("data-session-id")
             assert state.tasks.list(state.repo_root)["tasks"] == []
             # The real E2E ownership proof is create-from-draft below: the
             # browser sends only draft_id/session_id, then we assert the backend
