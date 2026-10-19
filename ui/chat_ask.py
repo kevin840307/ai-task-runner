@@ -57,12 +57,14 @@ def normalize_questions(raw: Any) -> list[dict[str, Any]]:
         )
         raw_options = value.get("options")
         kind = str(value.get("kind") or ("choice" if raw_options else "text")).strip().lower()
-        if kind not in {"choice", "text"}:
-            raise ValueError("Ask question kind must be choice or text")
+        if value.get("multiple") is True and kind == "choice":
+            kind = "multi_choice"
+        if kind not in {"choice", "multi_choice", "text"}:
+            raise ValueError("Ask question kind must be choice, multi_choice, or text")
 
         options: list[dict[str, str]] = []
         option_seen: set[str] = set()
-        if kind == "choice":
+        if kind in {"choice", "multi_choice"}:
             if not isinstance(raw_options, list) or not raw_options:
                 raise ValueError("Choice Ask question requires options")
             if len(raw_options) > MAX_OPTIONS:
@@ -108,7 +110,7 @@ def normalize_questions(raw: Any) -> list[dict[str, Any]]:
             "prompt": prompt,
             "kind": kind,
             "options": options,
-            "allow_other": kind == "choice",
+            "allow_other": kind in {"choice", "multi_choice"},
         })
     return result
 
@@ -140,6 +142,28 @@ def validate_answers(
             continue
 
         values = {item["value"] for item in question["options"]}
+        if question["kind"] == "multi_choice":
+            if not isinstance(answer, dict):
+                raise ValueError(f"Ask multi-choice answer must be an object: {question_id}")
+            raw_values = answer.get("values", [])
+            if not isinstance(raw_values, list):
+                raise ValueError(f"Ask multi-choice values must be a list: {question_id}")
+            selected_values: list[str] = []
+            for raw_value in raw_values:
+                selected = _text(raw_value, "Ask choice answer", MAX_OPTION_TEXT)
+                if selected not in values:
+                    raise ValueError(f"Invalid Ask option for {question_id}")
+                if selected not in selected_values:
+                    selected_values.append(selected)
+            custom = ""
+            if "other" in answer and str(answer.get("other") or "").strip():
+                custom = _text(answer.get("other"), "Ask custom answer", MAX_ANSWER_TEXT)
+            if not selected_values and not custom:
+                raise ValueError(f"Ask answer is required: {question_id}")
+            result[question_id] = {"values": selected_values}
+            if custom:
+                result[question_id]["other"] = custom
+            continue
         if isinstance(answer, dict) and "other" in answer:
             custom = _text(answer.get("other"), "Ask custom answer", MAX_ANSWER_TEXT)
             result[question_id] = {"other": custom}
