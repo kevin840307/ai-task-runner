@@ -289,6 +289,7 @@ const projectChat = createProjectChatController({
   showError: showActionError,
   autosizeTextarea,
   openTaskDraft: (options) => taskWorkspace.openDraft(options),
+  openTask: (task, options) => taskWorkspace.openTask(task, options),
   onPreferencesChanged: (data) => {
     state.projectPreferences = projectPreferencesProjection(data);
     renderBackendPicker();
