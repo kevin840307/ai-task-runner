@@ -782,6 +782,17 @@ def test_chat_ask_is_durable_session_scoped_and_validated(tmp_path: Path) -> Non
                 ],
             },
             {
+                "id": "features",
+                "header": "Features",
+                "question": "Which features?",
+                "kind": "multi_choice",
+                "options": [
+                    {"value": "queue", "label": "Queue"},
+                    {"value": "ask", "label": "Ask"},
+                    {"value": "tasks", "label": "Tasks"},
+                ],
+            },
+            {
                 "id": "reason",
                 "header": "Reason",
                 "question": "Why?",
@@ -818,12 +829,17 @@ def test_chat_ask_is_durable_session_scoped_and_validated(tmp_path: Path) -> Non
         ask_id,
         {
             "approach": {"other": "Use a narrow compatibility shim"},
+            "features": {"values": ["queue", "ask", "queue"], "other": "Native form"},
             "reason": "It limits migration risk",
         },
         request_id="answer-2",
     )
     assert answered["ask"]["status"] == "answered"
     assert answered["ask"]["answers"]["approach"]["other"] == "Use a narrow compatibility shim"
+    assert answered["ask"]["answers"]["features"] == {
+        "values": ["queue", "ask"],
+        "other": "Native form",
+    }
     repeated = restarted.submit_ask(
         project,
         first,
@@ -836,6 +852,35 @@ def test_chat_ask_is_durable_session_scoped_and_validated(tmp_path: Path) -> Non
     )
     assert repeated["duplicate"] is True
     assert repeated["ask"]["answers"]["approach"]["other"] == "Use a narrow compatibility shim"
+
+
+def test_chat_ask_multi_choice_requires_at_least_one_value_or_custom_answer(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="multi-turn",
+        questions=[{
+            "id": "features",
+            "header": "Features",
+            "question": "Pick any",
+            "multiple": True,
+            "options": ["queue", "ask"],
+        }],
+    )
+    question = created["ask"]["questions"][0]
+    assert question["kind"] == "multi_choice"
+    with pytest.raises(ValueError, match="required"):
+        chat.submit_ask(
+            project,
+            session_id,
+            created["ask"]["ask_id"],
+            {"features": {"values": []}},
+            request_id="multi-empty",
+        )
 
 
 def test_chat_ask_cancel_and_http_contract(tmp_path: Path) -> None:
