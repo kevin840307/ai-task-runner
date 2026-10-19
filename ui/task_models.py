@@ -56,7 +56,6 @@ def validate_generated_draft(
     project_path = str(project.resolve())
     workflow_path = str(workflow or "").strip()
     items: list[dict[str, Any]] = []
-    seen_item_ids: set[str] = set()
     for index, raw in enumerate(raw_items):
         if not isinstance(raw, dict):
             raise ValueError(f"TaskDraft item {index + 1} must be an object")
@@ -94,6 +93,7 @@ def validate_task_draft_for_create(
 
     project_path = str(project.resolve())
     items: list[dict[str, Any]] = []
+    seen_item_ids: set[str] = set()
     for index, raw in enumerate(raw_items):
         if not isinstance(raw, dict):
             raise ValueError(f"TaskDraft item {index + 1} must be an object")
