@@ -728,6 +728,17 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     return rows.find((row) => row.draft_id === draftId) || null;
   }
 
+  function updateTaskDraftModel(sessionId, draftId, nextDraft) {
+    const entry = findTaskDraft(sessionId, draftId);
+    if (!entry || !entry.draft || typeof entry.draft !== "object") return false;
+    const value = globalThis.structuredClone
+      ? globalThis.structuredClone(nextDraft)
+      : JSON.parse(JSON.stringify(nextDraft));
+    for (const key of Object.keys(entry.draft)) delete entry.draft[key];
+    Object.assign(entry.draft, value);
+    return true;
+  }
+
   function renderTaskDraftCard(entry, root) {
     const card = document.createElement("article");
     card.className = "message project-chat-message assistant project-chat-task-draft";
@@ -774,16 +785,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         workflows: settingsCatalog.workflows,
         returnFocus: edit,
         onSave: (nextDraft) => {
-          const rows = taskDraftsBySession.get(originSession) || [];
-          if (!rows.some((row) => row.draft_id === entry.draft_id)) return;
-          taskDraftsBySession.set(
-            originSession,
-            rows.map((row) => (
-              row.draft_id === entry.draft_id
-                ? { ...row, draft: nextDraft }
-                : row
-            )),
-          );
+          if (!updateTaskDraftModel(originSession, entry.draft_id, nextDraft)) return;
           if (projectPath() === originProject && activeSessionId === originSession) renderMessages();
         },
       });
@@ -792,7 +794,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     create.type = "button";
     create.className = "primary";
     create.textContent = "Create Task";
-    create.onclick = () => void createTaskFromDraft(entry.draft_id, draft);
+    create.onclick = () => void createTaskFromDraft(entry.draft_id);
     const dismiss = document.createElement("button");
     dismiss.type = "button";
     dismiss.textContent = "Dismiss";
@@ -1111,7 +1113,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     void refreshMessages();
   }
 
-  async function createTaskFromDraft(draftId, visibleDraft) {
+  async function createTaskFromDraft(draftId) {
     const path = projectPath();
     const session = activeSessionId;
     if (!path || !session) return;
@@ -1121,8 +1123,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       return;
     }
     const draft = globalThis.structuredClone
-      ? globalThis.structuredClone(visibleDraft)
-      : JSON.parse(JSON.stringify(visibleDraft));
+      ? globalThis.structuredClone(entry.draft)
+      : JSON.parse(JSON.stringify(entry.draft));
     try {
       const task = await api("/api/tasks/create", {
         method: "POST",
