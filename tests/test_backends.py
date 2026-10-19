@@ -1198,7 +1198,7 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
     monkeypatch.setattr(
         qwen_module,
         "run_process",
-        lambda *args, **kwargs: ProcessResult(0, "qwen-code 0.23.2\n", False, 0.01),
+        lambda *args, **kwargs: ProcessResult("qwen-code 0.23.2\n", 0),
     )
     qwen_features = chat_features("qwen", tmp_path)
     assert qwen_features.ask is True
@@ -1208,7 +1208,7 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
     monkeypatch.setattr(
         qwen_module,
         "run_process",
-        lambda *args, **kwargs: ProcessResult(0, "qwen-code 0.22.9\n", False, 0.01),
+        lambda *args, **kwargs: ProcessResult("qwen-code 0.22.9\n", 0),
     )
     old_qwen = chat_features("qwen", tmp_path)
     assert old_qwen.ask is False
