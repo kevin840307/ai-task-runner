@@ -417,7 +417,7 @@ def _bridge_for(state: UIState):
                         body.get("content"),
                     )
                 elif path == "/api/tasks/create":
-                    state._browser_last_task_create_draft = json.loads(
+                    state._browser_last_direct_task_create_draft = json.loads(
                         json.dumps(body.get("draft"))
                     )
                     data = state.tasks.create(
@@ -435,7 +435,7 @@ def _bridge_for(state: UIState):
                         str(body.get("draft_id", "")),
                         session_id=session_id,
                     )
-                    state._browser_last_task_create_draft = json.loads(
+                    state._browser_last_create_from_draft = json.loads(
                         json.dumps(canonical["draft"])
                     )
                     data = state.tasks.create(
@@ -1238,17 +1238,27 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 2")
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
-            assert page.locator(".project-chat-task-draft-item").first.get_by_text("Edited browser item one").is_visible()
+            draft_card = page.locator(".project-chat-task-draft").first
+            assert draft_card.get_by_text("Edited browser item one").is_visible()
+            draft_id = draft_card.get_attribute("data-draft-id")
+            owner_session = draft_card.get_attribute("data-session-id")
+            assert draft_id and owner_session
+            assert state.task_drafts.get(
+                state.repo_root,
+                draft_id,
+                session_id=owner_session,
+            )["draft"]["items"][0]["prompt"] == "Edited browser item one"
             assert state.tasks.list(state.repo_root)["tasks"] == []
             # The real E2E ownership proof is create-from-draft below: the
             # browser sends only draft_id/session_id, then we assert the backend
             # canonical edit is what reaches the durable Task.
             page.get_by_role("button", name="Create Task", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
-            assert len(state.tasks.list(state.repo_root)["tasks"]) == 1
-            assert state.tasks.list(state.repo_root)["tasks"][0]["status"] == "new"
-            assert state._browser_last_task_create_draft["items"][0]["prompt"] == "Edited browser item one"
-            assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Edited browser item one"
+            durable = state.tasks.list(state.repo_root)["tasks"]
+            assert len(durable) == 1
+            assert durable[0]["status"] == "new"
+            assert state._browser_last_create_from_draft["items"][0]["prompt"] == "Edited browser item one"
+            assert durable[0]["items"][0]["prompt"] == "Edited browser item one"
             page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
             assert page.locator(".task-workspace-tabs .task-workspace-tab").all_inner_texts() == [
