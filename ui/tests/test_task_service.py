@@ -248,6 +248,7 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
     project.mkdir()
 
     server = UIServer(repo, "127.0.0.1", 0)
+    registered = server.state.add_project(str(project))
     server.state.project_preferences.update(project, {
         "agent": "qwen",
         "workflow": "workflow.yaml",
@@ -301,6 +302,7 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
             },
         )
         assert created["status"] == "new"
+        assert created["project_id"] == registered["project_id"]
         assert server.state.tasks.list(project)["tasks"][0]["task_id"] == created["task_id"]
 
         updated_draft = json.loads(json.dumps(generated["draft"]))
