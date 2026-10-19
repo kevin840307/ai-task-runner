@@ -79,7 +79,7 @@ def test_task_draft_edit_is_backend_owned_and_session_scoped(tmp_path: Path) -> 
         runner=lambda **kwargs: {
             "draft": {
                 "title": "Draft",
-                "items": [{"title": "A", "prompt": "Original"}],
+                "items": [{"title": "A", "prompt": "Original", "workflow": "workflow.yaml"}],
             }
         },
     )
