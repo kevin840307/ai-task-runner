@@ -929,6 +929,17 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert state.tasks.list(state.repo_root)["tasks"][0]["status"] == "new"
             assert state._browser_last_task_create_draft["items"][0]["prompt"] == "Edited browser item one"
             assert state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"] == "Edited browser item one"
+            page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
+            assert page.locator(".task-workspace-tabs .task-workspace-tab").all_inner_texts() == [
+                "Overview", "Runtime", "Output", "History",
+            ]
+            assert page.locator(".task-workspace-status-pill").inner_text() == "NEW"
+            assert page.locator(".task-workspace-info-row").count() == 2
+            page.get_by_role("button", name="Runtime", exact=True).click()
+            assert page.locator(".task-workspace-empty-panel").get_by_text("No Runner runtime yet").is_visible()
+            page.locator("#taskWorkspaceClose").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
             page.fill("#projectChatInput", "@task-single browser one")
             page.click("#projectChatSendButton")
