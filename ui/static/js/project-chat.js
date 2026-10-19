@@ -3,7 +3,7 @@ function requestId() {
   return "chat-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
 
-export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, openTaskDraft, onPreferencesChanged }) {
+export function createProjectChatController({ api, inputDialog, confirmDialog, showToast, showError, autosizeTextarea, openTaskDraft, openTask, onPreferencesChanged }) {
   let project = null;
   let sessions = [];
   let activeSessionId = "";
@@ -1141,6 +1141,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       );
       await refreshMessages();
       showToast?.("Task created · New · " + String(task.title || task.task_id || ""));
+      openTask?.(task, { returnFocus: create });
     } catch (error) {
       showError?.(error.message, "Create Task failed");
     }
