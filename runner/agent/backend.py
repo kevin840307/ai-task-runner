@@ -269,6 +269,20 @@ class BaseBackend(ABC):
     def chat_features(cls, root: Path) -> ChatFeatureSpec:
         return ChatFeatureSpec(detail=f"{cls.name} does not expose native interactive Chat features")
 
+    @classmethod
+    def normalize_ask_request(cls, payload: Any) -> list[dict[str, Any]]:
+        raise BackendError(f"{cls.name} does not support native Ask mapping")
+
+    @classmethod
+    def encode_ask_response(
+        cls,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> Any:
+        raise BackendError(f"{cls.name} does not support native Ask mapping")
+
     def configure_reasoning(self, reasoning: str) -> None:
         value = str(reasoning or "").strip()
         if not value:
@@ -575,6 +589,24 @@ def chat_features(name: str, root: Path) -> ChatFeatureSpec:
     return _backend_type(name).chat_features(root)
 
 
+def normalize_ask_request(name: str, payload: Any) -> list[dict[str, Any]]:
+    return _backend_type(name).normalize_ask_request(payload)
+
+
+def encode_ask_response(
+    name: str,
+    payload: Any,
+    answers: dict[str, Any] | None,
+    *,
+    cancelled: bool = False,
+) -> Any:
+    return _backend_type(name).encode_ask_response(
+        payload,
+        answers,
+        cancelled=cancelled,
+    )
+
+
 def configure_interaction_args(
     name: str,
     mode: InteractionMode,
@@ -638,7 +670,9 @@ __all__ = [
     "create_backend",
     "default_command",
     "discover_capabilities",
+    "encode_ask_response",
     "interaction_modes",
+    "normalize_ask_request",
     "reasoning_options",
     "model_from_args",
     "register_backend",
