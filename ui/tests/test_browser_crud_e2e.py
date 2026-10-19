@@ -1212,6 +1212,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert saved["interface"]["appearance"] == "system"
             assert saved["interface"]["theme"] == "violet"
             assert saved["language"] == "en"
+            page.click("#themeCloseButton")
+            assert page.locator("#themePanel").is_hidden()
 
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
