@@ -271,7 +271,9 @@ class UIStateTests(unittest.TestCase):
 
         rows = self.state.projects()
 
-        self.assertEqual(rows, [{
+        self.assertEqual(len(rows), 1)
+        self.assertRegex(rows[0]["project_id"], r"^project-[0-9a-f]{32}$")
+        self.assertEqual({key: value for key, value in rows[0].items() if key != "project_id"}, {
             "name": "First",
             "path": str(self.project.resolve()),
             "exists": True,
@@ -279,17 +281,41 @@ class UIStateTests(unittest.TestCase):
             "runtime_stage": "",
             "runtime_completed_count": 0,
             "runtime_total": 0,
-        }])
+        })
 
     def test_project_display_name_can_be_renamed_without_changing_path(self) -> None:
-        self.state.add_project(str(self.project))
+        added = self.state.add_project(str(self.project))
+        original_id = added["project_id"]
 
         renamed = self.state.rename_project(str(self.project), "  Login Worktree  ")
         rows = self.state.projects()
 
-        self.assertEqual(renamed, {"name": "Login Worktree", "path": str(self.project.resolve())})
+        self.assertEqual(renamed, {
+            "project_id": original_id,
+            "name": "Login Worktree",
+            "path": str(self.project.resolve()),
+        })
+        self.assertEqual(rows[0]["project_id"], original_id)
         self.assertEqual(rows[0]["name"], "Login Worktree")
         self.assertEqual(Path(rows[0]["path"]).resolve(), self.project.resolve())
+
+    def test_readding_project_preserves_stable_project_id(self) -> None:
+        first = self.state.add_project(str(self.project))
+        second = self.state.add_project(str(self.project) + os.sep)
+        self.assertEqual(second["project_id"], first["project_id"])
+        self.assertEqual(self.state.projects()[0]["project_id"], first["project_id"])
+
+    def test_legacy_project_rows_are_migrated_to_stable_ids_on_startup(self) -> None:
+        self.state.projects_file.write_text(
+            json.dumps([{"name": "Legacy", "path": str(self.project)}]),
+            encoding="utf-8",
+        )
+        migrated = UIState(self.root)
+        rows = migrated.projects()
+        self.assertEqual(len(rows), 1)
+        self.assertRegex(rows[0]["project_id"], r"^project-[0-9a-f]{32}$")
+        stored = json.loads(migrated.projects_file.read_text(encoding="utf-8"))
+        self.assertEqual(stored[0]["project_id"], rows[0]["project_id"])
 
     def test_project_rename_requires_existing_sidebar_project(self) -> None:
         with self.assertRaisesRegex(ValueError, "not in the sidebar"):
