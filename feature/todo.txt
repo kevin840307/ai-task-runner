@@ -354,7 +354,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Browser 測試 Escape top-layer：正式版已移除 prototype 專用 Task context menu；現行 Task action / Project menu、rename dialog、discard modal 開啟時 Escape 只關最上層，不得同時 Back/Close Drawer。
 [x] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
 [x] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；正式版 Board 不再有繞過 Info 的 direct List 入口；standalone Draft → 底部 Cancel 共用 dirty discard confirmation。
-[ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
+[x] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。
 [x] Standalone + New → Task 也使用同一個 Task Workspace Shell 的 Editor View；Create / Cancel 後直接關 shell，不另外維護第二個 editor modal。
 [x] Chat Draft 單筆、Task List child Add/Edit、Task Info Edit 都共用同一 Editor View；returnTarget 只控制回 List / Info / Chat / Close。

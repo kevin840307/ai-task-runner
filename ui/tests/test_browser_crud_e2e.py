@@ -1196,6 +1196,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "Third list child")
+            page.fill("#taskWorkspacePrompt", "Third list prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 3
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
@@ -1226,6 +1233,41 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 3
+
+            # Reorder is deterministic and reversible; removing the third child
+            # leaves the two final Tasks used by validation/create below.
+            page.locator(".task-workspace-list-row").first.locator("button[title='Move down']").click()
+            page.wait_for_function(
+                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"
+            )
+            assert "First list child" in page.locator(".task-workspace-list-row").nth(1).inner_text()
+            page.locator(".task-workspace-list-row").nth(1).locator("button[title='Move up']").click()
+            page.wait_for_function(
+                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('First list child')"
+            )
+            page.locator(".task-workspace-list-row").last.get_by_role("button", name="Remove").click()
+            assert page.locator(".task-workspace-list-row").count() == 2
+            assert "Third list child" not in page.locator("#taskWorkspaceBody").inner_text()
+
+            # X / Escape / footer Cancel share the parent TaskDraft dirty guard.
+            # Keep editing must preserve the ordered children and their edits.
+            for close_kind in ("x", "escape", "cancel"):
+                if close_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                elif close_kind == "escape":
+                    page.locator("#taskWorkspaceDraftTitle").focus()
+                    page.keyboard.press("Escape")
+                else:
+                    page.click("#taskWorkspaceFooterBack")
+                page.wait_for_function("document.querySelector('.ui-dialog-card') !== null")
+                assert page.locator(".ui-dialog-card").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
+                page.locator("[data-dialog-cancel]").click()
+                assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+                assert page.locator(".task-workspace-list-row").count() == 2
+                assert "First list child" in page.locator(".task-workspace-list-row").first.inner_text()
+                assert "Second list child" in page.locator(".task-workspace-list-row").nth(1).inner_text()
+
             page.fill("#taskWorkspaceDraftTitle", "Chat browser list")
 
             # Backend validation must route the error back to the exact field
@@ -1263,7 +1305,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
 
-            page.click("#taskWorkspaceSave")
+            # Double activation must still produce exactly one durable Task.
+            page.evaluate("const b=document.querySelector('#taskWorkspaceSave'); b.click(); b.click();")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             created = state.tasks.list(state.repo_root)["tasks"]
             assert len(created) == 2
