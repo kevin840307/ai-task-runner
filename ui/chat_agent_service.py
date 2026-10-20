@@ -13,6 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from runner.config.defaults import DEFAULT_AGENT_TIMEOUT
+
 from tool.chat_agent import (
     chat_features,
     is_session_invalid_error,
@@ -23,6 +25,12 @@ from tool.chat_agent import (
 )
 
 from .chat_service import ChatService
+
+
+CHAT_AGENT_TIMEOUT_SECONDS = DEFAULT_AGENT_TIMEOUT
+CHAT_AGENT_WRAPPER_GRACE_SECONDS = 60
+CHAT_AGENT_CANCEL_GRACE_SECONDS = 5
+CHAT_AGENT_ERROR_CHARS = 4000
 
 
 class ChatTurnCancelled(RuntimeError):
@@ -789,6 +797,8 @@ class ChatAgentService:
             backend,
             "--mode",
             mode,
+            "--timeout",
+            str(CHAT_AGENT_TIMEOUT_SECONDS),
         ]
         if model:
             command.extend(["--model", model])
@@ -814,15 +824,20 @@ class ChatAgentService:
         if cancel_now:
             self._signal_cancel(process)
         try:
-            stdout, stderr = process.communicate(input=prompt, timeout=7260)
+            stdout, stderr = process.communicate(
+                input=prompt,
+                timeout=CHAT_AGENT_TIMEOUT_SECONDS + CHAT_AGENT_WRAPPER_GRACE_SECONDS,
+            )
         except subprocess.TimeoutExpired as exc:
             self._signal_cancel(process)
             try:
-                process.communicate(timeout=5)
+                process.communicate(timeout=CHAT_AGENT_CANCEL_GRACE_SECONDS)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate()
-            raise RuntimeError("Chat Agent timed out after 7260 seconds") from exc
+            raise RuntimeError(
+                f"Chat Agent timed out after {CHAT_AGENT_TIMEOUT_SECONDS} seconds"
+            ) from exc
         finally:
             with self._turn_guard:
                 if self._active_processes.get(execution_key) is process:
@@ -835,14 +850,17 @@ class ChatAgentService:
             payload = json.loads(raw) if raw else {}
         except json.JSONDecodeError as exc:
             detail = stderr.strip() or raw or f"exit {process.returncode}"
-            raise RuntimeError(f"Chat Agent returned invalid output: {detail[-2000:]}") from exc
+            raise RuntimeError(
+                f"Chat Agent returned invalid output: {detail[-CHAT_AGENT_ERROR_CHARS:]}"
+            ) from exc
         if process.returncode or payload.get("error"):
             detail = str(
                 payload.get("error")
                 or stderr
                 or f"exit {process.returncode}"
             ).strip()
-            raise RuntimeError(detail or "Chat Agent failed")
+            detail = detail or "Chat Agent failed"
+            raise RuntimeError(detail[-CHAT_AGENT_ERROR_CHARS:])
         if not isinstance(payload, dict):
             raise RuntimeError("Chat Agent returned invalid result")
         return payload
