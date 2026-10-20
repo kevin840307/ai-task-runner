@@ -219,8 +219,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     closeNow();
   }
 
+  function showNow() {
+    if (overlay) overlay.hidden = false;
+    document.body.classList.add("task-workspace-open");
+  }
+
   function closeNow({ restore = true } = {}) {
     if (overlay) overlay.hidden = true;
+    document.body.classList.remove("task-workspace-open");
     const focus = restore ? restoreFocus : null;
     state = null;
     restoreFocus = null;
@@ -1320,7 +1326,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlOriginal: "",
       yamlReturn: "list",
     };
-    overlay.hidden = false;
+    showNow();
     render();
   }
 
@@ -1348,7 +1354,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlOriginal: "",
       yamlReturn: "list",
     };
-    overlay.hidden = false;
+    showNow();
     render();
   }
 
@@ -1376,7 +1382,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlOriginal: "",
       yamlReturn: "list",
     };
-    overlay.hidden = false;
+    showNow();
     render();
   }
 
