@@ -401,10 +401,11 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
     first = chat.sessions(project)["active_session_id"]
     second = chat.create_session(project, request_id="second-session")["session_id"]
 
-    chat.enqueue_turn(
+    first_turn = chat.enqueue_turn(
         project, first, "one",
         request_id="turn-1", backend="qwen", model="m1", mode="auto",
     )
+    assert first_turn["turn_id"].startswith("turn-")
     chat.enqueue_turn(
         project, first, "two",
         request_id="turn-2", backend="qwen", model="m1", mode="auto",
@@ -416,6 +417,7 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
 
     restarted = ChatService()
     assert [row["content"] for row in restarted.queue(project, first)["items"]] == ["one", "two"]
+    assert restarted.queue(project, first)["items"][0]["turn_id"] == first_turn["turn_id"]
     assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
 
     first_item = restarted.queue(project, first)["items"][0]
@@ -543,6 +545,7 @@ def test_chat_queue_terminal_outcome_is_durable_and_idempotent(
     assert duplicate["duplicate"] is True
     assert duplicate["request_status"] == outcome
     assert duplicate["queue_id"] == queued["queue_id"]
+    assert duplicate["turn_id"] == queued["turn_id"]
 
 
 def test_chat_queue_recovers_dispatching_item_after_restart(tmp_path: Path) -> None:
@@ -777,7 +780,7 @@ def test_chat_agent_passes_snapshotted_reasoning_to_runner(tmp_path: Path) -> No
     chat = ChatService()
     service = ChatAgentService(repo, runner=fake_runner)
     session_id = chat.sessions(project)["active_session_id"]
-    service.turn(
+    result = service.turn(
         project,
         chat,
         session_id=session_id,
@@ -788,6 +791,8 @@ def test_chat_agent_passes_snapshotted_reasoning_to_runner(tmp_path: Path) -> No
         reasoning="deep",
         request_id="reasoning-turn-1",
     )
+    assert result["turn_id"].startswith("turn-")
+    assert result["queue_id"].startswith("queue-")
     assert calls[0]["reasoning"] == "deep"
     assert calls[0]["model"] == "openai/gpt-5.2"
 
@@ -1376,6 +1381,9 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     restarted = ChatService()
     snapshot = restarted.queue(project, session_id)
     assert snapshot["dispatching"]["status"] == "dispatching"
+    migrated_turn_id = snapshot["dispatching"]["turn_id"]
+    assert migrated_turn_id.startswith("turn-")
+    assert ChatService().queue(project, session_id)["dispatching"]["turn_id"] == migrated_turn_id
 
     normalized = json.loads(restarted._state_path(project).read_text(encoding="utf-8"))
     # Loading is migration-only; persisted rewrite happens on the next state mutation.

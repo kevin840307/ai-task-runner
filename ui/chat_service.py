@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - script import compatibility
 
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 6
+STATE_VERSION = 7
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
@@ -31,6 +31,7 @@ DEFAULT_ASK_TIMEOUT_SECONDS = 7200.0
 _SESSION_ID = re.compile(r"^chat-[0-9a-f]{32}$")
 _MESSAGE_ID = re.compile(r"^msg-[0-9a-f]{32}$")
 _QUEUE_ID = re.compile(r"^queue-[0-9a-f]{32}$")
+_TURN_ID = re.compile(r"^turn-[0-9a-f]{32}$")
 _ASK_ID = re.compile(r"^ask-[0-9a-f]{32}$")
 
 
@@ -486,12 +487,14 @@ class ChatService:
                     **snapshot,
                     "duplicate": True,
                     "queue_id": existing["queue_id"],
+                    "turn_id": existing["turn_id"],
                     "request_status": existing["status"],
                 }
             if len(session["queue"]) >= QUEUE_LIMIT:
                 raise ValueError("Chat Queue is full")
             item = {
                 "queue_id": f"queue-{uuid.uuid4().hex}",
+                "turn_id": f"turn-{uuid.uuid4().hex}",
                 "request_id": request,
                 "content": text,
                 "created_at": time.time(),
@@ -506,6 +509,7 @@ class ChatService:
             state["turn_requests"][request] = {
                 "session_id": session["session_id"],
                 "queue_id": item["queue_id"],
+                "turn_id": item["turn_id"],
                 "status": "queued",
             }
             self._trim_turn_requests(state)
@@ -514,6 +518,7 @@ class ChatService:
                 **self._queue_snapshot(session),
                 "duplicate": False,
                 "queue_id": item["queue_id"],
+                "turn_id": item["turn_id"],
                 "request_status": "queued",
             }
 
@@ -624,13 +629,14 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, 5, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, 5, 6, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
         source_version = int(state.get("version"))
         legacy_v1 = source_version == 1
         legacy_before_reasoning = source_version in {1, 2}
         legacy_before_ask = source_version in {1, 2, 3}
         legacy_queue_status = source_version <= 4
+        legacy_before_turn_id = source_version <= 6
         sessions = state.get("sessions")
         create_requests = state.get("create_requests")
         turn_requests = {} if legacy_v1 else state.get("turn_requests", {})
@@ -659,6 +665,9 @@ class ChatService:
                     raise ValueError("Chat state contains an invalid Queue item")
                 queue_id = str(item.get("queue_id") or "")
                 request_id = str(item.get("request_id") or "")
+                turn_id = str(item.get("turn_id") or "").strip()
+                if legacy_before_turn_id and not turn_id:
+                    turn_id = self._legacy_turn_id(session_id, request_id)
                 content = str(item.get("content") or "")
                 status = str(item.get("status") or "")
                 if legacy_queue_status and status == "processing":
@@ -666,6 +675,7 @@ class ChatService:
                 if (
                     not _QUEUE_ID.fullmatch(queue_id)
                     or queue_id in queue_seen
+                    or not _TURN_ID.fullmatch(turn_id)
                     or not request_id.strip()
                     or not content.strip()
                     or status not in {"queued", "dispatching"}
@@ -674,6 +684,7 @@ class ChatService:
                 queue_seen.add(queue_id)
                 queue_rows.append({
                     "queue_id": queue_id,
+                    "turn_id": turn_id,
                     "request_id": request_id,
                     "content": content,
                     "created_at": float(item.get("created_at") or 0),
@@ -703,6 +714,9 @@ class ChatService:
                 continue
             session_id = str(value.get("session_id") or "")
             queue_id = str(value.get("queue_id") or "")
+            turn_id = str(value.get("turn_id") or "").strip()
+            if legacy_before_turn_id and not turn_id:
+                turn_id = self._legacy_turn_id(session_id, str(request_id))
             status = str(value.get("status") or "")
             if legacy_queue_status:
                 status = {"processing": "dispatching", "done": "completed"}.get(status, status)
@@ -710,11 +724,13 @@ class ChatService:
                 str(request_id).strip()
                 and session_id in seen
                 and _QUEUE_ID.fullmatch(queue_id)
+                and _TURN_ID.fullmatch(turn_id)
                 and status in {"queued", "dispatching", "completed", "failed", "cancelled"}
             ):
                 normalized_turn_requests[str(request_id)] = {
                     "session_id": session_id,
                     "queue_id": queue_id,
+                    "turn_id": turn_id,
                     "status": status,
                 }
         for session in normalized:
@@ -722,6 +738,7 @@ class ChatService:
                 normalized_turn_requests.setdefault(item["request_id"], {
                     "session_id": session["session_id"],
                     "queue_id": item["queue_id"],
+                    "turn_id": item["turn_id"],
                     "status": item["status"],
                 })
         return {
@@ -859,6 +876,11 @@ class ChatService:
         return label or "New Chat"
 
     @staticmethod
+    def _legacy_turn_id(session_id: str, request_id: str) -> str:
+        seed = f"ai-task-runner:{session_id}:{request_id}"
+        return f"turn-{uuid.uuid5(uuid.NAMESPACE_URL, seed).hex}"
+
+    @staticmethod
     def _request_id(value: str) -> str:
         request = str(value or "").strip()
         if not request:
@@ -912,6 +934,7 @@ class ChatService:
             "items": [
                 {
                     "queue_id": row["queue_id"],
+                    "turn_id": row["turn_id"],
                     "content": row["content"],
                     "created_at": row["created_at"],
                     "status": row["status"],
@@ -923,6 +946,7 @@ class ChatService:
                 (
                     {
                         "queue_id": row["queue_id"],
+                        "turn_id": row["turn_id"],
                         "content": row["content"],
                         "created_at": row["created_at"],
                         "status": row["status"],

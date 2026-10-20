@@ -108,6 +108,10 @@ class ChatAgentService:
             return {
                 **self._drain_locked(project, chat, session_id),
                 **metadata,
+                "queue_id": queued["queue_id"],
+                "turn_id": queued["turn_id"],
+                "duplicate": queued["duplicate"],
+                "request_status": queued["request_status"],
             }
         finally:
             lock.release()
@@ -432,7 +436,7 @@ class ChatAgentService:
                     project,
                     session_id,
                     request_id=ask_request,
-                    turn_id=str(item.get("request_id") or ask_request),
+                    turn_id=str(item.get("turn_id") or ask_request),
                     questions=questions,
                     source="native",
                     backend=backend,
