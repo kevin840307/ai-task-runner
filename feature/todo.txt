@@ -479,9 +479,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Chat state v8 分離 durable turn_id 與 request_id，Queue canonical field 統一為 queue_item_id；v1-v7 僅在 state migration read 接受舊 queue_id，寫回與 HTTP/UI contract 不保留 alias。Draft/Task/Session/Message/Ask IDs 均由 backend 產生與驗證。
 [x] POST / send / create 等操作需要 request ID 或 idempotency key，避免重試後重複建立訊息或 Task。
     - Chat turn 不再生成 direct fallback key，缺 request_id fail closed；Session/TaskDraft/Task Create/Ask/Queue turn 既有 request maps 保持 durable idempotency。Agent message 另以 turn_id+role durable dedupe，restart 在 user/assistant 已落盤時不重複 history，assistant 已完成時也不重打 Agent。
-[ ] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
-[ ] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。
-[ ] Chat stream 與 Runner Task runtime stream 必須明確分開；不能混用 Task Stage event 代表 Chat tool call。
+[x] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
+    - 現有 UI/Runner live state 採 non-overlapping HTTP polling，因此 Chat 沿用同一機制：/api/chat/events 提供 durable bounded cursor feed，project-chat.js 重用既有 queuePollTimer，不新增 SSE/WebSocket connection manager。
+[x] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。
+    - CHAT_EVENT_TYPES 是唯一 schema owner；目前真實 lifecycle 會 emit completed/queue/Ask/turn 事件，message_delta/tool_* 僅保留給 Adapter 真正提供 streaming/tool event 時使用，不用 fake event 模擬。
+[x] Chat stream 與 Runner Task runtime stream 必須明確分開；不能混用 Task Stage event 代表 Chat tool call。
+    - Chat event feed 僅由 ChatService session state 擁有；Runner runtime 仍只由 /api/project/runtime + project_runtime_state projection 擁有，architecture regression 防止兩者互相引用事件 contract。
 [x] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
     - UIServer HTTP boundary 統一輸出 structured error envelope；POST 沿用 body request_id 作 correlation，frontend api() 保留 code/retryable/requestId metadata 並以 message 呈現。
 [ ] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。

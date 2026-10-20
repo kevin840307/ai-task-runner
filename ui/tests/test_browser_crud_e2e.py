@@ -186,6 +186,13 @@ def _bridge_for(state: UIState):
                 elif path == "/api/chat/ask":
                     session_id = query.get("session_id", [""])[0]
                     data = state.chat_service.ask(project, session_id)
+                elif path == "/api/chat/events":
+                    session_id = query.get("session_id", [""])[0]
+                    data = state.chat_service.events(
+                        project,
+                        session_id,
+                        after=query.get("after", ["0"])[0],
+                    )
                 elif path == "/api/chat/queue":
                     session_id = query.get("session_id", [""])[0]
                     queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])

@@ -239,6 +239,14 @@ class Handler(SimpleHTTPRequestHandler):
                     self.state.chat_service,
                     session_id=query.get("session_id", [""])[0],
                 ))
+            if parsed.path == "/api/chat/events":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.chat_service.events(
+                    project,
+                    query.get("session_id", [""])[0],
+                    after=query.get("after", ["0"])[0],
+                ))
             if parsed.path == "/api/backends":
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])

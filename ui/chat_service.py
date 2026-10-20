@@ -22,12 +22,25 @@ except ImportError:  # pragma: no cover - script import compatibility
 
 CHAT_DIR = ".ai-task-runner/ui/chat"
 STATE_FILE = "state.json"
-STATE_VERSION = 8
+STATE_VERSION = 9
 MESSAGE_READ_LIMIT = 500
 CREATE_REQUEST_LIMIT = 256
 TURN_REQUEST_LIMIT = 512
 QUEUE_LIMIT = 100
 DEFAULT_ASK_TIMEOUT_SECONDS = 7200.0
+EVENT_LIMIT = 256
+CHAT_EVENT_TYPES = frozenset({
+    "message_delta",
+    "message_completed",
+    "tool_started",
+    "tool_completed",
+    "queue_updated",
+    "ask_requested",
+    "ask_resolved",
+    "turn_completed",
+    "turn_failed",
+    "capabilities_updated",
+})
 _SESSION_ID = re.compile(r"^chat-[0-9a-f]{32}$")
 _MESSAGE_ID = re.compile(r"^msg-[0-9a-f]{32}$")
 _QUEUE_ITEM_ID = re.compile(r"^queue-[0-9a-f]{32}$")
@@ -46,6 +59,10 @@ class ChatService:
             state = self._load(project)
             changed = self._ensure_session(state)
             if changed:
+                self._record_event(session, "queue_updated", {
+                    "action": "recovered",
+                    "status": "queued",
+                })
                 self._write(project, state)
             return self._snapshot(state)
 
@@ -192,6 +209,11 @@ class ChatService:
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
             session["updated_at"] = row["time"]
+            self._record_event(session, "message_completed", {
+                "message_id": row["message_id"],
+                "role": role,
+                "turn_id": turn,
+            })
             self._write(project, state)
             return dict(row)
 
@@ -216,6 +238,53 @@ class ChatService:
                 role,
             )
             return dict(row) if row is not None else None
+
+    def events(
+        self,
+        project: Path,
+        session_id: str,
+        *,
+        after: int = 0,
+    ) -> dict[str, Any]:
+        try:
+            cursor = int(after)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Chat event cursor must be an integer") from exc
+        if cursor < 0:
+            raise ValueError("Chat event cursor must be non-negative")
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            latest = int(session.get("event_seq") or 0)
+            rows = list(session.get("events") or [])
+            first = int(rows[0]["seq"]) if rows else latest + 1
+            reset_required = cursor > latest or (
+                bool(rows) and cursor < first - 1
+            )
+            if reset_required:
+                selected = rows
+            else:
+                selected = [row for row in rows if int(row["seq"]) > cursor]
+            return {
+                "session_id": session["session_id"],
+                "cursor": latest,
+                "reset_required": reset_required,
+                "events": [dict(row) for row in selected],
+            }
+
+    def record_event(
+        self,
+        project: Path,
+        session_id: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            event = self._record_event(session, event_type, payload)
+            self._write(project, state)
+            return dict(event)
 
     def ask(self, project: Path, session_id: str) -> dict[str, Any]:
         with self._lock:
@@ -278,6 +347,11 @@ class ChatService:
             }
             session["ask"] = value
             session["updated_at"] = now
+            self._record_event(session, "ask_requested", {
+                "ask_id": value["ask_id"],
+                "turn_id": value["turn_id"],
+                "source": value["source"],
+            })
             self._write(project, state)
             return {
                 "session_id": session["session_id"],
@@ -364,6 +438,11 @@ class ChatService:
             )
             ask["resolved_at"] = time.time()
             session["updated_at"] = ask["resolved_at"]
+            self._record_event(session, "ask_resolved", {
+                "ask_id": ask["ask_id"],
+                "turn_id": ask["turn_id"],
+                "status": ask["status"],
+            })
             self._write(project, state)
             return {
                 "session_id": session["session_id"],
@@ -551,6 +630,12 @@ class ChatService:
                 "status": "queued",
             }
             self._trim_turn_requests(state)
+            self._record_event(session, "queue_updated", {
+                "action": "enqueued",
+                "queue_item_id": item["queue_item_id"],
+                "turn_id": item["turn_id"],
+                "status": item["status"],
+            })
             self._write(project, state)
             return {
                 **self._queue_snapshot(session),
@@ -587,6 +672,12 @@ class ChatService:
                 request = state["turn_requests"].get(item["request_id"])
                 if request is not None:
                     request["status"] = "dispatching"
+                self._record_event(session, "queue_updated", {
+                    "action": "dispatching",
+                    "queue_item_id": item["queue_item_id"],
+                    "turn_id": item["turn_id"],
+                    "status": "dispatching",
+                })
                 self._write(project, state)
                 return dict(item)
             return None
@@ -613,6 +704,21 @@ class ChatService:
                 request["status"] = outcome
             session["updated_at"] = time.time()
             self._trim_turn_requests(state)
+            self._record_event(session, "queue_updated", {
+                "action": "completed",
+                "queue_item_id": item["queue_item_id"],
+                "turn_id": item["turn_id"],
+                "status": outcome,
+            })
+            self._record_event(
+                session,
+                "turn_completed" if outcome == "completed" else "turn_failed",
+                {
+                    "turn_id": item["turn_id"],
+                    "queue_item_id": item["queue_item_id"],
+                    "outcome": outcome,
+                },
+            )
             self._write(project, state)
 
     def update_queue_item(
@@ -633,6 +739,12 @@ class ChatService:
                 raise ValueError("Only pending Queue items can be edited")
             item["content"] = text
             session["updated_at"] = time.time()
+            self._record_event(session, "queue_updated", {
+                "action": "edited",
+                "queue_item_id": item["queue_item_id"],
+                "turn_id": item["turn_id"],
+                "status": item["status"],
+            })
             self._write(project, state)
             return self._queue_snapshot(session)
 
@@ -656,6 +768,17 @@ class ChatService:
                 request["status"] = "cancelled"
             session["updated_at"] = time.time()
             self._trim_turn_requests(state)
+            self._record_event(session, "queue_updated", {
+                "action": "deleted",
+                "queue_item_id": item["queue_item_id"],
+                "turn_id": item["turn_id"],
+                "status": "cancelled",
+            })
+            self._record_event(session, "turn_failed", {
+                "turn_id": item["turn_id"],
+                "queue_item_id": item["queue_item_id"],
+                "outcome": "cancelled",
+            })
             self._write(project, state)
             return self._queue_snapshot(session)
 
@@ -667,7 +790,7 @@ class ChatService:
             state = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Chat state is invalid: {exc}") from exc
-        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, 5, 6, 7, STATE_VERSION}:
+        if not isinstance(state, dict) or state.get("version") not in {1, 2, 3, 4, 5, 6, 7, 8, STATE_VERSION}:
             raise ValueError("Unsupported Chat state version")
         source_version = int(state.get("version"))
         legacy_v1 = source_version == 1
@@ -676,6 +799,7 @@ class ChatService:
         legacy_queue_status = source_version <= 4
         legacy_before_turn_id = source_version <= 6
         legacy_before_queue_item_id = source_version <= 7
+        legacy_before_events = source_version <= 8
         sessions = state.get("sessions")
         create_requests = state.get("create_requests")
         turn_requests = {} if legacy_v1 else state.get("turn_requests", {})
@@ -736,6 +860,9 @@ class ChatService:
                     "reasoning": "" if legacy_before_reasoning else str(item.get("reasoning") or ""),
                 })
             ask = None if legacy_before_ask else self._normalize_ask(row.get("ask"))
+            event_seq = 0 if legacy_before_events else self._event_seq(row.get("event_seq"))
+            raw_events = [] if legacy_before_events else row.get("events", [])
+            event_rows = self._normalize_events(raw_events, event_seq)
             normalized.append({
                 "session_id": session_id,
                 "title": self._title(str(row.get("title") or "")),
@@ -745,6 +872,8 @@ class ChatService:
                 "agent_session_id": str(row.get("agent_session_id") or ""),
                 "queue": queue_rows,
                 "ask": ask,
+                "event_seq": event_seq,
+                "events": event_rows,
             })
         active = str(state.get("active_session_id") or "")
         if active and active not in seen:
@@ -838,6 +967,8 @@ class ChatService:
             "agent_session_id": "",
             "queue": [],
             "ask": None,
+            "event_seq": 0,
+            "events": [],
         }
 
     @staticmethod
@@ -917,6 +1048,74 @@ class ChatService:
         if len(label) > 80:
             raise ValueError("Chat title is too long")
         return label or "New Chat"
+
+    @staticmethod
+    def _event_seq(value: Any) -> int:
+        try:
+            seq = int(value or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Chat state contains an invalid event cursor") from exc
+        if seq < 0:
+            raise ValueError("Chat state contains an invalid event cursor")
+        return seq
+
+    @classmethod
+    def _normalize_events(
+        cls,
+        raw: Any,
+        event_seq: int,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(raw, list):
+            raise ValueError("Chat state contains invalid events")
+        rows: list[dict[str, Any]] = []
+        previous = 0
+        for item in raw[-EVENT_LIMIT:]:
+            if not isinstance(item, dict):
+                raise ValueError("Chat state contains invalid events")
+            seq = cls._event_seq(item.get("seq"))
+            event_type = str(item.get("type") or "")
+            payload = item.get("payload", {})
+            if (
+                seq <= previous
+                or seq > event_seq
+                or event_type not in CHAT_EVENT_TYPES
+                or not isinstance(payload, dict)
+            ):
+                raise ValueError("Chat state contains invalid events")
+            rows.append({
+                "seq": seq,
+                "type": event_type,
+                "time": float(item.get("time") or 0),
+                "payload": dict(payload),
+            })
+            previous = seq
+        return rows
+
+    @staticmethod
+    def _record_event(
+        session: dict[str, Any],
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        kind = str(event_type or "").strip()
+        if kind not in CHAT_EVENT_TYPES:
+            raise ValueError("Unsupported Chat event type")
+        body = {} if payload is None else payload
+        if not isinstance(body, dict):
+            raise ValueError("Chat event payload must be an object")
+        seq = int(session.get("event_seq") or 0) + 1
+        event = {
+            "seq": seq,
+            "type": kind,
+            "time": time.time(),
+            "payload": dict(body),
+        }
+        session["event_seq"] = seq
+        rows = session.setdefault("events", [])
+        rows.append(event)
+        if len(rows) > EVENT_LIMIT:
+            del rows[:-EVENT_LIMIT]
+        return event
 
     @staticmethod
     def _legacy_turn_id(session_id: str, request_id: str) -> str:

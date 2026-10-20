@@ -7,6 +7,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let project = null;
   let sessions = [];
   let activeSessionId = "";
+  let eventCursor = 0;
   let preferences = {};
   let agentCapabilities = [];
   let runnerCapabilities = [];
@@ -458,6 +459,40 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
+  async function refreshChatEvents() {
+    const path = projectPath();
+    const session = activeSessionId;
+    if (!path || !session) {
+      eventCursor = 0;
+      return { events: [], reset_required: false };
+    }
+    const expectedProject = path;
+    const expectedSession = session;
+    const data = await api(
+      "/api/chat/events?project=" + encodeURIComponent(path) +
+      "&session_id=" + encodeURIComponent(session) +
+      "&after=" + encodeURIComponent(String(eventCursor)),
+      { timeoutMs: 15000 }
+    );
+    if (projectPath() !== expectedProject || activeSessionId !== expectedSession) {
+      return { events: [], reset_required: false };
+    }
+    const rows = Array.isArray(data.events) ? data.events : [];
+    eventCursor = Number(data.cursor || 0);
+    const types = new Set(rows.map((item) => String(item?.type || "")));
+    if (data.reset_required || types.has("message_completed") || types.has("message_delta")) {
+      await refreshMessages();
+    }
+    if (types.has("capabilities_updated")) {
+      await Promise.all([
+        refreshSettingsCatalog(),
+        refreshAgentCapabilities({ refresh: true }),
+        refreshRunnerCapabilities(),
+      ]);
+    }
+    return data;
+  }
+
   function scheduleQueuePoll() {
     clearQueuePoll();
     if (!queueBusy || !project || !activeSessionId) return;
@@ -467,7 +502,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       queuePollTimer = 0;
       if (projectPath() !== expectedProject || activeSessionId !== expectedSession) return;
       try {
-        await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
+        await refreshChatEvents();
+        await Promise.all([refreshQueue(), refreshAsk()]);
       } catch (_) {}
     }, 900);
   }
@@ -1187,6 +1223,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (projectPath() !== expected) return;
     sessions = Array.isArray(data.sessions) ? data.sessions : [];
     activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
+    eventCursor = 0;
     renderSessions();
     await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
   }
@@ -1433,6 +1470,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       });
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.session_id || data.active_session_id || "");
+      eventCursor = 0;
       renderSessions();
       await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
       showToast?.("New Chat created");
@@ -1451,6 +1489,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       });
       sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
       activeSessionId = String(data.active_session_id || sessionId);
+      eventCursor = 0;
       renderSessions();
       await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
     } catch (error) {
@@ -1495,6 +1534,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       sessions = Array.isArray(data.sessions) ? data.sessions : [];
       taskDraftsBySession.delete(session.session_id);
       activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
+      eventCursor = 0;
       renderSessions();
       await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
       showToast?.("Chat deleted");
@@ -1511,6 +1551,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (name) name.textContent = project?.name || "Select a project";
     if (path) path.textContent = project?.path || "Open a local project folder to begin.";
     clearQueuePoll();
+    eventCursor = 0;
     queueItems = [];
     queueBusy = false;
     messageRows = [];

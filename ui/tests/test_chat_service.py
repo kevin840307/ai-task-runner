@@ -214,6 +214,91 @@ def test_project_chat_session_api_uses_existing_ui_server(tmp_path: Path) -> Non
 
 
 
+def test_chat_event_feed_is_durable_cursor_based_and_session_scoped(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    first = chat.sessions(project)["active_session_id"]
+    second = chat.create_session(project, request_id="events-second")["session_id"]
+
+    message = chat.append_message(project, first, "user", "hello")
+    queued = chat.enqueue_turn(
+        project,
+        first,
+        "work",
+        request_id="events-turn",
+        backend="qwen",
+    )
+    ask = chat.create_ask(
+        project,
+        first,
+        request_id="events-ask",
+        turn_id=queued["turn_id"],
+        questions=[{"id": "ok", "question": "Continue?", "options": ["yes", "no"]}],
+    )
+    chat.submit_ask(
+        project,
+        first,
+        ask["ask"]["ask_id"],
+        {"ok": "yes"},
+        request_id="events-answer",
+    )
+    claimed = chat.claim_next(project, first)
+    assert claimed is not None
+    chat.complete_queue_item(project, first, queued["queue_item_id"])
+
+    snapshot = ChatService().events(project, first, after=0)
+    assert snapshot["cursor"] >= 7
+    assert snapshot["reset_required"] is False
+    assert [row["type"] for row in snapshot["events"]] == [
+        "message_completed",
+        "queue_updated",
+        "ask_requested",
+        "ask_resolved",
+        "queue_updated",
+        "queue_updated",
+        "turn_completed",
+    ]
+    assert snapshot["events"][0]["payload"]["message_id"] == message["message_id"]
+    cursor = snapshot["cursor"]
+    assert ChatService().events(project, first, after=cursor)["events"] == []
+    assert ChatService().events(project, second, after=0)["events"] == []
+
+    state_file = project / ".ai-task-runner" / "ui" / "chat" / "state.json"
+    raw = json.loads(state_file.read_text(encoding="utf-8"))
+    assert raw["version"] == STATE_VERSION
+    first_state = next(row for row in raw["sessions"] if row["session_id"] == first)
+    assert first_state["event_seq"] == cursor
+    assert first_state["events"][-1]["type"] == "turn_completed"
+
+
+def test_chat_event_feed_http_contract(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+    server = UIServer(repo, "127.0.0.1", 0)
+    session_id = server.state.chat_service.sessions(project)["active_session_id"]
+    server.state.chat_service.append_message(project, session_id, "assistant", "event reply")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        project_query = urllib.parse.quote(str(project))
+        value = _json_request(
+            f"http://127.0.0.1:{server.port}/api/chat/events"
+            f"?project={project_query}&session_id={session_id}&after=0"
+        )
+        assert value["session_id"] == session_id
+        assert value["cursor"] == 1
+        assert value["events"][0]["type"] == "message_completed"
+        assert "content" not in value["events"][0]["payload"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_chat_agent_turn_is_separate_from_runner_history_and_reuses_agent_session(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
@@ -309,6 +394,7 @@ def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp
                 "project": str(project),
                 "session_id": session_id,
                 "message": "normal chat",
+                "request_id": "http-normal-chat-1",
             },
         )
         assert response["agent"] == "opencode"

@@ -62,6 +62,18 @@ def test_project_chat_agent_metadata_reuses_runner_backend_contract():
         assert provider_specific not in generic_projection
 
 
+def test_project_chat_event_feed_is_separate_from_runner_runtime_projection():
+    server = (ROOT / "ui/server.py").read_text(encoding="utf-8")
+    chat_service = (ROOT / "ui/chat_service.py").read_text(encoding="utf-8")
+    runtime = (ROOT / "ui/project_runtime_state.py").read_text(encoding="utf-8")
+
+    assert '"/api/chat/events"' in server
+    assert "CHAT_EVENT_TYPES" in chat_service
+    assert "def events(" in chat_service
+    assert "CHAT_EVENT_TYPES" not in runtime
+    assert "/api/chat/events" not in runtime
+
+
 def test_project_chat_never_invokes_runner_workflow_execution_directly():
     for relative in (
         "ui/chat_service.py",
