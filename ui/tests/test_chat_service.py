@@ -64,6 +64,47 @@ def test_project_chat_sessions_are_durable_and_separate_from_runner_history(tmp_
     assert restarted.messages(project, second_id)["messages"][0]["content"] == "separate session"
 
 
+def test_chat_server_reopen_does_not_touch_runner_runtime_state(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+
+    runtime = project / ".ai-task-runner"
+    runtime.mkdir()
+    sentinels = {
+        runtime / "state.json": '{"run_id":"runner-sentinel","completed":false}\n',
+        runtime / "runner-process.json": '{"supervisor_pid":12345,"worker_pid":12346}\n',
+        runtime / "stop.request": "keep-runner-stop-request\n",
+    }
+    for path, content in sentinels.items():
+        path.write_text(content, encoding="utf-8")
+
+    first = UIServer(repo, "127.0.0.1", 0)
+    try:
+        session_id = first.state.chat_service.sessions(project)["active_session_id"]
+        first.state.chat_service.append_message(
+            project,
+            session_id,
+            "user",
+            "ordinary chat survives server reopen",
+        )
+    finally:
+        first.server_close()
+
+    reopened = UIServer(repo, "127.0.0.1", 0)
+    try:
+        assert reopened.state.chat_service.sessions(project)["active_session_id"] == session_id
+        assert reopened.state.chat_service.messages(project, session_id)["messages"][0]["content"] == (
+            "ordinary chat survives server reopen"
+        )
+        for path, content in sentinels.items():
+            assert path.read_text(encoding="utf-8") == content
+    finally:
+        reopened.server_close()
+
+
 def test_project_chat_session_lifecycle_never_leaves_project_without_a_chat(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
