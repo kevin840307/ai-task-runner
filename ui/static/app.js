@@ -138,6 +138,7 @@ function applyThemePreferences(theme = "teal", appearance = "system") {
 }
 function applyGlobalSettings(value = state.globalSettings) {
   if (!value) return;
+  window.UiBootstrap?.storeGlobalSettings?.(value);
   const ui = value.interface || {};
   applyThemePreferences(ui.theme || "teal", ui.appearance || "system");
   applyMotionPreference(ui.motion || "full");

@@ -27,13 +27,18 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
     if (initialized) return;
     const rows = projects();
     const valid = new Set(rows.map(projectId).filter(Boolean));
+    let restored = false;
     try {
-      const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || "[]");
-      if (Array.isArray(saved)) {
-        for (const id of saved) if (valid.has(String(id))) selected.add(String(id));
+      const raw = localStorage.getItem(FILTER_KEY);
+      if (raw !== null) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved)) {
+          restored = true;
+          for (const id of saved) if (valid.has(String(id))) selected.add(String(id));
+        }
       }
     } catch (_) {}
-    if (!selected.size) {
+    if (!restored) {
       const current = getCurrentProject?.();
       const currentId = projectId(rows.find((row) => pathKey(row.path) === pathKey(current?.path)));
       if (currentId) selected.add(currentId);
