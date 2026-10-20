@@ -1444,7 +1444,11 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             # Double activation must still produce exactly one durable Task.
             page.evaluate("const b=document.querySelector('#taskWorkspaceSave'); b.click(); b.click();")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.wait_for_function(
+                "() => document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO' || Boolean(document.querySelector('#taskWorkspaceError'))"
+            )
+            create_error = page.locator("#taskWorkspaceError").inner_text() if page.locator("#taskWorkspaceError").count() else ""
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO", create_error
             created = state.tasks.list(state.repo_root)["tasks"]
             assert len(created) == 2
             assert created[1]["kind"] == "task_list"
