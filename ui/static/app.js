@@ -2120,12 +2120,20 @@ $("emptyOpenProjectButton").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("tasks");
-$("tasksNewButton").onclick = (event) => taskWorkspace.openCreateMenu({
-  anchor: event.currentTarget,
-  project: state.project?.path || "",
-  workflows: state.studioFiles.workflows || [],
-  workflow: currentProjectPreferences().workflow || "",
-});
+$("tasksNewButton").onclick = async (event) => {
+  const anchor = event.currentTarget;
+  const projectPath = state.project?.path || "";
+  await withButtonBusy(anchor, "", async () => {
+    await refreshStudioFiles({ projectPath });
+    if (!sameProjectPath(state.project?.path || "", projectPath)) return;
+    taskWorkspace.openCreateMenu({
+      anchor,
+      project: projectPath,
+      workflows: state.studioFiles.workflows || [],
+      workflow: currentProjectPreferences().workflow || "",
+    });
+  });
+};
 $("tasksCurrentRuntimeButton").onclick = () => switchView("tasks-runtime");
 $("tasksRuntimeBackButton").onclick = () => switchView("tasks");
 $("workflowNav").onclick = () => switchView("workflow");
