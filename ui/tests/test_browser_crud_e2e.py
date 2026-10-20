@@ -1041,9 +1041,14 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
         root = Path(td)
         state = _write_fixture_repo(root)
         # This flow intentionally exercises production Task validation, where
-        # every Task item requires a Workflow. Give the fixture a real saved
-        # Project selection instead of weakening the production validator.
-        state.project_preferences.update(root, {"workflow": "workflow.yaml"})
+        # every Task item requires a Workflow. Persist the canonical catalog
+        # path rather than a display/name guess so + New resolves the intended
+        # Workflow without depending on catalog sort order.
+        workflow_root = root / "runner" / "assets" / "workflows"
+        workflow_path = workflow_root / "workflow.yaml"
+        workflow_path.write_text("stages: {}\n", encoding="utf-8")
+        (workflow_root / "mixed.yaml").write_text("stages: {}\n", encoding="utf-8")
+        state.project_preferences.update(root, {"workflow": str(workflow_path)})
         # Keep Workflow capability behavior deterministic in this browser fixture.
         # Production resolves these flags from the real Workflow catalog.
         def task_requirements(_project: Path, workflow: str) -> dict:
@@ -1051,9 +1056,6 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             return {"requires_python_validator": mixed, "has_ai_validator": mixed}
         state.tasks._workflow_requirements = task_requirements
         state.task_drafts._workflow_requirements = task_requirements
-        workflow_root = root / "runner" / "assets" / "workflows"
-        (workflow_root / "workflow.yaml").write_text("stages: {}\n", encoding="utf-8")
-        (workflow_root / "mixed.yaml").write_text("stages: {}\n", encoding="utf-8")
         validator_upload = root / "validator-upload.py"
         validator_upload.write_text("print('uploaded validator')\n", encoding="utf-8")
         ai_upload = root / "ai-upload.md"
