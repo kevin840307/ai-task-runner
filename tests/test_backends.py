@@ -245,6 +245,49 @@ def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     assert "--auto" in captured["command"]
 
 
+def test_qwen_models_prefer_native_session_context(tmp_path, monkeypatch):
+    import runner.agent.qwen as qwen_module
+
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_native_model_ids",
+        lambda root: ["qwen-native-b(openai)", "qwen-native-a(openai)"],
+    )
+
+    assert available_models("qwen", project) == [
+        "qwen-native-b(openai)",
+        "qwen-native-a(openai)",
+    ]
+
+
+def test_qwen_model_projection_reads_native_config_options():
+    import runner.agent.qwen as qwen_module
+
+    context = {
+        "state": {
+            "configOptions": [
+                {"id": "mode", "category": "mode", "currentValue": "auto"},
+                {
+                    "id": "model",
+                    "category": "model",
+                    "currentValue": "qwen-current(openai)",
+                    "options": [
+                        {"value": "qwen-b(openai)", "name": "Qwen B"},
+                        {"value": "qwen-a(openai)", "name": "Qwen A"},
+                    ],
+                },
+            ],
+        },
+    }
+    assert qwen_module._qwen_model_ids_from_context(context) == [
+        "qwen-a(openai)",
+        "qwen-b(openai)",
+        "qwen-current(openai)",
+    ]
+
+
 def test_opencode_models_prefer_cli_catalog(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
 
@@ -919,6 +962,13 @@ def test_backend_catalog_discovers_plugin_backends_before_listing_models(tmp_pat
 
 
 def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatch):
+    import runner.agent.qwen as qwen_module
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_native_model_ids",
+        lambda root: (_ for _ in ()).throw(BackendError("native unavailable")),
+    )
     qwen_home = tmp_path / "qwen-home"
     qwen_home.mkdir()
     (qwen_home / "settings.json").write_text(
@@ -963,6 +1013,13 @@ def test_qwen_models_match_main_selector_protocol_and_flags(tmp_path, monkeypatc
 def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
     import runner.agent.opencode as opencode_module
+    import runner.agent.qwen as qwen_module
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_native_model_ids",
+        lambda root: (_ for _ in ()).throw(BackendError("native unavailable")),
+    )
 
     qwen_home = tmp_path / "qwen-home"
     qwen_home.mkdir()

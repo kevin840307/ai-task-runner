@@ -13,7 +13,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -469,7 +470,11 @@ def _qwen_http_json(
     return value
 
 
-def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+@contextmanager
+def _qwen_daemon_session(
+    root: Path,
+) -> Iterator[tuple[str, str, set[str]]]:
+    """Own one short-lived native Qwen daemon session for catalog discovery."""
     command = _qwen_serve_command(root)
     options: dict[str, Any] = {
         "cwd": root,
@@ -522,13 +527,9 @@ def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             raise BackendError(f"Qwen capability daemon did not become ready: {detail}")
 
         caps = _qwen_http_json(base_url, "/capabilities")
-        features = set(caps.get("features") or [])
-        required = {"session_create", "session_supported_commands", "session_resources"}
-        missing = sorted(required - features)
-        if missing:
-            raise BackendError(
-                "Qwen capability daemon is missing: " + ", ".join(missing)
-            )
+        features = {str(value) for value in caps.get("features") or []}
+        if "session_create" not in features:
+            raise BackendError("Qwen capability daemon is missing: session_create")
         create_body: dict[str, Any] = {"cwd": str(root)}
         if "session_scope_override" in features:
             create_body["sessionScope"] = "thread"
@@ -536,12 +537,7 @@ def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         session_id = str(created.get("sessionId") or "")
         if not session_id:
             raise BackendError("Qwen capability daemon did not return sessionId")
-        commands = _qwen_http_json(
-            base_url,
-            f"/session/{session_id}/supported-commands",
-        )
-        resources = _qwen_http_json(base_url, f"/session/{session_id}/resources")
-        return commands, resources
+        yield base_url, session_id, features
     finally:
         if base_url and session_id:
             try:
@@ -557,6 +553,69 @@ def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             except OSError:
                 pass
 
+
+def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    with _qwen_daemon_session(root) as (base_url, session_id, features):
+        required = {"session_supported_commands", "session_resources"}
+        missing = sorted(required - features)
+        if missing:
+            raise BackendError(
+                "Qwen capability daemon is missing: " + ", ".join(missing)
+            )
+        commands = _qwen_http_json(
+            base_url,
+            f"/session/{session_id}/supported-commands",
+        )
+        resources = _qwen_http_json(base_url, f"/session/{session_id}/resources")
+        return commands, resources
+
+
+def _qwen_model_ids_from_context(context: dict[str, Any]) -> list[str]:
+    state = context.get("state")
+    if not isinstance(state, dict):
+        return []
+    options = state.get("configOptions")
+    if not isinstance(options, list):
+        return []
+    model = next(
+        (
+            item
+            for item in options
+            if isinstance(item, dict)
+            and (
+                str(item.get("category") or "") == "model"
+                or str(item.get("id") or "") == "model"
+            )
+        ),
+        None,
+    )
+    if not isinstance(model, dict):
+        return []
+
+    values: set[str] = set()
+    current = str(model.get("currentValue") or "").strip()
+    if current:
+        values.add(current)
+    choices = model.get("options")
+    if isinstance(choices, list):
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            value = str(choice.get("value") or choice.get("id") or "").strip()
+            if value:
+                values.add(value)
+    return sorted(values)
+
+
+def _qwen_native_model_ids(root: Path) -> list[str]:
+    with _qwen_daemon_session(root) as (base_url, session_id, features):
+        if "session_context" not in features:
+            raise BackendError("Qwen capability daemon is missing: session_context")
+        context = _qwen_http_json(base_url, f"/session/{session_id}/context")
+        values = _qwen_model_ids_from_context(context)
+        if not values:
+            raise BackendError("Qwen session context did not return model options")
+        return values
 
 def _qwen_capability_specs(
     commands: dict[str, Any],
@@ -922,6 +981,17 @@ class QwenBackend(BaseBackend):
 
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
+        # Prefer Qwen's own live session projection: this is the same
+        # configOptions model registry consumed by Qwen ACP/UI clients.
+        try:
+            native = _qwen_native_model_ids(root)
+        except BackendError:
+            native = []
+        if native:
+            return native
+
+        # Older/incompatible CLI installs may not expose session_context.
+        # Keep settings parsing as a bounded compatibility fallback only.
         layers = [_read_qwen_settings(path) for path in _qwen_settings_paths(root)]
         providers = _qwen_replace_setting(layers, "modelProviders")
         provider_protocol = _qwen_replace_setting(layers, "providerProtocol")

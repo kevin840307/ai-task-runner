@@ -506,7 +506,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
 [x] Agent native Ask 能力不可用時由 adapter 回報 unsupported，Project Chat 顯示 Unavailable；不得用 @ask-demo 或其他 Mock 冒充 native Ask。
 [x] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
-    - Qwen capability discovery 由 adapter 啟動目前安裝的 Qwen daemon，讀 /capabilities、session supported commands/resources；native Ask 另有 CLI version gate，不由 UI 假設固定能力。
+    - Qwen capability/model discovery 由 adapter 啟動目前安裝的 Qwen daemon，讀 /capabilities、session supported commands/resources 與 session context 的原生 model configOptions；舊 settings model parser 僅作 bounded fallback。native Ask 另有 CLI version gate，不由 UI 假設固定能力。
 [x] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
     - OpenCode adapter 使用 structured opencode api command.list / skill.list / session question API；model discovery 使用 adapter-owned opencode models，UI 只消費 normalized projection。
 [ ] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
