@@ -796,6 +796,20 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert created["items"][0]["prompt"] == "Edited transient draft"
         assert server.state.tasks.list(project)["tasks"][0]["task_id"] == created["task_id"]
 
+        repeated_create = _json_request(
+            f"{base}/api/tasks/create-from-draft",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "draft_id": generated["draft_id"],
+                "request_id": "http-create-1",
+            },
+        )
+        assert repeated_create["duplicate"] is True
+        assert repeated_create["task_id"] == created["task_id"]
+        assert len(server.state.tasks.list(project)["tasks"]) == 1
+
         dismissed = _json_request(
             f"{base}/api/chat/task-draft/dismiss",
             method="POST",
