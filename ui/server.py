@@ -108,6 +108,18 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
 
+    def delete_chat_session(self, project: Path, session_id: str) -> dict:
+        session = str(session_id or "").strip()
+        if self.chat_agent.status(
+            project,
+            self.chat_service,
+            session_id=session,
+        )["busy"]:
+            raise ValueError("Stop or wait for the active Chat turn before deleting this Chat")
+        value = self.chat_service.delete_session(project, session)
+        self.task_drafts.discard_session(project, session)
+        return value
+
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -548,17 +560,9 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("title", "")),
                 ))
             if parsed.path == "/api/chat/session/delete":
-                project = self._project(body)
-                session_id = str(body.get("session_id", ""))
-                if self.state.chat_agent.status(
-                    project,
-                    self.state.chat_service,
-                    session_id=session_id,
-                )["busy"]:
-                    raise ValueError("Stop or wait for the active Chat turn before deleting this Chat")
-                return self._json(self.state.chat_service.delete_session(
-                    project,
-                    session_id,
+                return self._json(self.state.delete_chat_session(
+                    self._project(body),
+                    str(body.get("session_id", "")),
                 ))
             if parsed.path == "/api/project/message":
                 project = self._project(body)

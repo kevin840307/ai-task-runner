@@ -157,6 +157,28 @@ class TaskDraftService:
                     del self._requests[request_key]
             return {"draft_id": key[2], "dismissed": True, "duplicate": not existed}
 
+    def discard_session(self, project: Path, session_id: str) -> dict[str, Any]:
+        project_key = str(project.resolve())
+        session = str(session_id or "").strip()
+        with self._lock:
+            draft_keys = [
+                key for key in self._drafts
+                if key[0] == project_key and key[1] == session
+            ]
+            request_keys = [
+                key for key in self._requests
+                if key[0] == project_key and key[1] == session
+            ]
+            for key in draft_keys:
+                self._drafts.pop(key, None)
+            for key in request_keys:
+                self._requests.pop(key, None)
+            return {
+                "session_id": session,
+                "drafts_removed": len(draft_keys),
+                "requests_removed": len(request_keys),
+            }
+
     def _run_tool(
         self,
         *,

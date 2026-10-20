@@ -1491,6 +1491,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         body: JSON.stringify({ project: projectPath(), session_id: session.session_id }),
       });
       sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      taskDraftsBySession.delete(session.session_id);
       activeSessionId = String(data.active_session_id || data.session_id || sessions[0]?.session_id || "");
       renderSessions();
       await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
