@@ -514,12 +514,16 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [ ] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
 [ ] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
-[ ] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
-[ ] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
+[x] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
+    - Production owner 是 ui/task_draft_service.py；auto/single/list 共用同一 generate() 與 canonical validator。
+[x] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
+    - 固定 Prompt 由 ui/task_draft_prompt.md 擁有；tool/task_draft_agent.py 只透過既有 runner.agent adapter 執行，不建立第二個 workflow runtime。
 [ ] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
-[ ] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
+[x] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
+    - /api/tasks/create-from-draft 只取 transient canonical Draft 後呼叫 TaskService.create；request_id/idempotency 與 durable store 由 TaskService 單一 owner。
 [ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
-[ ] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
+[x] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
+    - TaskService.create 固定建立 status=new 且不寫 runtime；@goal 目前在 Workspace phase 前明確 fail closed，不會偷偷把普通 Draft 變成 Running。
 [ ] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
 [ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
 [ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。

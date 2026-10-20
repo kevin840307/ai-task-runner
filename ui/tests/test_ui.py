@@ -307,7 +307,7 @@ class UIStateTests(unittest.TestCase):
             "items": [{
                 "title": "Only",
                 "prompt": "Keep identity",
-                "workflow": "workflow.yaml",
+                "workflow": "task.workflow.yaml",
                 "project": str(self.project),
                 "workspace": "auto",
             }],

@@ -347,6 +347,9 @@ def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
     (repo / "ui" / "data").mkdir(parents=True)
     (repo / "ui" / "static").mkdir(parents=True)
     project.mkdir()
+    workflow_root = repo / "runner" / "assets" / "workflows"
+    workflow_root.mkdir(parents=True)
+    (workflow_root / "workflow.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
 
     server = UIServer(repo, "127.0.0.1", 0)
     server.state.add_project(str(project))
@@ -379,6 +382,52 @@ def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
         server.server_close()
         thread.join(timeout=5)
 
+
+def test_task_validation_fails_closed_for_missing_workflow(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    def requirements(_project: Path, workflow: str) -> dict:
+        return {
+            "exists": workflow == "valid.workflow.yaml",
+            "requires_python_validator": False,
+            "has_ai_validator": False,
+        }
+
+    generated = TaskDraftService(
+        repo,
+        workflow_requirements=requirements,
+        runner=lambda **kwargs: {
+            "draft": {"title": "Draft", "items": [{"title": "A", "prompt": "Do A"}]},
+        },
+    )
+    with pytest.raises(ValueError, match="Selected Workflow does not exist"):
+        generated.generate(
+            project,
+            spec="missing workflow",
+            draft_mode="single",
+            backend="qwen",
+            workflow="missing.workflow.yaml",
+            request_id="missing-generated-workflow",
+        )
+
+    service = TaskService(workflow_requirements=requirements)
+    draft = {
+        "title": "Missing workflow",
+        "items": [{
+            "title": "A",
+            "prompt": "Do A",
+            "workflow": "missing.workflow.yaml",
+            "project": str(project),
+            "workspace": "auto",
+        }],
+    }
+    with pytest.raises(ValueError, match="Workflow does not exist"):
+        service.validate(project, draft)
+
+    draft["items"][0]["workflow"] = "valid.workflow.yaml"
+    assert service.validate(project, draft)["draft"]["items"][0]["workflow"] == "valid.workflow.yaml"
 
 def test_task_service_enforces_workflow_capability_inputs(tmp_path: Path) -> None:
     project = tmp_path / "project"

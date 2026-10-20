@@ -57,6 +57,8 @@ def validate_generated_draft(
     project_path = str(project.resolve())
     workflow_path = str(workflow or "").strip()
     requirements = workflow_requirements(project, workflow_path) if workflow_requirements else {}
+    if workflow_requirements is not None and requirements.get("exists") is False:
+        raise ValueError("Selected Workflow does not exist")
     requires_python_validator = bool(requirements.get("requires_python_validator"))
     has_ai_validator = bool(requirements.get("has_ai_validator"))
     items: list[dict[str, Any]] = []
@@ -134,6 +136,8 @@ def validate_task_draft_for_create(
             required=False,
         )
         requirements = workflow_requirements(project, workflow) if workflow_requirements else {}
+        if workflow_requirements is not None and requirements.get("exists") is False:
+            raise ValueError(f"Task item {index + 1} Workflow does not exist")
         if requirements.get("requires_python_validator") and not validator:
             raise ValueError(f"Task item {index + 1} File Validator is required by the selected Workflow")
         if requirements.get("has_ai_validator") and not ai_validator_prompt_file:

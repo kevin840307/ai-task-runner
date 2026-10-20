@@ -46,7 +46,7 @@ except ImportError:
 class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
     def _task_workflow_requirements(self, project: Path, workflow: str) -> dict:
         selected = str(workflow or "").strip()
-        default = {"requires_python_validator": False, "has_ai_validator": False}
+        default = {"exists": False, "requires_python_validator": False, "has_ai_validator": False}
         if not selected:
             return default
         try:
@@ -63,12 +63,13 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
             }
             if selected in aliases:
                 return {
+                    "exists": True,
                     "requires_python_validator": bool(row.get("requires_python_validator")),
                     "has_ai_validator": bool(row.get("has_ai_validator")),
                 }
         candidate = Path(selected).expanduser()
         if candidate.is_absolute() and candidate.is_file():
-            return self._workflow_requirements(candidate.resolve())
+            return {"exists": True, **self._workflow_requirements(candidate.resolve())}
         return default
 
     def __init__(self, repo_root: Path) -> None:

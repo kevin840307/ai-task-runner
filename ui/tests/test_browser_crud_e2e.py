@@ -100,6 +100,10 @@ def _write_fixture_repo(root: Path) -> UIState:
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 
+    (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+        "stages: {}\nflow: []\n",
+        encoding="utf-8",
+    )
     prompts = root / "runner" / "assets" / "prompts" / "common"
     (prompts / "generic.md").write_text("{{ goal }}\n{{ instructions }}\n", encoding="utf-8")
     (prompts / "execution.md").write_text("{{ goal }}\n", encoding="utf-8")
