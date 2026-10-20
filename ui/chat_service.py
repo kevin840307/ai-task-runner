@@ -59,10 +59,6 @@ class ChatService:
             state = self._load(project)
             changed = self._ensure_session(state)
             if changed:
-                self._record_event(session, "queue_updated", {
-                    "action": "recovered",
-                    "status": "queued",
-                })
                 self._write(project, state)
             return self._snapshot(state)
 
@@ -659,6 +655,10 @@ class ChatService:
                     request["status"] = "queued"
                 changed = True
             if changed:
+                self._record_event(session, "queue_updated", {
+                    "action": "recovered",
+                    "status": "queued",
+                })
                 self._write(project, state)
 
     def claim_next(self, project: Path, session_id: str) -> dict[str, Any] | None:

@@ -100,10 +100,6 @@ def _write_fixture_repo(root: Path) -> UIState:
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 
-    (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
-        "stages: {}\nflow: []\n",
-        encoding="utf-8",
-    )
     prompts = root / "runner" / "assets" / "prompts" / "common"
     (prompts / "generic.md").write_text("{{ goal }}\n{{ instructions }}\n", encoding="utf-8")
     (prompts / "execution.md").write_text("{{ goal }}\n", encoding="utf-8")
@@ -841,6 +837,10 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
         second = root / "second-project"
         second.mkdir()
         state._write_projects([
@@ -1504,6 +1504,10 @@ def test_task_info_explains_non_new_delete_block() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
         project_row = state.projects()[0]
         draft = {
             "title": "Running task cannot be deleted",
