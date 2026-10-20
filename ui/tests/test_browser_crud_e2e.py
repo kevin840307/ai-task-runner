@@ -1169,6 +1169,26 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
             assert page.locator(".task-workspace-list-row").count() == 1
+
+            # Standalone Task List Draft footer Cancel shares the canonical
+            # dirty-discard guard. Keep editing preserves the Draft; Discard
+            # closes the same Drawer shell. Reopen before continuing creation.
+            page.fill("#taskWorkspaceDraftTitle", "Dirty footer cancel draft")
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') !== null")
+            assert page.locator(".ui-dialog-card").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Dirty footer cancel draft"
+            page.click("#taskWorkspaceFooterBack")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            page.click("#projectChatNewTaskButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 1
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "Second list child")
