@@ -517,7 +517,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Queue 產品契約使用共用 durable Chat service FIFO；Qwen Ctrl+Q 僅作 queued-next-turn UX 參考，不注入 CLI 鍵盤事件。Native Queue transport 未宣告時明確落在 service_fifo。
 [x] Slash skill / command 由 Qwen daemon 與 OpenCode native registry projection 提供，只顯示 Agent 實際解析且允許使用的能力，保留 permission / user-invocable / availability。
 [ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
-[ ] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
+[x] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
 
 
 15. Runner 必要變更

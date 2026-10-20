@@ -1205,6 +1205,36 @@ def test_qwen_capabilities_use_native_daemon_projection(monkeypatch, tmp_path):
     assert by_token[("/review", "skill")].source == "project"
 
 
+def test_native_capability_discovery_failures_are_not_replaced_with_fake_entries(monkeypatch, tmp_path):
+    from runner.agent import opencode as opencode_module
+    from runner.agent import qwen as qwen_module
+
+    def qwen_unavailable(root):
+        raise BackendError("qwen native skill registry unavailable")
+
+    monkeypatch.setattr(qwen_module, "_qwen_daemon_snapshot", qwen_unavailable)
+    with pytest.raises(BackendError, match="native skill registry unavailable"):
+        discover_capabilities("qwen", tmp_path)
+
+    def opencode_unavailable(root, operation):
+        raise BackendError(f"opencode {operation} unavailable")
+
+    monkeypatch.setattr(opencode_module, "_opencode_api_payload", opencode_unavailable)
+    with pytest.raises(BackendError, match="command.list unavailable"):
+        discover_capabilities("opencode", tmp_path)
+
+
+def test_qwen_model_discovery_failure_has_only_bounded_config_fallback(monkeypatch, tmp_path):
+    from runner.agent import qwen as qwen_module
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_native_model_ids",
+        lambda root: (_ for _ in ()).throw(BackendError("session context unavailable")),
+    )
+    assert available_models("qwen", tmp_path) == []
+
+
 def test_opencode_capabilities_use_native_api_registry(monkeypatch, tmp_path):
     from runner.agent import opencode as opencode_module
 
