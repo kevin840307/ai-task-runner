@@ -798,6 +798,10 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.wait_for_function("!document.querySelector('#rerunButton')?.hidden")
             page.click("#rerunButton")
             page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
