@@ -1073,6 +1073,140 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        workflow = root / "runner" / "assets" / "workflows" / "workflow.yaml"
+        workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        second = root / "second-project"
+        second.mkdir()
+        state._write_projects([
+            {"name": "Fixture Project", "path": str(root)},
+            {"name": "Second Project", "path": str(second)},
+        ])
+        project_id = next(
+            row["project_id"]
+            for row in state.projects()
+            if row["name"] == "Fixture Project"
+        )
+        state.tasks.create(
+            root,
+            {
+                "title": "Smoke task list",
+                "items": [
+                    {
+                        "title": "First",
+                        "prompt": "Do first",
+                        "workflow": str(workflow),
+                        "project": str(root),
+                        "workspace": "auto",
+                    },
+                    {
+                        "title": "Second",
+                        "prompt": "Do second",
+                        "workflow": str(workflow),
+                        "project": str(root),
+                        "workspace": "auto",
+                    },
+                ],
+            },
+            request_id="smoke-task-list",
+            project_id=project_id,
+        )
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        def install(page, expected_project: str = "Fixture Project") -> None:
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page, expected_project)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            install(page)
+
+            page.reload(wait_until="domcontentloaded")
+            install(page)
+
+            # Tasks + New uses the same canonical menu for Task and Task List.
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksNewButton")
+            page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            page.click("#tasksNewButton")
+            page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            # Existing Board card opens Info, then the same Task List route.
+            page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Smoke task list").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceOpenList")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            # Chat New Task reuses the same create menu/editor.
+            page.locator("#projectList .project-root").filter(has_text="Fixture Project").click()
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+            page.click("#projectChatNewTaskButton")
+            page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            # Removing the last visible Project must fail open to an empty app,
+            # not leave a stale active Project or throw a page error.
+            for project_name in ("Second Project", "Fixture Project"):
+                row = page.locator(".project-row").filter(has_text=project_name)
+                row.locator(".project-menu-button").click()
+                page.locator(".project-action-menu-portal").get_by_role(
+                    "button", name="Remove project"
+                ).click()
+                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                page.locator("[data-dialog-ok]").click()
+                page.wait_for_function(
+                    "(name) => !Array.from(document.querySelectorAll('.project-row')).some((row) => row.textContent.includes(name))",
+                    arg=project_name,
+                )
+
+            assert page.locator(".project-row").count() == 0
+            assert errors == []
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
