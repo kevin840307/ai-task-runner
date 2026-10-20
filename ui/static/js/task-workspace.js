@@ -46,6 +46,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
     document.addEventListener("keydown", (event) => {
       if (!overlay || overlay.hidden || event.key !== "Escape") return;
+      if (!overlay.contains(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       void requestClose();

@@ -1665,6 +1665,44 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#tasksListRows .tasks-list-row").count() == 1
             page.locator("#tasksListRows .tasks-list-row").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+
+            # Escape belongs to the focused top layer. The Task Workspace stays
+            # open while a Project menu, rename dialog or discard dialog closes.
+            active_project = page.locator("#projectList .project-row.active")
+            active_project.locator(".project-menu-button").click()
+            page.wait_for_function("document.querySelector('.project-action-menu:not([hidden])') !== null")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('.project-action-menu:not([hidden])') === null")
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
+
+            active_project.locator(".project-menu-button").click()
+            page.locator(".project-action-menu:not([hidden])").get_by_role("button", name="Rename project").click()
+            page.wait_for_function("document.querySelector('.ui-dialog-input') !== null")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') === null")
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
+
+            page.click("#taskWorkspaceOpenList")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-durable-edit").click()
+            page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
+            page.locator("#taskWorkspacePrompt").focus()
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') !== null")
+            assert page.locator(".ui-dialog-card").get_by_text("unsaved Task edits", exact=False).is_visible()
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') === null")
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK EDITOR"
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Escape top-layer dirty prompt"
+            page.click("#taskWorkspaceClose")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.locator("#tasksListRows .tasks-list-row").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+
             page.click("#taskWorkspaceDeleteTask")
             assert page.locator(".ui-dialog-body").get_by_text("Task ID:", exact=False).is_visible()
             page.locator("[data-dialog-cancel]").click()
