@@ -382,7 +382,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
 [x] Regression 修正：compact New Task layout 移除 state-hint 後，同步移除舊 startup writer，並把 newTaskListDraft 初始化移到 task-editor.js 最前面，避免 Task Editor 載入中止後 Task Workspace 出現 TDZ ReferenceError。
 [x] Tasks header 移除 tasksProjectLine；HTML 與 task-editor / tasks-page / project-sidebar 所有 writer 一併刪除，不留下 null.textContent 路徑。
-[ ] Browser smoke：reload 後 + New → Task / Task List、Board card → Info / Task List、刪除最後一個 Project、Chat New Task 都實際點擊一次且 console 0 error。
+[x] Browser smoke：reload 後 + New → Task / Task List、Board card → Info / Task List、刪除最後一個 Project、Chat New Task 都實際點擊一次且 console 0 error。
+    - Production Browser E2E reload 後實際走 Tasks + New→Task/Task List、Board multi-item card→Info→Task List、Chat New Task 共用 create menu/editor；最後依序 Remove Project 到 0，並要求 pageerror=[]。
 [ ] Browser 視覺回歸：New Task 在常用 Drawer 寬度確認 Prompt / File Validator 首屏可見；切換 inline / file / asset、file / AI workflow、Light / Dark、820px / 620px breakpoint 不重疊、不截斷。
 [ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
 [ ] React migration 先建立 shared UI primitives：AppShell、Sidebar、Drawer/Modal/Popover、Tabs、Field、Select、Button、Badge/Pill、EmptyState；Theme token 只由一處提供。
