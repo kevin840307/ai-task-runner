@@ -59,6 +59,8 @@ def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> 
     assert value["draft"]["project"] == str(project.resolve())
     assert [row["workspace"] for row in value["draft"]["items"]] == ["auto", "auto"]
     assert [row["workflow"] for row in value["draft"]["items"]] == ["workflow.yaml", "workflow.yaml"]
+    assert all("validator" not in row for row in value["draft"]["items"])
+    assert all("ai_validator_prompt_file" not in row for row in value["draft"]["items"])
     assert calls[0]["draft_mode"] == "list"
     assert not (project / ".ai-task-runner" / "ui" / "tasks.json").exists()
 
@@ -71,6 +73,60 @@ def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> 
     )
     assert duplicate["duplicate"] is True
     assert duplicate["draft_id"] == value["draft_id"]
+
+def test_generated_task_draft_includes_only_required_validation_overrides(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    def requirements(_project: Path, workflow: str) -> dict:
+        return {
+            "requires_python_validator": workflow in {"file.workflow.yaml", "mixed.workflow.yaml"},
+            "has_ai_validator": workflow in {"ai.workflow.yaml", "mixed.workflow.yaml"},
+        }
+
+    service = TaskDraftService(
+        repo,
+        workflow_requirements=requirements,
+        runner=lambda **kwargs: {
+            "draft": {
+                "title": "Draft",
+                "items": [{
+                    "title": "A",
+                    "prompt": "Do A",
+                    "validator": "validate.py",
+                    "ai_validator_prompt_file": "review.md",
+                }],
+            }
+        },
+    )
+
+    expected = {
+        "plain.workflow.yaml": set(),
+        "file.workflow.yaml": {"validator"},
+        "ai.workflow.yaml": {"ai_validator_prompt_file"},
+        "mixed.workflow.yaml": {"validator", "ai_validator_prompt_file"},
+    }
+    for index, (workflow, optional_keys) in enumerate(expected.items(), start=1):
+        value = service.generate(
+            project,
+            spec=f"case {index}",
+            draft_mode="single",
+            backend="qwen",
+            workflow=workflow,
+            request_id=f"capability-{index}",
+        )
+        item = value["draft"]["items"][0]
+        present = {
+            key for key in ("validator", "ai_validator_prompt_file")
+            if key in item
+        }
+        assert present == optional_keys
+        if "validator" in optional_keys:
+            assert item["validator"] == "validate.py"
+        if "ai_validator_prompt_file" in optional_keys:
+            assert item["ai_validator_prompt_file"] == "review.md"
+
 
 def test_task_draft_edit_is_backend_owned_and_session_scoped(tmp_path: Path) -> None:
     repo = tmp_path / "repo"

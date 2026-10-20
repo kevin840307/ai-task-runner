@@ -35,6 +35,7 @@ def validate_generated_draft(
     mode: str,
     project: Path,
     workflow: str,
+    workflow_requirements: Callable[[Path, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if mode not in DRAFT_MODES:
         raise ValueError("Unsupported TaskDraft mode")
@@ -55,19 +56,35 @@ def validate_generated_draft(
 
     project_path = str(project.resolve())
     workflow_path = str(workflow or "").strip()
+    requirements = workflow_requirements(project, workflow_path) if workflow_requirements else {}
+    requires_python_validator = bool(requirements.get("requires_python_validator"))
+    has_ai_validator = bool(requirements.get("has_ai_validator"))
     items: list[dict[str, Any]] = []
     for index, raw in enumerate(raw_items):
         if not isinstance(raw, dict):
             raise ValueError(f"TaskDraft item {index + 1} must be an object")
-        items.append({
+        item = {
             "title": bounded_text(raw.get("title"), f"TaskDraft item {index + 1} title", 240),
             "prompt": bounded_text(raw.get("prompt"), f"TaskDraft item {index + 1} prompt", 24000),
             "workflow": workflow_path,
             "project": project_path,
             "workspace": "auto",
-            "validator": bounded_text(raw.get("validator"), f"TaskDraft item {index + 1} File Validator", 4096, required=False),
-            "ai_validator_prompt_file": bounded_text(raw.get("ai_validator_prompt_file"), f"TaskDraft item {index + 1} AI Validator Prompt", 4096, required=False),
-        })
+        }
+        if requires_python_validator:
+            item["validator"] = bounded_text(
+                raw.get("validator"),
+                f"TaskDraft item {index + 1} File Validator",
+                4096,
+                required=False,
+            )
+        if has_ai_validator:
+            item["ai_validator_prompt_file"] = bounded_text(
+                raw.get("ai_validator_prompt_file"),
+                f"TaskDraft item {index + 1} AI Validator Prompt",
+                4096,
+                required=False,
+            )
+        items.append(item)
     return {
         "schema_version": 1,
         "title": title,

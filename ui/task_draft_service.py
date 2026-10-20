@@ -88,6 +88,7 @@ class TaskDraftService:
             mode=mode,
             project=project,
             workflow=str(workflow or "").strip(),
+            workflow_requirements=self._workflow_requirements,
         )
         value = {
             "draft_id": f"draft-{uuid.uuid4().hex}",

@@ -244,7 +244,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Prompt 必須要求 AI 輸出結構化資料，不可以只回傳自由文字；驗證失敗要 fail closed。
 [x] 產生結果先顯示精簡 Draft 預覽，使用者可 Edit、Create Task 或 Dismiss。
 [x] TaskDraft 最低欄位包含 title、Project reference、ordered items[]；每個 item 至少包含 title、task prompt、Workflow、Project、workspace policy。
-[ ] Validator / Prompt source override 只在需要時加入；不把無關 runtime 欄位塞進 Draft。
+[x] Validator / Prompt source override 只在需要時加入；不把無關 runtime 欄位塞進 Draft。
+    - 正式 TaskDraft generation 透過既有 Workflow capability resolver 決定 optional validation fields；plain/file/ai/mixed deterministic unit coverage 鎖定欄位投影，不在 UI hardcode。
 [x] Draft 不包含 Runner runtime、Retry、Recovery、Merge 狀態；不得在建立前寫入正式 Task history。
 [x] 單筆 Draft 的 Edit 使用既有 canonical Task Editor。
 [x] 多筆 Draft 的 Edit 使用既有 Task List workspace；每個 child 的 Add / Edit 繼續使用同一個 canonical Task Editor。
