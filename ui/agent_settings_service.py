@@ -1,13 +1,20 @@
 """Cached Agent settings catalog for Project Chat."""
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+from runner.agent import (
+    BackendError,
+    available_models,
+    chat_features,
+    interaction_modes,
+    reasoning_options,
+)
+from runner.plugins.registry import discover_plugins
 
 
 class AgentSettingsService:
@@ -48,38 +55,26 @@ class AgentSettingsService:
                     del self._cache[key]
 
     def _load(self, project: Path, backend: str, model: str) -> dict[str, Any]:
-        command = [
-            sys.executable,
-            str(self.repo_root / "tool" / "agent_settings_catalog.py"),
-            "--project-root",
-            str(project),
-            "--backend",
-            backend,
-        ]
-        if model:
-            command.extend(["--model", model])
         try:
-            result = subprocess.run(
-                command,
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                timeout=25,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            discover_plugins()
+            root = project.resolve()
+            models = available_models(backend, root)
+            try:
+                modes = interaction_modes(backend)
+            except BackendError:
+                modes = ()
+            reasoning = reasoning_options(backend, root, model)
+            features = chat_features(backend, root)
+        except Exception as exc:
             raise ValueError(f"Agent settings catalog unavailable: {exc}") from exc
-        raw = result.stdout.strip()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError as exc:
-            detail = result.stderr.strip() or raw or f"exit {result.returncode}"
-            raise ValueError(f"Agent settings catalog returned invalid JSON: {detail[-2000:]}") from exc
-        if result.returncode or payload.get("error"):
-            detail = str(payload.get("error") or result.stderr or f"exit {result.returncode}").strip()
-            raise ValueError(detail or "Agent settings catalog failed")
-        if not isinstance(payload, dict):
-            raise ValueError("Agent settings catalog returned invalid payload")
+
+        payload = {
+            "agent": backend,
+            "models": models,
+            "modes": [asdict(item) for item in modes],
+            "reasoning": [asdict(item) for item in reasoning],
+            "features": asdict(features),
+        }
         for key in ("models", "modes", "reasoning"):
             if not isinstance(payload.get(key), list):
                 raise ValueError(f"Agent settings catalog is missing {key}")
