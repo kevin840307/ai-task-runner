@@ -3,18 +3,10 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from runner.agent import (
-    BackendError,
-    available_models,
-    chat_features,
-    interaction_modes,
-    reasoning_options,
-)
-from runner.plugins.registry import discover_plugins
+from tool.agent_catalog import settings_catalog
 
 
 class AgentSettingsService:
@@ -56,25 +48,11 @@ class AgentSettingsService:
 
     def _load(self, project: Path, backend: str, model: str) -> dict[str, Any]:
         try:
-            discover_plugins()
-            root = project.resolve()
-            models = available_models(backend, root)
-            try:
-                modes = interaction_modes(backend)
-            except BackendError:
-                modes = ()
-            reasoning = reasoning_options(backend, root, model)
-            features = chat_features(backend, root)
+            payload = settings_catalog(project, backend, model)
         except Exception as exc:
             raise ValueError(f"Agent settings catalog unavailable: {exc}") from exc
-
-        payload = {
-            "agent": backend,
-            "models": models,
-            "modes": [asdict(item) for item in modes],
-            "reasoning": [asdict(item) for item in reasoning],
-            "features": asdict(features),
-        }
+        if not isinstance(payload, dict):
+            raise ValueError("Agent settings catalog returned invalid payload")
         for key in ("models", "modes", "reasoning"):
             if not isinstance(payload.get(key), list):
                 raise ValueError(f"Agent settings catalog is missing {key}")
