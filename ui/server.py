@@ -533,7 +533,7 @@ class Handler(SimpleHTTPRequestHandler):
                 value = self.state.chat_service.update_queue_item(
                     project,
                     str(body.get("session_id", "")),
-                    str(body.get("queue_id", "")),
+                    str(body.get("queue_item_id", "")),
                     str(body.get("message", "")),
                 )
                 return self._json({
@@ -549,7 +549,7 @@ class Handler(SimpleHTTPRequestHandler):
                 value = self.state.chat_service.delete_queue_item(
                     project,
                     str(body.get("session_id", "")),
-                    str(body.get("queue_id", "")),
+                    str(body.get("queue_item_id", "")),
                 )
                 return self._json({
                     **value,

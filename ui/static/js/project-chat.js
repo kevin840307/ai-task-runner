@@ -501,7 +501,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     for (const item of queueItems) {
       const row = document.createElement("div");
       row.className = "project-chat-queue-item";
-      if (item.queue_id === editingQueueId) {
+      if (item.queue_item_id === editingQueueId) {
         row.classList.add("editing");
         const editor = document.createElement("div");
         editor.className = "project-chat-queue-editor";
@@ -572,7 +572,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   function beginQueueEdit(item) {
-    editingQueueId = String(item.queue_id || "");
+    editingQueueId = String(item.queue_item_id || "");
     editingQueueValue = String(item.content || "");
     editingQueueError = "";
     renderQueue();
@@ -602,7 +602,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         body: JSON.stringify({
           project: projectPath(),
           session_id: activeSessionId,
-          queue_id: item.queue_id,
+          queue_item_id: item.queue_item_id,
           message: next,
         }),
       });
@@ -620,7 +620,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   function applyQueueState(data = {}) {
     queueItems = Array.isArray(data.items) ? data.items : [];
-    if (editingQueueId && !queueItems.some((item) => item.queue_id === editingQueueId)) {
+    if (editingQueueId && !queueItems.some((item) => item.queue_item_id === editingQueueId)) {
       editingQueueId = "";
       editingQueueValue = "";
       editingQueueError = "";
@@ -657,7 +657,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         body: JSON.stringify({
           project: projectPath(),
           session_id: activeSessionId,
-          queue_id: item.queue_id,
+          queue_item_id: item.queue_item_id,
         }),
       });
       applyQueueState(data);

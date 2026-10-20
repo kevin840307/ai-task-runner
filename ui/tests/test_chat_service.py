@@ -421,9 +421,9 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
     assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
 
     first_item = restarted.queue(project, first)["items"][0]
-    restarted.update_queue_item(project, first, first_item["queue_id"], "one edited")
+    restarted.update_queue_item(project, first, first_item["queue_item_id"], "one edited")
     assert restarted.queue(project, first)["items"][0]["content"] == "one edited"
-    restarted.delete_queue_item(project, first, first_item["queue_id"])
+    restarted.delete_queue_item(project, first, first_item["queue_item_id"])
     assert [row["content"] for row in restarted.queue(project, first)["items"]] == ["two"]
     assert [row["content"] for row in restarted.queue(project, second)["items"]] == ["other"]
 
@@ -431,13 +431,13 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
         restarted.update_queue_item(
             project,
             first,
-            restarted.queue(project, first)["items"][0]["queue_id"],
+            restarted.queue(project, first)["items"][0]["queue_item_id"],
             "   ",
         )
 
     long_message = "queued-" + ("x" * 4096)
     remaining = restarted.queue(project, first)["items"][0]
-    restarted.update_queue_item(project, first, remaining["queue_id"], long_message)
+    restarted.update_queue_item(project, first, remaining["queue_item_id"], long_message)
     assert ChatService().queue(project, first)["items"][0]["content"] == long_message
     assert [row["content"] for row in ChatService().queue(project, second)["items"]] == ["other"]
 
@@ -526,7 +526,7 @@ def test_chat_queue_terminal_outcome_is_durable_and_idempotent(
     chat.complete_queue_item(
         project,
         session_id,
-        queued["queue_id"],
+        queued["queue_item_id"],
         outcome=outcome,
     )
     assert chat.queue(project, session_id) == {
@@ -544,7 +544,7 @@ def test_chat_queue_terminal_outcome_is_durable_and_idempotent(
     )
     assert duplicate["duplicate"] is True
     assert duplicate["request_status"] == outcome
-    assert duplicate["queue_id"] == queued["queue_id"]
+    assert duplicate["queue_item_id"] == queued["queue_item_id"]
     assert duplicate["turn_id"] == queued["turn_id"]
 
 
@@ -616,7 +616,7 @@ def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
         mode="auto",
         reasoning="high",
     )
-    queue_id = queued["queue_id"]
+    queue_item_id = queued["queue_item_id"]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.port}"
@@ -632,7 +632,7 @@ def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
             body={
                 "project": str(project),
                 "session_id": session_id,
-                "queue_id": queue_id,
+                "queue_item_id": queue_item_id,
                 "message": "edited",
             },
         )
@@ -643,7 +643,7 @@ def test_project_chat_queue_http_edit_delete_contract(tmp_path: Path) -> None:
             body={
                 "project": str(project),
                 "session_id": session_id,
-                "queue_id": queue_id,
+                "queue_item_id": queue_item_id,
             },
         )
         assert deleted["items"] == []
@@ -792,7 +792,7 @@ def test_chat_agent_passes_snapshotted_reasoning_to_runner(tmp_path: Path) -> No
         request_id="reasoning-turn-1",
     )
     assert result["turn_id"].startswith("turn-")
-    assert result["queue_id"].startswith("queue-")
+    assert result["queue_item_id"].startswith("queue-")
     assert calls[0]["reasoning"] == "deep"
     assert calls[0]["model"] == "openai/gpt-5.2"
 
@@ -1365,17 +1365,21 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
         request_id="legacy-status-1",
         backend="qwen",
     )
-    queue_id = queued["queue_id"]
+    queue_item_id = queued["queue_item_id"]
     state_path = project / ".ai-task-runner" / "ui" / "chat" / "state.json"
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     raw["version"] = 4
-    raw["sessions"][0]["queue"][0].pop("turn_id", None)
-    raw["sessions"][0]["queue"][0]["status"] = "processing"
-    raw["turn_requests"]["legacy-status-1"].pop("turn_id", None)
-    raw["turn_requests"]["legacy-status-1"]["status"] = "processing"
+    legacy_queue = raw["sessions"][0]["queue"][0]
+    legacy_queue["queue_id"] = legacy_queue.pop("queue_item_id")
+    legacy_queue.pop("turn_id", None)
+    legacy_queue["status"] = "processing"
+    legacy_request = raw["turn_requests"]["legacy-status-1"]
+    legacy_request["queue_id"] = legacy_request.pop("queue_item_id")
+    legacy_request.pop("turn_id", None)
+    legacy_request["status"] = "processing"
     raw["turn_requests"]["finished"] = {
         "session_id": session_id,
-        "queue_id": queue_id,
+        "queue_id": queue_item_id,
         "status": "done",
     }
     state_path.write_text(json.dumps(raw), encoding="utf-8")
@@ -1394,7 +1398,11 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     assert normalized["version"] == STATE_VERSION
     assert normalized["sessions"][0]["queue"][0]["status"] == "queued"
     assert normalized["sessions"][0]["queue"][0]["turn_id"] == migrated_turn_id
+    assert normalized["sessions"][0]["queue"][0]["queue_item_id"] == queue_item_id
+    assert "queue_id" not in normalized["sessions"][0]["queue"][0]
     assert normalized["turn_requests"]["legacy-status-1"]["turn_id"] == migrated_turn_id
+    assert normalized["turn_requests"]["legacy-status-1"]["queue_item_id"] == queue_item_id
+    assert "queue_id" not in normalized["turn_requests"]["legacy-status-1"]
     assert normalized["turn_requests"]["legacy-status-1"]["status"] == "queued"
 
 
@@ -1710,11 +1718,11 @@ def test_stale_stop_after_item_execution_does_not_cancel_next_queue_item(
 
     original_complete = chat.complete_queue_item
 
-    def blocking_complete(project_arg, session_arg, queue_id, *, outcome="completed"):
+    def blocking_complete(project_arg, session_arg, queue_item_id, *, outcome="completed"):
         if outcome == "completed" and not finalize_started.is_set():
             finalize_started.set()
             assert release_finalize.wait(timeout=4)
-        return original_complete(project_arg, session_arg, queue_id, outcome=outcome)
+        return original_complete(project_arg, session_arg, queue_item_id, outcome=outcome)
 
     chat.complete_queue_item = blocking_complete
     service = ChatAgentService(repo, runner=fake_runner)

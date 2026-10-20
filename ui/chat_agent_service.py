@@ -108,7 +108,7 @@ class ChatAgentService:
             return {
                 **self._drain_locked(project, chat, session_id),
                 **metadata,
-                "queue_id": queued["queue_id"],
+                "queue_item_id": queued["queue_item_id"],
                 "turn_id": queued["turn_id"],
                 "duplicate": queued["duplicate"],
                 "request_status": queued["request_status"],
@@ -185,9 +185,9 @@ class ChatAgentService:
         process: subprocess.Popen[str] | None = None
         execution_key: tuple[str, str, str] | None = None
         with self._turn_guard:
-            queue_id = self._active_items.get(key, "")
-            if queue_id:
-                execution_key = (*key, queue_id)
+            queue_item_id = self._active_items.get(key, "")
+            if queue_item_id:
+                execution_key = (*key, queue_item_id)
                 duplicate = execution_key in self._cancelled_turns
                 self._cancelled_turns.add(execution_key)
                 process = self._active_processes.get(execution_key)
@@ -218,7 +218,7 @@ class ChatAgentService:
             item = chat.claim_next(project, session_id)
             if item is None:
                 break
-            execution_key = (*session_key, str(item["queue_id"]))
+            execution_key = (*session_key, str(item["queue_item_id"]))
             self._begin_execution(session_key, execution_key)
             try:
                 self._execute_item(
@@ -239,10 +239,10 @@ class ChatAgentService:
                 chat.complete_queue_item(
                     project,
                     session_id,
-                    item["queue_id"],
+                    item["queue_item_id"],
                     outcome="cancelled",
                 )
-                cancelled.append(item["queue_id"])
+                cancelled.append(item["queue_item_id"])
                 continue
             except Exception as exc:
                 self._close_execution(session_key, execution_key)
@@ -256,7 +256,7 @@ class ChatAgentService:
                 chat.complete_queue_item(
                     project,
                     session_id,
-                    item["queue_id"],
+                    item["queue_item_id"],
                     outcome="failed",
                 )
                 break
@@ -270,13 +270,13 @@ class ChatAgentService:
                 chat.complete_queue_item(
                     project,
                     session_id,
-                    item["queue_id"],
+                    item["queue_item_id"],
                     outcome="cancelled",
                 )
-                cancelled.append(item["queue_id"])
+                cancelled.append(item["queue_item_id"])
                 continue
-            chat.complete_queue_item(project, session_id, item["queue_id"])
-            processed.append(item["queue_id"])
+            chat.complete_queue_item(project, session_id, item["queue_item_id"])
+            processed.append(item["queue_item_id"])
         return {
             **chat.queue(project, session_id),
             "status": "error" if failure else "idle",

@@ -475,7 +475,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Ask request event / answer submit / cancel
     - generate TaskDraft / validate TaskDraft / create Task
     - Merge preflight / direct merge / Merge Chat handoff context
-[ ] 所有 API 使用穩定的 session_id、turn_id、message_id、queue_item_id、ask_id、draft_id、task_id。
+[x] 所有 API 使用穩定的 session_id、turn_id、message_id、queue_item_id、ask_id、draft_id、task_id。
+    - Chat state v8 分離 durable turn_id 與 request_id，Queue canonical field 統一為 queue_item_id；v1-v7 僅在 state migration read 接受舊 queue_id，寫回與 HTTP/UI contract 不保留 alias。Draft/Task/Session/Message/Ask IDs 均由 backend 產生與驗證。
 [ ] POST / send / create 等操作需要 request ID 或 idempotency key，避免重試後重複建立訊息或 Task。
 [ ] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
 [ ] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。

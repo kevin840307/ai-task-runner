@@ -517,7 +517,7 @@ def _bridge_for(state: UIState):
                         queues = getattr(state, "_browser_chat_queue", {})
                         queue = queues.setdefault(session_id, [])
                         queue.append({
-                            "queue_id": f"queue-{len(queue) + 1:032x}",
+                            "queue_item_id": f"queue-{len(queue) + 1:032x}",
                             "content": message,
                             "created_at": len(queue) + 1,
                             "status": "queued",
@@ -540,7 +540,7 @@ def _bridge_for(state: UIState):
                         queues = getattr(state, "_browser_chat_queue", {})
                         queue = queues.setdefault(session_id, [])
                         queue.append({
-                            "queue_id": f"queue-{len(queue) + 1:032x}",
+                            "queue_item_id": f"queue-{len(queue) + 1:032x}",
                             "content": message,
                             "created_at": len(queue) + 1,
                             "status": "queued",
@@ -622,7 +622,7 @@ def _bridge_for(state: UIState):
                     session_id = str(body.get("session_id", ""))
                     queue = getattr(state, "_browser_chat_queue", {}).get(session_id, [])
                     for item in queue:
-                        if item["queue_id"] == str(body.get("queue_id", "")):
+                        if item["queue_item_id"] == str(body.get("queue_item_id", "")):
                             item["content"] = str(body.get("message", ""))
                     busy_map = getattr(state, "_browser_chat_busy", {})
                     data = {"session_id": session_id, "items": list(queue), "busy": bool(busy_map.get(session_id, False))}
@@ -631,7 +631,7 @@ def _bridge_for(state: UIState):
                     queues = getattr(state, "_browser_chat_queue", {})
                     queues[session_id] = [
                         item for item in queues.get(session_id, [])
-                        if item["queue_id"] != str(body.get("queue_id", ""))
+                        if item["queue_item_id"] != str(body.get("queue_item_id", ""))
                     ]
                     state._browser_chat_queue = queues
                     busy_map = getattr(state, "_browser_chat_busy", {})
