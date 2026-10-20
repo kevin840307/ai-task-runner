@@ -830,6 +830,9 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        state.global_settings.update({
+            "interface": {"appearance": "dark", "theme": "violet"},
+        })
         (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
             "stages: {}\nflow: []\n",
             encoding="utf-8",
@@ -977,6 +980,8 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1440, "height": 900})
             page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
             page.expose_function("__apiBridge", _bridge_for(state))
             _load_main_ui_document(page, html)
 
@@ -996,8 +1001,22 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             def reload_ui(expected_project: str) -> None:
                 page.reload(wait_until="domcontentloaded")
                 install(expected_project)
+                page.wait_for_function("document.documentElement.dataset.theme === 'violet'")
+                page.wait_for_function("document.documentElement.dataset.appearance === 'dark'")
+
+            def assert_reload_state(expected_summary: str, baseline: dict) -> None:
+                assert page.locator("#projectChatName").inner_text() == "Second Project"
+                assert page.locator("#tasksProjectFilterSummary").inner_text() == expected_summary
+                assert page.locator("html").get_attribute("data-theme") == "violet"
+                assert page.locator("html").get_attribute("data-appearance") == "dark"
+                current = page.locator("#tasksBoardView").bounding_box()
+                assert current is not None
+                for key in ("x", "y", "width", "height"):
+                    assert abs(current[key] - baseline[key]) <= 1, (key, baseline, current)
 
             install("Fixture Project")
+            page.wait_for_function("document.documentElement.dataset.theme === 'violet'")
+            page.wait_for_function("document.documentElement.dataset.appearance === 'dark'")
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
             page.click("#chatNav")
@@ -1013,11 +1032,13 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             assert page.locator("#tasksBoardNew .tasks-board-card").get_by_text("Cross-project parent").is_visible()
             assert page.locator("#projectChatName").inner_text() == "Second Project"
             assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
+            board_geometry = page.locator("#tasksBoardView").bounding_box()
+            assert board_geometry is not None
 
             reload_ui("Second Project")
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
-            assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
+            assert_reload_state("Second Project", board_geometry)
 
             page.click("#tasksProjectFilterButton")
             page.locator(".tasks-project-option").filter(has_text="Third Project").locator("input").check()
@@ -1025,6 +1046,7 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             reload_ui("Second Project")
             page.click("#chatNav")
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 selected'")
+            assert_reload_state("2 selected", board_geometry)
 
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterAll")
@@ -1032,6 +1054,7 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             reload_ui("Second Project")
             page.click("#chatNav")
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            assert_reload_state("All", board_geometry)
 
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterClear")
@@ -1040,7 +1063,9 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             reload_ui("Second Project")
             page.click("#chatNav")
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'None'")
+            assert_reload_state("None", board_geometry)
             assert page.locator("#tasksBoardNew .tasks-board-card").count() == 0
+            assert errors == []
             browser.close()
 
 
