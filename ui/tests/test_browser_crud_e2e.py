@@ -1047,15 +1047,27 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
         workflow_root = root / "runner" / "assets" / "workflows"
         workflow_path = workflow_root / "workflow.yaml"
         workflow_path.write_text("stages: {}\n", encoding="utf-8")
-        (workflow_root / "mixed.yaml").write_text("stages: {}\n", encoding="utf-8")
+        (workflow_root / "mixed.yaml").write_text(
+            "stages:\n"
+            "  planning:\n"
+            "    type: plan\n"
+            "  validate_file:\n"
+            "    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "  validate_ai:\n"
+            "    type: ai_validator\n"
+            "    validator: ai\n"
+            "flow:\n"
+            "  - planning\n"
+            "  - validate_file\n"
+            "  - validate_ai\n",
+            encoding="utf-8",
+        )
         state.project_preferences.update(root, {"workflow": str(workflow_path)})
-        # Keep Workflow capability behavior deterministic in this browser fixture.
-        # Production resolves these flags from the real Workflow catalog.
-        def task_requirements(_project: Path, workflow: str) -> dict:
-            mixed = Path(str(workflow or "")).name == "mixed.yaml"
-            return {"requires_python_validator": mixed, "has_ai_validator": mixed}
-        state.tasks._workflow_requirements = task_requirements
-        state.task_drafts._workflow_requirements = task_requirements
+        # Use the same Workflow metadata owner as production so the Editor and
+        # Task validation cannot drift apart in this browser fixture.
+        state.tasks._workflow_requirements = state._task_workflow_requirements
+        state.task_drafts._workflow_requirements = state._task_workflow_requirements
         validator_upload = root / "validator-upload.py"
         validator_upload.write_text("print('uploaded validator')\n", encoding="utf-8")
         ai_upload = root / "ai-upload.md"
