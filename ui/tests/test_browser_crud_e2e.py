@@ -1111,7 +1111,14 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Standalone task prompt"
 
             page.click("#taskWorkspaceSave")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.wait_for_function(
+                "() => document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'"
+                " || !!document.querySelector('#taskWorkspaceError:not([hidden])')"
+            )
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO", (
+                "Create Task did not reach Task Info: "
+                + page.locator("#taskWorkspaceError").inner_text()
+            )
             created = state.tasks.list(state.repo_root)["tasks"]
             assert len(created) == 1
             assert created[0]["title"] == "Standalone browser task"
@@ -1800,7 +1807,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            page.locator(".task-workspace-list-row").first.locator(".task-workspace-durable-edit").click()
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
             page.locator("#taskWorkspacePrompt").focus()
             page.keyboard.press("Escape")
