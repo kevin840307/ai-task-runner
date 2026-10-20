@@ -70,6 +70,7 @@ def _install_main_ui_scripts(page, static_root: Path) -> None:
                 body=source.read_text(encoding="utf-8"),
             ),
         )
+    page.add_script_tag(path=str(static_root / "js" / "ui-bootstrap.js"))
     page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
     page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
     page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
@@ -269,16 +270,7 @@ def _bridge_for(state: UIState):
                             "queue_mode": "service_fifo",
                             "detail": "Native Ask available" if selected_agent == "opencode" else "Native Ask unavailable",
                         },
-                        "workflows": [
-                            {
-                                "id": item["id"],
-                                "name": item["display_name"],
-                                "path": item["path"],
-                                "scope": item["scope"],
-                            }
-                            for item in state.studio_files(project).get("workflows", [])
-                            if not item.get("hidden")
-                        ],
+                        "workflows": state.chat_workflows(project),
                         "cached": False,
                     }
                 elif path == "/api/chat/capabilities":
@@ -2339,7 +2331,7 @@ def test_first_paint_restores_cached_theme_before_app_mount() -> None:
     html = (static_root / "index.html").read_text(encoding="utf-8")
     html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
     html = re.sub(
-        r'<script(?![^>]+src="/js/ui-bootstrap\\.js")[^>]*>.*?</script>',
+        r'<script(?![^>]+src="/js/ui-bootstrap\.js")[^>]*>.*?</script>',
         "",
         html,
         flags=re.S,

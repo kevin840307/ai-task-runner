@@ -109,6 +109,21 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
 
+    def chat_workflows(self, project: Path) -> list[dict]:
+        """Project Chat projection of the canonical Workflow Studio catalog."""
+        return [
+            {
+                "id": item["id"],
+                "name": item["display_name"],
+                "path": item["path"],
+                "scope": item["scope"],
+                "requires_python_validator": bool(item.get("requires_python_validator")),
+                "has_ai_validator": bool(item.get("has_ai_validator")),
+            }
+            for item in self.studio_files(project).get("workflows", [])
+            if not item.get("hidden")
+        ]
+
     def delete_chat_session(self, project: Path, session_id: str) -> dict:
         session = str(session_id or "").strip()
         if self.chat_agent.status(
@@ -177,16 +192,7 @@ class Handler(SimpleHTTPRequestHandler):
                     model,
                     refresh=query.get("refresh", ["0"])[0] == "1",
                 )
-                workflows = [
-                    {
-                        "id": item["id"],
-                        "name": item["display_name"],
-                        "path": item["path"],
-                        "scope": item["scope"],
-                    }
-                    for item in self.state.studio_files(project).get("workflows", [])
-                    if not item.get("hidden")
-                ]
+                workflows = self.state.chat_workflows(project)
                 backend_catalog = self.state.backend_catalog(project)
                 return self._json({
                     **value,

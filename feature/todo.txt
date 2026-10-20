@@ -395,7 +395,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] tasksProjectFilterButton 移除 HTML 假值「1 selected」；使用 ui-pending / stateful-content，render 真實 filter state 後才解除 pending。
 [x] current Project 與 Tasks Project filter 加入 prototype persistence，reload 時直接從 bootstrap state 起步。
 [x] loading transition 支援 prefers-reduced-motion，並有 fail-open 行為，避免初始化例外造成永久遮罩。
-[x] Browser 測試 reload：Dark + 非 Teal palette、非預設 Project、Task filter 單選/多選/全選/空選擇時不得出現 Light flash、錯誤 summary 或 layout jump。
+[ ] Browser 測試 reload：Dark + 非 Teal palette、非預設 Project、Task filter 單選/多選/全選/空選擇時不得出現 Light flash、錯誤 summary 或 layout jump。
 [ ] 正式 React 在 mount 前 pre-hydrate Theme / Project / persisted UI filter；禁止 first render 使用假預設值後再由 useEffect 修正。
 [ ] 正式 React 不保留 Plan 作為使用者可感知的額外層級；Plan/YAML 可是內部 model/editor mode，但 UX 只呈現 Task / Task List / Task。
 [x] Browser 測試：+ New → Task 與 Task List 同層；Task List → Add task → Back 仍在同一 workspace；不得出現 modal 疊 modal 的俄羅斯娃娃。
