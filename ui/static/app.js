@@ -2265,7 +2265,24 @@ $("resetButton").onclick = async () => {
   const ok = await confirmDialog({ title: "Reset stopped task?", message: "Discard resumable Runner state? UI task history and request snapshots are kept.", confirmLabel: "Reset", danger: true }); if (!ok) return;
   try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime({ force: true }); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
-$("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
+$("rerunButton").onclick = async () => {
+  const ok = await confirmDialog({
+    title: "Rerun completed task?",
+    message: "Start a new run from the last task request? Existing run history is kept.",
+    confirmLabel: "Rerun",
+  });
+  if (!ok) return;
+  await withButtonBusy($("rerunButton"), "Rerunning…", async () => {
+    try {
+      await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) });
+      showToast("Task rerun started");
+      setTimeout(refreshRuntime, 250);
+    } catch (error) {
+      $("errorText").textContent = error.message;
+      showActionError(error.message, "Rerun failed");
+    }
+  });
+};
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("workflowContextMenu").hidden) return closeWorkflowContextMenu(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
 state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {
