@@ -2566,7 +2566,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
             assert page.locator("html").get_attribute("data-theme") == "violet"
-            assert page.locator("html").get_attribute("data-appearance-preference") == "system"
+            assert page.locator("html").get_attribute("data-appearance-preference") == "dark"
 
             input_box = page.locator("#projectChatInput")
             input_box.fill("short")
