@@ -343,16 +343,16 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task Editor footer 明確保留 Back/Cancel 按鈕；從 Task Info 編輯單一 Task 時顯示 Back to Info，多 Task 則進 Task List 並可 Back to Info。
 [x] New 狀態 Task 從 Board 直接開 Task List 時，footer 同時保留原 Back（關閉 Drawer）與 Back to Info（回同一 Task Info）；從 Info/Chat/Draft 進 List 時不重複顯示第二顆 Info 返回鍵。
 [x] Task Info 的 Edit Task：單一 Task 直接開 canonical Task Editor；多 Task 開 Task List Workspace；兩者 returnTarget 均明確為 info。
-[ ] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
+[x] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
 [ ] Browser 測試 Project Chat Delete：刪中間 Chat / active running mock Chat / 含 TaskDraft Chat / 最後一個 Chat；確認只影響目前 Project，刪最後一個會建立空 Chat。
-[ ] Browser 視覺確認 Drawer tabs 永遠只有 Overview / Runtime / Output / History 四個固定位置，不再出現 Steps 或因 Task 類型左右位移。
+[x] Browser 視覺確認 Drawer tabs 永遠只有 Overview / Runtime / Output / History 四個固定位置，不再出現 Steps 或因 Task 類型左右位移。
 [ ] Browser 測試 Info → Edit Task：單一 New Task 進 Editor 時底部 Back to Info 可見；多 Task 進 Task List 時底部 Back 靠右並可回 Info。
 [ ] Browser 測試 Task Editor dirty guard：修改 Title / Project / Prompt / Workflow / Workspace → Back / Cancel / X / Escape / Open Prompts；Keep editing / Discard 都要保持正確 route/focus。
 [ ] Browser 測試 chained dirty guard：Task List Draft → child Editor 修改未 Save → X / Open Prompts → 先 child discard、再 parent Draft discard；第二層 Keep editing 後 child dirty state 仍需保留。
-[ ] Browser 測試 YAML dirty guard：修改 YAML 未 Apply → Header Back / 底部 Cancel / X / backdrop / Escape；Keep editing / Discard / Apply 後返回 List 都應一致。
+[x] Browser 測試 YAML dirty guard：修改 YAML 未 Apply → Header Back / 底部 Cancel / X / backdrop / Escape；Keep editing / Discard / Apply 後返回 List 都應一致。
 [ ] Browser 測試 Chat TaskDraft transient mount：Edit 單筆/多筆 → Back / X / Open Prompts → 回 Chat 後 taskMap 不殘留 _chatDraft，但 Chat Draft 修改內容仍保留。
 [ ] Browser 測試 Escape top-layer：Task context menu / Project dropdown / Title rename / discard modal 開啟時 Escape 只關最上層，不得同時 Back/Close Drawer。
-[ ] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
+[x] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
 [ ] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；直接開 List → 底部 Back 關 Drawer；Draft → 底部 Cancel → dirty discard confirmation。
 [ ] Browser 測試 Task List Draft：新增 3 筆 → Edit 第 1 筆 → reorder → Remove → dirty X/Escape/Cancel discard confirmation → Keep editing / Discard → Create；確認不產生 duplicate Task。
 [ ] Browser 視覺確認 route 切換時 Header 高度、Close/Expand 位置、Drawer 寬度穩定，不出現第二個 Header 或 layout jump。

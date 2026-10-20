@@ -1418,7 +1418,25 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#taskWorkspaceYamlButton")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
             yaml_text = page.locator("#taskWorkspaceYamlText").input_value()
-            page.fill("#taskWorkspaceYamlText", yaml_text.replace("title: Browser generated draft", "title: YAML renamed list", 1))
+            dirty_yaml = yaml_text.replace("title: Browser generated draft", "title: YAML renamed list", 1)
+            page.fill("#taskWorkspaceYamlText", dirty_yaml)
+
+            for close_kind in ("header", "footer", "x", "backdrop", "escape"):
+                if close_kind == "header":
+                    page.click("#taskWorkspaceHeaderBack")
+                elif close_kind == "footer":
+                    page.click("#taskWorkspaceFooterBack")
+                elif close_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                elif close_kind == "backdrop":
+                    page.locator("#taskWorkspaceOverlay").click(position={"x": 8, "y": 8})
+                else:
+                    page.keyboard.press("Escape")
+                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                page.locator("[data-dialog-cancel]").click()
+                assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK YAML"
+                assert page.locator("#taskWorkspaceYamlText").input_value() == dirty_yaml
+
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.click("#taskWorkspaceSave")
