@@ -1262,6 +1262,29 @@ class ChatService:
             session["updated_at"] = time.time()
             self._write(project, state)
 
+    def clear_agent_session(
+        self,
+        project: Path,
+        session_id: str,
+        backend: str,
+        *,
+        expected_agent_session_id: str = "",
+    ) -> bool:
+        expected = str(expected_agent_session_id or "").strip()
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            if str(session.get("agent_backend") or "") != str(backend or "").strip():
+                return False
+            current = str(session.get("agent_session_id") or "").strip()
+            if not current or (expected and current != expected):
+                return False
+            session["agent_backend"] = ""
+            session["agent_session_id"] = ""
+            session["updated_at"] = time.time()
+            self._write(project, state)
+            return True
+
     @staticmethod
     def _public_session(row: dict[str, Any]) -> dict[str, Any]:
         return {

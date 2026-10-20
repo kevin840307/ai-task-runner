@@ -13,6 +13,7 @@
 - `operations/SECURITY_PROTECTION.zh-TW.md`：Protected path、Policy、Git/backend safety。
 - `operations/OPERATIONS.zh-TW.md`：24H、Retry/Recovery、Debug、故障排查。
 - `development/PROJECT_GUIDE.zh-TW.md`：AI/維護者強制開發規則。
+- `development/PROJECT_CHAT_API.zh-TW.md`：Project Chat API ownership、持久化、重連與隱私契約。
 - `development/TEST_MATRIX.zh-TW.md`：測試契約、Smoke/Examples policy。
 - `validator_templates/README.zh-TW.md`：Deterministic validator 慣例。
 

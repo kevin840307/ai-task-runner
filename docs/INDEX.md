@@ -13,6 +13,7 @@ Version: 1.2.66
 - `operations/SECURITY_PROTECTION.md`: protected paths, project policy, Git/backend safety.
 - `operations/OPERATIONS.md`: long-running behavior, retry/recovery, diagnostics.
 - `development/PROJECT_GUIDE.md`: mandatory AI/maintainer development rules.
+- `development/PROJECT_CHAT_API.md`: Project Chat API ownership, durability, reconnect, and privacy contract.
 - `development/TEST_MATRIX.md`: contract coverage and smoke/example policy.
 - `validator_templates/README.md`: deterministic validator conventions.
 

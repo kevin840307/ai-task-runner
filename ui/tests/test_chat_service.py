@@ -530,6 +530,111 @@ def test_chat_queue_is_durable_fifo_and_session_scoped(tmp_path: Path) -> None:
     assert [row["content"] for row in ChatService().queue(project, second)["items"]] == ["other"]
 
 
+def test_expired_chat_agent_session_is_cleared_without_replaying_failed_turn(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.set_agent_session(project, session_id, "qwen", "stale-agent-session")
+    calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(),
+    )
+
+    def fake_runner(**kwargs):
+        prompt = str(kwargs["prompt"])
+        native_session = str(kwargs["session_id"])
+        calls.append((prompt, native_session))
+        if native_session:
+            raise RuntimeError("No saved session found for stale-agent-session")
+        return {"text": "fresh reply", "session_id": "fresh-agent-session"}
+
+    service = ChatAgentService(repo, runner=fake_runner)
+    failed = service.turn(
+        project,
+        chat,
+        session_id=session_id,
+        message="first",
+        backend="qwen",
+        request_id="expired-session-first",
+    )
+
+    assert failed["status"] == "error"
+    assert chat.agent_session(project, session_id, "qwen") == ""
+    assert calls == [("first", "stale-agent-session")]
+    assert "retry this Chat turn" in failed["error"]
+
+    continued = service.turn(
+        project,
+        chat,
+        session_id=session_id,
+        message="second",
+        backend="qwen",
+        request_id="expired-session-second",
+    )
+
+    assert continued["status"] == "idle"
+    assert calls == [
+        ("first", "stale-agent-session"),
+        ("second", ""),
+    ]
+    assert chat.agent_session(project, session_id, "qwen") == "fresh-agent-session"
+    assert [
+        row["content"]
+        for row in chat.messages(project, session_id)["messages"]
+        if row["role"] == "user"
+    ] == ["first", "second"]
+
+
+def test_chat_public_projection_excludes_native_transport_session_details(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    chat.set_agent_session(
+        project,
+        session_id,
+        "opencode",
+        "private-agent-session",
+    )
+    chat.create_ask(
+        project,
+        session_id,
+        request_id="public-redaction-question",
+        turn_id="public-redaction-turn",
+        questions=[{
+            "id": "confirm",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["yes", "no"],
+        }],
+        source="native",
+        backend="opencode",
+        agent_session_id="private-native-session",
+        native_request_id="private-native-request",
+    )
+
+    public_payload = json.dumps({
+        "sessions": chat.sessions(project),
+        "ask": chat.ask(project, session_id),
+        "events": chat.events(project, session_id),
+    })
+
+    assert "private-agent-session" not in public_payload
+    assert "private-native-session" not in public_payload
+    assert "private-native-request" not in public_payload
+    assert "agent_session_id" not in public_payload
+    assert "native_request_id" not in public_payload
+
+
 def test_chat_agent_busy_turns_queue_and_drain_fifo(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"

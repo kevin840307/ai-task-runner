@@ -463,7 +463,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [x] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
     - Production foundation: Project Chat session/message persistence is owned by `ui/chat_service.py` and exposed through the existing `UIServer`; Runner task history remains separate.
-[ ] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
+[x] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
+    - Production coordination 沿用單一 UIServer boundary，並依 concern 分 owner：ChatService 持久化 Session/Message/Queue/Ask/Event，ChatAgentService 協調普通 Agent turn，Agent capability/settings service 投影 adapter 能力，TaskDraftService 負責 Draft；不新增平行 server/store/runtime。
 [x] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
     - Production chat_service / chat_agent_service / chat_ask / task_draft_service 不引用 WorkflowRunner / FlowEngine / StageExecutor / runner.api；architecture regression 鎖定此邊界。@goal 在 Workspace phase 前仍 fail closed。
 [ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
@@ -487,10 +488,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Chat event feed 僅由 ChatService session state 擁有；Runner runtime 仍只由 /api/project/runtime + project_runtime_state projection 擁有，architecture regression 防止兩者互相引用事件 contract。
 [x] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
     - UIServer HTTP boundary 統一輸出 structured error envelope；POST 沿用 body request_id 作 correlation，frontend api() 保留 code/retryable/requestId metadata 並以 message 呈現。
-[ ] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。
-[ ] Chat history、Queue 與等待中的 Ask 有清楚的持久化策略；重啟後不可以讓 UI 顯示假的執行中狀態。
-[ ] 不把完整 system prompt、憑證、API key 或敏感本機環境資訊回傳給 UI。
-[ ] API contract 要有 unit / integration test 與最小可讀文件；UI Mock 與正式 API 共用 schema。
+[x] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。
+    - Turn cancel / Ask timeout 已有 idempotent contract；HTTP disconnect 只終止 response write，不改 durable turn；/api/chat/events cursor + durable Queue 支援 reconnect。過期 Agent session 重用 runner.agent.is_session_invalid_error，compare-and-clear durable pointer，failed turn 不自動重播，下一個明確 turn 才 fresh session；request_id 保護重送。
+[x] Chat history、Queue 與等待中的 Ask 有清楚的持久化策略；重啟後不可以讓 UI 顯示假的執行中狀態。
+    - Chat state + per-session JSONL message history 持久化；restart 會把 unowned dispatching Queue 恢復為 queued，assistant 已 durable 的 turn 不重打 Agent；resolving Ask 會恢復 waiting，expired Ask durable cancel。process-local busy lock 不會跨 restart 假裝仍在執行。
+[x] 不把完整 system prompt、憑證、API key 或敏感本機環境資訊回傳給 UI。
+    - Session / Ask / Event public projection 使用 whitelist；native Agent session/request transport metadata 不回傳。Chat API 不回傳 system prompt、environment 或 credential material，並有 projection regression test。
+[x] API contract 要有 unit / integration test 與最小可讀文件；UI Mock 與正式 API 共用 schema。
+    - ui/tests/test_chat_service.py 覆蓋 service + HTTP contract；Browser deterministic fixture 直接重用 ChatService / TaskDraftService schema owner；docs/development/PROJECT_CHAT_API(.zh-TW).md 記錄 ownership、主要 endpoint、reconnect/restart 與 redaction contract。
 
 
 14. Agent Adapter

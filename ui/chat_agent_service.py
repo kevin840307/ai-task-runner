@@ -13,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from runner.agent import is_session_invalid_error
 from tool.chat_agent import (
     chat_features,
     ensure_native_session,
@@ -324,40 +325,58 @@ class ChatAgentService:
             features.ask
             and features.ask_transport == "question_api"
         )
-        if native_bridge:
-            native_session = ensure_native_session(
-                agent,
-                project,
-                previous_session,
-            )
-            if not native_session:
-                raise RuntimeError(
-                    f"{agent} native Ask requires a stable Agent session"
+        used_session = previous_session
+        try:
+            if native_bridge:
+                native_session = ensure_native_session(
+                    agent,
+                    project,
+                    previous_session,
                 )
-            chat.set_agent_session(project, session_id, agent, native_session)
-            result = self._run_with_native_ask_bridge(
-                project,
-                chat,
-                session_id,
-                item,
-                backend=agent,
-                model=model,
-                mode=mode,
-                reasoning=reasoning,
-                native_session=native_session,
-                execution_key=execution_key,
-            )
-        else:
-            result = self._invoke_runner(
-                execution_key,
-                project=project,
-                backend=agent,
-                model=model,
-                mode=mode,
-                reasoning=reasoning,
-                session_id=previous_session,
-                prompt=str(item["content"]),
-            )
+                if not native_session:
+                    raise RuntimeError(
+                        f"{agent} native Ask requires a stable Agent session"
+                    )
+                used_session = native_session
+                chat.set_agent_session(project, session_id, agent, native_session)
+                result = self._run_with_native_ask_bridge(
+                    project,
+                    chat,
+                    session_id,
+                    item,
+                    backend=agent,
+                    model=model,
+                    mode=mode,
+                    reasoning=reasoning,
+                    native_session=native_session,
+                    execution_key=execution_key,
+                )
+            else:
+                result = self._invoke_runner(
+                    execution_key,
+                    project=project,
+                    backend=agent,
+                    model=model,
+                    mode=mode,
+                    reasoning=reasoning,
+                    session_id=previous_session,
+                    prompt=str(item["content"]),
+                )
+        except Exception as exc:
+            if used_session and is_session_invalid_error(str(exc)):
+                chat.clear_agent_session(
+                    project,
+                    session_id,
+                    agent,
+                    expected_agent_session_id=used_session,
+                )
+                detail = str(exc).strip() or "Agent session is unavailable"
+                raise RuntimeError(
+                    detail
+                    + "\nSaved Agent session was cleared; retry this Chat turn "
+                    "to start a fresh Agent session."
+                ) from exc
+            raise
         answer = str(result.get("text") or "").strip()
         if not answer:
             raise RuntimeError("Chat Agent returned an empty response")
