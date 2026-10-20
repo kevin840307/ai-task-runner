@@ -74,6 +74,84 @@ def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> 
     assert duplicate["duplicate"] is True
     assert duplicate["draft_id"] == value["draft_id"]
 
+def test_task_draft_spec_boundaries_preserve_text_and_fail_closed(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_runner(**kwargs):
+        calls.append(dict(kwargs))
+        return {
+            "draft": {
+                "title": "Boundary draft",
+                "items": [
+                    {"title": "First", "prompt": "Do first"},
+                    {"title": "Second", "prompt": "Do second"},
+                ],
+            }
+        }
+
+    service = TaskDraftService(repo, runner=fake_runner)
+    spec = 'Implement safely:\n- keep Queue FIFO\n- preserve @task /review ✓ and "quoted" text'
+    value = service.generate(
+        project,
+        spec=spec,
+        draft_mode="list",
+        backend="qwen",
+        workflow="workflow.yaml",
+        request_id="boundary-multiline",
+    )
+    assert value["spec"] == spec
+    assert calls[0]["spec"] == spec
+    assert [item["title"] for item in value["draft"]["items"]] == ["First", "Second"]
+    assert [item["workspace"] for item in value["draft"]["items"]] == ["auto", "auto"]
+
+    with pytest.raises(ValueError, match="TaskDraft spec is required"):
+        service.generate(
+            project,
+            spec=" \n\t ",
+            draft_mode="auto",
+            backend="qwen",
+            request_id="boundary-empty",
+        )
+    with pytest.raises(ValueError, match="TaskDraft spec is too long"):
+        service.generate(
+            project,
+            spec="x" * 24001,
+            draft_mode="auto",
+            backend="qwen",
+            request_id="boundary-long",
+        )
+    with pytest.raises(ValueError, match="Unsupported TaskDraft mode"):
+        service.generate(
+            project,
+            spec="valid",
+            draft_mode="parallel",
+            backend="qwen",
+            request_id="boundary-mode",
+        )
+
+    invalid = TaskDraftService(
+        repo,
+        runner=lambda **kwargs: {
+            "draft": {
+                "title": "Invalid generated draft",
+                "items": [{"title": "A", "prompt": "   "}],
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="TaskDraft item 1 prompt is required"):
+        invalid.generate(
+            project,
+            spec="schema validation",
+            draft_mode="single",
+            backend="qwen",
+            workflow="workflow.yaml",
+            request_id="boundary-schema",
+        )
+
+
 def test_generated_task_draft_includes_only_required_validation_overrides(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"

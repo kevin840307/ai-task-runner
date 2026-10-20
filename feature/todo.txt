@@ -553,7 +553,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 16. 測試策略與驗收
 -----------------
 
-[ ] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
+[x] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
 [ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
 [ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
@@ -568,7 +568,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
 [ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
-[ ] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
+[x] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
 [ ] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
 [ ] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
