@@ -1369,7 +1369,9 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     state_path = project / ".ai-task-runner" / "ui" / "chat" / "state.json"
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     raw["version"] = 4
+    raw["sessions"][0]["queue"][0].pop("turn_id", None)
     raw["sessions"][0]["queue"][0]["status"] = "processing"
+    raw["turn_requests"]["legacy-status-1"].pop("turn_id", None)
     raw["turn_requests"]["legacy-status-1"]["status"] = "processing"
     raw["turn_requests"]["finished"] = {
         "session_id": session_id,
@@ -1391,6 +1393,8 @@ def test_chat_queue_migrates_legacy_processing_and_done_statuses(tmp_path: Path)
     normalized = json.loads(restarted._state_path(project).read_text(encoding="utf-8"))
     assert normalized["version"] == STATE_VERSION
     assert normalized["sessions"][0]["queue"][0]["status"] == "queued"
+    assert normalized["sessions"][0]["queue"][0]["turn_id"] == migrated_turn_id
+    assert normalized["turn_requests"]["legacy-status-1"]["turn_id"] == migrated_turn_id
     assert normalized["turn_requests"]["legacy-status-1"]["status"] == "queued"
 
 
