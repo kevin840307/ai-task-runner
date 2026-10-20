@@ -1109,6 +1109,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert len(created) == 1
             assert created[0]["title"] == "Standalone browser task"
             assert created[0]["items"][0]["prompt"] == "Standalone task prompt"
+            assert page.locator("#taskWorkspaceEditTask").is_visible()
+            page.click("#taskWorkspaceEditTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
+            assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
@@ -1185,6 +1192,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert state.task_uploads.staged_exists(root, managed_ai_prompt) is False
             assert state.task_uploads.staged_exists(root, staged_validator) is False
             assert created[1]["project"] == str(state.repo_root.resolve())
+            assert page.locator("#taskWorkspaceOpenList").is_visible()
+            page.click("#taskWorkspaceOpenList")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
+            assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             browser.close()
 
 
