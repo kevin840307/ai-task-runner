@@ -234,10 +234,12 @@ def test_chat_agent_turn_is_separate_from_runner_history_and_reuses_agent_sessio
     service.turn(
         project, chat, session_id=session_id, message="hello",
         backend="qwen", model="model-a", mode="auto", reasoning="high",
+        request_id="continuity-1",
     )
     service.turn(
         project, chat, session_id=session_id, message="again",
         backend="qwen", model="model-a", mode="auto", reasoning="high",
+        request_id="continuity-2",
     )
 
     assert [row["content"] for row in chat.messages(project, session_id)["messages"]] == [
@@ -264,9 +266,9 @@ def test_chat_agent_session_resets_when_project_agent_changes(tmp_path: Path) ->
     service = ChatAgentService(repo, runner=fake_runner)
     session_id = chat.sessions(project)["active_session_id"]
 
-    service.turn(project, chat, session_id=session_id, message="a", backend="qwen", mode="auto")
-    service.turn(project, chat, session_id=session_id, message="b", backend="opencode", mode="auto")
-    service.turn(project, chat, session_id=session_id, message="c", backend="opencode", mode="auto")
+    service.turn(project, chat, session_id=session_id, message="a", backend="qwen", mode="auto", request_id="switch-1")
+    service.turn(project, chat, session_id=session_id, message="b", backend="opencode", mode="auto", request_id="switch-2")
+    service.turn(project, chat, session_id=session_id, message="c", backend="opencode", mode="auto", request_id="switch-3")
 
     assert seen == [
         ("qwen", ""),
@@ -561,6 +563,13 @@ def test_chat_queue_recovers_dispatching_item_after_restart(tmp_path: Path) -> N
     claimed = chat.claim_next(project, session_id)
     assert claimed is not None
     assert chat.queue(project, session_id)["dispatching"]["content"] == "persisted"
+    first_user = chat.append_message(
+        project,
+        session_id,
+        "user",
+        "persisted",
+        turn_id=claimed["turn_id"],
+    )
 
     calls: list[str] = []
     service = ChatAgentService(
@@ -574,6 +583,78 @@ def test_chat_queue_recovers_dispatching_item_after_restart(tmp_path: Path) -> N
     assert result["status"] == "idle"
     assert calls == ["persisted"]
     assert ChatService().queue(project, session_id)["items"] == []
+    messages = ChatService().messages(project, session_id)["messages"]
+    assert [row["role"] for row in messages] == ["user", "assistant"]
+    assert messages[0]["message_id"] == first_user["message_id"]
+    assert messages[0]["turn_id"] == claimed["turn_id"]
+    assert messages[1]["turn_id"] == claimed["turn_id"]
+
+
+def test_chat_queue_restart_does_not_repeat_completed_agent_turn(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    queued = chat.enqueue_turn(
+        project,
+        session_id,
+        "persisted complete",
+        request_id="persisted-complete-1",
+        backend="qwen",
+    )
+    claimed = chat.claim_next(project, session_id)
+    assert claimed is not None
+    chat.append_message(
+        project,
+        session_id,
+        "user",
+        "persisted complete",
+        turn_id=queued["turn_id"],
+    )
+    assistant = chat.append_message(
+        project,
+        session_id,
+        "assistant",
+        "already durable",
+        turn_id=queued["turn_id"],
+    )
+
+    calls: list[str] = []
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: (
+            calls.append(kwargs["prompt"])
+            or {"text": "should-not-run", "session_id": "native"}
+        ),
+    )
+    result = service.drain(project, ChatService(), session_id=session_id)
+
+    assert result["status"] == "idle"
+    assert calls == []
+    assert ChatService().queue(project, session_id)["items"] == []
+    messages = ChatService().messages(project, session_id)["messages"]
+    assert [row["content"] for row in messages] == ["persisted complete", "already durable"]
+    assert messages[1]["message_id"] == assistant["message_id"]
+
+
+def test_chat_turn_requires_request_id(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    service = ChatAgentService(
+        repo,
+        runner=lambda **kwargs: {"text": "unused", "session_id": "native"},
+    )
+    with pytest.raises(ValueError, match="request_id is required"):
+        service.turn(
+            project,
+            chat,
+            session_id=chat.sessions(project)["active_session_id"],
+            message="no id",
+            backend="qwen",
+        )
 
 
 def test_chat_queue_backend_failure_records_error_and_preserves_later_items(tmp_path: Path) -> None:

@@ -156,28 +156,66 @@ class ChatService:
         session_id: str,
         role: str,
         content: str,
+        *,
+        turn_id: str = "",
     ) -> dict[str, Any]:
         text = str(content or "")
         if not text.strip():
             raise ValueError("Chat message is empty")
         if role not in {"user", "assistant", "system"}:
             raise ValueError("Invalid Chat message role")
+        turn = str(turn_id or "").strip()
+        if turn and not _TURN_ID.fullmatch(turn):
+            raise ValueError("Invalid Chat turn_id")
         with self._lock:
             state = self._load(project)
             session = self._require_session(state, session_id)
+            path = self._messages_path(project, session["session_id"])
+            if turn:
+                existing = self._find_turn_message(path, turn, role)
+                if existing is not None:
+                    session["updated_at"] = max(
+                        float(session.get("updated_at") or 0),
+                        float(existing.get("time") or 0),
+                    )
+                    self._write(project, state)
+                    return dict(existing)
             row = {
                 "message_id": f"msg-{uuid.uuid4().hex}",
                 "role": role,
                 "content": text,
                 "time": time.time(),
             }
-            path = self._messages_path(project, session["session_id"])
+            if turn:
+                row["turn_id"] = turn
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
             session["updated_at"] = row["time"]
             self._write(project, state)
             return dict(row)
+
+    def turn_message(
+        self,
+        project: Path,
+        session_id: str,
+        turn_id: str,
+        role: str,
+    ) -> dict[str, Any] | None:
+        turn = str(turn_id or "").strip()
+        if not _TURN_ID.fullmatch(turn):
+            raise ValueError("Invalid Chat turn_id")
+        if role not in {"user", "assistant", "system"}:
+            raise ValueError("Invalid Chat message role")
+        with self._lock:
+            state = self._load(project)
+            session = self._require_session(state, session_id)
+            row = self._find_turn_message(
+                self._messages_path(project, session["session_id"]),
+                turn,
+                role,
+            )
+            return dict(row) if row is not None else None
 
     def ask(self, project: Path, session_id: str) -> dict[str, Any]:
         with self._lock:
@@ -962,6 +1000,32 @@ class ChatService:
                 None,
             ),
         }
+
+    @staticmethod
+    def _find_turn_message(
+        path: Path,
+        turn_id: str,
+        role: str,
+    ) -> dict[str, Any] | None:
+        if not path.is_file():
+            return None
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise ValueError(f"Chat messages unavailable: {exc}") from exc
+        for line in reversed(lines):
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(row, dict)
+                and row.get("turn_id") == turn_id
+                and row.get("role") == role
+                and _MESSAGE_ID.fullmatch(str(row.get("message_id") or ""))
+            ):
+                return row
+        return None
 
     @staticmethod
     def _state_path(project: Path) -> Path:

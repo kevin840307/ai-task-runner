@@ -69,7 +69,9 @@ class ChatAgentService:
         agent = str(backend or "").strip()
         if not agent:
             raise ValueError("Chat Agent is required")
-        request = str(request_id or "").strip() or f"direct-{uuid.uuid4().hex}"
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
         queued = chat.enqueue_turn(
             project,
             session_id,
@@ -235,6 +237,7 @@ class ChatAgentService:
                     session_id,
                     "system",
                     "Agent turn cancelled.",
+                    turn_id=str(item["turn_id"]),
                 )
                 chat.complete_queue_item(
                     project,
@@ -252,6 +255,7 @@ class ChatAgentService:
                     session_id,
                     "system",
                     f"Agent error: {failure}",
+                    turn_id=str(item["turn_id"]),
                 )
                 chat.complete_queue_item(
                     project,
@@ -266,6 +270,7 @@ class ChatAgentService:
                     session_id,
                     "system",
                     "Agent turn cancelled.",
+                    turn_id=str(item["turn_id"]),
                 )
                 chat.complete_queue_item(
                     project,
@@ -303,8 +308,17 @@ class ChatAgentService:
             raise ValueError("Queued Chat turn has unsupported mode")
         model = str(item.get("model") or "").strip()
         reasoning = str(item.get("reasoning") or "").strip()
+        turn_id = str(item["turn_id"])
+        if chat.turn_message(project, session_id, turn_id, "assistant") is not None:
+            return
         previous_session = chat.agent_session(project, session_id, agent)
-        chat.append_message(project, session_id, "user", str(item["content"]))
+        chat.append_message(
+            project,
+            session_id,
+            "user",
+            str(item["content"]),
+            turn_id=turn_id,
+        )
         features = chat_features(agent, project)
         native_bridge = (
             features.ask
@@ -353,7 +367,13 @@ class ChatAgentService:
         ).strip()
         if next_session:
             chat.set_agent_session(project, session_id, agent, next_session)
-        chat.append_message(project, session_id, "assistant", answer)
+        chat.append_message(
+            project,
+            session_id,
+            "assistant",
+            answer,
+            turn_id=turn_id,
+        )
 
     @staticmethod
     def _native_request_id(payload: dict[str, Any]) -> str:
