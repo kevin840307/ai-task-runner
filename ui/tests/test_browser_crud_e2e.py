@@ -2183,6 +2183,44 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
 
             assert page.locator("html").get_attribute("data-appearance-preference") == "system"
             assert page.locator("html").get_attribute("data-appearance") == "dark"
+
+            # Build the dynamic Chat surfaces before cycling themes so every
+            # palette exercises the real composer / TaskDraft / Ask / Queue.
+            page.fill("#projectChatInput", "@task-single theme surface")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-task-draft') !== null")
+            page.fill("#projectChatInput", "@ask-demo")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
+            page.fill("#projectChatInput", "theme queue item")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1")
+
+            def chat_surface_backgrounds():
+                return page.evaluate(
+                    """() => {
+                        const selectors = {
+                            composer: '#projectChatComposePanel .composer-box',
+                            ask: '.project-chat-ask',
+                            queue: '#projectChatQueue',
+                            settings: '#projectChatSettingsPopover',
+                            draft: '.project-chat-task-draft'
+                        };
+                        const result = {};
+                        for (const [key, selector] of Object.entries(selectors)) {
+                            const node = document.querySelector(selector);
+                            if (!node) throw new Error('Missing theme surface: ' + selector);
+                            const style = getComputedStyle(node);
+                            result[key] = {
+                                background: style.backgroundColor,
+                                color: style.color,
+                                border: style.borderColor
+                            };
+                        }
+                        return result;
+                    }"""
+                )
+
             page.click("#themeButton")
             assert page.locator("#themePanel").is_visible()
 
@@ -2210,6 +2248,22 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                     )
                     assert all(tokens)
                     assert len(set(tokens)) == 3
+
+                    # Settings is a real popover surface, so inspect it while
+                    # open instead of relying only on root CSS variables.
+                    page.click("#themeCloseButton")
+                    page.click("#projectChatSettingsButton")
+                    page.wait_for_function("document.querySelector('#projectChatSettingsPopover')?.hidden === false")
+                    surfaces = chat_surface_backgrounds()
+                    for values in surfaces.values():
+                        assert values["background"] not in {"rgba(0, 0, 0, 0)", "transparent", ""}
+                        assert values["color"]
+                        assert values["border"]
+                        if appearance == "dark":
+                            assert values["background"] not in {"rgb(255, 255, 255)", "rgba(255, 255, 255, 1)"}
+                    page.click("#projectChatSettingsClose")
+                    page.click("#themeButton")
+                    assert page.locator("#themePanel").is_visible()
 
             page.locator("[data-appearance-option='system']").click()
             page.locator("[data-theme-option='violet']").click()

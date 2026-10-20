@@ -362,7 +362,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Chat composer 的 Project tag 已移除；Mode 旁 New Task 重用 Tasks 頁同一個 + New → Task / Task List menu，預設帶入目前 Chat Project。
 [x] 新增共用 uiText / data-i18n translation layer；這次新增或修改的 Chat / Composer / Task Draft / Task List Draft 文案均提供 zh-TW / en。
 [x] Queue / Ask / command suggestions / Chat TaskDraft / Task List Draft 等動態文字改走 uiText，不只靜態 HTML 翻譯。
-[ ] Browser 測試 Light / Dark × Teal / Blue / Violet / Amber / Rose：Chat composer、Ask、Queue、settings popover、Task Draft 不得出現亮白殘留。
+[x] Browser 測試 Light / Dark × Teal / Blue / Violet / Amber / Rose：Chat composer、Ask、Queue、settings popover、Task Draft 逐組檢查實際 computed surface token；Dark 不得退回純白背景。
 [ ] Browser 測試 zh-TW / en 即時切換：Composer 靜態文案、Queue / Ask / command suggestions / Task Draft / Task List Draft 應同步更新。
 [x] UI review：移除已被 Drawer / inline inspector 取代的 taskInfoModal、dead renderer 與 task-context-info / wide-menu CSS，避免第二套 Info ownership。
 [x] UI review：Task context menu 定位改讀實際 DOM 尺寸，不再使用舊雙欄 menu 的 454px hardcode。
