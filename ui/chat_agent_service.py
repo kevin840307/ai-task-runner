@@ -358,6 +358,7 @@ class ChatAgentService:
             or payload.get("questionID")
             or payload.get("questionId")
             or payload.get("requestID")
+            or payload.get("requestId")
             or ""
         ).strip()
 
