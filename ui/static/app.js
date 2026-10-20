@@ -283,6 +283,10 @@ const taskWorkspace = createTaskWorkspaceController({
   confirmDialog,
   showError: showActionError,
   onTaskChanged: () => tasksBoard?.refresh(),
+  openPrompts: async () => {
+    await switchView("prompt");
+    showToast("Prompt assets are managed in Prompts");
+  },
 });
 tasksBoard = createTasksBoardController({
   api,

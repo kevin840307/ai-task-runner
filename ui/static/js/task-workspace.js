@@ -4,7 +4,7 @@ function cloneDraft(value) {
 }
 function draftSignature(value) { return JSON.stringify(value || {}); }
 
-export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged }) {
+export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged, openPrompts }) {
   let state = null;
   let pendingUploadActions = Promise.resolve();
   let overlay = null;
@@ -185,14 +185,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     closeNow();
   }
 
-  function closeNow() {
+  function closeNow({ restore = true } = {}) {
     if (overlay) overlay.hidden = true;
-    const focus = restoreFocus;
+    const focus = restore ? restoreFocus : null;
     state = null;
     restoreFocus = null;
     requestAnimationFrame(() => {
       if (focus && document.contains(focus) && typeof focus.focus === "function") focus.focus();
     });
+  }
+
+  async function openPromptsFromWorkspace() {
+    if (typeof openPrompts !== "function") return;
+    if (!(await confirmDiscardIfDirty())) return;
+    closeNow({ restore: false });
+    await openPrompts();
+  }
+
+  function promptsButton() {
+    if (typeof openPrompts !== "function") return null;
+    const button = document.createElement("button");
+    button.id = "taskWorkspaceOpenPrompts";
+    button.type = "button";
+    button.textContent = "Open Prompts";
+    button.onclick = () => void openPromptsFromWorkspace();
+    return button;
   }
 
   function touchEditor() {
@@ -484,6 +501,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     yaml.textContent = "Edit YAML";
     yaml.onclick = () => void openYaml();
     actions.append(add, yaml);
+    const prompts = promptsButton();
+    if (prompts) actions.appendChild(prompts);
     body.appendChild(actions);
   }
 
@@ -631,6 +650,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     error.hidden = !state.error;
     error.textContent = state.error || "";
     body.appendChild(error);
+    const prompts = promptsButton();
+    if (prompts) {
+      const actions = document.createElement("div");
+      actions.className = "task-workspace-info-actions";
+      actions.appendChild(prompts);
+      body.appendChild(actions);
+    }
   }
 
   function renderTaskInfo() {
@@ -823,6 +849,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yaml.textContent = "Edit YAML";
       yaml.onclick = () => void openYaml();
       actions.append(add, yaml);
+      const prompts = promptsButton();
+      if (prompts) actions.appendChild(prompts);
       body.appendChild(actions);
     }
     if (state.error) {
