@@ -271,21 +271,13 @@ def _bridge_for(state: UIState):
                         },
                         "workflows": [
                             {
-                                "id": "wf1",
-                                "name": "ralphy_ai_validate.yaml",
-                                "path": str(state.repo_root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"),
-                                "scope": "global",
-                                "requires_python_validator": False,
-                                "has_ai_validator": False,
-                            },
-                            {
-                                "id": "wf2",
-                                "name": "mixed.yaml",
-                                "path": str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml"),
-                                "scope": "global",
-                                "requires_python_validator": True,
-                                "has_ai_validator": True,
-                            },
+                                "id": item["id"],
+                                "name": item["display_name"],
+                                "path": item["path"],
+                                "scope": item["scope"],
+                            }
+                            for item in state.studio_files(project).get("workflows", [])
+                            if not item.get("hidden")
                         ],
                         "cached": False,
                     }
