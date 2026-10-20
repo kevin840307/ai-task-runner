@@ -124,6 +124,9 @@ def _write_fixture_repo(root: Path) -> UIState:
         encoding="utf-8",
     )
     state = UIState(root)
+    # Keep the broad browser suite deterministic in English; the localization
+    # contract below explicitly exercises zh-TW and en at runtime.
+    state.global_settings.update({"language": "en"})
 
     def browser_task_draft_runner(**kwargs):
         spec = str(kwargs.get("spec", ""))
@@ -2265,6 +2268,51 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                     page.click("#themeButton")
                     assert page.locator("#themePanel").is_visible()
 
+            # Static Composer copy and dynamic Queue / Ask / command suggestions
+            # / Chat TaskDraft must all rerender from the same language owner.
+            page.locator("[data-language-option='zh-TW']").click()
+            page.wait_for_function("document.documentElement.lang === 'zh-Hant'")
+            page.click("#themeCloseButton")
+            assert page.locator("#projectChatInput").get_attribute("placeholder") == "輸入訊息給此專案…"
+            assert page.locator("#projectChatNewTaskButton").inner_text() == "新增任務"
+            assert page.locator("#projectChatSendButton").inner_text() == "加入佇列"
+            assert page.locator(".project-chat-task-draft-actions").get_by_role("button", name="編輯草稿").is_visible()
+            assert page.locator(".project-chat-ask-option").filter(has_text="其他／自行輸入").first.is_visible()
+            assert page.locator("#projectChatQueueList .project-chat-queue-item").first.get_by_role("button", name="編輯").is_visible()
+            page.fill("#projectChatInput", "/")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            assert page.locator("#projectChatSuggestTitle").inner_text() == "Agent 技能 / 指令"
+            page.keyboard.press("Escape")
+
+            page.click("#themeButton")
+            page.locator("[data-language-option='en']").click()
+            page.wait_for_function("document.documentElement.lang === 'en'")
+            page.click("#themeCloseButton")
+            assert page.locator("#projectChatInput").get_attribute("placeholder") == "Message this Project…"
+            assert page.locator("#projectChatNewTaskButton").inner_text() == "New Task"
+            assert page.locator("#projectChatSendButton").inner_text() == "Queue"
+            assert page.locator(".project-chat-task-draft-actions").get_by_role("button", name="Edit Draft").is_visible()
+            assert page.locator(".project-chat-ask-option").filter(has_text="Other / custom answer").first.is_visible()
+            assert page.locator("#projectChatQueueList .project-chat-queue-item").first.get_by_role("button", name="Edit").is_visible()
+
+            # Task List Draft rerenders in place on the same language event.
+            page.click("#projectChatNewTaskButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ Add task"
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
+            page.evaluate("window.I18n.setLanguage('zh-TW')")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === '任務清單'")
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ 新增任務"
+            assert page.locator("#taskWorkspaceSave").inner_text() == "建立任務清單"
+            page.evaluate("window.I18n.setLanguage('en')")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ Add task"
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            page.click("#themeButton")
             page.locator("[data-appearance-option='system']").click()
             page.locator("[data-theme-option='violet']").click()
             page.locator("[data-language-option='en']").click()

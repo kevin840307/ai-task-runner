@@ -12,6 +12,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let createMenu = null;
   let createContext = null;
   const byId = (id) => document.getElementById(id);
+  const tr = (key, fallback) => window.I18n?.t?.(key, fallback) ?? fallback;
+  const trf = (key, values, fallback) => window.I18n?.format?.(key, values, fallback) ?? fallback;
 
   function ensureMounted() {
     if (overlay) return overlay;
@@ -239,7 +241,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const button = document.createElement("button");
     button.id = "taskWorkspaceOpenPrompts";
     button.type = "button";
-    button.textContent = "Open Prompts";
+    button.textContent = tr("task.open_prompts", "Open Prompts");
     button.onclick = () => void openPromptsFromWorkspace();
     return button;
   }
@@ -486,7 +488,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (editable) {
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
-        for (const [label, titleText, delta] of [["↑", "Move up", -1], ["↓", "Move down", 1]]) {
+        for (const [label, titleText, delta] of [["↑", tr("task.move_up", "Move up"), -1], ["↓", tr("task.move_down", "Move down"), 1]]) {
           const button = document.createElement("button");
           button.type = "button";
           button.textContent = label;
@@ -498,11 +500,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-row-edit";
-        edit.textContent = "Edit";
+        edit.textContent = tr("task.edit_action", "Edit");
         edit.onclick = () => editItem(index);
         const remove = document.createElement("button");
         remove.type = "button";
-        remove.textContent = "Remove";
+        remove.textContent = tr("task.remove", "Remove");
         remove.disabled = values.length <= 1;
         remove.onclick = () => removeItem(index);
         actions.append(edit, remove);
@@ -513,7 +515,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-durable-edit";
-        edit.textContent = "Edit";
+        edit.textContent = tr("task.edit_action", "Edit");
         edit.onclick = () => onEdit(index);
         actions.appendChild(edit);
         row.appendChild(actions);
@@ -529,12 +531,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const add = document.createElement("button");
     add.id = "taskWorkspaceAddTask";
     add.type = "button";
-    add.textContent = "+ Add task";
+    add.textContent = tr("task.add", "+ Add task");
     add.onclick = addDraftListItem;
     const yaml = document.createElement("button");
     yaml.id = "taskWorkspaceYamlButton";
     yaml.type = "button";
-    yaml.textContent = "Edit YAML";
+    yaml.textContent = tr("task.edit_yaml", "Edit YAML");
     yaml.onclick = () => void openYaml();
     actions.append(add, yaml);
     const prompts = promptsButton();
@@ -548,7 +550,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     body.appendChild(renderDraftTitleField());
     const intro = document.createElement("div");
     intro.className = "task-workspace-intro";
-    intro.innerHTML = "<strong>Task order</strong><span>Tasks run top-to-bottom inside this Task List.</span>";
+    intro.innerHTML = "<strong>" + tr("task.order", "Task order") + "</strong><span>" + tr("task.order_desc", "Tasks run top-to-bottom inside this Task List.") + "</span>";
     body.appendChild(intro);
     body.appendChild(renderTaskRows(state.draft.items, { editable: true }));
     appendDraftListActions(body);
@@ -878,12 +880,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const add = document.createElement("button");
       add.id = "taskWorkspaceAddTask";
       add.type = "button";
-      add.textContent = "+ Add task";
+      add.textContent = tr("task.add", "+ Add task");
       add.onclick = addTaskListItem;
       const yaml = document.createElement("button");
       yaml.id = "taskWorkspaceYamlButton";
       yaml.type = "button";
-      yaml.textContent = "Edit YAML";
+      yaml.textContent = tr("task.edit_yaml", "Edit YAML");
       yaml.onclick = () => void openYaml();
       actions.append(add, yaml);
       const prompts = promptsButton();
@@ -1079,7 +1081,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const yamlRoute = state.route === "yaml";
     const count = state.draft.items.length;
     const creating = !!state.createOnSave;
-    byId("taskWorkspaceEyebrow").textContent = yamlRoute ? "TASK YAML" : (listRoute ? "TASK LIST" : "TASK EDITOR");
+    byId("taskWorkspaceEyebrow").textContent = yamlRoute ? tr("task.yaml", "TASK YAML") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.editor", "TASK EDITOR"));
     byId("taskWorkspaceTitle").textContent = yamlRoute
       ? String(state.draft.title || "Task YAML")
       : listRoute
@@ -1088,15 +1090,19 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceMeta").textContent = yamlRoute
       ? "Same canonical items[]"
       : listRoute
-        ? count + " ordered task" + (count === 1 ? "" : "s")
+        ? trf("task.ordered_count", { count }, count + " ordered task" + (count === 1 ? "" : "s"))
         : "Task " + (state.index + 1) + " of " + count;
-    byId("taskWorkspaceFooterBack").textContent = yamlRoute ? "Back to Task List" : (listRoute ? (creating ? "Cancel" : "Back to Chat") : (count > 1 ? "Back to Task List" : (creating ? "Cancel" : "Back to Chat")));
+    byId("taskWorkspaceFooterBack").textContent = yamlRoute
+      ? tr("task.back_list", "Back to Task List")
+      : (listRoute
+        ? (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))
+        : (count > 1 ? tr("task.back_list", "Back to Task List") : (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))));
     byId("taskWorkspaceSave").hidden = !yamlRoute && !listRoute && count > 1;
     byId("taskWorkspaceSave").textContent = yamlRoute
       ? "Apply YAML"
       : creating
-        ? (listRoute ? "Create Task List" : "Create Task")
-        : "Save draft";
+        ? (listRoute ? tr("task.create_list", "Create Task List") : tr("task.create", "Create Task"))
+        : tr("task.save_draft", "Save draft");
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
     if (!yamlRoute) (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus();
   }
@@ -1373,6 +1379,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     overlay.hidden = false;
     render();
   }
+
+  window.addEventListener("app-language-changed", () => {
+    if (state && overlay && !overlay.hidden) render();
+  });
 
   return { openDraft, openTask, openNew, openCreateMenu, close: requestClose };
 }

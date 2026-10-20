@@ -31,6 +31,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   let preferenceAction = Promise.resolve();
 
   const byId = (id) => document.getElementById(id);
+  const tr = (key, fallback) => window.I18n?.t?.(key, fallback) ?? fallback;
+  const trf = (key, values, fallback) => window.I18n?.format?.(key, values, fallback) ?? fallback;
 
   function projectPath() {
     return String(project?.path || "");
@@ -374,13 +376,13 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const isRunner = context.prefix === "@";
     const title = byId("projectChatSuggestTitle");
     const hint = title?.parentElement?.querySelector("small");
-    if (title) title.textContent = isRunner ? "Runner Commands / Prompts" : "Agent Skills / Commands";
-    if (hint) hint.textContent = isRunner ? "@ = AI Task Runner" : "/ = selected Agent";
+    if (title) title.textContent = isRunner ? tr("chat.runner_suggestions", "Runner Commands / Prompts") : tr("chat.agent_suggestions", "Agent Skills / Commands");
+    if (hint) hint.textContent = isRunner ? tr("chat.runner_hint", "@ = AI Task Runner") : tr("chat.agent_hint", "/ = selected Agent");
     const error = isRunner ? runnerCapabilitiesError : capabilitiesError;
     panel.hidden = false;
     if (retry) {
       retry.hidden = !error || isRunner;
-      retry.textContent = "Retry";
+      retry.textContent = tr("chat.retry", "Retry");
     }
     list.innerHTML = "";
     if (error) {
@@ -395,8 +397,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       const empty = document.createElement("div");
       empty.className = "project-chat-suggest-empty";
       empty.textContent = suggestionQuery()?.prefix === "@"
-        ? "No Runner Command / Prompt matches."
-        : "No Agent Skill / Command matches.";
+        ? tr("chat.no_runner_suggestions", "No Runner Command / Prompt matches.")
+        : tr("chat.no_agent_suggestions", "No Agent Skill / Command matches.");
       list.appendChild(empty);
       return;
     }
@@ -481,8 +483,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (send) {
       send.disabled = !project;
       send.setAttribute("aria-busy", String(queueBusy));
-      send.textContent = queueBusy ? "Queue" : "Send";
-      send.title = queueBusy ? "Queue for next turn (Ctrl+Q)" : "Send message";
+      send.textContent = queueBusy ? tr("chat.queue", "Queue") : tr("chat.send", "Send");
+      send.title = queueBusy ? tr("chat.queue_hint", "Queue for next turn (Ctrl+Q)") : tr("chat.send_hint", "Send message");
     }
     if (input) input.disabled = !project;
     scheduleQueuePoll();
@@ -506,7 +508,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         const input = document.createElement("textarea");
         input.rows = 2;
         input.value = editingQueueValue;
-        input.setAttribute("aria-label", "Queued message");
+        input.setAttribute("aria-label", tr("chat.queued_message", "Queued message"));
         input.oninput = () => {
           editingQueueValue = input.value;
           if (editingQueueError && input.value.trim()) {
@@ -538,11 +540,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         actions.className = "project-chat-queue-actions";
         const save = document.createElement("button");
         save.type = "button";
-        save.textContent = "Save";
+        save.textContent = tr("chat.queue_save", "Save");
         save.onclick = () => void saveQueueEdit(item);
         const cancel = document.createElement("button");
         cancel.type = "button";
-        cancel.textContent = "Cancel";
+        cancel.textContent = tr("chat.queue_cancel", "Cancel");
         cancel.onclick = cancelQueueEdit;
         actions.append(save, cancel);
         row.append(editor, actions);
@@ -556,11 +558,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         actions.className = "project-chat-queue-actions";
         const edit = document.createElement("button");
         edit.type = "button";
-        edit.textContent = "Edit";
+        edit.textContent = tr("chat.queue_edit", "Edit");
         edit.onclick = () => beginQueueEdit(item);
         const remove = document.createElement("button");
         remove.type = "button";
-        remove.textContent = "Delete";
+        remove.textContent = tr("chat.queue_delete", "Delete");
         remove.onclick = () => void deleteQueueItem(item);
         actions.append(edit, remove);
         row.append(copy, actions);
@@ -586,7 +588,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   async function saveQueueEdit(item) {
     const next = String(editingQueueValue || "").trim();
     if (!next) {
-      editingQueueError = "Queued message cannot be empty.";
+      editingQueueError = tr("chat.queue_empty", "Queued message cannot be empty.");
       renderQueue();
       return;
     }
@@ -764,12 +766,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const head = document.createElement("div");
     head.className = "project-chat-task-draft-head";
     const title = document.createElement("div");
-    title.innerHTML = "<small>TASK DRAFT</small>";
+    title.innerHTML = "<small>" + tr("chat.task_draft", "TASK DRAFT") + "</small>";
     const strong = document.createElement("strong");
     strong.textContent = String(draft.title || "TaskDraft");
     title.appendChild(strong);
     const meta = document.createElement("span");
-    meta.textContent = (Array.isArray(draft.items) ? draft.items.length : 0) + " item(s)";
+    meta.textContent = trf("chat.item_count", { count: Array.isArray(draft.items) ? draft.items.length : 0 }, (Array.isArray(draft.items) ? draft.items.length : 0) + " item(s)");
     head.append(title, meta);
 
     const items = document.createElement("div");
@@ -789,8 +791,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     actions.className = "project-chat-task-draft-actions";
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.textContent = "Edit";
-    edit.setAttribute("aria-label", "Edit Draft");
+    edit.textContent = tr("chat.queue_edit", "Edit");
+    edit.setAttribute("aria-label", tr("chat.edit_draft", "Edit Draft"));
     edit.onclick = () => {
       const originProject = projectPath();
       const viewSession = activeSessionId;
@@ -821,11 +823,11 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const create = document.createElement("button");
     create.type = "button";
     create.className = "primary";
-    create.textContent = "Create Task";
+    create.textContent = tr("chat.create_task", "Create Task");
     create.onclick = () => void createTaskFromDraft(entry.draft_id, create);
     const dismiss = document.createElement("button");
     dismiss.type = "button";
-    dismiss.textContent = "Dismiss";
+    dismiss.textContent = tr("chat.dismiss", "Dismiss");
     dismiss.onclick = () => void dismissTaskDraft(entry.draft_id);
     actions.append(edit, create, dismiss);
     card.append(head, items, actions);
@@ -917,7 +919,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       other.className = "project-chat-ask-option";
       other.classList.toggle("selected", !!(selected && typeof selected === "object" && "other" in selected));
       other.setAttribute("aria-pressed", String(!!(selected && typeof selected === "object" && "other" in selected)));
-      other.textContent = "Other / custom answer";
+      other.textContent = tr("chat.ask_other", "Other / custom answer");
       other.onclick = () => {
         const current = askAnswers[question.question_id];
         askAnswers = {
@@ -935,8 +937,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         const custom = document.createElement("textarea");
         custom.className = "project-chat-ask-input";
         custom.rows = 2;
-        custom.placeholder = "Type another answer…";
-        custom.setAttribute("aria-label", "Custom answer");
+        custom.placeholder = tr("chat.ask_other_placeholder", "Type another answer…");
+        custom.setAttribute("aria-label", tr("chat.ask_custom_answer", "Custom answer"));
         custom.value = String(selected.other || "");
         custom.oninput = () => {
           askAnswers = {
@@ -979,7 +981,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       other.type = "button";
       other.className = "project-chat-ask-option";
       other.classList.toggle("selected", !!(selected && typeof selected === "object" && "other" in selected));
-      other.textContent = "Other / custom answer";
+      other.textContent = tr("chat.ask_other", "Other / custom answer");
       other.onclick = () => {
         const current = askAnswers[question.question_id];
         const keep = current && typeof current === "object" && "other" in current ? String(current.other || "") : "";
@@ -992,8 +994,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
         const custom = document.createElement("textarea");
         custom.className = "project-chat-ask-input";
         custom.rows = 2;
-        custom.placeholder = "Type your answer…";
-        custom.setAttribute("aria-label", "Custom answer");
+        custom.placeholder = tr("chat.ask_answer_placeholder", "Type your answer…");
+        custom.setAttribute("aria-label", tr("chat.ask_custom_answer", "Custom answer"));
         custom.value = String(selected.other || "");
         custom.oninput = () => {
           askAnswers = { ...askAnswers, [question.question_id]: { other: custom.value } };
@@ -1008,8 +1010,8 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       const input = document.createElement("textarea");
       input.className = "project-chat-ask-input";
       input.rows = 3;
-      input.placeholder = "Type your answer…";
-      input.setAttribute("aria-label", "Ask text answer");
+      input.placeholder = tr("chat.ask_answer_placeholder", "Type your answer…");
+      input.setAttribute("aria-label", tr("chat.ask_text_answer", "Ask text answer"));
       input.value = String(askAnswers[question.question_id] || "");
       input.oninput = () => {
         askAnswers = { ...askAnswers, [question.question_id]: input.value };
@@ -1031,16 +1033,16 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     actions.className = "project-chat-ask-actions";
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.textContent = "Cancel";
+    cancel.textContent = tr("chat.ask_cancel", "Cancel");
     cancel.onclick = () => void cancelAsk();
     const next = document.createElement("button");
     next.type = "button";
     next.className = "primary project-chat-ask-primary";
-    next.textContent = askIndex + 1 === questions.length ? "Submit" : "Next";
+    next.textContent = askIndex + 1 === questions.length ? tr("chat.ask_submit", "Submit") : tr("chat.ask_next", "Next");
     next.disabled = !askAnswerValid(question);
     next.onclick = () => {
       if (!askAnswerValid(question)) {
-        askError = "Answer this question before continuing.";
+        askError = tr("chat.ask_required", "Answer this question before continuing.");
         renderMessages();
         return;
       }
@@ -1635,6 +1637,14 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   });
   byId("projectChatSuggestRetry")?.addEventListener("click", () => void refreshAgentCapabilities({ refresh: true }));
+  window.addEventListener("app-language-changed", () => {
+    renderPreferences();
+    renderSessions();
+    renderSuggestions();
+    renderQueue();
+    renderTurnState();
+    renderMessages();
+  });
 
   return {
     openProject,
