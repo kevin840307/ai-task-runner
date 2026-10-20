@@ -5,21 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from runner.agent import (
-    BackendError,
-    available_models,
-    chat_features,
-    interaction_modes,
-    reasoning_options,
-)
-from runner.plugins.registry import discover_plugins
+from tool.agent_catalog import settings_catalog
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,25 +21,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="")
     args = parser.parse_args(argv)
     root = Path(args.project_root).expanduser().resolve()
-    discover_plugins()
     try:
-        models = available_models(args.backend, root)
-        try:
-            modes = interaction_modes(args.backend)
-        except BackendError:
-            modes = ()
-        reasoning = reasoning_options(args.backend, root, args.model)
-        features = chat_features(args.backend, root)
-    except BackendError as exc:
+        payload = settings_catalog(root, args.backend, args.model)
+    except Exception as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 1
-    print(json.dumps({
-        "agent": args.backend,
-        "models": models,
-        "modes": [asdict(item) for item in modes],
-        "reasoning": [asdict(item) for item in reasoning],
-        "features": asdict(features),
-    }, ensure_ascii=False))
+    print(json.dumps(payload, ensure_ascii=False))
     return 0
 
 
