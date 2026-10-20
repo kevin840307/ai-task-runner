@@ -811,6 +811,8 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
             page.locator("[data-dialog-cancel]").click()
             assert state._browser_runtime_actions == []
 
+            page.click("#optionsButton")
+            page.wait_for_function("!document.querySelector('#optionsPanel')?.hidden")
             page.click("#rerunButton")
             page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
             page.locator("[data-dialog-ok]").click()
