@@ -210,10 +210,22 @@ async function api(path, options = {}) {
       ...(controller ? { signal: controller.signal } : {}),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(data?.message || `HTTP ${response.status}`);
+      error.code = String(data?.code || "http_error");
+      error.retryable = Boolean(data?.retryable);
+      error.requestId = String(data?.request_id || "");
+      throw error;
+    }
     return data;
   } catch (error) {
-    if (controller?.signal.aborted) throw new Error(`Request timed out after ${timeoutMs} ms`);
+    if (controller?.signal.aborted) {
+      const timeoutError = new Error(`Request timed out after ${timeoutMs} ms`);
+      timeoutError.code = "client_timeout";
+      timeoutError.retryable = true;
+      timeoutError.requestId = "";
+      throw timeoutError;
+    }
     throw error;
   } finally {
     if (timer) window.clearTimeout(timer);

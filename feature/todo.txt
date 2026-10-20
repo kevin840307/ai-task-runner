@@ -480,7 +480,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 使用 SSE / WebSocket 或專案現有 streaming 機制回傳事件；不建立第二套長連線管理器。
 [ ] 定義統一事件：message_delta、message_completed、tool_started、tool_completed、queue_updated、ask_requested、ask_resolved、turn_completed、turn_failed、capabilities_updated。
 [ ] Chat stream 與 Runner Task runtime stream 必須明確分開；不能混用 Task Stage event 代表 Chat tool call。
-[ ] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
+[x] API error 回傳可辨識的 code、message、retryable、request_id；UI 依 error code 顯示可操作錯誤。
+    - UIServer HTTP boundary 統一輸出 structured error envelope；POST 沿用 body request_id 作 correlation，frontend api() 保留 code/retryable/requestId metadata 並以 message 呈現。
 [ ] API 支援 cancel、timeout、disconnect / reconnect、session expiration 與重送保護。
 [ ] Chat history、Queue 與等待中的 Ask 有清楚的持久化策略；重啟後不可以讓 UI 顯示假的執行中狀態。
 [ ] 不把完整 system prompt、憑證、API key 或敏感本機環境資訊回傳給 UI。

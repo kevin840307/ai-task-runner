@@ -1179,7 +1179,7 @@ class UIStateTests(unittest.TestCase):
             try:
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{server.port}/api/studio/stage/test",
-                    data=b"{}",
+                    data=json.dumps({"request_id": "stage-invalid-1"}).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
@@ -1189,7 +1189,10 @@ class UIStateTests(unittest.TestCase):
                     self.assertNotEqual(exc.code, 404)
                     self.assertEqual(exc.code, 400)
                     payload = json.loads(exc.read().decode("utf-8"))
-                    self.assertIn("error", payload)
+                    self.assertEqual(payload["code"], "invalid_request")
+                    self.assertTrue(payload["message"])
+                    self.assertFalse(payload["retryable"])
+                    self.assertEqual(payload["request_id"], "stage-invalid-1")
                 else:
                     self.fail("invalid Stage Test request unexpectedly succeeded")
             finally:
@@ -1215,7 +1218,10 @@ class UIStateTests(unittest.TestCase):
                 except urllib.error.HTTPError as exc:
                     self.assertEqual(exc.code, 400)
                     payload = json.loads(exc.read().decode("utf-8"))
-                    self.assertIn("error", payload)
+                    self.assertEqual(payload["code"], "invalid_request")
+                    self.assertTrue(payload["message"])
+                    self.assertFalse(payload["retryable"])
+                    self.assertEqual(payload["request_id"], "")
                 else:
                     self.fail("invalid studio request unexpectedly succeeded")
             finally:

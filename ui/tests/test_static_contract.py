@@ -28,6 +28,13 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('id="themeButton"', self.html)
         self.assertIn('id="themePanel"', self.html)
 
+    def test_api_errors_use_structured_contract(self):
+        self.assertIn('data?.message || `HTTP ${response.status}`', self.app_js)
+        self.assertIn('error.code = String(data?.code || "http_error")', self.app_js)
+        self.assertIn('error.retryable = Boolean(data?.retryable)', self.app_js)
+        self.assertIn('error.requestId = String(data?.request_id || "")', self.app_js)
+        self.assertNotIn("data.error ||", self.app_js)
+
     def test_workflow_library_is_management_only(self):
         for token in (
             'id="studioFileList"',

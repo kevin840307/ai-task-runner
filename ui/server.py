@@ -287,12 +287,28 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._project_get(parsed.path)
             return super().do_GET()
         except ValueError as exc:
-            self._json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            query = parse_qs(parsed.query)
+            self._api_error(
+                exc,
+                status=HTTPStatus.BAD_REQUEST,
+                code="invalid_request",
+                retryable=False,
+                request_id=query.get("request_id", [""])[0],
+            )
         except Exception as exc:
-            self._json({"error": f"UI request failed: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            query = parse_qs(parsed.query)
+            self._api_error(
+                exc,
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                code="internal_error",
+                retryable=True,
+                request_id=query.get("request_id", [""])[0],
+                prefix="UI request failed: ",
+            )
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        body: dict = {}
         try:
             if parsed.path == "/api/tasks/upload/stage":
                 length = int(self.headers.get("Content-Length", "0") or 0)
@@ -725,9 +741,22 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_check(str(body.get("id", "")), str(body.get("content", "")), project))
             self.send_error(HTTPStatus.NOT_FOUND)
         except ValueError as exc:
-            self._json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._api_error(
+                exc,
+                status=HTTPStatus.BAD_REQUEST,
+                code="invalid_request",
+                retryable=False,
+                request_id=str(body.get("request_id", "")),
+            )
         except Exception as exc:
-            self._json({"error": f"UI request failed: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._api_error(
+                exc,
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                code="internal_error",
+                retryable=True,
+                request_id=str(body.get("request_id", "")),
+                prefix="UI request failed: ",
+            )
 
     def _project_get(self, path: str) -> None:
         query = parse_qs(urlparse(self.path).query)
@@ -818,6 +847,27 @@ class Handler(SimpleHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         data = json.loads(raw.decode("utf-8"))
         return data if isinstance(data, dict) else {}
+
+    def _api_error(
+        self,
+        exc: BaseException,
+        *,
+        status: HTTPStatus,
+        code: str,
+        retryable: bool,
+        request_id: str = "",
+        prefix: str = "",
+    ) -> None:
+        message = prefix + str(exc)
+        self._json(
+            {
+                "code": str(code),
+                "message": message,
+                "retryable": bool(retryable),
+                "request_id": str(request_id or "").strip(),
+            },
+            status=status,
+        )
 
     def _json(self, data: object, status: HTTPStatus = HTTPStatus.OK) -> None:
         payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
