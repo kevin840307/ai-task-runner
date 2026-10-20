@@ -524,13 +524,15 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 15. Runner 必要變更
 -------------------
 
-[ ] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
+[x] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
+    - Architecture regression 鎖定 chat_service / chat_agent_service / chat_ask / task_draft_service 不可引用 WorkflowRunner / FlowEngine / StageExecutor / runner.api；普通 Chat 只走 Agent adapter，Task execution 仍保留給 Runner public action boundary。
 [ ] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
 [x] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
     - Production owner 是 ui/task_draft_service.py；auto/single/list 共用同一 generate() 與 canonical validator。
 [x] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
     - 固定 Prompt 由 ui/task_draft_prompt.md 擁有；tool/task_draft_agent.py 只透過既有 runner.agent adapter 執行，不建立第二個 workflow runtime。
-[ ] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
+[x] AI 輸出解析、schema validation、Project / Workflow / Prompt / Validator / Workspace 驗證由 Backend 執行；無效輸出 fail closed。
+    - ui/task_models.py 是 canonical TaskDraft/Create validator；mode/item count、Project identity、Workflow existence/capability、prompt/title bounds、workspace policy、File/AI Validator requirements 都由 Backend 驗證。invalid/empty/long/multiline/missing-workflow deterministic tests 已覆蓋。
 [x] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
     - /api/tasks/create-from-draft 只取 transient canonical Draft 後呼叫 TaskService.create；request_id/idempotency 與 durable store 由 TaskService 單一 owner。
 [ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
@@ -539,10 +541,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
 [ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
 [ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
-[ ] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
+[x] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
+    - ChatService durable Ask state 保存 ask_id/turn_id/questions/status；ChatAgentService 將 native Qwen/OpenCode Ask normalized 後掛回同一 turn，Submit/Cancel 透過 adapter resolve 後繼續原 Agent turn，含 restart/rollback tests。
 [ ] Ask Cancel / timeout / client disconnect 要明確終止或取消等待狀態，避免 runner / agent process 永久卡住。
-[ ] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
-[ ] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
+[x] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
+    - Durable FIFO queue 只存在 ChatService session state，使用 queue_item_id/turn_id；Runner Task store 與 Task List 使用獨立 TaskService schema，architecture regression 禁止 Chat service 進入 Runner workflow execution。
+[x] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
+    - Qwen/OpenCode interaction_modes + configure_interaction_args/process_environment 是正式 owner；tests/test_backends.py 驗證 Qwen safe/yolo flags、OpenCode permission policy 與 runtime environment propagation。
 [ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
 [ ] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
 [ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
