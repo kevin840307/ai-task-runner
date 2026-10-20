@@ -511,7 +511,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
     - OpenCode adapter 使用 structured opencode api command.list / skill.list / session question API；model discovery 使用 adapter-owned opencode models，UI 只消費 normalized projection。
 [x] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
-    - Project Chat capability/settings service 已改為 in-process 直接呼叫既有 runner.agent registry + plugin discovery，保留 TTL cache；不再為每個 UI catalog refresh 先 fork Python helper。Qwen/OpenCode 真實 Model/Mode/Skill/Command/Ask discovery 仍由各自 Backend adapter 擁有。
+    - Project Chat capability/settings service 已改為 in-process 呼叫共用 tool.agent_catalog boundary，保留 TTL cache；UI 不直接 import Runner，也不再為每個 catalog refresh 先 fork Python helper。tool.agent_catalog 再投影既有 runner.agent registry，Qwen/OpenCode 真實 Model/Mode/Skill/Command/Ask discovery 仍由各自 Backend adapter 擁有。
 [x] Model 列表與預設值由既有 Backend adapter/catalog 回傳；production frontend 不硬編碼 Qwen/OpenCode model 名稱。
 [x] Mode profile 由 Backend adapter 的 interaction_modes 回報 native mapping、支援狀態與安全描述；Project Chat 共用該 projection。
 [x] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
