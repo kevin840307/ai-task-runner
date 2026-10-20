@@ -329,7 +329,8 @@ def _bridge_for(state: UIState):
                 elif path == "/api/project/runs":
                     data = {"runs": state.run_history(project) if project is not None else []}
                 elif path == "/api/project/runtime":
-                    data = state.read_runtime(project)
+                    override = getattr(state, "_browser_runtime_override", None)
+                    data = dict(override) if isinstance(override, dict) else state.read_runtime(project)
                     data["recent_transitions"] = [
                         {
                             "stage": "execute", "status": "pass", "target": "review",
@@ -723,6 +724,11 @@ def _bridge_for(state: UIState):
                     data = state.studio_rename(
                         body.get("id", ""), body.get("name", ""), None
                     )
+                elif path == "/api/project/rerun":
+                    calls = getattr(state, "_browser_runtime_actions", [])
+                    calls.append("rerun")
+                    state._browser_runtime_actions = calls
+                    data = {"ok": True}
                 elif path == "/api/studio/delete":
                     data = state.studio_delete(body.get("id", ""), None)
                 elif path == "/api/studio/visibility":
@@ -736,6 +742,75 @@ def _bridge_for(state: UIState):
             return {"status": 400, "data": {"error": str(exc)}}
 
     return bridge
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_completed_runtime_rerun_requires_confirmation() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        state._browser_runtime_override = {
+            "status": "completed",
+            "view": {"label": "Completed"},
+            "actions": {"run": False, "stop": False, "resume": False, "reset": False, "rerun": True},
+            "running": False,
+            "completed": True,
+            "resumable": False,
+            "stale": False,
+            "has_state": True,
+            "task": "Completed browser task",
+            "stage": "",
+            "cli_status": "",
+            "completed_count": 1,
+            "total": 1,
+            "run_id": "browser-completed-run",
+        }
+        state._browser_runtime_actions = []
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.wait_for_function("!document.querySelector('#rerunButton')?.hidden")
+            page.click("#rerunButton")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text("Rerun completed task?", exact=True).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert state._browser_runtime_actions == []
+
+            page.click("#rerunButton")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelector('#rerunButton')?.getAttribute('aria-busy') !== 'true'")
+            assert state._browser_runtime_actions == ["rerun"]
+            browser.close()
 
 
 @pytest.mark.skipif(
