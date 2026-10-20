@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from runner.agent import discover_capabilities
-from runner.plugins.registry import discover_plugins
+from tool.agent_catalog import capability_catalog
 
 
 class AgentCapabilityService:
@@ -57,16 +55,18 @@ class AgentCapabilityService:
 
     def _discover(self, project: Path, backend: str) -> dict[str, Any]:
         try:
-            discover_plugins()
-            values = [
-                asdict(item)
-                for item in discover_capabilities(backend, project.resolve())
-            ]
+            payload = capability_catalog(project, backend)
         except Exception as exc:
             raise ValueError(f"Agent capability discovery failed: {exc}") from exc
 
+        values = payload.get("capabilities")
+        if not isinstance(values, list):
+            raise ValueError("Agent capability discovery is missing capabilities")
+
         capabilities: list[dict[str, Any]] = []
         for item in values:
+            if not isinstance(item, dict):
+                raise ValueError("Agent capability discovery returned invalid capability")
             token = str(item.get("token") or "").strip()
             name = str(item.get("name") or "").strip()
             kind = str(item.get("kind") or "").strip()
