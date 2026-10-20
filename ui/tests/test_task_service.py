@@ -347,9 +347,6 @@ def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
     (repo / "ui" / "data").mkdir(parents=True)
     (repo / "ui" / "static").mkdir(parents=True)
     project.mkdir()
-    workflow_root = repo / "runner" / "assets" / "workflows"
-    workflow_root.mkdir(parents=True)
-    (workflow_root / "workflow.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
 
     server = UIServer(repo, "127.0.0.1", 0)
     server.state.add_project(str(project))
@@ -642,6 +639,9 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
     (repo / "ui" / "data").mkdir(parents=True)
     (repo / "ui" / "static").mkdir(parents=True)
     project.mkdir()
+    workflow_root = repo / "runner" / "assets" / "workflows"
+    workflow_root.mkdir(parents=True)
+    (workflow_root / "workflow.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
 
     server = UIServer(repo, "127.0.0.1", 0)
     registered = server.state.add_project(str(project))
