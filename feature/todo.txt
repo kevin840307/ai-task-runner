@@ -503,7 +503,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [x] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
     - 沿用既有 Runner AgentBackend / BaseBackend 作唯一 adapter contract；UI 不另造第二套介面。Model / Mode / capability / native Ask projection 皆從 generic registry API 取得。
-[ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
+[x] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
+    - Provider-specific 行為仍集中在 runner.agent BaseBackend/QwenBackend/OpenCodeBackend：build_command/ask/decode JSON stream、Model/Mode/Reasoning/Capability、native Ask、BackendError；Project Chat generic process owner 只負責隔離、cancel 與 durable service_fifo，不含 Qwen/OpenCode 分支。
 [x] Agent native Ask 能力不可用時由 adapter 回報 unsupported，Project Chat 顯示 Unavailable；不得用 @ask-demo 或其他 Mock 冒充 native Ask。
 [x] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
     - Qwen capability/model discovery 由 adapter 啟動目前安裝的 Qwen daemon，讀 /capabilities、session supported commands/resources 與 session context 的原生 model configOptions；舊 settings model parser 僅作 bounded fallback。native Ask 另有 CLI version gate，不由 UI 假設固定能力。
@@ -517,7 +518,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - BaseBackend 定義 normalize/encode contract，Qwen/OpenCode 各自映射 native payload；Chat service 使用 chat_ask.py 的 normalized questions/answers，不暴露 provider payload 給 UI。
 [x] Queue 產品契約使用共用 durable Chat service FIFO；Qwen Ctrl+Q 僅作 queued-next-turn UX 參考，不注入 CLI 鍵盤事件。Native Queue transport 未宣告時明確落在 service_fifo。
 [x] Slash skill / command 由 Qwen daemon 與 OpenCode native registry projection 提供，只顯示 Agent 實際解析且允許使用的能力，保留 permission / user-invocable / availability。
-[ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
+[x] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
+    - BaseBackend 共用 DEFAULT_AGENT_TIMEOUT + runner.runtime.process_runner bounded output/process-tree cleanup；Project Chat helper 顯式傳同一 timeout、保留 bounded wrapper grace、cancel 先 signal 再 bounded force-kill fallback，error detail bounded。session-invalid 會 compare-and-clear durable Agent session，restart/reconnect 由 durable Queue/Ask state 恢復。
 [x] 針對 Qwen / OpenCode 分別測試：Model 取得失敗、skill registry 失敗、Agent 不支援 Ask、permission denied、CLI 版本不相容。
 
 
@@ -560,8 +562,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 -----------------
 
 [x] 單元測試：TaskDraft parser / schema / mode 約束 / 空白 prompt / 多筆排序 / workspace policy。
-[ ] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
-[ ] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
+[x] 單元測試：AgentAdapter capability mapping、Model / Mode 相容性、Ask schema、Queue FIFO / idempotency。
+    - tests/test_backends.py 覆蓋 Qwen/OpenCode model/mode/reasoning/capability/Ask/permission；ui/tests/test_chat_service.py 覆蓋 durable FIFO、terminal outcome idempotency、restart、native Ask 與 in-process catalog cache。
+[x] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
+    - ui/tests/test_chat_service.py + ui/tests/test_task_service.py 直接啟動 UIServer 驗證 session lifecycle、cursor event feed、turn cancel/reconnect、Queue CRUD、Ask submit/cancel、TaskDraft generate/update/create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
 [ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
 [ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 normalization + Task merge_failure_count separation、Allow concurrent Main tasks Off/On 對 Main disabled/resolver 的一致性、Appearance / Theme palette / Language persistence。
@@ -580,7 +584,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
 [ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
-[ ] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
+[x] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
+    - service-level restart test 與 /api/tasks/create-from-draft HTTP retry 均重用同 request_id，要求 duplicate=true、task_id 相同且 durable Task count=1。
 [ ] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
 [ ] 只有實際執行 Browser / API / Live 測試並保存結果後，才能將對應項目標記完成。
 [ ] 24H soak 排在單元、整合、Browser、故障恢復測試之後；只有實際跑完才能宣稱 24H 驗證完成。
