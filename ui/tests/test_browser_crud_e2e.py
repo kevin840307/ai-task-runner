@@ -1114,9 +1114,51 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
-            page.click("#taskWorkspaceFooterBack")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceClose")
+            assert page.locator("#taskWorkspaceProject").is_editable() is False
+
+            page.fill("#taskWorkspaceDraftTitle", "Dirty standalone title")
+            page.fill("#taskWorkspacePrompt", "Dirty standalone prompt")
+            page.select_option("#taskWorkspaceWorkspace", "main")
+            mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
+            page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+
+            for guard_kind in ("header", "footer", "x", "escape", "prompts"):
+                if guard_kind == "header":
+                    trigger = "#taskWorkspaceHeaderBack"
+                    page.click(trigger)
+                elif guard_kind == "footer":
+                    trigger = "#taskWorkspaceFooterBack"
+                    page.click(trigger)
+                elif guard_kind == "x":
+                    trigger = "#taskWorkspaceClose"
+                    page.click(trigger)
+                elif guard_kind == "escape":
+                    trigger = "#taskWorkspacePrompt"
+                    page.locator(trigger).focus()
+                    page.keyboard.press("Escape")
+                else:
+                    trigger = "#taskWorkspaceOpenPrompts"
+                    page.click(trigger)
+                page.wait_for_function("!document.querySelector('.ui-dialog-card')?.hidden")
+                assert page.locator(".ui-dialog-card").get_by_text("unsaved Task edits", exact=False).is_visible()
+                page.locator("[data-dialog-cancel]").click()
+                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+                assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Dirty standalone title"
+                assert page.locator("#taskWorkspacePrompt").input_value() == "Dirty standalone prompt"
+                assert page.locator("#taskWorkspaceWorkspace").input_value() == "main"
+                assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
+                page.wait_for_timeout(20)
+                assert page.locator(trigger).evaluate("(node) => document.activeElement === node")
+
+            page.click("#taskWorkspaceOpenPrompts")
+            page.wait_for_function("!document.querySelector('.ui-dialog-card')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+            durable_after_discard = state.tasks.list(state.repo_root)["tasks"][0]
+            assert durable_after_discard["title"] == "Standalone browser task"
+            assert durable_after_discard["items"][0]["prompt"] == "Standalone task prompt"
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
             page.locator("#projectList .project-root").first.click()
