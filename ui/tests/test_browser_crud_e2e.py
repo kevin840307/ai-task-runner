@@ -1096,6 +1096,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 if close_kind == "x":
                     page.click("#taskWorkspaceClose")
                 elif close_kind == "escape":
+                    page.locator("#taskWorkspacePrompt").focus()
                     page.keyboard.press("Escape")
                 elif close_kind == "backdrop":
                     page.locator("#taskWorkspaceOverlay").click(position={"x": 8, "y": 8})
@@ -1741,6 +1742,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 elif close_kind == "backdrop":
                     page.locator("#taskWorkspaceOverlay").click(position={"x": 8, "y": 8})
                 else:
+                    page.locator("#taskWorkspaceYamlText").focus()
                     page.keyboard.press("Escape")
                 page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
                 page.locator("[data-dialog-cancel]").click()
