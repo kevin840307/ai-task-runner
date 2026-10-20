@@ -965,6 +965,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
 
             # Delete a non-active middle Chat; the other Project must not change.
             middle = page.locator("#projectChatSessionList .project-chat-session-row").nth(1)
+            middle.hover()
             middle.locator("button[aria-label='Delete Chat']").click()
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
