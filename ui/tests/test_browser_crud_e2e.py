@@ -946,9 +946,12 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
         )
         second = root / "second-project"
         second.mkdir()
+        third = root / "third-project"
+        third.mkdir()
         state._write_projects([
             {"name": "Fixture Project", "path": str(root)},
             {"name": "Second Project", "path": str(second)},
+            {"name": "Third Project", "path": str(third)},
         ])
         projects = state.projects()
         root_row = next(row for row in projects if row["name"] == "Fixture Project")
@@ -984,18 +987,27 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
             page.expose_function("__apiBridge", _bridge_for(state))
             _load_main_ui_document(page, html)
-            page.evaluate(
-                """window.fetch = async (url, options = {}) => {
-                    const method = (options.method || 'GET').toUpperCase();
-                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
-                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
-                };"""
-            )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
-            _install_main_ui_scripts(page, static_root)
-            _boot_main_ui(page)
 
+            def install(expected_project: str) -> None:
+                page.evaluate(
+                    """window.fetch = async (url, options = {}) => {
+                        const method = (options.method || 'GET').toUpperCase();
+                        const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                        return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                    };"""
+                )
+                for css in sorted((static_root / "css").glob("*.css")):
+                    page.add_style_tag(path=str(css))
+                _install_main_ui_scripts(page, static_root)
+                _boot_main_ui(page, expected_project)
+
+            def reload_ui(expected_project: str) -> None:
+                page.reload(wait_until="domcontentloaded")
+                install(expected_project)
+
+            install("Fixture Project")
+            page.locator("#projectList .project-root").filter(has_text="Second Project").click()
+            page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
@@ -1007,8 +1019,36 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
             assert page.locator("#tasksBoardNew .tasks-board-card").get_by_text("Cross-project parent").is_visible()
-            assert page.locator("#projectChatName").inner_text() == "Fixture Project"
+            assert page.locator("#projectChatName").inner_text() == "Second Project"
             assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
+
+            reload_ui("Second Project")
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
+
+            page.click("#tasksProjectFilterButton")
+            page.locator(".tasks-project-option").filter(has_text="Third Project").locator("input").check()
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 selected'")
+            reload_ui("Second Project")
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 selected'")
+
+            page.click("#tasksProjectFilterButton")
+            page.click("#tasksProjectFilterAll")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            reload_ui("Second Project")
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+
+            page.click("#tasksProjectFilterButton")
+            page.click("#tasksProjectFilterClear")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'None'")
+            assert page.locator("#tasksBoardNew .tasks-board-card").count() == 0
+            reload_ui("Second Project")
+            page.click("#chatNav")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'None'")
+            assert page.locator("#tasksBoardNew .tasks-board-card").count() == 0
             browser.close()
 
 
@@ -2294,6 +2334,53 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_first_paint_restores_cached_theme_before_app_mount() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    html = (static_root / "index.html").read_text(encoding="utf-8")
+    html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+    html = re.sub(
+        r'<script(?![^>]+src="/js/ui-bootstrap\\.js")[^>]*>.*?</script>',
+        "",
+        html,
+        flags=re.S,
+    )
+    html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+    with sync_playwright() as playwright:
+        browser = _launch_browser(playwright)
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 720},
+            color_scheme="dark",
+        )
+        context.add_init_script(
+            """if (location.origin === 'http://local.test') {
+                localStorage.setItem(
+                    'ai-task-runner.ui.bootstrap.v1',
+                    JSON.stringify({theme:'violet', appearance:'dark', motion:'reduced'})
+                );
+            }"""
+        )
+        page = context.new_page()
+        page.route(
+            "http://local.test/js/ui-bootstrap.js",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/javascript",
+                body=(static_root / "js" / "ui-bootstrap.js").read_text(encoding="utf-8"),
+            ),
+        )
+        _load_main_ui_document(page, html)
+        assert page.locator("html").get_attribute("data-theme") == "violet"
+        assert page.locator("html").get_attribute("data-appearance-preference") == "dark"
+        assert page.locator("html").get_attribute("data-appearance") == "dark"
+        assert page.locator("html").get_attribute("data-motion") == "reduced"
+        browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_global_settings_and_project_chat_composer_browser_contract() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
@@ -2467,16 +2554,20 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
             page.click("#themeButton")
-            page.locator("[data-appearance-option='system']").click()
+            page.locator("[data-appearance-option='dark']").click()
             page.locator("[data-theme-option='violet']").click()
             page.locator("[data-language-option='en']").click()
-            page.wait_for_function("document.documentElement.dataset.appearancePreference === 'system'")
+            page.wait_for_function("document.documentElement.dataset.appearancePreference === 'dark'")
             page.wait_for_function("document.documentElement.dataset.theme === 'violet'")
             page.wait_for_function("document.documentElement.lang === 'en'")
             saved = state.global_settings.get()
-            assert saved["interface"]["appearance"] == "system"
+            assert saved["interface"]["appearance"] == "dark"
             assert saved["interface"]["theme"] == "violet"
             assert saved["language"] == "en"
+            bootstrap = page.evaluate(
+                "() => JSON.parse(localStorage.getItem('ai-task-runner.ui.bootstrap.v1'))"
+            )
+            assert bootstrap == {"theme": "violet", "appearance": "dark", "motion": "full"}
             page.click("#themeCloseButton")
             assert page.locator("#themePanel").is_hidden()
 
@@ -2559,7 +2650,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.reload(wait_until="domcontentloaded")
             install(page, "Second Project")
             assert page.locator("html").get_attribute("data-theme") == "violet"
-            assert page.locator("html").get_attribute("data-appearance-preference") == "system"
+            assert page.locator("html").get_attribute("data-appearance-preference") == "dark"
             assert page.locator("html").get_attribute("data-appearance") == "dark"
             assert page.locator("html").get_attribute("lang") == "en"
             assert not errors
