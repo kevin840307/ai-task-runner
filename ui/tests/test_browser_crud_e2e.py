@@ -955,7 +955,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             for stylesheet in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(stylesheet))
             _install_main_ui_scripts(page, static_root)
-            _boot_main_ui(page)
+            _boot_main_ui(page, expected_project="Second Project")
 
             page.locator("#projectList .project-root").filter(has_text="Fixture Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
