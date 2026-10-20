@@ -13,9 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from runner.config.defaults import DEFAULT_AGENT_TIMEOUT
-
 from tool.chat_agent import (
+    DEFAULT_CHAT_AGENT_TIMEOUT,
     chat_features,
     is_session_invalid_error,
     ensure_native_session,
@@ -27,7 +26,7 @@ from tool.chat_agent import (
 from .chat_service import ChatService
 
 
-CHAT_AGENT_TIMEOUT_SECONDS = DEFAULT_AGENT_TIMEOUT
+CHAT_AGENT_TIMEOUT_SECONDS = DEFAULT_CHAT_AGENT_TIMEOUT
 CHAT_AGENT_WRAPPER_GRACE_SECONDS = 60
 CHAT_AGENT_CANCEL_GRACE_SECONDS = 5
 CHAT_AGENT_ERROR_CHARS = 4000
