@@ -83,6 +83,27 @@ def test_project_chat_event_feed_is_separate_from_runner_runtime_projection():
     assert "/api/chat/events" not in runtime
 
 
+def test_ui_runtime_actions_stay_behind_project_runtime_api_boundary():
+    app = (ROOT / "ui/static/app.js").read_text(encoding="utf-8")
+    server = (ROOT / "ui/server.py").read_text(encoding="utf-8")
+    runtime = (ROOT / "ui/project_runtime_state.py").read_text(encoding="utf-8")
+    task_workspace = (ROOT / "ui/static/js/task-workspace.js").read_text(encoding="utf-8")
+    tasks_board = (ROOT / "ui/static/js/tasks-board.js").read_text(encoding="utf-8")
+
+    for action in ("stop", "resume", "reset", "rerun"):
+        endpoint = f"/api/project/{action}"
+        assert endpoint in app
+        assert endpoint in server
+
+    for owner in ("def stop(", "def resume(", "def reset_runtime(", "def rerun_last("):
+        assert owner in runtime
+
+    for source in (task_workspace, tasks_board):
+        assert "runner-process.json" not in source
+        assert "stop.request" not in source
+        assert ".ai-task-runner/state.json" not in source
+
+
 def test_project_chat_never_invokes_runner_workflow_execution_directly():
     for relative in (
         "ui/chat_service.py",
