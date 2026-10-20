@@ -803,6 +803,8 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
             page.click("#tasksCurrentRuntimeButton")
             page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
             page.wait_for_function("!document.querySelector('#rerunButton')?.hidden")
+            page.click("#optionsButton")
+            page.wait_for_function("!document.querySelector('#optionsPanel')?.hidden")
             page.click("#rerunButton")
             page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
             assert page.locator(".ui-dialog-card").get_by_text("Rerun completed task?", exact=True).is_visible()
