@@ -1,13 +1,14 @@
 """Cached projection of native Agent capabilities for the Project Chat UI."""
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+from runner.agent import discover_capabilities
+from runner.plugins.registry import discover_plugins
 
 
 class AgentCapabilityService:
@@ -55,49 +56,17 @@ class AgentCapabilityService:
                 del self._cache[key]
 
     def _discover(self, project: Path, backend: str) -> dict[str, Any]:
-        command = [
-            sys.executable,
-            str(self.repo_root / "tool" / "agent_capabilities.py"),
-            "--project-root",
-            str(project),
-            "--backend",
-            backend,
-        ]
         try:
-            completed = subprocess.run(
-                command,
-                cwd=self.repo_root,
-                text=True,
-                capture_output=True,
-                timeout=30,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            discover_plugins()
+            values = [
+                asdict(item)
+                for item in discover_capabilities(backend, project.resolve())
+            ]
+        except Exception as exc:
             raise ValueError(f"Agent capability discovery failed: {exc}") from exc
-
-        raw = completed.stdout.strip()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError as exc:
-            detail = completed.stderr.strip() or raw or f"exit {completed.returncode}"
-            raise ValueError(
-                f"Agent capability discovery returned invalid output: {detail[-2000:]}"
-            ) from exc
-        if completed.returncode or payload.get("error"):
-            detail = str(
-                payload.get("error")
-                or completed.stderr
-                or f"exit {completed.returncode}"
-            ).strip()
-            raise ValueError(detail or "Agent capability discovery failed")
-        values = payload.get("capabilities")
-        if not isinstance(values, list):
-            raise ValueError("Agent capability discovery is missing capabilities")
 
         capabilities: list[dict[str, Any]] = []
         for item in values:
-            if not isinstance(item, dict):
-                raise ValueError("Agent capability discovery returned invalid capability")
             token = str(item.get("token") or "").strip()
             name = str(item.get("name") or "").strip()
             kind = str(item.get("kind") or "").strip()
