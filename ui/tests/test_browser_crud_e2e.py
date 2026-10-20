@@ -1051,6 +1051,9 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             return {"requires_python_validator": mixed, "has_ai_validator": mixed}
         state.tasks._workflow_requirements = task_requirements
         state.task_drafts._workflow_requirements = task_requirements
+        workflow_root = root / "runner" / "assets" / "workflows"
+        (workflow_root / "workflow.yaml").write_text("stages: {}\n", encoding="utf-8")
+        (workflow_root / "mixed.yaml").write_text("stages: {}\n", encoding="utf-8")
         validator_upload = root / "validator-upload.py"
         validator_upload.write_text("print('uploaded validator')\n", encoding="utf-8")
         ai_upload = root / "ai-upload.md"
