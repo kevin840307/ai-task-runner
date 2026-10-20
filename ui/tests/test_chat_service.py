@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import time
 import urllib.parse
@@ -17,7 +18,12 @@ from runner.agent import (
 )
 from ui.agent_capability_service import AgentCapabilityService
 from ui.agent_settings_service import AgentSettingsService
-from ui.chat_agent_service import ChatAgentService
+from ui.chat_agent_service import (
+    CHAT_AGENT_CANCEL_GRACE_SECONDS,
+    CHAT_AGENT_TIMEOUT_SECONDS,
+    CHAT_AGENT_WRAPPER_GRACE_SECONDS,
+    ChatAgentService,
+)
 from ui.chat_service import ChatService, STATE_VERSION
 from ui.server import UIServer
 from ui.task_draft_service import TaskDraftService
@@ -1805,6 +1811,108 @@ def test_restart_recovers_unowned_inflight_ask_resolution(tmp_path: Path) -> Non
     restored = chat.ask(project, session_id)["ask"]
     assert restored["status"] == "waiting"
     assert chat.ask_context(project, session_id, restored["ask_id"])["answer_request_id"] == ""
+
+
+def test_chat_agent_tool_uses_shared_timeout_contract(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    captured: dict[str, object] = {}
+
+    class Process:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self, input=None, timeout=None):
+            captured["input"] = input
+            captured["timeout"] = timeout
+            return json.dumps({"text": "ok", "session_id": "native"}), ""
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = list(command)
+        captured["options"] = dict(kwargs)
+        return Process()
+
+    monkeypatch.setattr("ui.chat_agent_service.subprocess.Popen", fake_popen)
+    service = ChatAgentService(repo)
+    value = service._run_tool(
+        execution_key=(str(project), "chat-test", "queue-test"),
+        project=project,
+        backend="qwen",
+        model="model-a",
+        mode="auto",
+        reasoning="high",
+        session_id="session-a",
+        prompt="hello",
+    )
+
+    command = captured["command"]
+    assert command[command.index("--timeout") + 1] == str(CHAT_AGENT_TIMEOUT_SECONDS)
+    assert captured["timeout"] == CHAT_AGENT_TIMEOUT_SECONDS + CHAT_AGENT_WRAPPER_GRACE_SECONDS
+    assert captured["input"] == "hello"
+    assert value == {"text": "ok", "session_id": "native"}
+
+
+def test_chat_agent_tool_timeout_signals_then_forces_cleanup(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    class Process:
+        returncode = None
+
+        def __init__(self):
+            self.calls = 0
+            self.signalled = False
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.signalled = True
+
+        def send_signal(self, _signal):
+            self.signalled = True
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        def communicate(self, input=None, timeout=None):
+            self.calls += 1
+            if self.calls <= 2:
+                raise subprocess.TimeoutExpired("chat-agent", timeout or 0)
+            return "", ""
+
+    process = Process()
+    monkeypatch.setattr(
+        "ui.chat_agent_service.subprocess.Popen",
+        lambda *args, **kwargs: process,
+    )
+    service = ChatAgentService(repo)
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"timed out after {CHAT_AGENT_TIMEOUT_SECONDS} seconds",
+    ):
+        service._run_tool(
+            execution_key=(str(project), "chat-timeout", "queue-timeout"),
+            project=project,
+            backend="qwen",
+            model="",
+            mode="auto",
+            reasoning="",
+            session_id="",
+            prompt="hang",
+        )
+
+    assert process.signalled is True
+    assert process.killed is True
+    assert process.calls == 3
+    assert CHAT_AGENT_CANCEL_GRACE_SECONDS > 0
 
 
 def test_chat_turn_cancel_marks_current_item_cancelled_and_runs_queued_next_turn(
