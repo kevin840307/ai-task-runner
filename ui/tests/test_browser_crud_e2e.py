@@ -1183,6 +1183,27 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").is_visible()
+
+            # A dirty child Editor and a dirty parent Task List Draft are two
+            # separate discard decisions. Cancelling the parent decision must
+            # leave the child Editor and its unsaved values untouched.
+            for leave_kind in ("x", "prompts"):
+                if leave_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                else:
+                    page.click("#taskWorkspaceOpenPrompts")
+                page.wait_for_function("!document.querySelector('.ui-dialog-card')?.hidden")
+                assert page.locator(".ui-dialog-card").get_by_text("unsaved Task edits", exact=False).is_visible()
+                page.locator("[data-dialog-ok]").click()
+                page.wait_for_function(
+                    "() => !document.querySelector('.ui-dialog-card')?.hidden && document.querySelector('.ui-dialog-card')?.textContent.includes('unsaved TaskDraft edits')"
+                )
+                page.locator("[data-dialog-cancel]").click()
+                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+                assert page.locator("#taskWorkspaceItemTitle").input_value() == "First list child"
+                assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
+                assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
+
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.fill("#taskWorkspaceDraftTitle", "Chat browser list")

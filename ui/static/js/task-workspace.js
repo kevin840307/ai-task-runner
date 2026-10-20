@@ -166,6 +166,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       && draftSignature(state.editDraft) !== state.editOriginal;
   }
 
+  function draftChildEditorDirty() {
+    return !!(
+      isDraftState()
+      && state.route === "editor"
+      && state.draft.items.length > 1
+      && state.draftEditorOriginal
+      && draftSignature(state.draft) !== state.draftEditorOriginal
+    );
+  }
+
   async function confirmDiscardIfDirty() {
     if (!isDirty()) return true;
     const durable = state?.kind === "task";
@@ -179,9 +189,30 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }));
   }
 
+  async function confirmWorkspaceLeave() {
+    if (!draftChildEditorDirty()) return confirmDiscardIfDirty();
+    const discardChild = await confirmDialog?.({
+      title: "Discard Task changes?",
+      message: "Your unsaved Task edits will be lost.",
+      confirmLabel: "Discard",
+      danger: true,
+    });
+    if (!discardChild) return false;
+    if (state.draftEditorOriginal !== state.original) {
+      const discardParent = await confirmDialog?.({
+        title: "Discard TaskDraft changes?",
+        message: "Your unsaved TaskDraft edits will be lost.",
+        confirmLabel: "Discard",
+        danger: true,
+      });
+      if (!discardParent) return false;
+    }
+    return true;
+  }
+
   async function requestClose() {
     if (!state) return closeNow();
-    if (!(await confirmDiscardIfDirty())) return;
+    if (!(await confirmWorkspaceLeave())) return;
     closeNow();
   }
 
@@ -197,7 +228,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   async function openPromptsFromWorkspace() {
     if (typeof openPrompts !== "function") return;
-    if (!(await confirmDiscardIfDirty())) return;
+    if (!(await confirmWorkspaceLeave())) return;
     closeNow({ restore: false });
     await openPrompts();
   }
@@ -261,7 +292,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.fieldErrors = { [fieldErrorKey(field, index)]: text };
     if (field !== "draftTitle") {
       state.index = index;
-      if (state.route === "list") state.route = "editor";
+      if (state.route === "list") {
+        if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        state.route = "editor";
+      }
     }
     return true;
   }
@@ -422,6 +456,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       beginTaskEdit(index, "list");
       return;
     }
+    state.draftEditorOriginal = draftSignature(state.draft);
     state.route = "editor";
     state.index = index;
     render();
@@ -804,6 +839,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.index = state.draft.items.length - 1;
     state.error = "";
     state.fieldErrors = {};
+    state.draftEditorOriginal = draftSignature(state.draft);
     state.route = "editor";
     render();
   }
@@ -1114,6 +1150,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     if (state.route === "editor" && state.draft.items.length > 1) {
+      state.draftEditorOriginal = "";
       state.route = "list";
       render();
       return;
@@ -1223,7 +1260,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } catch (error) {
       state.error = String(error?.message || "TaskDraft validation failed");
       const mapped = mapFieldError(state.error);
-      if (!mapped && state.route === "list") { state.route = "editor"; state.index = 0; }
+      if (!mapped && state.route === "list") {
+        if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        state.route = "editor";
+        state.index = 0;
+      }
       render();
       showError?.(error.message, "Save TaskDraft failed");
     } finally {
@@ -1267,6 +1308,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       index: 0,
       error: "",
       fieldErrors: {},
+      draftEditorOriginal: "",
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
@@ -1294,6 +1336,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       index: 0,
       error: "",
       fieldErrors: {},
+      draftEditorOriginal: "",
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
