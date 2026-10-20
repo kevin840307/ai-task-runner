@@ -140,6 +140,58 @@ def test_task_draft_edit_is_backend_owned_and_session_scoped(tmp_path: Path) -> 
         )
 
 
+def test_task_draft_discard_session_removes_only_that_chat_cache(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    service = TaskDraftService(
+        repo,
+        runner=lambda **kwargs: {
+            "draft": {
+                "title": "Draft",
+                "items": [{"title": "A", "prompt": "Do it"}],
+            }
+        },
+    )
+    first = service.generate(
+        project,
+        spec="first",
+        draft_mode="single",
+        backend="qwen",
+        workflow="workflow.yaml",
+        request_id="request-a",
+        session_id="session-a",
+    )
+    second = service.generate(
+        project,
+        spec="second",
+        draft_mode="single",
+        backend="qwen",
+        workflow="workflow.yaml",
+        request_id="request-b",
+        session_id="session-b",
+    )
+
+    removed = service.discard_session(project, "session-a")
+    assert removed["drafts_removed"] == 1
+    assert removed["requests_removed"] == 1
+    with pytest.raises(ValueError, match="no longer available"):
+        service.get(project, first["draft_id"], session_id="session-a")
+    assert service.get(project, second["draft_id"], session_id="session-b")["draft_id"] == second["draft_id"]
+
+    regenerated = service.generate(
+        project,
+        spec="first again",
+        draft_mode="single",
+        backend="qwen",
+        workflow="workflow.yaml",
+        request_id="request-a",
+        session_id="session-a",
+    )
+    assert regenerated["duplicate"] is False
+    assert regenerated["draft_id"] != first["draft_id"]
+
+
 def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

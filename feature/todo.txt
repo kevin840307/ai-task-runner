@@ -344,7 +344,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] New 狀態 Task 從 Board 直接開 Task List 時，footer 同時保留原 Back（關閉 Drawer）與 Back to Info（回同一 Task Info）；從 Info/Chat/Draft 進 List 時不重複顯示第二顆 Info 返回鍵。
 [x] Task Info 的 Edit Task：單一 Task 直接開 canonical Task Editor；多 Task 開 Task List Workspace；兩者 returnTarget 均明確為 info。
 [x] Browser 測試共用 Drawer：Info → List → Editor → Back → YAML → Back、Chat Draft → List/Editor → Chat、New Task Cancel/Create、X / backdrop / Escape。
-[ ] Browser 測試 Project Chat Delete：刪中間 Chat / active running mock Chat / 含 TaskDraft Chat / 最後一個 Chat；確認只影響目前 Project，刪最後一個會建立空 Chat。
+[x] Browser 測試 Project Chat Delete：刪中間 Chat / active running mock Chat / 含 TaskDraft Chat / 最後一個 Chat；確認只影響目前 Project，刪最後一個會建立空 Chat。
 [x] Browser 視覺確認 Drawer tabs 永遠只有 Overview / Runtime / Output / History 四個固定位置，不再出現 Steps 或因 Task 類型左右位移。
 [ ] Browser 測試 Info → Edit Task：單一 New Task 進 Editor 時底部 Back to Info 可見；多 Task 進 Task List 時底部 Back 靠右並可回 Info。
 [ ] Browser 測試 Task Editor dirty guard：修改 Title / Project / Prompt / Workflow / Workspace → Back / Cancel / X / Escape / Open Prompts；Keep editing / Discard 都要保持正確 route/focus。

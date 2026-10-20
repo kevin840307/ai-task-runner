@@ -15,6 +15,7 @@ from ui.agent_settings_service import AgentSettingsService
 from ui.chat_agent_service import ChatAgentService
 from ui.chat_service import ChatService, STATE_VERSION
 from ui.server import UIServer
+from ui.task_draft_service import TaskDraftService
 
 
 def test_project_chat_sessions_are_durable_and_separate_from_runner_history(tmp_path: Path) -> None:
@@ -175,6 +176,37 @@ def test_project_chat_session_api_uses_existing_ui_server(tmp_path: Path) -> Non
             row["session_id"] == session_id and row["title"] == "Renamed"
             for row in renamed["sessions"]
         )
+
+        server.state.task_drafts = TaskDraftService(
+            repo,
+            runner=lambda **kwargs: {
+                "draft": {
+                    "title": "Delete with Chat",
+                    "items": [{"title": "A", "prompt": "Do A"}],
+                }
+            },
+        )
+        transient = server.state.task_drafts.generate(
+            project,
+            spec="delete this session draft",
+            draft_mode="single",
+            backend="qwen",
+            workflow="workflow.yaml",
+            request_id="delete-session-draft",
+            session_id=session_id,
+        )
+        deleted = _json_request(
+            f"{base}/api/chat/session/delete",
+            method="POST",
+            body={"project": str(project), "session_id": session_id},
+        )
+        assert all(row["session_id"] != session_id for row in deleted["sessions"])
+        with pytest.raises(ValueError, match="no longer available"):
+            server.state.task_drafts.get(
+                project,
+                transient["draft_id"],
+                session_id=session_id,
+            )
     finally:
         server.shutdown()
         server.server_close()

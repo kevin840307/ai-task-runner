@@ -644,7 +644,13 @@ def _bridge_for(state: UIState):
                         Path(body["project"]), str(body.get("session_id", "")), str(body.get("title", ""))
                     )
                 elif path == "/api/chat/session/delete":
-                    data = state.chat_service.delete_session(Path(body["project"]), str(body.get("session_id", "")))
+                    session_id = str(body.get("session_id", ""))
+                    busy_map = getattr(state, "_browser_chat_busy", {})
+                    if bool(busy_map.get(session_id, False)):
+                        raise ValueError("Stop or wait for the active Chat turn before deleting this Chat")
+                    data = state.delete_chat_session(Path(body["project"]), session_id)
+                    getattr(state, "_browser_chat_queue", {}).pop(session_id, None)
+                    busy_map.pop(session_id, None)
                 elif path == "/api/studio/prompt/create":
                     data = state.studio_prompt_create(
                         body.get("name", ""),
@@ -902,6 +908,123 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             assert page.locator("#projectChatName").inner_text() == "Fixture Project"
             assert page.locator("#tasksProjectFilterSummary").inner_text() == "Second Project"
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        second = root / "second-project"
+        second.mkdir()
+        state.add_project(str(second))
+        state.rename_project(str(second), "Second Project")
+        state.chat_service.sessions(second)
+        state.chat_service.create_session(
+            second,
+            title="Second preserved",
+            request_id="second-chat-preserved",
+        )
+        second_ids = [
+            row["session_id"]
+            for row in state.chat_service.sessions(second)["sessions"]
+        ]
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser_instance = _launch_browser(playwright)
+            page = browser_instance.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.locator("#projectList .project-root").filter(has_text="Fixture Project").click()
+            page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
+            for _ in range(2):
+                page.click("#newProjectChatButton")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 3")
+
+            # Delete a non-active middle Chat; the other Project must not change.
+            middle = page.locator("#projectChatSessionList .project-chat-session-row").nth(1)
+            middle.locator("button[aria-label='Delete Chat']").click()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            assert [
+                row["session_id"]
+                for row in state.chat_service.sessions(second)["sessions"]
+            ] == second_ids
+
+            # A running/busy Chat is fail-closed. It remains present until the
+            # active turn is stopped or completes.
+            active_id = state.chat_service.sessions(root)["active_session_id"]
+            state._browser_chat_busy = {active_id: True}
+            active_row = page.locator("#projectChatSessionList .project-chat-session-row.active")
+            active_row.locator("button[aria-label='Delete Chat']").click()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('Stop or wait for the active Chat turn'))"
+            )
+            assert any(
+                row["session_id"] == active_id
+                for row in state.chat_service.sessions(root)["sessions"]
+            )
+            state._browser_chat_busy[active_id] = False
+
+            # A Chat carrying a transient TaskDraft deletes both the durable Chat
+            # and that session-scoped transient draft cache.
+            page.fill("#projectChatInput", "@task-single delete this draft with chat")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
+            draft_card = page.locator(".project-chat-task-draft").first
+            draft_id = draft_card.get_attribute("data-draft-id")
+            draft_session = draft_card.get_attribute("data-session-id")
+            assert draft_session == active_id
+            active_row = page.locator("#projectChatSessionList .project-chat-session-row.active")
+            active_row.locator("button[aria-label='Delete Chat']").click()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            with pytest.raises(ValueError, match="no longer available"):
+                state.task_drafts.get(root, draft_id, session_id=draft_session)
+            assert page.locator(".project-chat-task-draft").count() == 0
+
+            # Deleting the final Chat immediately creates a fresh empty Chat.
+            last_before = state.chat_service.sessions(root)["active_session_id"]
+            page.locator("#projectChatSessionList .project-chat-session-row.active button[aria-label='Delete Chat']").click()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            replacement = state.chat_service.sessions(root)
+            assert replacement["active_session_id"] != last_before
+            assert replacement["sessions"][0]["title"] == "New Chat"
+
+            page.locator("#projectList .project-root").filter(has_text="Second Project").click()
+            page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
+            page.wait_for_function(
+                f"document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === {len(second_ids)}"
+            )
+            assert [
+                row["session_id"]
+                for row in state.chat_service.sessions(second)["sessions"]
+            ] == second_ids
+            browser_instance.close()
 
 
 @pytest.mark.skipif(
