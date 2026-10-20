@@ -286,8 +286,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 若 input 仍等於該 staged upload 的 managed target path，capture 不得清除 upload metadata；只有使用者手動改成另一條 path 時才取消 staged upload、改走 manual-path 流程。
 [x] Prototype 模擬 managed copy path：.ai-task-runner/uploads/<task-item-id>/<kind>/<filename>；canonical Task 不保存 browser File / upload token。
 [x] backend copy 成功後必須把 managed path 回傳 UI；Task Editor 的 taskValidatorFile / taskGoalFile / taskAiFile 要顯示回傳 path，而不是 filename/fakepath。
-[ ] 正式 backend upload API：接收 bytes + filename + target Task/item identity，原子 copy 到 managed storage；copy 失敗時 Create / Save fail closed，保留 staged upload 供重試。
-[ ] Browser 測試 Upload file → Create/Save → managed path 回填；再測 Upload 後手動輸入 path 時 manual path 優先且 staged upload 被取消。
+[x] 正式 backend upload API：接收 bytes + filename + target Task/item identity，原子 copy 到 managed storage；copy 失敗時 Create / Save fail closed，保留 staged upload 供重試。
+[x] Browser 測試 Upload file → Create/Save → managed path 回填；再測 Upload 後手動輸入 path 時 manual path 優先且 staged upload 被取消。
 [x] Composer 的 Ask mock 按鈕與 handler 已移除；@ask-demo 保留作為 Ask flow 測試入口。
 [x] Workflow 不需要的欄位不要佔畫面；需要的 validator / prompt source 應依 Workflow capability 顯示。
 [x] Prototype UI 不在不同入口建立重複的 Task Editor / Task List renderer：Chat、Board、Task List Add/Edit 共用 TaskUi controller 與同一份 canonical surface。

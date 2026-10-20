@@ -422,6 +422,19 @@ def _bridge_for(state: UIState):
                         str(body.get("draft_id", "")),
                         session_id=session_id,
                     )
+                elif path == "/api/tasks/upload/stage":
+                    data = state.task_uploads.stage(
+                        Path(body["project"]),
+                        item_id=body.get("item_id"),
+                        kind=body.get("kind"),
+                        filename=body.get("filename"),
+                        content_base64=body.get("content_base64"),
+                    )
+                elif path == "/api/tasks/upload/cancel":
+                    data = state.task_uploads.cancel(
+                        Path(body["project"]),
+                        body.get("path"),
+                    )
                 elif path == "/api/tasks/validate-draft":
                     data = state.tasks.validate(
                         Path(body["project"]),
@@ -911,6 +924,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             return {"requires_python_validator": mixed, "has_ai_validator": mixed}
         state.tasks._workflow_requirements = task_requirements
         state.task_drafts._workflow_requirements = task_requirements
+        validator_upload = root / "validator-upload.py"
+        validator_upload.write_text("print('uploaded validator')\n", encoding="utf-8")
+        ai_upload = root / "ai-upload.md"
+        ai_upload.write_text("uploaded AI validator prompt\n", encoding="utf-8")
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
@@ -1004,7 +1021,15 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceValidator").get_attribute("aria-invalid") == "true"
             assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
             assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
-            page.fill("#taskWorkspaceValidator", str(state.repo_root / "validate.py"))
+
+            with page.expect_file_chooser() as chooser:
+                page.locator("[data-task-upload-field='validator']").click()
+            chooser.value.set_files(str(validator_upload))
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.value.includes('.ai-task-runner')")
+            staged_validator = page.locator("#taskWorkspaceValidator").input_value()
+            assert state.task_uploads.staged_exists(root, staged_validator) is True
+            manual_validator = str(state.repo_root / "validate.py")
+            page.fill("#taskWorkspaceValidator", manual_validator)
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
@@ -1013,7 +1038,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceAiValidatorPrompt").get_attribute("aria-invalid") == "true"
             assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt is required", exact=False).is_visible()
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
-            page.fill("#taskWorkspaceAiValidatorPrompt", str(state.repo_root / "review.md"))
+
+            with page.expect_file_chooser() as chooser:
+                page.locator("[data-task-upload-field='ai_validator_prompt_file']").click()
+            chooser.value.set_files(str(ai_upload))
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.value.includes('.ai-task-runner')")
+            managed_ai_prompt = page.locator("#taskWorkspaceAiValidatorPrompt").input_value()
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
@@ -1024,8 +1055,11 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert len(created) == 2
             assert created[1]["kind"] == "task_list"
             assert [item["prompt"] for item in created[1]["items"]] == ["First list prompt", "Second list prompt"]
-            assert created[1]["items"][0]["validator"].endswith("validate.py")
-            assert created[1]["items"][0]["ai_validator_prompt_file"].endswith("review.md")
+            assert created[1]["items"][0]["validator"] == manual_validator
+            assert created[1]["items"][0]["ai_validator_prompt_file"] == managed_ai_prompt
+            assert Path(managed_ai_prompt).read_text(encoding="utf-8") == "uploaded AI validator prompt\n"
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is False
+            assert state.task_uploads.staged_exists(root, staged_validator) is False
             assert created[1]["project"] == str(state.repo_root.resolve())
             browser.close()
 

@@ -6,6 +6,7 @@ function draftSignature(value) { return JSON.stringify(value || {}); }
 
 export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged }) {
   let state = null;
+  let pendingUploadActions = Promise.resolve();
   let overlay = null;
   let restoreFocus = null;
   let createMenu = null;
@@ -56,8 +57,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return prefix + "-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
   }
 
+  function newItemId() {
+    return "item-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
+  }
+
   function blankItem(project, workflow) {
     return {
+      item_id: newItemId(),
       title: "",
       prompt: "",
       workflow: String(workflow || ""),
@@ -250,6 +256,87 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       item[key] = value;
       touchEditor();
     }
+  }
+
+  function managedUploadPath(value) {
+    return /(^|[\\/])\.ai-task-runner[\\/]uploads[\\/]/.test(String(value || ""));
+  }
+
+  function uploadKind(field) {
+    return field === "validator" ? "validator" : field === "ai_validator_prompt_file" ? "ai-validator" : "goal";
+  }
+
+  function ensureItemId(item) {
+    if (!item.item_id) item.item_id = newItemId();
+    return item.item_id;
+  }
+
+  function queueUploadCancel(path) {
+    const value = String(path || "").trim();
+    if (!managedUploadPath(value) || !state) return;
+    const project = String(state.task?.project || state.project || "");
+    pendingUploadActions = pendingUploadActions
+      .then(() => api("/api/tasks/upload/cancel", {
+        method: "POST",
+        body: JSON.stringify({ project, path: value }),
+      }))
+      .catch(() => {});
+  }
+
+  async function fileBase64(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    const chunk = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+    }
+    return btoa(binary);
+  }
+
+  function chooseUpload(field, button) {
+    const draft = editorDraft();
+    const item = draft?.items?.[state?.index ?? -1];
+    if (!item || !state) return;
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.hidden = true;
+    document.body.appendChild(picker);
+    picker.addEventListener("change", async () => {
+      const file = picker.files?.[0];
+      if (!file) { picker.remove(); return; }
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Uploading…";
+      try {
+        const previous = String(item[field] || "");
+        const data = await api("/api/tasks/upload/stage", {
+          method: "POST",
+          body: JSON.stringify({
+            project: String(item.project || state.task?.project || state.project || ""),
+            task_id: String(state.task?.task_id || ""),
+            item_id: ensureItemId(item),
+            kind: uploadKind(field),
+            filename: file.name,
+            content_base64: await fileBase64(file),
+          }),
+        });
+        if (previous && previous !== data.path) queueUploadCancel(previous);
+        updateItem(state.index, field, String(data.path || ""));
+        render();
+      } catch (error) {
+        state.error = String(error?.message || "Upload failed");
+        state.fieldErrors = { [fieldErrorKey(field)]: state.error };
+        render();
+        showError?.(error.message, "Upload file failed");
+      } finally {
+        picker.remove();
+        if (document.contains(button)) {
+          button.disabled = false;
+          button.textContent = original;
+        }
+      }
+    }, { once: true });
+    picker.click();
   }
 
   function workflowMeta(value) {
@@ -512,8 +599,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.value = String(value || "");
       input.maxLength = 4096;
       input.placeholder = "Enter file path";
-      input.addEventListener("input", () => updateItem(state.index, key, input.value));
-      field.append(label, input);
+      input.addEventListener("input", () => {
+        const previous = String(editorDraft()?.items?.[state.index]?.[key] || "");
+        if (previous !== input.value) queueUploadCancel(previous);
+        updateItem(state.index, key, input.value);
+      });
+      const row = document.createElement("div");
+      row.className = "task-workspace-path-row";
+      const upload = document.createElement("button");
+      upload.type = "button";
+      upload.className = "task-workspace-upload";
+      upload.dataset.taskUploadField = key;
+      upload.textContent = "Upload file";
+      upload.addEventListener("click", () => chooseUpload(key, upload));
+      row.append(input, upload);
+      field.append(label, row);
       appendFieldError(field, input, key);
       validationGrid.appendChild(field);
     }
@@ -1004,6 +1104,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
+    await pendingUploadActions;
     if (!state.saveRequestId) {
       state.saveRequestId = "task-update-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
     }
@@ -1051,6 +1152,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
+    await pendingUploadActions;
     try {
       const data = await api("/api/tasks/validate-draft", {
         method: "POST",
