@@ -407,6 +407,20 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }) || null;
   }
 
+  function resolveWorkflowSelection(rows, preferred = "") {
+    const selected = String(preferred || "").trim();
+    const values = Array.isArray(rows) ? rows : [];
+    if (selected) {
+      const matched = values.find((row) =>
+        [row?.path, row?.id, row?.reference, row?.name, row?.display_name]
+          .some((entry) => String(entry || "") === selected)
+      );
+      if (matched) return String(matched.path || matched.id || selected);
+    }
+    const fallback = values.find((row) => !row?.hidden) || values[0];
+    return String(fallback?.path || fallback?.id || selected);
+  }
+
   function workflowOptions(saved) {
     const result = [], seen = new Set();
     for (const row of (Array.isArray(state?.workflows) ? state.workflows : [])) {
@@ -1293,14 +1307,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     closeCreateMenu();
     const projectPath = String(project || "").trim();
     const rows = Array.isArray(workflows) ? workflows.slice() : [];
-    const defaultWorkflow = String(
-      workflow
-      || rows.find((row) => !row?.hidden)?.path
-      || rows.find((row) => !row?.hidden)?.id
-      || rows[0]?.path
-      || rows[0]?.id
-      || ""
-    );
+    const defaultWorkflow = resolveWorkflowSelection(rows, workflow);
     const draft = {
       schema_version: 1,
       title: list ? "New Task List" : "New Task",
