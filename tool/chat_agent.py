@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from runner.config.defaults import DEFAULT_AGENT_TIMEOUT
+
 from runner.agent import (
     BackendError,
     chat_features,
@@ -24,6 +26,9 @@ from runner.agent import (
     pending_native_ask,
     resolve_native_ask,
 )
+
+
+DEFAULT_CHAT_AGENT_TIMEOUT = DEFAULT_AGENT_TIMEOUT
 
 
 class _ChatTurnCancelled(Exception):
@@ -49,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=("read", "auto", "yolo"), default="auto")
     parser.add_argument("--reasoning", default="")
     parser.add_argument("--session", default="")
-    parser.add_argument("--timeout", type=int, default=7200)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_CHAT_AGENT_TIMEOUT)
     args = parser.parse_args(argv)
 
     prompt = sys.stdin.read()
