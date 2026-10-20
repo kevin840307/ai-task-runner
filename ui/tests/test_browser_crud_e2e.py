@@ -1688,9 +1688,67 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             assert page.locator(".project-chat-task-draft-item").get_by_text("Edited single draft").is_visible()
+
+            # A Chat TaskDraft is transient workspace state, not a durable Task.
+            # Clean Back / X / Open Prompts must unmount the workspace without
+            # losing the Chat-owned draft model or leaking it into the Task store.
+            for leave_kind in ("back", "x", "prompts"):
+                page.get_by_role("button", name="Edit Draft").click()
+                page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
+                assert page.locator("#taskWorkspacePrompt").input_value() == "Edited single draft"
+                if leave_kind == "back":
+                    page.click("#taskWorkspaceFooterBack")
+                elif leave_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                else:
+                    page.click("#taskWorkspaceOpenPrompts")
+                page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+                if leave_kind == "prompts":
+                    page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+                    page.locator("#projectList .project-root").first.click()
+                    page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+                assert page.locator(".project-chat-task-draft-item").get_by_text("Edited single draft").is_visible()
+                assert state.tasks.list(state.repo_root)["tasks"] == []
+
             page.get_by_role("button", name="Dismiss", exact=True).click()
             page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
             assert state.tasks.list(state.repo_root)["tasks"] == []
+
+            page.fill("#projectChatInput", "@task-list browser transient multi")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 1")
+            assert page.locator(".project-chat-task-draft-item").count() == 2
+            page.get_by_role("button", name="Edit Draft").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            page.fill("#taskWorkspacePrompt", "Edited multi draft")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            assert page.locator(".project-chat-task-draft-item").get_by_text("Edited multi draft").is_visible()
+            assert state.tasks.list(state.repo_root)["tasks"] == []
+
+            for leave_kind in ("back", "x", "prompts"):
+                page.get_by_role("button", name="Edit Draft").click()
+                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+                assert page.locator(".task-workspace-list-row").first.get_by_text("Edited multi draft").is_visible()
+                if leave_kind == "back":
+                    page.click("#taskWorkspaceFooterBack")
+                elif leave_kind == "x":
+                    page.click("#taskWorkspaceClose")
+                else:
+                    page.click("#taskWorkspaceOpenPrompts")
+                page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+                if leave_kind == "prompts":
+                    page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+                    page.locator("#projectList .project-root").first.click()
+                    page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+                assert page.locator(".project-chat-task-draft-item").get_by_text("Edited multi draft").is_visible()
+                assert state.tasks.list(state.repo_root)["tasks"] == []
+
+            page.get_by_role("button", name="Dismiss", exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.project-chat-task-draft').length === 0")
 
             page.fill("#projectChatInput", "@task browser auto")
             page.click("#projectChatSendButton")

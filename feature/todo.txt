@@ -350,7 +350,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Browser 測試 Task Editor dirty guard：修改 Title / Prompt / Workflow / Workspace，Project 依正式 Task-level contract 保持 readonly；Back / Cancel / X / Escape / Open Prompts 的 Keep editing / Discard 都保持正確 route/focus。
 [x] Browser 測試 chained dirty guard：Task List Draft → child Editor 修改未 Save → X / Open Prompts → 先 child discard、再 parent Draft discard；第二層 Keep editing 後 child dirty state 仍需保留。
 [x] Browser 測試 YAML dirty guard：修改 YAML 未 Apply → Header Back / 底部 Cancel / X / backdrop / Escape；Keep editing / Discard / Apply 後返回 List 都應一致。
-[ ] Browser 測試 Chat TaskDraft transient mount：Edit 單筆/多筆 → Back / X / Open Prompts → 回 Chat 後 taskMap 不殘留 _chatDraft，但 Chat Draft 修改內容仍保留。
+[x] Browser 測試 Chat TaskDraft transient mount：Edit 單筆/多筆 → Back / X / Open Prompts → 回 Chat 後 taskMap 不殘留 _chatDraft，但 Chat Draft 修改內容仍保留。
 [ ] Browser 測試 Escape top-layer：Task context menu / Project dropdown / Title rename / discard modal 開啟時 Escape 只關最上層，不得同時 Back/Close Drawer。
 [x] Browser 測試 Ask waiting：Ask 卡片正常 Next/Submit；主 Chat composer Send / Enter 只加入 Queue，不得直接 Submit Ask。
 [ ] Browser 測試 Task List 底部 Back：Task Info → List → 底部 Back 回 Info；Chat Draft → List → 底部 Back 回 Chat；直接開 List → 底部 Back 關 Drawer；Draft → 底部 Cancel → dirty discard confirmation。
