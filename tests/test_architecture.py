@@ -27,6 +27,58 @@ def test_agent_owns_client_backend_and_provider_adapters():
     assert not (ROOT / "runner" / "backends").exists()
 
 
+def test_project_chat_agent_metadata_reuses_runner_backend_contract():
+    backend = (ROOT / "runner/agent/backend.py").read_text(encoding="utf-8")
+    capability_service = (ROOT / "ui/agent_capability_service.py").read_text(encoding="utf-8")
+    settings_service = (ROOT / "ui/agent_settings_service.py").read_text(encoding="utf-8")
+    capability_tool = (ROOT / "tool/agent_capabilities.py").read_text(encoding="utf-8")
+    settings_tool = (ROOT / "tool/agent_settings_catalog.py").read_text(encoding="utf-8")
+
+    for token in (
+        "class AgentBackend(Protocol)",
+        "def available_models(",
+        "def interaction_modes(",
+        "def discover_capabilities(",
+        "def normalize_ask_request(",
+        "def encode_ask_response(",
+    ):
+        assert token in backend
+
+    assert 'agent_capabilities.py' in capability_service
+    assert 'agent_settings_catalog.py' in settings_service
+    assert "discover_capabilities" in capability_tool
+    assert "available_models" in settings_tool
+    assert "interaction_modes" in settings_tool
+
+    generic_projection = "\n".join(
+        (capability_service, settings_service, capability_tool, settings_tool)
+    )
+    for provider_specific in (
+        "QwenBackend",
+        "OpenCodeBackend",
+        "runner.agent.qwen",
+        "runner.agent.opencode",
+    ):
+        assert provider_specific not in generic_projection
+
+
+def test_project_chat_never_invokes_runner_workflow_execution_directly():
+    for relative in (
+        "ui/chat_service.py",
+        "ui/chat_agent_service.py",
+        "ui/chat_ask.py",
+        "ui/task_draft_service.py",
+    ):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        for forbidden in (
+            "WorkflowRunner",
+            "FlowEngine",
+            "StageExecutor",
+            "from runner.api",
+            "import runner.api",
+        ):
+            assert forbidden not in source, f"{relative}: {forbidden}"
+
 def test_workspace_and_script_are_single_owner_modules():
     assert (ROOT / "runner" / "workspace.py").is_file()
     assert (ROOT / "runner" / "script.py").is_file()

@@ -464,7 +464,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Chat 必須共用既有 Backend server / process manager / 設定載入 / logging / auth 與 error handling；不再起一個平行的獨立 Chat Backend。
     - Production foundation: Project Chat session/message persistence is owned by `ui/chat_service.py` and exposed through the existing `UIServer`; Runner task history remains separate.
 [ ] 新增 Chat service layer，負責 Session、Message、Stream、Queue、Ask、Agent capability 與 TaskDraft generation 的 API 協調。
-[ ] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
+[x] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
+    - Production chat_service / chat_agent_service / chat_ask / task_draft_service 不引用 WorkflowRunner / FlowEngine / StageExecutor / runner.api；architecture regression 鎖定此邊界。@goal 在 Workspace phase 前仍 fail closed。
 [ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
     - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
     - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
@@ -489,15 +490,19 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 14. Agent Adapter
 -----------------
 
-[ ] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
+[x] 定義一個統一 AgentAdapter 介面；Qwen Code 與 OpenCode 都實作同一份產品契約。
+    - 沿用既有 Runner AgentBackend / BaseBackend 作唯一 adapter contract；UI 不另造第二套介面。Model / Mode / capability / native Ask projection 皆從 generic registry API 取得。
 [ ] Adapter 需負責：啟動 / 連線、傳送訊息、stream 解析、cancel、Model 列表、Mode mapping、Commands / Skills discovery、Ask、Queue capability 與錯誤正規化。
 [x] Agent native Ask 能力不可用時由 adapter 回報 unsupported，Project Chat 顯示 Unavailable；不得用 @ask-demo 或其他 Mock 冒充 native Ask。
-[ ] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
-[ ] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
+[x] Qwen Code adapter 必須參照目前安裝版本的 CLI / SkillManager / slash command registry；不能假設不同版本的內部 API 不變。
+    - Qwen capability discovery 由 adapter 啟動目前安裝的 Qwen daemon，讀 /capabilities、session supported commands/resources；native Ask 另有 CLI version gate，不由 UI 假設固定能力。
+[x] OpenCode adapter 必須參照目前安裝版本可用的 server / SDK / command / skill registry；不能只解析 console output 當成正式 API。
+    - OpenCode adapter 使用 structured opencode api command.list / skill.list / session question API；model discovery 使用 adapter-owned opencode models，UI 只消費 normalized projection。
 [ ] 盡可能重用既有 Agent CLI process / Backend session 管理，不為每個 UI 下拉另啟一個 CLI。
 [x] Model 列表與預設值由既有 Backend adapter/catalog 回傳；production frontend 不硬編碼 Qwen/OpenCode model 名稱。
 [x] Mode profile 由 Backend adapter 的 interaction_modes 回報 native mapping、支援狀態與安全描述；Project Chat 共用該 projection。
-[ ] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
+[x] Ask 使用統一的 normalized question schema；Adapter 把 Qwen ask_user_question / OpenCode question tool 映射到該 schema。
+    - BaseBackend 定義 normalize/encode contract，Qwen/OpenCode 各自映射 native payload；Chat service 使用 chat_ask.py 的 normalized questions/answers，不暴露 provider payload 給 UI。
 [x] Queue 產品契約使用共用 durable Chat service FIFO；Qwen Ctrl+Q 僅作 queued-next-turn UX 參考，不注入 CLI 鍵盤事件。Native Queue transport 未宣告時明確落在 service_fifo。
 [x] Slash skill / command 由 Qwen daemon 與 OpenCode native registry projection 提供，只顯示 Agent 實際解析且允許使用的能力，保留 permission / user-invocable / availability。
 [ ] Adapter 具備 timeout、cancel、child process cleanup、stderr / bounded logs 與 reconnect / restart 行為。
