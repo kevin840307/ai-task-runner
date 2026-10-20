@@ -1259,8 +1259,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Dirty standalone prompt"
                 assert page.locator("#taskWorkspaceWorkspace").input_value() == "main"
                 assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
-                page.wait_for_timeout(20)
-                assert page.locator(trigger).evaluate("(node) => document.activeElement === node")
+                page.wait_for_function(
+                    "(selector) => document.activeElement === document.querySelector(selector)",
+                    arg=trigger,
+                )
 
             page.click("#taskWorkspaceOpenPrompts")
             page.wait_for_function("!document.querySelector('.ui-dialog-card')?.hidden")
