@@ -31,6 +31,7 @@ def test_project_chat_agent_metadata_reuses_runner_backend_contract():
     backend = (ROOT / "runner/agent/backend.py").read_text(encoding="utf-8")
     capability_service = (ROOT / "ui/agent_capability_service.py").read_text(encoding="utf-8")
     settings_service = (ROOT / "ui/agent_settings_service.py").read_text(encoding="utf-8")
+    catalog_tool = (ROOT / "tool/agent_catalog.py").read_text(encoding="utf-8")
     capability_tool = (ROOT / "tool/agent_capabilities.py").read_text(encoding="utf-8")
     settings_tool = (ROOT / "tool/agent_settings_catalog.py").read_text(encoding="utf-8")
 
@@ -44,19 +45,22 @@ def test_project_chat_agent_metadata_reuses_runner_backend_contract():
     ):
         assert token in backend
 
-    assert "discover_capabilities" in capability_service
-    assert "available_models" in settings_service
-    assert "interaction_modes" in settings_service
+    assert "capability_catalog" in capability_service
+    assert "settings_catalog" in settings_service
+    assert "from runner" not in capability_service
+    assert "from runner" not in settings_service
     assert "subprocess" not in capability_service
     assert "subprocess" not in settings_service
-    assert "tool/agent_" not in capability_service
-    assert "tool/agent_" not in settings_service
-    assert "discover_capabilities" in capability_tool
-    assert "available_models" in settings_tool
-    assert "interaction_modes" in settings_tool
+    assert "discover_capabilities" in catalog_tool
+    assert "available_models" in catalog_tool
+    assert "interaction_modes" in catalog_tool
+    assert "reasoning_options" in catalog_tool
+    assert "chat_features" in catalog_tool
+    assert "capability_catalog" in capability_tool
+    assert "settings_catalog" in settings_tool
 
     generic_projection = "\n".join(
-        (capability_service, settings_service, capability_tool, settings_tool)
+        (capability_service, settings_service, catalog_tool, capability_tool, settings_tool)
     )
     for provider_specific in (
         "QwenBackend",
