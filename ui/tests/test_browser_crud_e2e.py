@@ -1319,12 +1319,55 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert state.task_uploads.staged_exists(root, staged_validator) is False
             assert created[1]["project"] == str(state.repo_root.resolve())
             assert page.locator("#taskWorkspaceOpenList").is_visible()
+
+            # Info/List/Editor/YAML are routes inside one physical Drawer.
+            # Header height, shell width and Close position must not jump and
+            # there must never be a second route-specific header.
+            def task_workspace_geometry():
+                shell = page.locator("#taskWorkspaceShell").bounding_box()
+                head = page.locator("#taskWorkspaceShell .task-workspace-head").bounding_box()
+                close = page.locator("#taskWorkspaceClose").bounding_box()
+                assert shell and head and close
+                assert page.locator("#taskWorkspaceShell .task-workspace-head").count() == 1
+                return {
+                    "shell_width": shell["width"],
+                    "head_height": head["height"],
+                    "close_x": close["x"],
+                    "close_y": close["y"],
+                }
+
+            info_geometry = task_workspace_geometry()
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            list_geometry = task_workspace_geometry()
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
+
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            editor_geometry = task_workspace_geometry()
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+
+            page.click("#taskWorkspaceYamlButton")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
+            yaml_geometry = task_workspace_geometry()
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+
+            for geometry in (list_geometry, editor_geometry, yaml_geometry):
+                assert abs(geometry["shell_width"] - info_geometry["shell_width"]) <= 1
+                assert abs(geometry["head_height"] - info_geometry["head_height"]) <= 1
+                assert abs(geometry["close_x"] - info_geometry["close_x"]) <= 1
+                assert abs(geometry["close_y"] - info_geometry["close_y"]) <= 1
+
             page.click("#taskWorkspaceFooterBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            final_info_geometry = task_workspace_geometry()
+            assert abs(final_info_geometry["shell_width"] - info_geometry["shell_width"]) <= 1
+            assert abs(final_info_geometry["head_height"] - info_geometry["head_height"]) <= 1
+            assert abs(final_info_geometry["close_x"] - info_geometry["close_x"]) <= 1
+            assert abs(final_info_geometry["close_y"] - info_geometry["close_y"]) <= 1
             browser.close()
 
 
