@@ -44,8 +44,13 @@ def test_project_chat_agent_metadata_reuses_runner_backend_contract():
     ):
         assert token in backend
 
-    assert 'agent_capabilities.py' in capability_service
-    assert 'agent_settings_catalog.py' in settings_service
+    assert "discover_capabilities" in capability_service
+    assert "available_models" in settings_service
+    assert "interaction_modes" in settings_service
+    assert "subprocess" not in capability_service
+    assert "subprocess" not in settings_service
+    assert "tool/agent_" not in capability_service
+    assert "tool/agent_" not in settings_service
     assert "discover_capabilities" in capability_tool
     assert "available_models" in settings_tool
     assert "interaction_modes" in settings_tool
