@@ -980,6 +980,14 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1440, "height": 900})
             page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.add_init_script(
+                """if (location.origin === 'http://local.test') {
+                    localStorage.setItem(
+                        'ai-task-runner.ui.bootstrap.v1',
+                        JSON.stringify({theme:'violet', appearance:'dark', motion:'full'})
+                    );
+                }"""
+            )
             errors: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.expose_function("__apiBridge", _bridge_for(state))
