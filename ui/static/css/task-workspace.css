@@ -47,3 +47,8 @@
 .task-create-menu button strong{font-size:11px}
 .task-create-menu button small{color:var(--muted);font-size:9px}
 .project-chat-new-task{min-height:28px;padding:4px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text);font-size:10px;font-weight:800}
+
+/* The Task shell stays modal over the workspace, but the active Project action
+   trigger remains reachable so Rename/Remove dialogs can own Escape above it.
+   The menu itself is already portaled at z-index 4900. */
+body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
