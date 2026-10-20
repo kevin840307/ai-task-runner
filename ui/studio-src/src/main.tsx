@@ -282,11 +282,17 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) {
+  if (!response.ok) {
     if (response.status === 404 && url.includes("/api/studio/stage/test")) {
       throw new Error("Stage Test API not found. Restart the local UI server so the backend matches this Full Designer build.");
     }
-    throw new Error(data?.error || response.statusText);
+    const error = new Error(data?.message || `HTTP ${response.status}`);
+    Object.assign(error, {
+      code: String(data?.code || "http_error"),
+      retryable: Boolean(data?.retryable),
+      requestId: String(data?.request_id || ""),
+    });
+    throw error;
   }
   return data as T;
 }

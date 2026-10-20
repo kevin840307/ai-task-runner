@@ -19,6 +19,7 @@ from runner.agent import (
     configure_model_args,
     create_backend,
     ensure_native_session,
+    is_session_invalid_error,
     normalize_ask_request,
     pending_native_ask,
     resolve_native_ask,

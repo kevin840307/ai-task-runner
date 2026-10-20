@@ -13,9 +13,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from runner.agent import is_session_invalid_error
 from tool.chat_agent import (
     chat_features,
+    is_session_invalid_error,
     ensure_native_session,
     normalize_ask_request,
     pending_native_ask,

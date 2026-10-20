@@ -746,7 +746,16 @@ def _bridge_for(state: UIState):
                     raise ValueError(f"Unhandled browser E2E POST {path}")
             return {"status": 200, "data": data}
         except Exception as exc:
-            return {"status": 400, "data": {"error": str(exc)}}
+            request_id = str(body.get("request_id", "")) if isinstance(body, dict) else ""
+            return {
+                "status": 400,
+                "data": {
+                    "code": "invalid_request",
+                    "message": str(exc),
+                    "retryable": False,
+                    "request_id": request_id,
+                },
+            }
 
     return bridge
 
@@ -939,6 +948,10 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
         second = root / "second-project"
         second.mkdir()
         state._write_projects([
@@ -1574,6 +1587,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         state = _write_fixture_repo(Path(td))
+        (state.repo_root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
         state.studio_workflow_create("e2e_crud", "global", None)
 
         # Real Prompt impact fixture: a second Workflow references a Prompt so
