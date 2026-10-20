@@ -268,8 +268,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 ---------------------------------
 
 [x] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
-[ ] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
-[ ] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
+[x] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
+[x] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
 [ ] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
 [x] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
 [x] Edit Task 的 Back 依來源回 Info / Task List / Chat Draft；關閉按鈕、Cancel、Escape 與遮罩關閉行為需一致。

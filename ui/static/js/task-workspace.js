@@ -784,40 +784,50 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     overview.appendChild(renderTaskRows(task.items));
 
     const lifecycleStatus = String(task.status || "new");
+    const editable = lifecycleStatus === "new";
     const actions = document.createElement("div");
     actions.className = "task-workspace-info-actions";
+    const restrictions = [];
+
     const remove = document.createElement("button");
     remove.id = "taskWorkspaceDeleteTask";
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = "Delete Task";
-    if (lifecycleStatus === "new") {
+    if (editable) {
       remove.onclick = () => void deleteTask();
     } else {
       remove.disabled = true;
       remove.title = "Only New Tasks can be deleted safely";
-      const note = document.createElement("p");
-      note.className = "task-workspace-action-note";
-      note.textContent = "Delete is unavailable while this Task has runtime or lifecycle state. Only New Tasks can be deleted safely.";
-      overview.appendChild(note);
+      restrictions.push("Delete is unavailable while this Task has runtime or lifecycle state. Only New Tasks can be deleted safely.");
     }
     actions.appendChild(remove);
-    if (lifecycleStatus === "new") {
-      if (Array.isArray(task.items) && task.items.length > 1) {
-        const openList = document.createElement("button");
-        openList.id = "taskWorkspaceOpenList";
-        openList.type = "button";
-        openList.textContent = "Open Task List";
-        openList.onclick = () => beginTaskListEdit();
-        actions.appendChild(openList);
+
+    const taskList = Array.isArray(task.items) && task.items.length > 1;
+    const edit = document.createElement("button");
+    edit.id = taskList ? "taskWorkspaceOpenList" : "taskWorkspaceEditTask";
+    edit.type = "button";
+    edit.textContent = taskList ? "Open Task List" : "Edit Task";
+    if (editable) {
+      edit.onclick = taskList ? () => beginTaskListEdit() : () => beginTaskEdit(0, "info");
+    } else {
+      edit.disabled = true;
+      if (lifecycleStatus === "ongoing") {
+        edit.title = "Pause this Task before editing runtime-affecting content";
+        restrictions.push("Pause this Task before editing runtime-affecting content.");
       } else {
-        const edit = document.createElement("button");
-        edit.id = "taskWorkspaceEditTask";
-        edit.type = "button";
-        edit.textContent = "Edit Task";
-        edit.onclick = () => beginTaskEdit(0, "info");
-        actions.appendChild(edit);
+        const label = lifecycleStatus.charAt(0).toUpperCase() + lifecycleStatus.slice(1);
+        edit.title = `Task editing is unavailable while this Task is ${label}`;
+        restrictions.push(`Task editing is unavailable while this Task is ${label}.`);
       }
+    }
+    actions.appendChild(edit);
+
+    if (restrictions.length) {
+      const note = document.createElement("p");
+      note.className = "task-workspace-action-note";
+      note.textContent = [...new Set(restrictions)].join(" ");
+      overview.appendChild(note);
     }
     overview.appendChild(actions);
     body.appendChild(overview);

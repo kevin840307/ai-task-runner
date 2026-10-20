@@ -1512,7 +1512,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
-def test_task_info_explains_non_new_delete_block() -> None:
+def test_task_info_explains_non_new_edit_and_delete_block() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -1524,13 +1524,22 @@ def test_task_info_explains_non_new_delete_block() -> None:
         project_row = state.projects()[0]
         draft = {
             "title": "Running task cannot be deleted",
-            "items": [{
-                "title": "Child",
-                "prompt": "Keep runtime state safe",
-                "workflow": "workflow.yaml",
-                "project": str(root),
-                "workspace": "auto",
-            }],
+            "items": [
+                {
+                    "title": "Child A",
+                    "prompt": "Keep runtime state safe",
+                    "workflow": "workflow.yaml",
+                    "project": str(root),
+                    "workspace": "auto",
+                },
+                {
+                    "title": "Child B",
+                    "prompt": "Do not expose Add Task while Ongoing",
+                    "workflow": "workflow.yaml",
+                    "project": str(root),
+                    "workspace": "auto",
+                },
+            ],
         }
         created = state.tasks.create(
             root,
@@ -1574,7 +1583,13 @@ def test_task_info_explains_non_new_delete_block() -> None:
 
             delete_button = page.locator("#taskWorkspaceDeleteTask")
             assert delete_button.is_disabled()
-            assert "Only New Tasks can be deleted safely" in page.locator(".task-workspace-action-note").inner_text()
+            list_button = page.locator("#taskWorkspaceOpenList")
+            assert list_button.is_visible()
+            assert list_button.is_disabled()
+            assert "Pause this Task before editing" in (list_button.get_attribute("title") or "")
+            restriction = page.locator(".task-workspace-action-note").inner_text()
+            assert "Only New Tasks can be deleted safely" in restriction
+            assert "Pause this Task before editing runtime-affecting content." in restriction
             assert state.tasks.get(root, created["task_id"])["status"] == "ongoing"
             browser.close()
 
