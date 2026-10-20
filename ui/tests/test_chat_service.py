@@ -10,12 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from runner.agent import (
-    CapabilitySpec,
-    ChatFeatureSpec,
-    InteractionModeSpec,
-    ReasoningOptionSpec,
-)
+from runner.agent import ChatFeatureSpec
 from ui.agent_capability_service import AgentCapabilityService
 from ui.agent_settings_service import AgentSettingsService
 from ui.chat_agent_service import (
@@ -428,28 +423,30 @@ def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp
 def test_agent_capability_service_caches_native_projection(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
-    project.mkdir()
+    project.mkdir(parents=True)
     calls = 0
 
-    def fake_discover(backend, root):
+    def fake_catalog(root, backend):
         nonlocal calls
         calls += 1
         assert backend == "qwen"
         assert Path(root) == project
-        return [CapabilitySpec(
-            token="/btw",
-            name="btw",
-            description="Side question",
-            kind="command",
-            source="builtin",
-            user_invocable=True,
-            enabled=True,
-            permission="available",
-            availability="available",
-        )]
+        return {
+            "backend": "qwen",
+            "capabilities": [{
+                "token": "/btw",
+                "name": "btw",
+                "description": "Side question",
+                "kind": "command",
+                "source": "builtin",
+                "user_invocable": True,
+                "enabled": True,
+                "permission": "available",
+                "availability": "available",
+            }],
+        }
 
-    monkeypatch.setattr("ui.agent_capability_service.discover_capabilities", fake_discover)
-    monkeypatch.setattr("ui.agent_capability_service.discover_plugins", lambda: ())
+    monkeypatch.setattr("ui.agent_capability_service.capability_catalog", fake_catalog)
     service = AgentCapabilityService(repo, ttl_seconds=60)
     first = service.get(project, "qwen")
     second = service.get(project, "qwen")
@@ -467,11 +464,10 @@ def test_agent_capability_service_fails_closed_on_discovery_error(tmp_path: Path
     project = repo / "project"
     project.mkdir(parents=True)
 
-    def fail_discovery(*args, **kwargs):
+    def fail_catalog(*args, **kwargs):
         raise RuntimeError("native registry unavailable")
 
-    monkeypatch.setattr("ui.agent_capability_service.discover_capabilities", fail_discovery)
-    monkeypatch.setattr("ui.agent_capability_service.discover_plugins", lambda: ())
+    monkeypatch.setattr("ui.agent_capability_service.capability_catalog", fail_catalog)
     service = AgentCapabilityService(repo)
     with pytest.raises(ValueError, match="native registry unavailable"):
         service.get(project, "qwen")
@@ -979,39 +975,38 @@ def test_agent_settings_service_preserves_native_reasoning_ids(tmp_path: Path, m
     project.mkdir(parents=True)
     calls = 0
 
-    def fake_models(backend, root):
+    def fake_catalog(root, backend, model):
         nonlocal calls
         calls += 1
-        assert backend == "opencode"
         assert Path(root) == project
-        return ["openai/gpt-5.2"]
+        assert backend == "opencode"
+        assert model == "openai/gpt-5.2"
+        return {
+            "agent": "opencode",
+            "models": ["openai/gpt-5.2"],
+            "modes": [{
+                "id": "auto",
+                "native": "--auto",
+                "description": "safe",
+                "supported": True,
+                "unsafe": False,
+            }],
+            "reasoning": [{
+                "id": "deep",
+                "label": "Deep",
+                "native": "openai/gpt-5.2#deep",
+                "description": "variant",
+                "default": False,
+            }],
+            "features": {
+                "ask": True,
+                "ask_transport": "question_api",
+                "queue_mode": "service_fifo",
+                "detail": "native",
+            },
+        }
 
-    monkeypatch.setattr("ui.agent_settings_service.discover_plugins", lambda: ())
-    monkeypatch.setattr("ui.agent_settings_service.available_models", fake_models)
-    monkeypatch.setattr(
-        "ui.agent_settings_service.interaction_modes",
-        lambda backend: (InteractionModeSpec("auto", "--auto", "safe"),),
-    )
-    monkeypatch.setattr(
-        "ui.agent_settings_service.reasoning_options",
-        lambda backend, root, model: (
-            ReasoningOptionSpec(
-                id="deep",
-                label="Deep",
-                native="openai/gpt-5.2#deep",
-                description="variant",
-            ),
-        ),
-    )
-    monkeypatch.setattr(
-        "ui.agent_settings_service.chat_features",
-        lambda backend, root: ChatFeatureSpec(
-            ask=True,
-            ask_transport="question_api",
-            queue_mode="service_fifo",
-            detail="native",
-        ),
-    )
+    monkeypatch.setattr("ui.agent_settings_service.settings_catalog", fake_catalog)
 
     service = AgentSettingsService(repo, ttl_seconds=60)
     value = service.get(project, "opencode", "openai/gpt-5.2")
