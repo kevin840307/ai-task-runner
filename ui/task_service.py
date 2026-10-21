@@ -22,6 +22,24 @@ CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
 DELETE_REQUEST_LIMIT = 512
 TASK_YAML_LIMIT = 256 * 1024
+_EDITABLE_ITEM_FIELDS = (
+    "title",
+    "prompt",
+    "goal_file",
+    "workflow",
+    "project",
+    "workspace",
+    "validator",
+    "ai_validator_prompt",
+    "ai_validator_prompt_file",
+)
+
+
+def _editable_item_value(item: dict[str, Any]) -> dict[str, str]:
+    return {
+        key: str(item.get(key) or "")
+        for key in _EDITABLE_ITEM_FIELDS
+    }
 
 
 def _safe_task_id(value: str) -> bool:
@@ -43,10 +61,86 @@ class TaskService:
         self._workflow_requirements = workflow_requirements
         self._uploads = uploads
 
+    @staticmethod
+    def edit_policy(task: dict[str, Any]) -> dict[str, Any]:
+        """Project the canonical Task/child edit policy without owning Runner state."""
+        status = str(task.get("status") or "new")
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        try:
+            completed = int(task.get("completed_item_count", 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Task completed_item_count is invalid") from exc
+        if completed < 0 or completed > len(items):
+            raise ValueError("Task completed_item_count is out of range")
+
+        if status == "new":
+            editable = True
+            reason = ""
+        elif status == "paused":
+            editable = True
+            reason = ""
+        elif status == "ongoing":
+            editable = False
+            reason = "Pause this Task before editing runtime-affecting content"
+        else:
+            editable = False
+            reason = "Closed Tasks are read-only"
+
+        current_index = completed if status == "paused" and completed < len(items) else None
+        item_policies: list[dict[str, Any]] = []
+        for index, item in enumerate(items):
+            item_id = str(item.get("item_id") or "") if isinstance(item, dict) else ""
+            if not editable:
+                state = "locked"
+                can_edit = False
+                can_restructure = False
+                item_reason = reason
+            elif status == "paused" and index < completed:
+                state = "completed"
+                can_edit = False
+                can_restructure = False
+                item_reason = "Completed Task items are locked"
+            elif status == "paused" and index == current_index:
+                state = "current"
+                can_edit = True
+                can_restructure = False
+                item_reason = "Current paused item may be edited but not moved or removed"
+            else:
+                state = "future" if status == "paused" else "pending"
+                can_edit = True
+                can_restructure = True
+                item_reason = ""
+            item_policies.append({
+                "item_id": item_id,
+                "index": index,
+                "state": state,
+                "editable": can_edit,
+                "restructure": can_restructure,
+                "reason": item_reason,
+            })
+        return {
+            "editable": editable,
+            "reason": reason,
+            "completed_item_count": completed,
+            "current_item_index": current_index,
+            "can_rename": editable,
+            "can_add_item": editable,
+            "can_edit_yaml": status == "new" or (status == "paused" and completed == 0),
+            "can_delete": status == "new",
+            "restart_required": bool(task.get("restart_required", False)),
+            "items": item_policies,
+        }
+
+    @classmethod
+    def _project_task(cls, row: dict[str, Any]) -> dict[str, Any]:
+        value = deepcopy(row)
+        value["edit_policy"] = cls.edit_policy(row)
+        return value
+
     def list(self, project: Path) -> dict[str, Any]:
         with self._lock:
             state = self._load(project)
-            return {"tasks": [deepcopy(row) for row in state["tasks"]]}
+            return {"tasks": [self._project_task(row) for row in state["tasks"]]}
 
     def get(self, project: Path, task_id: str) -> dict[str, Any]:
         task_key = validate_task_id(task_id)
@@ -54,7 +148,7 @@ class TaskService:
             state = self._load(project)
             for row in state["tasks"]:
                 if row["task_id"] == task_key:
-                    return deepcopy(row)
+                    return self._project_task(row)
         raise ValueError("Task does not exist")
 
     def validate(self, project: Path, draft: Any) -> dict[str, Any]:
@@ -132,7 +226,7 @@ class TaskService:
             if existing_id:
                 for row in state["tasks"]:
                     if row["task_id"] == existing_id:
-                        return {**deepcopy(row), "duplicate": True}
+                        return {**self._project_task(row), "duplicate": True}
                 raise ValueError("Task create request points to a missing Task")
 
             now = time.time()
@@ -151,6 +245,8 @@ class TaskService:
                 "project": str(project.resolve()),
                 "status": "new",
                 "items": items,
+                "completed_item_count": 0,
+                "restart_required": False,
                 "run_count": 0,
                 "merge_failure_count": 0,
                 "created_at": now,
@@ -164,7 +260,7 @@ class TaskService:
             self._write(project, state)
             if self._uploads:
                 self._uploads.finalize(project, materialized)
-            return {**deepcopy(task), "duplicate": False}
+            return {**self._project_task(task), "duplicate": False}
 
     def update(
         self,
@@ -197,8 +293,9 @@ class TaskService:
             task = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
             if task is None:
                 raise ValueError("Task does not exist")
-            if task.get("status") != "new":
-                raise ValueError("Task must be New before editing")
+            status = str(task.get("status") or "")
+            if status not in {"new", "paused"}:
+                raise ValueError("Task must be New or Paused before editing")
             if expected_updated_at is not None:
                 try:
                     expected = float(expected_updated_at)
@@ -235,10 +332,34 @@ class TaskService:
                 payload = {key: value for key, value in item.items() if key != "item_id"}
                 items.append({"item_id": item_id, **payload})
 
+            restart_required = bool(task.get("restart_required", False))
+            if status == "paused":
+                policy = self.edit_policy(task)
+                completed = int(policy["completed_item_count"])
+                previous_items = task.get("items") if isinstance(task.get("items"), list) else []
+                locked_prefix = previous_items[:completed]
+                if len(items) < completed:
+                    raise ValueError("Completed Task items cannot be removed while Paused")
+                for index, previous in enumerate(locked_prefix):
+                    current = items[index]
+                    if str(current.get("item_id") or "") != str(previous.get("item_id") or ""):
+                        raise ValueError("Completed Task items cannot be reordered while Paused")
+                    if _editable_item_value(current) != _editable_item_value(previous):
+                        raise ValueError("Completed Task items cannot be modified while Paused")
+                current_index = policy.get("current_item_index")
+                if isinstance(current_index, int):
+                    previous = previous_items[current_index]
+                    if len(items) <= current_index or str(items[current_index].get("item_id") or "") != str(previous.get("item_id") or ""):
+                        raise ValueError("Current paused Task item cannot be moved or removed")
+                    if _editable_item_value(items[current_index]) != _editable_item_value(previous):
+                        restart_required = True
+
             materialized = self._uploads.materialize_items(project, items) if self._uploads else []
             task["title"] = validated["title"]
             task["kind"] = "task" if len(items) == 1 else "task_list"
             task["items"] = items
+            task["completed_item_count"] = int(task.get("completed_item_count", 0))
+            task["restart_required"] = restart_required
             task["updated_at"] = time.time()
             state["update_requests"][request] = task_key
             while len(state["update_requests"]) > UPDATE_REQUEST_LIMIT:
@@ -320,6 +441,23 @@ class TaskService:
             ids.add(task_id)
             if row.get("status") not in {"new", "ongoing", "paused", "closed"}:
                 raise ValueError("Task store contains an invalid lifecycle status")
+            items = row.get("items")
+            if not isinstance(items, list) or not items:
+                raise ValueError("Task store contains invalid Task items")
+            try:
+                completed = int(row.get("completed_item_count", 0))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Task store contains invalid completed_item_count") from exc
+            if completed < 0 or completed > len(items):
+                raise ValueError("Task store contains invalid completed_item_count")
+            restart_required = row.get("restart_required", False)
+            if not isinstance(restart_required, bool):
+                raise ValueError("Task store contains invalid restart_required")
+            row = {
+                **row,
+                "completed_item_count": completed,
+                "restart_required": restart_required,
+            }
             normalized.append(row)
         return {
             "version": STATE_VERSION,
