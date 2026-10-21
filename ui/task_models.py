@@ -11,6 +11,13 @@ _TASK_ID = re.compile(r"^task-[0-9a-f]{32}$")
 _ITEM_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
 
 
+def canonical_project_path(project: Path) -> str:
+    root = Path(project).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError("Selected Project does not exist")
+    return str(root)
+
+
 def bounded_text(value: Any, label: str, limit: int, *, required: bool = True) -> str:
     text = str(value or "").strip()
     if required and not text:
@@ -54,7 +61,7 @@ def validate_generated_draft(
     if mode == "list" and len(raw_items) < 2:
         raise ValueError("@task-list must generate at least two items")
 
-    project_path = str(project.resolve())
+    project_path = canonical_project_path(project)
     workflow_path = str(workflow or "").strip()
     requirements = workflow_requirements(project, workflow_path) if workflow_requirements else {}
     if workflow_requirements is not None and requirements.get("exists") is False:
@@ -110,7 +117,7 @@ def validate_task_draft_for_create(
     if len(raw_items) > 32:
         raise ValueError("TaskDraft contains too many items")
 
-    project_path = str(project.resolve())
+    project_path = canonical_project_path(project)
     items: list[dict[str, Any]] = []
     seen_item_ids: set[str] = set()
     for index, raw in enumerate(raw_items):
