@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
 import threading
 import urllib.request
 from pathlib import Path
@@ -9,6 +10,11 @@ from pathlib import Path
 import pytest
 
 from ui.server import UIServer
+from tool.task_draft_agent import (
+    TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
+    TASK_DRAFT_ERROR_CHARS,
+    TASK_DRAFT_WRAPPER_GRACE_SECONDS,
+)
 from ui.task_draft_service import TaskDraftService
 from ui.task_service import TaskService
 from ui.task_upload_service import TaskUploadService
@@ -24,6 +30,92 @@ def _json_request(url: str, *, method: str = "GET", body: dict | None = None) ->
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def test_task_draft_tool_uses_shared_timeout_and_bounded_errors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    captured: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = json.dumps({
+            "draft": {
+                "title": "Generated",
+                "items": [{"title": "One", "prompt": "Do one"}],
+            }
+        })
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        captured["command"] = list(command)
+        captured["timeout"] = kwargs.get("timeout")
+        return Completed()
+
+    monkeypatch.setattr("ui.task_draft_service.subprocess.run", fake_run)
+    service = TaskDraftService(repo)
+    result = service._run_tool(
+        project=project,
+        backend="qwen",
+        model="model-a",
+        reasoning="high",
+        draft_mode="single",
+        spec="generate one task",
+    )
+    assert result["draft"]["title"] == "Generated"
+    assert captured["timeout"] == (
+        TASK_DRAFT_AGENT_TIMEOUT_SECONDS + TASK_DRAFT_WRAPPER_GRACE_SECONDS
+    )
+
+    class Failed:
+        returncode = 1
+        stdout = ""
+        stderr = ("x" * (TASK_DRAFT_ERROR_CHARS + 200)) + "TAIL"
+
+    monkeypatch.setattr(
+        "ui.task_draft_service.subprocess.run",
+        lambda *args, **kwargs: Failed(),
+    )
+    with pytest.raises(ValueError) as exc_info:
+        service._run_tool(
+            project=project,
+            backend="qwen",
+            model="",
+            reasoning="",
+            draft_mode="single",
+            spec="fail with large stderr",
+        )
+    detail = str(exc_info.value)
+    assert len(detail) == TASK_DRAFT_ERROR_CHARS
+    assert detail.endswith("TAIL")
+
+
+def test_task_draft_tool_timeout_is_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd="task-draft-agent",
+            timeout=kwargs.get("timeout", 0),
+        )
+
+    monkeypatch.setattr("ui.task_draft_service.subprocess.run", timeout)
+    service = TaskDraftService(repo)
+    with pytest.raises(ValueError, match="TaskDraft generation failed"):
+        service._run_tool(
+            project=project,
+            backend="qwen",
+            model="",
+            reasoning="",
+            draft_mode="single",
+            spec="timeout",
+        )
 
 
 def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> None:
