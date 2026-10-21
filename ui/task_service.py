@@ -287,7 +287,7 @@ class TaskService:
                     raise ValueError("request_id belongs to another Task")
                 for row in state["tasks"]:
                     if row["task_id"] == task_key:
-                        return {**deepcopy(row), "duplicate": True}
+                        return {**self._project_task(row), "duplicate": True}
                 raise ValueError("Task update request points to a missing Task")
 
             task = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
@@ -367,7 +367,7 @@ class TaskService:
             self._write(project, state)
             if self._uploads:
                 self._uploads.finalize(project, materialized)
-            return {**deepcopy(task), "duplicate": False}
+            return {**self._project_task(task), "duplicate": False}
 
     def delete(
         self,
