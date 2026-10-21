@@ -2937,8 +2937,11 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
                 "#projectChatSessionList .project-chat-session-row:not(.active) .project-chat-session-open"
             ).first.click()
             page.wait_for_function(
-                "() => document.querySelector('#projectChatSessionList .project-chat-session-row.active') !== null"
+                "(id) => document.querySelector('#projectChatSessionList .project-chat-session-row.active .project-chat-session-open')?.textContent === 'New Chat'"
+                " && window.__apiBridge !== undefined",
+                arg=first_session,
             )
+            assert state.chat_service.sessions(added_project)["active_session_id"] == first_session
             assert_chat_preferences(defaults)
 
             # Switching Projects restores each Project's independently persisted
