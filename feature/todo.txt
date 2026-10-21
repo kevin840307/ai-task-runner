@@ -568,14 +568,16 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - tests/test_backends.py 覆蓋 Qwen/OpenCode model/mode/reasoning/capability/Ask/permission；ui/tests/test_chat_service.py 覆蓋 durable FIFO、terminal outcome idempotency、restart、native Ask 與 in-process catalog cache。
 [x] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
     - ui/tests/test_chat_service.py + ui/tests/test_task_service.py 直接啟動 UIServer 驗證 session lifecycle、cursor event feed、turn cancel/reconnect、Queue CRUD、Ask submit/cancel、TaskDraft generate/update/create。
-[ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+[x] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
+    - `test_browser_workflow_settings_manager_and_prompt_crud` 已在真實 Browser lane 覆蓋 Project→Chat、Project settings、`@`/`/` suggestions、Chat TaskDraft Edit/Back/Create、Queue CRUD/session scope、Ask 多題/Other/文字/Submit/Cancel 與 backend error toast；2026-10-20 Browser run 中此測試 PASS。
 [x] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
     - Production Browser E2E 明確建立兩組不同 Project-level 五項設定，切換 Project 與同 Project Chat session 後逐項驗證 Agent / Model / Mode / Reasoning / Workflow，reload 後仍保持同一 canonical preference projection。
 [ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 normalization + Task merge_failure_count separation、Allow concurrent Main tasks Off/On 對 Main disabled/resolver 的一致性、Appearance / Theme palette / Language persistence。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
 [x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
-[ ] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
+[x] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
+    - 同一 production Browser E2E 實際走 Task Info→List→Add/Edit child→Back、Footer Back→Info，以及 single/multi Chat Draft→shared Editor/List→Back/X/Prompts→Chat；未建立第二套 Drawer/Editor。
 [ ] Browser 測試：Chat Draft 與 Tasks 頁開出的 Task Editor / Task List Workspace DOM 結構與欄位一致，驗證來源只差 return context。
 [ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
