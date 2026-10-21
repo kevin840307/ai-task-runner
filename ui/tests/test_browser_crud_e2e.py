@@ -2017,19 +2017,36 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
             assert page.locator("#taskWorkspaceOverlay").is_visible()
             assert page.locator(".task-workspace-list-row").count() == 2
+            page.evaluate("window.__sharedTaskWorkspaceShell = document.querySelector('#taskWorkspaceShell')")
             chat_during = page.locator("#projectChatView").bounding_box()
             assert chat_before and chat_during
-            assert abs(chat_before["x"] - chat_during["x"]) <= 1
-            assert abs(chat_before["width"] - chat_during["width"]) <= 1
+            for key in ("x", "y", "width", "height"):
+                assert abs(chat_before[key] - chat_during[key]) <= 1
 
             page.locator(".task-workspace-row-edit").first.click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.evaluate(
+                "window.__sharedTaskWorkspaceShell === document.querySelector('#taskWorkspaceShell')"
+            )
+            chat_editor = page.locator("#projectChatView").bounding_box()
+            assert chat_editor
+            for key in ("x", "y", "width", "height"):
+                assert abs(chat_before[key] - chat_editor[key]) <= 1
+            chat_editor_fields = page.evaluate(
+                """() => Array.from(
+                    document.querySelectorAll('#taskWorkspaceShell input[id], #taskWorkspaceShell select[id], #taskWorkspaceShell textarea[id]')
+                ).map((node) => node.id).sort()"""
+            )
             page.fill("#taskWorkspacePrompt", "Edited browser item one")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 2")
             assert page.locator(".task-workspace-list-row").first.locator("p").inner_text() == "Edited browser item one"
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            chat_after = page.locator("#projectChatView").bounding_box()
+            assert chat_after
+            for key in ("x", "y", "width", "height"):
+                assert abs(chat_before[key] - chat_after[key]) <= 1
             draft_card = page.locator(".project-chat-task-draft").first
             assert draft_card.get_by_text("Edited browser item one").is_visible()
             assert draft_card.get_attribute("data-draft-id")
@@ -2058,6 +2075,15 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             page.locator(".task-workspace-row-edit").first.click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.evaluate(
+                "window.__sharedTaskWorkspaceShell === document.querySelector('#taskWorkspaceShell')"
+            )
+            durable_editor_fields = page.evaluate(
+                """() => Array.from(
+                    document.querySelectorAll('#taskWorkspaceShell input[id], #taskWorkspaceShell select[id], #taskWorkspaceShell textarea[id]')
+                ).map((node) => node.id).sort()"""
+            )
+            assert durable_editor_fields == chat_editor_fields
             page.fill("#taskWorkspacePrompt", "Durably edited browser item one")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
