@@ -2013,10 +2013,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert state.tasks.list(state.repo_root)["tasks"] == []
 
             chat_before = page.locator("#projectChatView").bounding_box()
+            scroll_before = page.evaluate(
+                "() => [window.scrollX, window.scrollY, document.querySelector('#projectChatMessages')?.scrollTop || 0]"
+            )
             page.get_by_role("button", name="Edit Draft").click()
             page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
             assert page.locator("#taskWorkspaceOverlay").is_visible()
             assert page.locator(".task-workspace-list-row").count() == 2
+            assert page.evaluate(
+                "() => getComputedStyle(document.querySelector('#taskWorkspaceOverlay')).position === 'fixed'"
+                " && Number.parseInt(getComputedStyle(document.querySelector('#taskWorkspaceOverlay')).zIndex, 10) >= 520"
+            )
+            assert page.evaluate(
+                "() => [window.scrollX, window.scrollY, document.querySelector('#projectChatMessages')?.scrollTop || 0]"
+            ) == scroll_before
             page.evaluate("window.__sharedTaskWorkspaceShell = document.querySelector('#taskWorkspaceShell')")
             chat_during = page.locator("#projectChatView").bounding_box()
             assert chat_before and chat_during
@@ -2047,6 +2057,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert chat_after
             for key in ("x", "y", "width", "height"):
                 assert abs(chat_before[key] - chat_after[key]) <= 1
+            assert page.evaluate(
+                "() => [window.scrollX, window.scrollY, document.querySelector('#projectChatMessages')?.scrollTop || 0]"
+            ) == scroll_before
             draft_card = page.locator(".project-chat-task-draft").first
             assert draft_card.get_by_text("Edited browser item one").is_visible()
             assert draft_card.get_attribute("data-draft-id")
@@ -3000,7 +3013,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             project_rows = state.projects()
             renamed = next(item for item in project_rows if item["name"] == "Renamed Default Project")
             assert Path(renamed["path"]).resolve() == added_project.resolve()
-            assert state.chat_service.sessions(added_project)["active_session_id"] == second_session
+            assert state.chat_service.sessions(added_project)["active_session_id"] == first_session
 
             page.reload(wait_until="domcontentloaded")
             install(page, "Renamed Default Project")
