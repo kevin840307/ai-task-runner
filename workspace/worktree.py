@@ -183,6 +183,13 @@ def target_branch_git_lock(repo: Path, branch: str):
     ):
         yield
 
+@contextmanager
+def merge_queue_lock(repo: Path, branch: str):
+    """Serialize only durable FIFO queue state updates for one target branch."""
+    key = hashlib.sha256(str(branch).encode("utf-8")).hexdigest()[:24]
+    with _git_file_lock(repo, f"ai-task-runner-merge-queue-{key}.lock"):
+        yield
+
 
 def add_or_reuse_worktree(
     repo: Path,

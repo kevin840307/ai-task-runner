@@ -282,3 +282,66 @@ def test_source_branch_change_after_snapshot_fails_closed(tmp_path: Path):
 
     with pytest.raises(WorkspaceError, match="snapshot no longer matches"):
         MergeManager().merge(prepared, snapshot)
+
+
+def test_concurrent_main_merge_queue_is_durable_fifo_and_prevents_overtake(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager_a, prepared_a = _task(repo, "a")
+    manager_b, prepared_b = _task(repo, "b")
+
+    (prepared_a.worktree_path / "app.txt").write_text("task a side\n", encoding="utf-8")
+    snapshot_a = manager_a.snapshot_result(prepared_a)
+    (prepared_b.worktree_path / "b.txt").write_text("task b\n", encoding="utf-8")
+    snapshot_b = manager_b.snapshot_result(prepared_b)
+
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "advance target with conflict")
+
+    blocked_head = MergeManager().merge(prepared_a, snapshot_a, validate=lambda _project: "PASS")
+    assert blocked_head.status == "conflict"
+    assert blocked_head.merge_queue_seq == 1
+
+    waiting_b = MergeManager().merge(prepared_b, snapshot_b, validate=lambda _project: "PASS")
+    assert waiting_b.status == "pending_merge"
+    assert waiting_b.merge_queue_seq == 2
+    assert not (repo / "b.txt").exists()
+
+    restarted_b = MergeManager().merge(prepared_b, snapshot_b, validate=lambda _project: "PASS")
+    assert restarted_b.status == "pending_merge"
+    assert restarted_b.merge_queue_seq == 2
+
+    _git(repo, "merge", "--no-ff", "-s", "ours", prepared_a.task_branch, "-m", "external delivery a")
+    finalized_a = MergeManager().merge(prepared_a, snapshot_a, validate=lambda _project: "SOURCE_FAIL")
+    assert finalized_a.status == "merged"
+    assert finalized_a.merge_queue_seq == 1
+
+    delivered_b = MergeManager().merge(prepared_b, snapshot_b, validate=lambda _project: "PASS")
+    assert delivered_b.status == "merged"
+    assert delivered_b.merge_queue_seq == 2
+    assert (repo / "b.txt").read_text(encoding="utf-8") == "task b\n"
+
+
+def test_merge_queue_assigns_stable_fifo_sequence_to_multiple_main_tasks(tmp_path: Path):
+    repo = _repo(tmp_path)
+    prepared = []
+    for index, suffix in enumerate(("a", "b", "c", "d", "e"), start=1):
+        manager, workspace = _task(repo, suffix)
+        if index == 1:
+            (workspace.worktree_path / "app.txt").write_text("queue head\n", encoding="utf-8")
+        else:
+            (workspace.worktree_path / f"{suffix}.txt").write_text(f"{suffix}\n", encoding="utf-8")
+        prepared.append((workspace, manager.snapshot_result(workspace)))
+
+    (repo / "app.txt").write_text("target conflict\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "block queue head")
+
+    first = MergeManager().merge(*prepared[0], validate=lambda _project: "PASS")
+    assert first.status == "conflict"
+    assert first.merge_queue_seq == 1
+
+    for expected_seq, (workspace, snapshot) in enumerate(prepared[1:], start=2):
+        result = MergeManager().merge(workspace, snapshot, validate=lambda _project: "PASS")
+        assert result.status == "pending_merge"
+        assert result.merge_queue_seq == expected_seq

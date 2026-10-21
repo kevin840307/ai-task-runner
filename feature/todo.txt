@@ -442,6 +442,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Concurrent Main 開關只控制 Main busy 時能否啟動 Main；不可改寫 Auto policy。
     - Resolver regression 覆蓋 Busy→Worktree 永遠維持 worktree、Always Main/explicit Main 才由 concurrent switch 決定 block/Main。
 [ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
+    - Workspace delivery layer 已加入 repository + captured target branch scoped durable FIFO queue；conflict/recovery/blocked head 保留順位、後續 Main 回 pending_merge，process restart 會重讀同一 merge_queue_seq。Task orchestration/API 尚未接線，因此本項暫不勾完成。
 [x] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
     - 正式 Git identity/path 只由 top-level `workspace/manager.py` + `workspace/worktree.py` 產生；architecture test 鎖定 Runner 不 import workspace、workspace 不 import Runner/UI。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。

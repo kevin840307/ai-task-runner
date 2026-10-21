@@ -115,6 +115,7 @@ class MergeResult:
     verdict: str = ""
     real_merge_failure: bool = False
     conflict_files: tuple[str, ...] = ()
+    merge_queue_seq: int = 0
     detail: str = ""
 
     def as_dict(self) -> dict[str, Any]:

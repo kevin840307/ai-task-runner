@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import Callable
 
+from .merge_queue import MergeQueue
 from .model import MergeResult, PreparedWorkspace, WorkspaceError, WorkspaceSnapshot
 from .worktree import (
     active_git_operations,
@@ -214,12 +215,29 @@ class MergeManager:
                 detail=cleanup,
             )
 
+        queue = MergeQueue(repo, prepared.target_branch)
+        queue_entry, is_queue_head = queue.enqueue(
+            task_id=prepared.task_id,
+            run_number=prepared.run_number,
+            source_sha=source_sha,
+            source_base_sha=prepared.task_base_sha,
+        )
+        if not is_queue_head:
+            return MergeResult(
+                status="pending_merge",
+                merge_queue_seq=queue_entry.seq,
+                detail="Waiting for an earlier Main Task merge",
+            )
+
+        def queued_result(**values: object) -> MergeResult:
+            return MergeResult(merge_queue_seq=queue_entry.seq, **values)
+
         with target_branch_git_lock(repo, prepared.target_branch):
             target_head = branch_head(repo, prepared.target_branch)
             if not target_head:
-                return MergeResult(status="waiting_target_branch")
+                return queued_result(status="waiting_target_branch")
             if not is_ancestor(repo, prepared.task_base_sha, target_head):
-                return MergeResult(
+                return queued_result(
                     status="waiting_target_history",
                     target_head_sha=target_head,
                     detail="Task source base is no longer an ancestor of captured target branch",
@@ -227,7 +245,8 @@ class MergeManager:
             if is_ancestor(repo, source_sha, target_head):
                 managed = _delivery_path(prepared)
                 cleanup = _cleanup_delivery(repo, managed, prepared.target_branch) if managed.exists() else ""
-                return MergeResult(
+                queue.complete(queue_entry)
+                return queued_result(
                     status="merged",
                     target_head_sha=target_head,
                     merged_target_head_sha=target_head,
@@ -243,7 +262,7 @@ class MergeManager:
                 current_branch = git(target, "branch", "--show-current").stdout.strip()
                 current_head = git(target, "rev-parse", "HEAD").stdout.strip()
                 if current_branch != prepared.target_branch or current_head != target_head:
-                    return MergeResult(
+                    return queued_result(
                         status="waiting_target_workspace",
                         target_head_sha=target_head,
                         target_worktree=target,
@@ -260,7 +279,7 @@ class MergeManager:
                             _abort_owned_merge(target, source_sha)
                             operations = ()
                     if operations:
-                        return MergeResult(
+                        return queued_result(
                             status="waiting_target_workspace",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -268,7 +287,7 @@ class MergeManager:
                         )
 
                 if git(target, "status", "--porcelain=v1", "-z").stdout:
-                    return MergeResult(
+                    return queued_result(
                         status="waiting_target_clean",
                         target_head_sha=target_head,
                         target_worktree=target,
@@ -293,7 +312,7 @@ class MergeManager:
                     )
                     if conflicts:
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="conflict",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -302,7 +321,7 @@ class MergeManager:
                             detail=(merge.stderr or merge.stdout or "").strip(),
                         )
                     _abort_owned_merge(target, source_sha)
-                    return MergeResult(
+                    return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
                         target_worktree=target,
@@ -314,7 +333,7 @@ class MergeManager:
                 working_diff = git(target, "diff", "--quiet", check=False)
                 if index_tree.returncode != 0 or working_diff.returncode != 0:
                     _abort_owned_merge(target, source_sha)
-                    return MergeResult(
+                    return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
                         target_worktree=target,
@@ -327,7 +346,7 @@ class MergeManager:
                 if validation_required:
                     if validate is None:
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="validation_required",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -338,7 +357,7 @@ class MergeManager:
                         verdict = str(validate(_target_project(prepared, target)) or "").strip().upper()
                     except Exception as exc:
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -348,7 +367,7 @@ class MergeManager:
                         )
                     if verdict not in _VALIDATION_RESULTS:
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -358,7 +377,7 @@ class MergeManager:
                         )
                     if verdict == "SOURCE_FAIL":
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="source_fail",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -368,7 +387,7 @@ class MergeManager:
                         )
                     if verdict == "TECHNICAL_ERROR":
                         _abort_owned_merge(target, source_sha)
-                        return MergeResult(
+                        return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
                             target_worktree=target,
@@ -384,7 +403,7 @@ class MergeManager:
                     expected_index_tree=index_tree.stdout.strip(),
                 ):
                     _abort_owned_merge(target, source_sha)
-                    return MergeResult(
+                    return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
                         target_worktree=target,
@@ -411,7 +430,8 @@ class MergeManager:
                     raise WorkspaceError("Committed merge does not contain Task snapshot")
                 cleanup_needed = False
                 cleanup_error = _cleanup_delivery(repo, target, prepared.target_branch) if managed else ""
-                return MergeResult(
+                queue.complete(queue_entry)
+                return queued_result(
                     status="merged",
                     target_head_sha=target_head,
                     merged_target_head_sha=merged,
