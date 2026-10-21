@@ -4,6 +4,7 @@ import base64
 import json
 import subprocess
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -651,6 +652,7 @@ def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
                 "kind": "ai-validator",
                 "filename": "review.md",
                 "content_base64": base64.b64encode(b"review me").decode("ascii"),
+                "request_id": "upload-stage-1",
             },
         )
         assert ".ai-task-runner" in staged["path"]
@@ -658,10 +660,33 @@ def test_task_upload_http_stage_and_cancel(tmp_path: Path) -> None:
         cancelled = _json_request(
             f"{base}/api/tasks/upload/cancel",
             method="POST",
-            body={"project": str(project), "path": staged["path"]},
+            body={
+                "project": str(project),
+                "path": staged["path"],
+                "request_id": "upload-cancel-1",
+            },
         )
         assert cancelled["cancelled"] is True
         assert server.state.task_uploads.staged_exists(project, staged["path"]) is False
+
+        bad_request = urllib.request.Request(
+            f"{base}/api/tasks/upload/stage",
+            data=json.dumps({
+                "project": str(project),
+                "item_id": "item-http-upload",
+                "kind": "unsupported",
+                "filename": "review.md",
+                "content_base64": base64.b64encode(b"review me").decode("ascii"),
+                "request_id": "upload-error-1",
+            }).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(bad_request, timeout=5)
+        payload = json.loads(exc_info.value.read().decode("utf-8"))
+        assert payload["request_id"] == "upload-error-1"
+        assert payload["code"] == "invalid_request"
     finally:
         server.shutdown()
         server.server_close()
