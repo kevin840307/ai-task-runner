@@ -1134,8 +1134,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     overview.appendChild(heading);
     overview.appendChild(renderTaskRows(task.items));
 
+    const policy = taskEditPolicy(task);
     const lifecycleStatus = String(task.status || "new");
-    const editable = lifecycleStatus === "new";
+    const editable = !!policy.editable;
     const actions = document.createElement("div");
     actions.className = "task-workspace-info-actions";
     const restrictions = [];
@@ -1145,7 +1146,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = "Delete Task";
-    if (editable) {
+    if (policy.can_delete) {
       remove.onclick = () => void deleteTask();
     } else {
       remove.disabled = true;
@@ -1161,16 +1162,23 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     edit.textContent = taskList ? "Open Task List" : "Edit Task";
     if (taskList) {
       edit.onclick = () => beginTaskListEdit();
+      edit.textContent = editable ? "Edit Task List" : "Open Task List";
       if (!editable) restrictions.push("Task List is view-only. " + taskMutationBlockedReason(task) + ".");
-    } else if (editable) {
-      edit.onclick = () => beginTaskEdit(0, "info");
     } else {
-      edit.disabled = true;
-      edit.title = taskMutationBlockedReason(task);
-      restrictions.push(taskMutationBlockedReason(task) + ".");
+      const itemPolicy = Array.isArray(policy.items) ? policy.items[0] : null;
+      if (editable && itemPolicy?.editable !== false) {
+        edit.onclick = () => beginTaskEdit(0, "info");
+      } else {
+        edit.disabled = true;
+        edit.title = String(itemPolicy?.reason || taskMutationBlockedReason(task));
+        restrictions.push(edit.title + ".");
+      }
     }
     actions.appendChild(edit);
 
+    if (policy.restart_required) {
+      restrictions.unshift("Current paused Task configuration changed. Restart the current item instead of resuming its frozen run.");
+    }
     if (restrictions.length) {
       const note = document.createElement("p");
       note.className = "task-workspace-action-note";
@@ -1242,18 +1250,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const task = state.task || {};
     const body = byId("taskWorkspaceBody");
     body.innerHTML = "";
-    const editable = String(task.status || "") === "new" && ensureTaskEditDraft();
-    if (editable) body.appendChild(renderDraftTitleField());
+    const policy = taskEditPolicy(task);
+    const editable = policy.editable && ensureTaskEditDraft();
+    if (editable && policy.can_rename) body.appendChild(renderDraftTitleField());
     const intro = document.createElement("div");
     intro.className = "task-workspace-intro";
     intro.innerHTML = editable
-      ? "<strong>Task order</strong><span>Add, edit, remove or reorder before Save.</span>"
+      ? (String(task.status || "") === "paused"
+        ? "<strong>Task order</strong><span>Paused · completed items are locked; current changes require restart.</span>"
+        : "<strong>Task order</strong><span>Add, edit, remove or reorder before Save.</span>")
       : "<strong>Task order</strong><span>Canonical ordered items</span>";
     body.appendChild(intro);
     const blockedReason = editable ? "" : taskMutationBlockedReason(task);
     body.appendChild(renderTaskRows(
       editable ? state.editDraft.items : task.items,
-      { editable, disabledEditReason: blockedReason },
+      { editable, itemPolicies: policy.items, disabledEditReason: blockedReason },
     ));
 
     const actions = document.createElement("div");
@@ -1266,19 +1277,26 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     yaml.id = "taskWorkspaceYamlButton";
     yaml.type = "button";
     yaml.textContent = tr("task.edit_yaml", "Edit YAML");
-    if (editable) {
-      add.onclick = addTaskListItem;
-      yaml.onclick = () => void openYaml();
-    } else {
-      add.disabled = true;
-      add.title = blockedReason;
-      yaml.disabled = true;
-      yaml.title = blockedReason;
-    }
+    add.disabled = !editable || !policy.can_add_item;
+    add.title = add.disabled ? String(blockedReason || policy.reason || "") : "";
+    if (!add.disabled) add.onclick = addTaskListItem;
+    yaml.disabled = !editable || !policy.can_edit_yaml;
+    yaml.title = yaml.disabled
+      ? (String(task.status || "") === "paused" && Number(policy.completed_item_count || 0) > 0
+        ? "Completed Task items are frozen; edit current or future items individually"
+        : String(blockedReason || policy.reason || ""))
+      : "";
+    if (!yaml.disabled) yaml.onclick = () => void openYaml();
     actions.append(add, yaml);
     if (editable) {
       const prompts = promptsButton();
       if (prompts) actions.appendChild(prompts);
+      if (policy.restart_required) {
+        const note = document.createElement("p");
+        note.className = "task-workspace-action-note";
+        note.textContent = "Current paused Task changed · restart required before continuing.";
+        body.appendChild(note);
+      }
     } else {
       const note = document.createElement("p");
       note.className = "task-workspace-action-note";
@@ -1297,7 +1315,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   async function deleteTask() {
     const task = state?.task;
-    if (!task || String(task.status || "") !== "new") return;
+    if (!task || !taskEditPolicy(task).can_delete) return;
     const ok = await confirmDialog?.({
       title: "Delete Task?",
       message: "This deletes the durable Task record. It does not delete Project files.",
@@ -1327,7 +1345,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   async function openYaml() {
-    if (state?.kind === "task" && !ensureTaskEditDraft()) return;
+    if (state?.kind === "task") {
+      if (!ensureTaskEditDraft() || !taskEditPolicy().can_edit_yaml) return;
+    }
     const draft = editorDraft();
     if (!draft) return;
     try {
@@ -1416,7 +1436,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function beginTaskEdit(index, returnRoute) {
     const task = state?.task;
-    if (!task || String(task.status || "") !== "new" || !ensureTaskEditDraft()) return;
+    if (!task || !ensureTaskEditDraft()) return;
+    const item = state.editDraft?.items?.[index];
+    if (!taskItemEditPolicy(index, item).editable) return;
     state.editorReturn = returnRoute === "list" ? "list" : "info";
     state.index = Math.max(0, Math.min(Number(index) || 0, state.editDraft.items.length - 1));
     state.saveRequestId = "";
@@ -1437,7 +1459,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const yamlRoute = state.route === "yaml";
       if (footer) footer.hidden = !(listRoute || editorRoute || yamlRoute);
       if (save) {
-        const canSaveList = listRoute && String(state.task?.status || "") === "new" && !!state.editDraft;
+        const canSaveList = listRoute && taskEditPolicy(state.task).editable && !!state.editDraft;
         save.hidden = !(editorRoute || canSaveList || yamlRoute);
         save.textContent = yamlRoute ? "Apply YAML" : (canSaveList ? "Save Task List" : "Save Task");
       }
@@ -1637,7 +1659,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.editOriginal = "";
       state.saveRequestId = "";
       state.route = returnRoute === "list" && state.task.items.length > 1 ? "list" : "info";
-      if (state.route === "list" && String(state.task.status || "") === "new") {
+      if (state.route === "list" && taskEditPolicy(state.task).editable) {
         state.editDraft = taskDraftFromRecord(state.task);
         state.editOriginal = draftSignature(state.editDraft);
       }
