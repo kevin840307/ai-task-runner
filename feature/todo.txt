@@ -258,10 +258,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Create Task 後產生持久 Task ID、狀態 New、runtime idle；建立後不自動 Run。
 [x] Draft 失敗、格式不合法、缺欄位、空 Prompt、Backend 503 / timeout 時顯示可理解錯誤，且錯誤框不能被 modal、drawer 或 Composer 遮住。
 [x] Create / Dismiss / Retry / Edit / Back / Create Again 必須有明確的重複操作語義；不能重複建立同一 Draft。
-[ ] Prototype 的 @task 隨機單筆 / 多筆；測試可使用固定 fixture / seed，避免自動化測試被隨機結果影響。
-[ ] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
+[x] Prototype 的 @task 隨機單筆 / 多筆；測試可使用固定 fixture / seed，避免自動化測試被隨機結果影響。
+    - 正式 production 不移植 random branching；`test_task_draft_auto_deterministically_accepts_single_or_list` 固定覆蓋 auto 產生 1/2 items，Browser fixture 另覆蓋 @task-single / @task-list。
+[x] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
+    - deterministic Browser bridge 以真 TaskDraftService owner 注入 mock:error / mock:invalid，驗證 backend failure 與 invalid structured data 皆走 production error UI。
 [ ] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在、Worktree 不可建立都要有測試。
-[ ] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
+[x] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
+    - Browser fixture 直接實例化 production TaskDraftService，response 經 validate_generated_draft / validate_task_draft_for_create；沒有 mock-only TaskDraft class/schema。
 
 
 10. Task、Task List、狀態與編輯政策
@@ -588,9 +591,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - 真 Chromium E2E 比對 Drawer 前/List/Editor/關閉後 Chat x/y/width/height，確認 window + Chat message scroll 不變；同時驗證 Task Workspace overlay 為 fixed 且 z-index >= 520。2026-10-21 Browser 34/34 PASS。
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
-[ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
+[x] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
+    - 自動化測試刻意移除 randomness：auto 用參數化 1/2-item unit fixture，Browser @task-single 固定 1 筆、@task-list 固定 2 筆，仍共用 production TaskDraft validator。
 [x] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
-[ ] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
+[x] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
+    - production 不使用隨機 Ask；Browser deterministic @ask-demo fixture 固定覆蓋三題、多選、Other/custom、文字題、Next、Submit、Cancel、validation 與 Queue unblock。Native Ask 是否出現仍只由 Agent adapter 決定。
 [x] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
     - `test_browser_workflow_settings_manager_and_prompt_crud` 的 deterministic Browser bridge 實際排入 3 筆 Queue，驗證 FIFO、Edit Save、Edit Cancel、空白 Save error、Delete、Stop 保留 queued item，以及切換新/舊 Chat session 後 Queue scope；2026-10-21 Browser lane PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
@@ -598,7 +603,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
 [x] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
     - service-level restart test 與 /api/tasks/create-from-draft HTTP retry 均重用同 request_id，要求 duplicate=true、task_id 相同且 durable Task count=1。
-[ ] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
+[x] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
+    - production 沒有 `_chatDraft` canonical store；HTTP TaskDraft generate/update regression 明確要求 Create 前無 task_id、TaskService list=0、無 tasks.json、Runner state.json / runner-process.json / stop.request / legacy Runner history，Browser 同時驗證 Board 無 Draft card。
 [ ] 只有實際執行 Browser / API / Live 測試並保存結果後，才能將對應項目標記完成。
 [ ] 24H soak 排在單元、整合、Browser、故障恢復測試之後；只有實際跑完才能宣稱 24H 驗證完成。
 
