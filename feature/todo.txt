@@ -537,7 +537,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [x] Runner Core 仍是唯一執行入口；Chat service 不複製 FlowEngine、StageExecutor、retry / recovery / resume 或 Task lifecycle。
     - Architecture regression 鎖定 chat_service / chat_agent_service / chat_ask / task_draft_service 不可引用 WorkflowRunner / FlowEngine / StageExecutor / runner.api；普通 Chat 只走 Agent adapter，Task execution 仍保留給 Runner public action boundary。
-[ ] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
+[x] 新增正式 TaskDraft schema 與 validator，將 AI 回應轉為既有 canonical Task / RunRequest 資料。
+    - `ui/task_models.py` 是單一 TaskDraft/Create schema owner；`TaskDraftService` 的 AI output 與 `TaskService` create/update/YAML 都共用 `validate_generated_draft` / `validate_task_draft_for_create`，不維護第二份 mock schema。
 [x] 新增共用 generate-task service：輸入 spec、Project context 與 mode（auto / single / list），後端套用固定 Prompt，輸出 TaskDraft。
     - Production owner 是 ui/task_draft_service.py；auto/single/list 共用同一 generate() 與 canonical validator。
 [x] Generate Task 的固定 Prompt 參照 Generate Workflow 現有模式，但不得複製一套 Workflow Generator runtime。
