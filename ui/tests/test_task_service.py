@@ -119,6 +119,52 @@ def test_task_draft_tool_timeout_is_fail_closed(tmp_path: Path, monkeypatch) -> 
         )
 
 
+def test_missing_project_fails_before_task_draft_agent_or_task_validation(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    missing = repo / "missing-project"
+    calls = 0
+
+    def fake_runner(**kwargs):
+        nonlocal calls
+        calls += 1
+        return {
+            "draft": {
+                "title": "Should not run",
+                "items": [{"title": "One", "prompt": "Do one"}],
+            }
+        }
+
+    drafts = TaskDraftService(repo, runner=fake_runner)
+    with pytest.raises(ValueError, match="Selected Project does not exist"):
+        drafts.generate(
+            missing,
+            spec="do not invoke agent",
+            draft_mode="single",
+            backend="qwen",
+            workflow="workflow.yaml",
+            request_id="missing-project-draft",
+        )
+    assert calls == 0
+
+    tasks = TaskService()
+    with pytest.raises(ValueError, match="Selected Project does not exist"):
+        tasks.validate(
+            missing,
+            {
+                "title": "Missing project",
+                "items": [{
+                    "title": "One",
+                    "prompt": "Do one",
+                    "workflow": "workflow.yaml",
+                    "project": str(missing),
+                    "workspace": "auto",
+                }],
+            },
+        )
+
+
 def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
