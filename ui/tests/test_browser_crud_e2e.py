@@ -1815,6 +1815,143 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
+        project_row = state.projects()[0]
+        created = state.tasks.create(
+            root,
+            {
+                "title": "Paused editable list",
+                "items": [
+                    {
+                        "title": "Completed child",
+                        "prompt": "Frozen completed prompt",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "auto",
+                    },
+                    {
+                        "title": "Current child",
+                        "prompt": "Current paused prompt",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "main",
+                    },
+                    {
+                        "title": "Future child",
+                        "prompt": "Future prompt",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "worktree",
+                    },
+                ],
+            },
+            request_id="paused-browser-create",
+            project_id=project_row["project_id"],
+        )
+        task_path = state.tasks._state_path(root)
+        raw = json.loads(task_path.read_text(encoding="utf-8"))
+        raw["tasks"][0]["status"] = "paused"
+        raw["tasks"][0]["completed_item_count"] = 1
+        task_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function("document.querySelectorAll('#tasksBoardPaused .tasks-board-card').length === 1")
+            page.locator("#tasksBoardPaused .tasks-board-card").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+
+            list_button = page.locator("#taskWorkspaceOpenList")
+            assert list_button.is_enabled()
+            assert list_button.inner_text() == "Edit Task List"
+            assert page.locator("#taskWorkspaceDeleteTask").is_disabled()
+
+            list_button.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            rows = page.locator(".task-workspace-list-row")
+            assert rows.count() == 3
+            assert "COMPLETED" in rows.nth(0).locator("small").inner_text()
+            assert "CURRENT" in rows.nth(1).locator("small").inner_text()
+            assert "FUTURE" in rows.nth(2).locator("small").inner_text()
+
+            completed_actions = rows.nth(0).locator(".task-workspace-list-actions button")
+            assert all(button.is_disabled() for button in completed_actions.all())
+            current = rows.nth(1)
+            assert current.locator(".task-workspace-row-edit").is_enabled()
+            assert current.get_by_role("button", name="Remove").is_disabled()
+            assert current.get_by_title("Move up").is_disabled()
+            assert current.get_by_title("Move down").is_disabled()
+            future = rows.nth(2)
+            assert future.locator(".task-workspace-row-edit").is_enabled()
+            assert future.get_by_title("Move up").is_disabled()
+            assert page.locator("#taskWorkspaceAddTask").is_enabled()
+            assert page.locator("#taskWorkspaceYamlButton").is_disabled()
+            assert "Completed Task items are frozen" in (
+                page.locator("#taskWorkspaceYamlButton").get_attribute("title") or ""
+            )
+
+            current.locator(".task-workspace-row-edit").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspacePrompt", "Edited current prompt")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert "restart required" in page.locator(".task-workspace-action-note").inner_text().lower()
+
+            saved = state.tasks.get(root, created["task_id"])
+            assert saved["status"] == "paused"
+            assert saved["restart_required"] is True
+            assert saved["items"][0]["prompt"] == "Frozen completed prompt"
+            assert saved["items"][1]["prompt"] == "Edited current prompt"
+            assert saved["edit_policy"]["items"][0]["editable"] is False
+            assert saved["edit_policy"]["items"][1]["editable"] is True
+            assert errors == []
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_browser_workflow_settings_manager_and_prompt_crud() -> None:@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
