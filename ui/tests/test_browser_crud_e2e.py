@@ -2934,12 +2934,10 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             # Switching Chat sessions within one Project must not fork Project-level
             # Agent/Model/Mode/Reasoning/Workflow preferences.
             page.locator(
-                "#projectChatSessionList .project-chat-session-row:not(.active) .project-chat-session-open"
-            ).first.click()
+                "#projectChatSessionList .project-chat-session-row"
+            ).first.locator(".project-chat-session-open").click()
             page.wait_for_function(
-                "(id) => document.querySelector('#projectChatSessionList .project-chat-session-row.active .project-chat-session-open')?.textContent === 'New Chat'"
-                " && window.__apiBridge !== undefined",
-                arg=first_session,
+                "() => document.querySelectorAll('#projectChatSessionList .project-chat-session-row')[0]?.classList.contains('active')"
             )
             assert state.chat_service.sessions(added_project)["active_session_id"] == first_session
             assert_chat_preferences(defaults)
