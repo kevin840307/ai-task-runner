@@ -166,6 +166,39 @@ def test_task_draft_is_transient_structured_and_mode_checked(tmp_path: Path) -> 
     assert duplicate["duplicate"] is True
     assert duplicate["draft_id"] == value["draft_id"]
 
+@pytest.mark.parametrize("count", [1, 2])
+def test_task_draft_auto_deterministically_accepts_single_or_list(
+    tmp_path: Path,
+    count: int,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+
+    service = TaskDraftService(
+        repo,
+        runner=lambda **kwargs: {
+            "draft": {
+                "title": "Auto draft",
+                "items": [
+                    {"title": f"Item {index + 1}", "prompt": f"Do {index + 1}"}
+                    for index in range(count)
+                ],
+            }
+        },
+    )
+    value = service.generate(
+        project,
+        spec=f"auto-{count}",
+        draft_mode="auto",
+        backend="qwen",
+        workflow="workflow.yaml",
+        request_id=f"auto-{count}",
+    )
+    assert value["mode"] == "auto"
+    assert len(value["draft"]["items"]) == count
+
+
 def test_task_draft_spec_boundaries_preserve_text_and_fail_closed(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
