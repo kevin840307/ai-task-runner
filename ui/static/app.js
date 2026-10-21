@@ -394,18 +394,21 @@ function taskWorkspaceAssets(options = {}) {
     prompts: suppliedPrompts.length ? suppliedPrompts : (state.studioFiles.prompts || []),
   };
 }
+let boardTaskOpenToken = 0;
 async function openBoardTask(task, options = {}) {
+  const token = ++boardTaskOpenToken;
   const projectPath = String(task?.project || "").trim();
   if (!projectPath) return showActionError("Task Project is missing.", "Open Task failed");
   try {
     const assets = await api("/api/studio/files?x=1&project=" + encodeURIComponent(projectPath), { timeoutMs: 15000 });
+    if (token !== boardTaskOpenToken) return;
     taskWorkspace.openTask(task, {
       ...options,
       workflows: Array.isArray(assets?.workflows) ? assets.workflows : [],
       prompts: Array.isArray(assets?.prompts) ? assets.prompts : [],
     });
   } catch (error) {
-    showActionError(error.message, "Open Task failed");
+    if (token === boardTaskOpenToken) showActionError(error.message, "Open Task failed");
   }
 }
 tasksBoard = createTasksBoardController({

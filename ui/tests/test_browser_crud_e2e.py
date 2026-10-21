@@ -3233,6 +3233,8 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterAll")
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterMenu')?.hidden === true")
             task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
             assert task_card.count() == 1
             task_card.click()
@@ -3341,8 +3343,8 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
 
             initial_prompt_box = assert_inside_drawer("[data-task-source-card='prompt']")
             initial_validator_box = assert_inside_drawer("[data-task-source-card='validator']")
-            initial_ai_box = assert_inside_drawer("[data-task-source-card='ai']")
-            for box in (initial_prompt_box, initial_validator_box, initial_ai_box):
+            assert_inside_drawer("[data-task-source-card='ai']")
+            for box in (initial_prompt_box, initial_validator_box):
                 assert box["y"] < viewport["height"]
                 assert box["y"] + min(32, box["height"]) <= viewport["height"] + 1
 

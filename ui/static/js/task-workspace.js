@@ -908,7 +908,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       upload.type = "button";
       upload.className = "task-workspace-upload";
       upload.dataset.taskUploadField = key;
-      upload.textContent = "Upload file";
+      upload.textContent = tr("task.upload_file", "Upload file");
       upload.addEventListener("click", () => chooseUpload(key, upload));
       row.append(input, upload);
       return { row, input };
