@@ -53,3 +53,55 @@
    trigger remains reachable so Rename/Remove dialogs can own Escape above it.
    The menu itself is already portaled at z-index 4900. */
 body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
+
+
+.task-workspace-result-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border, #d6d9de);
+  border-radius: 12px;
+  background: var(--panel-soft, var(--surface-2, rgba(127, 127, 127, 0.06)));
+}
+.task-workspace-result-head,
+.task-workspace-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-workspace-result-head { justify-content: space-between; }
+.task-workspace-worktree-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--border, #d6d9de);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.task-workspace-result-meta {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
+  gap: 7px 12px;
+  margin: 0;
+}
+.task-workspace-result-meta dt {
+  color: var(--text-muted, #667085);
+  font-size: 12px;
+}
+.task-workspace-result-meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.task-workspace-result-detail {
+  margin: 0;
+  color: var(--text-muted, #667085);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.task-workspace-result-actions { justify-content: flex-end; }

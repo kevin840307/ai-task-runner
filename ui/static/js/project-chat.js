@@ -1460,23 +1460,40 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
-  async function createSession() {
+  async function createSessionRecord({ title = "" } = {}) {
     const path = projectPath();
-    if (!path) return;
+    if (!path) throw new Error("Project is required");
+    const data = await api("/api/chat/session/create", {
+      method: "POST",
+      body: JSON.stringify({ project: path, title: String(title || ""), request_id: requestId() }),
+    });
+    sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
+    activeSessionId = String(data.session_id || data.active_session_id || "");
+    eventCursor = 0;
+    renderSessions();
+    await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
+    return activeSessionId;
+  }
+
+  async function createSession() {
     try {
-      const data = await api("/api/chat/session/create", {
-        method: "POST",
-        body: JSON.stringify({ project: path, request_id: requestId() }),
-      });
-      sessions = Array.isArray(data.sessions) ? data.sessions : sessions;
-      activeSessionId = String(data.session_id || data.active_session_id || "");
-      eventCursor = 0;
-      renderSessions();
-      await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
+      await createSessionRecord();
       showToast?.("New Chat created");
     } catch (error) {
       showError?.(error.message, "Create Chat failed");
     }
+  }
+
+  async function openMergeChat({ title = "Merge Chat", prompt = "" } = {}) {
+    const sessionId = await createSessionRecord({ title });
+    const input = byId("projectChatInput");
+    if (!input) return sessionId;
+    input.value = String(prompt || "");
+    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    suggestionIndex = 0;
+    renderSuggestions();
+    input.focus();
+    return sessionId;
   }
 
   async function selectSession(sessionId) {
@@ -1695,6 +1712,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     refreshQueue,
     refreshAsk,
     renderPreferences,
+    openMergeChat,
     activeSessionId: () => activeSessionId,
   };
 }

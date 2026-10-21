@@ -4,7 +4,7 @@ function cloneDraft(value) {
 }
 function draftSignature(value) { return JSON.stringify(value || {}); }
 
-export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged, openPrompts }) {
+export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged, openPrompts, openMergeChat }) {
   let state = null;
   let pendingUploadActions = Promise.resolve();
   let overlay = null;
@@ -1134,6 +1134,79 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     overview.appendChild(heading);
     overview.appendChild(renderTaskRows(task.items));
 
+    const workspaceResult = task?.run?.workspace_result && typeof task.run.workspace_result === "object"
+      ? task.run.workspace_result
+      : null;
+    const mergeResult = workspaceResult?.merge && typeof workspaceResult.merge === "object"
+      ? workspaceResult.merge
+      : null;
+    if (workspaceResult?.snapshot) {
+      const resultCard = document.createElement("section");
+      resultCard.className = "task-workspace-result-card";
+      const resultHead = document.createElement("div");
+      resultHead.className = "task-workspace-result-head";
+      const resultTitle = document.createElement("strong");
+      resultTitle.textContent = "Workspace Result";
+      const badge = document.createElement("span");
+      badge.id = "taskWorkspaceWorktreeBadge";
+      badge.className = "task-workspace-worktree-badge";
+      badge.textContent = String(workspaceResult.effective_mode || task?.run?.workspace?.effective_mode || "worktree").toUpperCase();
+      resultHead.append(resultTitle, badge);
+      resultCard.appendChild(resultHead);
+
+      const resultMeta = document.createElement("dl");
+      resultMeta.className = "task-workspace-result-meta";
+      for (const [label, value, id] of [
+        ["Branch", String(workspaceResult.branch || task?.run?.workspace?.task_branch || ""), "taskWorkspaceBranch"],
+        ["Path", String(workspaceResult.path || task?.run?.workspace?.worktree_path || ""), "taskWorkspacePath"],
+        ["Merge", String(mergeResult?.status || task?.run?.phase || "ready"), "taskWorkspaceMergeStatus"],
+      ]) {
+        const dt = document.createElement("dt"); dt.textContent = label;
+        const dd = document.createElement("dd"); dd.id = id; dd.textContent = value || "—";
+        resultMeta.append(dt, dd);
+      }
+      resultCard.appendChild(resultMeta);
+
+      if (Array.isArray(mergeResult?.conflict_files) && mergeResult.conflict_files.length) {
+        const conflicts = document.createElement("p");
+        conflicts.id = "taskWorkspaceConflicts";
+        conflicts.className = "task-workspace-result-detail";
+        conflicts.textContent = "Conflicts: " + mergeResult.conflict_files.join(", ");
+        resultCard.appendChild(conflicts);
+      } else if (mergeResult?.detail) {
+        const detail = document.createElement("p");
+        detail.className = "task-workspace-result-detail";
+        detail.textContent = String(mergeResult.detail);
+        resultCard.appendChild(detail);
+      }
+
+      const resultActions = document.createElement("div");
+      resultActions.className = "task-workspace-result-actions";
+      const merge = document.createElement("button");
+      merge.id = "taskWorkspaceMerge";
+      merge.type = "button";
+      merge.textContent = "Merge";
+      const mergeStatus = String(mergeResult?.status || "");
+      const mergeBlocked = new Set(["conflict", "source_fail", "technical_error", "validation_required", "waiting_target_history"]);
+      merge.disabled = mergeBlocked.has(mergeStatus) || mergeStatus === "merged" || mergeStatus === "no_changes";
+      merge.title = merge.disabled && mergeBlocked.has(mergeStatus)
+        ? "Resolve this merge state before retrying direct Merge"
+        : "";
+      merge.onclick = () => void mergeTaskResult();
+      resultActions.appendChild(merge);
+
+      if (typeof openMergeChat === "function") {
+        const mergeChat = document.createElement("button");
+        mergeChat.id = "taskWorkspaceMergeChat";
+        mergeChat.type = "button";
+        mergeChat.textContent = "Merge Chat";
+        mergeChat.onclick = () => void openTaskMergeChat();
+        resultActions.appendChild(mergeChat);
+      }
+      resultCard.appendChild(resultActions);
+      overview.appendChild(resultCard);
+    }
+
     const policy = taskEditPolicy(task);
     const lifecycleStatus = String(task.status || "new");
     const editable = !!policy.editable;
@@ -1310,6 +1383,72 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       error.className = "task-workspace-error";
       error.textContent = state.error;
       body.appendChild(error);
+    }
+  }
+
+  function mergeChatPrompt(task) {
+    const run = task?.run && typeof task.run === "object" ? task.run : {};
+    const prepared = run.workspace && typeof run.workspace === "object" ? run.workspace : {};
+    const result = run.workspace_result && typeof run.workspace_result === "object" ? run.workspace_result : {};
+    const merge = result.merge && typeof result.merge === "object" ? result.merge : {};
+    const snapshot = result.snapshot && typeof result.snapshot === "object" ? result.snapshot : {};
+    const conflicts = Array.isArray(merge.conflict_files) ? merge.conflict_files : [];
+    return [
+      "Help me integrate this completed AI Task Runner result into the captured Project branch.",
+      "Do not restart or redo the original feature development. Preserve the latest Project changes and adapt only the completed Task result needed for integration.",
+      "",
+      "Task: " + String(task?.title || task?.task_id || ""),
+      "Task ID: " + String(task?.task_id || ""),
+      "Run: " + String(run.run_number || ""),
+      "Project: " + String(task?.project || ""),
+      "Target branch: " + String(prepared.target_branch || ""),
+      "Task branch: " + String(result.branch || prepared.task_branch || ""),
+      "Worktree: " + String(result.path || prepared.worktree_path || ""),
+      "Task snapshot: " + String(snapshot.task_snapshot_sha || ""),
+      "Merge status: " + String(merge.status || run.phase || ""),
+      conflicts.length ? "Conflict files: " + conflicts.join(", ") : "",
+      merge.detail ? "Merge detail: " + String(merge.detail) : "",
+      "",
+      "Inspect the latest Project state and the retained Task worktree/branch, then help resolve only this integration or merge problem safely.",
+    ].filter((line) => line !== "").join("\n");
+  }
+
+  async function openTaskMergeChat() {
+    const task = state?.task;
+    if (!task || typeof openMergeChat !== "function") return;
+    try {
+      await openMergeChat({
+        project: String(task.project || ""),
+        title: "Merge · " + String(task.title || task.task_id || "Task"),
+        prompt: mergeChatPrompt(task),
+      });
+      closeNow({ restore: false });
+    } catch (error) {
+      showError?.(error.message, "Open Merge Chat failed");
+    }
+  }
+
+  async function mergeTaskResult() {
+    const task = state?.task;
+    if (!task) return;
+    const button = byId("taskWorkspaceMerge");
+    if (button?.disabled) return;
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    try {
+      const updated = await api("/api/tasks/merge", {
+        method: "POST",
+        body: JSON.stringify({ project: task.project, task_id: task.task_id }),
+      });
+      state.task = cloneDraft(updated);
+      state.error = "";
+      render();
+      await onTaskChanged?.();
+    } catch (error) {
+      showError?.(error.message, "Merge Task failed");
+      render();
     }
   }
 

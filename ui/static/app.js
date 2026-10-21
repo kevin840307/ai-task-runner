@@ -375,6 +375,7 @@ const confirmDialog = (options) => window.UiDialogs.confirm(options);
 const inputDialog = (options) => window.UiDialogs.input(options);
 const choiceDialog = (options) => window.UiDialogs.choice(options);
 let tasksBoard = null;
+let projectChat = null;
 const taskWorkspace = createTaskWorkspaceController({
   api,
   confirmDialog,
@@ -383,6 +384,18 @@ const taskWorkspace = createTaskWorkspaceController({
   openPrompts: async () => {
     await switchView("prompt");
     showToast("Prompt assets are managed in Prompts");
+  },
+  openMergeChat: async ({ project, title, prompt }) => {
+    const targetPath = String(project || "").trim();
+    let target = state.projects.find((item) => sameProjectPath(item.path, targetPath));
+    if (!target) {
+      await refreshProjectStatuses();
+      target = state.projects.find((item) => sameProjectPath(item.path, targetPath));
+    }
+    if (!target) throw new Error("Task Project is not available");
+    if (!sameProjectPath(state.project?.path, targetPath)) await selectProject(target);
+    else await switchView("project-chat");
+    return projectChat.openMergeChat({ title, prompt });
   },
 });
 function taskWorkspaceAssets(options = {}) {
@@ -418,7 +431,7 @@ tasksBoard = createTasksBoardController({
   getCurrentProject: () => state.project,
   showError: showActionError,
 });
-const projectChat = createProjectChatController({
+projectChat = createProjectChatController({
   api,
   inputDialog,
   confirmDialog,

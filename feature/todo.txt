@@ -69,6 +69,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
 [x] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
 [ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
+    - Production handoff 已實作：Workspace Result → Merge Chat 一律呼叫 canonical /api/chat/session/create 後才預填 context，不寫入原 session；待 Browser CI 通過後勾選。
 [x] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [x] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
 [x] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
@@ -102,6 +103,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
 [x] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
 [ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
+    - openMergeChat 預填後直接重用 canonical autosizeTextarea(min 46/max 180)；已補 Browser 高度 assertion，待 CI 通過後勾選。
 [x] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
 [x] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
 [x] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
@@ -619,6 +621,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
     - `test_task_info_explains_non_new_edit_and_delete_block` 真 Chromium 驗證 Ongoing Task 的 Delete disabled；Task List 可進入唯讀檢視，但 child Edit、Add Task、YAML 全 disabled 並顯示 Pause 原因，Save 不出現。
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
+    - 已新增 deterministic Chromium case 覆蓋 MAIN badge、Branch、Path、conflict status、Merge disabled、Merge Chat handoff/new session/composer autosize；待 Browser lane 實際 PASS 後勾選。
 [x] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
     - 自動化測試刻意移除 randomness：auto 用參數化 1/2-item unit fixture，Browser @task-single 固定 1 筆、@task-list 固定 2 筆，仍共用 production TaskDraft validator。
 [x] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。

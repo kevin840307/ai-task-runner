@@ -179,7 +179,7 @@ def _bridge_for(state: UIState):
                 elif path == "/api/project/preferences":
                     data = state.project_preferences.get(project)
                 elif path == "/api/tasks":
-                    data = state.tasks.list(project)
+                    data = state.task_runs.list(project)
                 elif path == "/api/chat/ask":
                     session_id = query.get("session_id", [""])[0]
                     data = state.chat_service.ask(project, session_id)
@@ -742,6 +742,147 @@ def _bridge_for(state: UIState):
             }
 
     return bridge
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        active = state.chat_service.sessions(root)["active_session_id"]
+        state.chat_service.append_message(root, active, "user", "existing conversation")
+        state.chat_service.append_message(root, active, "assistant", "existing reply")
+        original_messages = state.chat_service.messages(root, active)["messages"]
+
+        created = state.tasks.create(
+            root,
+            {
+                "title": "Conflict delivery",
+                "items": [{
+                    "title": "One",
+                    "prompt": "Implement one",
+                    "workflow": "workflow.yaml",
+                    "project": str(root),
+                    "workspace": "main",
+                }],
+            },
+            request_id="browser-merge-task",
+            project_id=state.project_identity(root)["project_id"],
+        )
+        task_id = created["task_id"]
+        workspace_meta = {
+            "task_id": task_id,
+            "run_number": 1,
+            "requested_mode": "main",
+            "effective_mode": "main",
+            "target_branch": "future-ui-implementation",
+            "target_head_sha_at_start": "abc123",
+            "task_branch": f"local/task/{task_id}-r1",
+            "task_base_sha": "abc123",
+            "repository_root": str(root),
+            "repository_identity": str(root / ".git"),
+            "source_project_root": str(root),
+            "worktree_path": str(root.parent / "worktrees" / f"{task_id}-r1"),
+            "project_root": str(root.parent / "worktrees" / f"{task_id}-r1"),
+        }
+        state.tasks.begin_run(
+            root,
+            task_id,
+            request_id="browser-merge-run",
+            workspace=workspace_meta,
+        )
+        state.tasks.transition_run(
+            root,
+            task_id,
+            1,
+            phase="conflict",
+            status="paused",
+            increment_merge_failure=True,
+            workspace_result={
+                "snapshot": {
+                    "task_snapshot_sha": "def456",
+                    "no_changes": False,
+                    "created_commit": True,
+                },
+                "effective_mode": "main",
+                "branch": workspace_meta["task_branch"],
+                "path": workspace_meta["worktree_path"],
+                "merge": {
+                    "status": "conflict",
+                    "real_merge_failure": True,
+                    "conflict_files": ["app.py", "ui/panel.js"],
+                    "detail": "automatic merge conflict",
+                },
+            },
+        )
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser_instance = _launch_browser(playwright)
+            page = browser_instance.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for style in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(style))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function("document.querySelectorAll('.tasks-board-card').length === 1")
+            page.locator(".tasks-board-card").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+
+            assert page.locator("#taskWorkspaceWorktreeBadge").inner_text() == "MAIN"
+            assert page.locator("#taskWorkspaceBranch").inner_text() == workspace_meta["task_branch"]
+            assert page.locator("#taskWorkspacePath").inner_text() == workspace_meta["worktree_path"]
+            assert page.locator("#taskWorkspaceMergeStatus").inner_text() == "conflict"
+            assert page.locator("#taskWorkspaceMerge").is_disabled()
+            assert page.locator("#taskWorkspaceMergeChat").is_enabled()
+            assert "app.py" in page.locator("#taskWorkspaceConflicts").inner_text()
+
+            page.click("#taskWorkspaceMergeChat")
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.wait_for_function("document.querySelector('#projectChatInput')?.value.includes('Merge status: conflict')")
+
+            sessions = state.chat_service.sessions(root)
+            assert len(sessions["sessions"]) == 2
+            assert sessions["active_session_id"] != active
+            assert state.chat_service.messages(root, active)["messages"] == original_messages
+            assert state.chat_service.messages(root, sessions["active_session_id"])["messages"] == []
+
+            prompt = page.locator("#projectChatInput").input_value()
+            assert f"Task ID: {task_id}" in prompt
+            assert workspace_meta["task_branch"] in prompt
+            assert workspace_meta["worktree_path"] in prompt
+            assert "Conflict files: app.py, ui/panel.js" in prompt
+            composer_height = page.locator("#projectChatInput").evaluate(
+                "(node) => node.getBoundingClientRect().height"
+            )
+            assert composer_height > 46
+            assert composer_height <= 181
+            browser_instance.close()
 
 
 @pytest.mark.skipif(
