@@ -935,6 +935,9 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
+        state.global_settings.update({
+            "interface": {"theme": "violet", "appearance": "dark"},
+        })
         (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
             "stages: {}\nflow: []\n",
             encoding="utf-8",
