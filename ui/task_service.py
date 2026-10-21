@@ -21,6 +21,7 @@ STATE_VERSION = 1
 CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
 DELETE_REQUEST_LIMIT = 512
+RUN_REQUEST_LIMIT = 512
 TASK_YAML_LIMIT = 256 * 1024
 _EDITABLE_ITEM_FIELDS = (
     "title",
@@ -403,6 +404,145 @@ class TaskService:
             self._write(project, state)
             return {"task_id": task_key, "deleted": True, "duplicate": False}
 
+    def begin_run(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+        workspace: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Attach one durable Task Run identity before Runner launch."""
+        task_key = validate_task_id(task_id)
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        if not isinstance(workspace, dict):
+            raise ValueError("Workspace metadata must be an object")
+        try:
+            run_number = int(workspace.get("run_number"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Workspace run_number is invalid") from exc
+        if str(workspace.get("task_id") or "") != task_key or run_number <= 0:
+            raise ValueError("Workspace identity does not match Task")
+        if not str(workspace.get("project_root") or "").strip():
+            raise ValueError("Workspace project_root is required")
+
+        with self._lock:
+            state = self._load(project)
+            existing = state["run_requests"].get(request)
+            task = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
+            if task is None:
+                raise ValueError("Task does not exist")
+            if existing:
+                if str(existing.get("task_id") or "") != task_key:
+                    raise ValueError("request_id belongs to another Task")
+                if int(existing.get("run_number") or 0) != run_number:
+                    raise ValueError("request_id belongs to another Task Run")
+                return {**self._project_task(task), "duplicate": True}
+
+            if task.get("status") not in {"new", "paused"}:
+                raise ValueError("Task must be New or Paused before starting")
+            items = task.get("items") if isinstance(task.get("items"), list) else []
+            completed = int(task.get("completed_item_count", 0))
+            if completed >= len(items):
+                raise ValueError("Task has no remaining item to run")
+            expected_run = int(task.get("run_count", 0)) + 1
+            if run_number != expected_run:
+                raise ValueError("Workspace run_number does not match the next Task Run")
+
+            previous = task.get("run")
+            if isinstance(previous, dict):
+                history = task.get("history")
+                if not isinstance(history, list):
+                    history = []
+                history.append(deepcopy(previous))
+                task["history"] = history[-100:]
+
+            now = time.time()
+            task["status"] = "ongoing"
+            task["run_count"] = run_number
+            task["restart_required"] = False
+            task["run"] = {
+                "run_number": run_number,
+                "item_index": completed,
+                "phase": "launching",
+                "workspace": deepcopy(workspace),
+                "started_at": now,
+                "updated_at": now,
+                "error": "",
+                "workspace_result": {},
+            }
+            task["updated_at"] = now
+            state["run_requests"][request] = {
+                "task_id": task_key,
+                "run_number": run_number,
+            }
+            while len(state["run_requests"]) > RUN_REQUEST_LIMIT:
+                state["run_requests"].pop(next(iter(state["run_requests"])))
+            self._write(project, state)
+            return {**self._project_task(task), "duplicate": False}
+
+    def transition_run(
+        self,
+        project: Path,
+        task_id: str,
+        run_number: int,
+        *,
+        phase: str,
+        status: str | None = None,
+        error: str | None = None,
+        workspace_result: dict[str, Any] | None = None,
+        completed_item_count: int | None = None,
+        increment_merge_failure: bool = False,
+    ) -> dict[str, Any]:
+        """Persist Task-orchestrator state only; Runner runtime remains projected."""
+        task_key = validate_task_id(task_id)
+        next_phase = str(phase or "").strip()
+        if not next_phase:
+            raise ValueError("Task Run phase is required")
+        if status is not None and status not in {"new", "ongoing", "paused", "closed"}:
+            raise ValueError("Invalid Task lifecycle status")
+        try:
+            expected_run = int(run_number)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Task Run number is invalid") from exc
+        with self._lock:
+            state = self._load(project)
+            task = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
+            if task is None:
+                raise ValueError("Task does not exist")
+            run = task.get("run")
+            if not isinstance(run, dict) or int(run.get("run_number") or 0) != expected_run:
+                raise ValueError("Task Run identity is stale")
+            now = time.time()
+            run["phase"] = next_phase
+            run["updated_at"] = now
+            if error is not None:
+                run["error"] = str(error)
+            if workspace_result is not None:
+                if not isinstance(workspace_result, dict):
+                    raise ValueError("workspace_result must be an object")
+                run["workspace_result"] = deepcopy(workspace_result)
+            if completed_item_count is not None:
+                try:
+                    completed = int(completed_item_count)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("completed_item_count is invalid") from exc
+                items = task.get("items") if isinstance(task.get("items"), list) else []
+                if completed < 0 or completed > len(items):
+                    raise ValueError("completed_item_count is out of range")
+                task["completed_item_count"] = completed
+            if increment_merge_failure:
+                task["merge_failure_count"] = int(task.get("merge_failure_count", 0)) + 1
+            if status is not None:
+                task["status"] = status
+            task["updated_at"] = now
+            self._write(project, state)
+            return self._project_task(task)
+
     def _load(self, project: Path) -> dict[str, Any]:
         path = self._state_path(project)
         if not path.exists():
@@ -412,6 +552,7 @@ class TaskService:
                 "create_requests": {},
                 "update_requests": {},
                 "delete_requests": {},
+                "run_requests": {},
             }
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -423,11 +564,13 @@ class TaskService:
         requests = raw.get("create_requests")
         update_requests = raw.get("update_requests", {})
         delete_requests = raw.get("delete_requests", {})
+        run_requests = raw.get("run_requests", {})
         if (
             not isinstance(tasks, list)
             or not isinstance(requests, dict)
             or not isinstance(update_requests, dict)
             or not isinstance(delete_requests, dict)
+            or not isinstance(run_requests, dict)
         ):
             raise ValueError("Task store is invalid")
         ids: set[str] = set()
@@ -476,6 +619,20 @@ class TaskService:
                 str(key): str(value)
                 for key, value in delete_requests.items()
                 if str(key).strip() and _safe_task_id(str(value))
+            },
+            "run_requests": {
+                str(key): {
+                    "task_id": str(value.get("task_id") or ""),
+                    "run_number": int(value.get("run_number") or 0),
+                }
+                for key, value in run_requests.items()
+                if (
+                    str(key).strip()
+                    and isinstance(value, dict)
+                    and str(value.get("task_id") or "") in ids
+                    and str(value.get("run_number") or "").isdigit()
+                    and int(value.get("run_number") or 0) > 0
+                )
             },
         }
 

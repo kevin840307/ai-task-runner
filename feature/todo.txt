@@ -446,6 +446,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
     - 正式 Git identity/path 只由 top-level `workspace/manager.py` + `workspace/worktree.py` 產生；architecture test 鎖定 Runner 不 import workspace、workspace 不 import Runner/UI。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
+    - TaskRunService 已接入 durable task_id + run_number workspace metadata；Run 前 prepare、launch_failed / Stop / Resume 均 restore 同一 worktree identity，UI server restart 會掃描 Ongoing Run 並重新掛 lifecycle watcher。Task List / Restart 全路徑尚未完成，因此本項暫不勾。
 [x] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
     - `WorkspaceManager.snapshot_result`/`snapshot_task_result` 在 add/commit 前後重驗 ownership、branch/base ancestry 與 active Git operation；支援保留 Agent commits、只 commit remaining diff、no_changes 不造空 commit。
 [ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。

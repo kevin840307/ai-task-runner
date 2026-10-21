@@ -21,6 +21,7 @@ try:
     from .chat_system_capabilities import system_capabilities
     from .task_draft_service import TaskDraftService
     from .task_service import TaskService
+    from .task_run_service import TaskRunService
     from .task_upload_service import TaskUploadService
     from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
@@ -36,6 +37,7 @@ except ImportError:
     from chat_system_capabilities import system_capabilities
     from task_draft_service import TaskDraftService
     from task_service import TaskService
+    from task_run_service import TaskRunService
     from task_upload_service import TaskUploadService
     from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
@@ -71,6 +73,30 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         if candidate.is_absolute() and candidate.is_file():
             return {"exists": True, **self._workflow_requirements(candidate.resolve())}
         return default
+
+    def _task_workflow_path(self, project: Path, workflow: str) -> Path:
+        selected = str(workflow or "").strip()
+        if not selected:
+            raise ValueError("Task Workflow is required")
+        for row in self.studio_files(project).get("workflows", []):
+            aliases = {
+                str(row.get("id") or ""),
+                str(row.get("name") or ""),
+                str(row.get("display_name") or ""),
+                str(row.get("reference") or ""),
+                str(row.get("path") or ""),
+            }
+            if selected in aliases:
+                path = Path(str(row.get("path") or "")).expanduser().resolve()
+                if path.is_file():
+                    return path
+        candidate = Path(selected).expanduser()
+        if candidate.is_absolute() and candidate.is_file():
+            return candidate.resolve()
+        raise ValueError("Selected Task Workflow does not exist")
+
+    def _task_backend_default(self, project: Path) -> str:
+        return str(self.backend_catalog(project).get("default") or "").strip()
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
@@ -108,6 +134,22 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self.ensure_project_ids()
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
+        self.task_runs = TaskRunService(
+            self.tasks,
+            execution_settings=lambda: self.global_settings.get()["execution"],
+            preferences=self.project_preferences.get,
+            backend_default=self._task_backend_default,
+            resolve_workflow=self._task_workflow_path,
+            launch=self.launch,
+            read_runtime=self.read_runtime,
+            stop_runtime=self.stop,
+            resume_runtime=self.resume,
+        )
+        self.task_runs.recover([
+            Path(row["path"]).resolve()
+            for row in self.projects()
+            if row.get("exists")
+        ])
 
     def chat_workflows(self, project: Path) -> list[dict]:
         """Project Chat projection of the canonical Workflow Studio catalog."""
@@ -218,7 +260,7 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
-                return self._json(self.state.tasks.list(project))
+                return self._json(self.state.task_runs.list(project))
             if parsed.path == "/api/chat/sessions":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
@@ -482,6 +524,31 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     str(body.get("task_id", "")),
                     request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/tasks/run":
+                project = self._project(body)
+                return self._json(self.state.task_runs.start(
+                    project,
+                    str(body.get("task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/tasks/stop":
+                project = self._project(body)
+                return self._json(self.state.task_runs.stop(
+                    project,
+                    str(body.get("task_id", "")),
+                ))
+            if parsed.path == "/api/tasks/resume":
+                project = self._project(body)
+                return self._json(self.state.task_runs.resume(
+                    project,
+                    str(body.get("task_id", "")),
+                ))
+            if parsed.path == "/api/tasks/merge":
+                project = self._project(body)
+                return self._json(self.state.task_runs.merge(
+                    project,
+                    str(body.get("task_id", "")),
                 ))
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
