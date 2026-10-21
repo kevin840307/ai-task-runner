@@ -466,11 +466,45 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return wrap;
   }
 
+  function taskEditPolicy(task = state?.task) {
+    const policy = task?.edit_policy;
+    if (policy && typeof policy === "object" && Array.isArray(policy.items)) return policy;
+    return {
+      editable: false,
+      reason: "Task edit policy is unavailable; reload this Task",
+      completed_item_count: 0,
+      current_item_index: null,
+      can_rename: false,
+      can_add_item: false,
+      can_edit_yaml: false,
+      can_delete: false,
+      restart_required: false,
+      items: [],
+    };
+  }
+
+  function taskItemEditPolicy(index, item = null) {
+    const policy = taskEditPolicy();
+    const itemId = String(item?.item_id || "");
+    const matched = itemId
+      ? policy.items.find((row) => String(row?.item_id || "") === itemId)
+      : policy.items.find((row) => Number(row?.index) === Number(index));
+    if (matched) return matched;
+    return policy.editable
+      ? { item_id: itemId, index, state: "future", editable: true, restructure: true, reason: "" }
+      : { item_id: itemId, index, state: "locked", editable: false, restructure: false, reason: policy.reason };
+  }
+
   function moveItem(index, delta) {
     const draft = editorDraft();
     const items = draft?.items;
     const next = index + delta;
     if (!Array.isArray(items) || next < 0 || next >= items.length) return;
+    if (state?.kind === "task") {
+      const currentPolicy = taskItemEditPolicy(index, items[index]);
+      const targetPolicy = taskItemEditPolicy(next, items[next]);
+      if (!currentPolicy.restructure || !targetPolicy.restructure) return;
+    }
     const [item] = items.splice(index, 1);
     items.splice(next, 0, item);
     touchEditor();
@@ -481,6 +515,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const draft = editorDraft();
     const items = draft?.items;
     if (!Array.isArray(items) || items.length <= 1) return;
+    if (state?.kind === "task" && !taskItemEditPolicy(index, items[index]).restructure) return;
     items.splice(index, 1);
     state.index = Math.min(state.index, items.length - 1);
     touchEditor();
@@ -499,14 +534,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function taskMutationBlockedReason(task = state?.task) {
-    const status = String(task?.status || "new");
-    if (status === "new") return "";
-    if (status === "ongoing") return "Pause this Task before editing runtime-affecting content";
-    const label = status.charAt(0).toUpperCase() + status.slice(1);
-    return `Task editing is unavailable while this Task is ${label}`;
+    const policy = taskEditPolicy(task);
+    return policy.editable ? "" : String(policy.reason || "Task editing is unavailable");
   }
 
-  function renderTaskRows(items, { editable = false, onEdit = null, disabledEditReason = "" } = {}) {
+  function renderTaskRows(items, { editable = false, itemPolicies = null, onEdit = null, disabledEditReason = "" } = {}) {
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
     list.className = "task-workspace-list";
@@ -521,20 +553,44 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const title = document.createElement("strong");
       title.textContent = String(item.title || "Task " + (index + 1));
       const meta = document.createElement("small");
-      meta.textContent = [String(item.workflow || "Workflow"), String(item.workspace || "auto").toUpperCase()].join(" · ");
+      const rowPolicy = Array.isArray(itemPolicies)
+        ? (String(item.item_id || "")
+          ? itemPolicies.find((value) => String(value?.item_id || "") === String(item.item_id || ""))
+          : itemPolicies[index])
+        : null;
+      const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
+        ? String(rowPolicy.state).toUpperCase()
+        : "";
+      meta.textContent = [
+        String(item.workflow || "Workflow"),
+        String(item.workspace || "auto").toUpperCase(),
+        stateLabel,
+      ].filter(Boolean).join(" · ");
       const prompt = document.createElement("p");
       prompt.textContent = String(item.prompt || item.goal_file || "");
       copy.append(title, meta, prompt);
       row.append(number, copy);
       if (editable) {
+        const policy = rowPolicy || { editable: true, restructure: true, reason: "" };
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
         for (const [label, titleText, delta] of [["↑", tr("task.move_up", "Move up"), -1], ["↓", tr("task.move_down", "Move down"), 1]]) {
           const button = document.createElement("button");
           button.type = "button";
           button.textContent = label;
-          button.title = titleText;
-          button.disabled = delta < 0 ? index === 0 : index === values.length - 1;
+          const next = index + delta;
+          const adjacent = next >= 0 && next < values.length
+            ? (Array.isArray(itemPolicies)
+              ? (String(values[next]?.item_id || "")
+                ? itemPolicies.find((value) => String(value?.item_id || "") === String(values[next]?.item_id || ""))
+                : itemPolicies[next])
+              : null)
+            : null;
+          button.disabled = !policy.restructure
+            || next < 0
+            || next >= values.length
+            || adjacent?.restructure === false;
+          button.title = button.disabled && policy.reason ? String(policy.reason) : titleText;
           button.onclick = () => moveItem(index, delta);
           actions.appendChild(button);
         }
@@ -542,11 +598,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         edit.type = "button";
         edit.className = "task-workspace-row-edit";
         edit.textContent = tr("task.edit_action", "Edit");
+        edit.disabled = policy.editable === false;
+        edit.title = edit.disabled ? String(policy.reason || disabledEditReason || "") : "";
         edit.onclick = () => editItem(index);
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = tr("task.remove", "Remove");
-        remove.disabled = values.length <= 1;
+        remove.disabled = values.length <= 1 || policy.restructure === false;
+        remove.title = remove.disabled && policy.reason ? String(policy.reason) : "";
         remove.onclick = () => removeItem(index);
         actions.append(edit, remove);
         row.appendChild(actions);
@@ -1132,7 +1191,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function ensureTaskEditDraft() {
     const task = state?.task;
-    if (!task || String(task.status || "") !== "new") return false;
+    if (!task || !taskEditPolicy(task).editable) return false;
     if (!state.editDraft) {
       state.editDraft = taskDraftFromRecord(task);
       state.editOriginal = draftSignature(state.editDraft);
@@ -1167,7 +1226,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function addTaskListItem() {
-    if (!ensureTaskEditDraft()) return;
+    if (!ensureTaskEditDraft() || !taskEditPolicy().can_add_item) return;
     const first = state.editDraft.items[0] || {};
     const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
     state.editDraft.items.push(blankItem(state.task?.project || "", workflow));
