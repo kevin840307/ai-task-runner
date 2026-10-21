@@ -3163,6 +3163,181 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+@pytest.mark.parametrize(
+    ("viewport", "color_scheme"),
+    [
+        ({"width": 820, "height": 900}, "light"),
+        ({"width": 820, "height": 900}, "dark"),
+        ({"width": 620, "height": 900}, "light"),
+        ({"width": 620, "height": 900}, "dark"),
+    ],
+)
+def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_scheme) -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        workflows = root / "runner" / "assets" / "workflows"
+        mixed = workflows / "mixed.yaml"
+        mixed.write_text(
+            "stages:\n"
+            "  planning:\n    type: plan\n"
+            "  validate_file:\n    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+            "flow: [planning, validate_file, validate_ai]\n",
+            encoding="utf-8",
+        )
+        prompt_asset = root / "runner" / "assets" / "prompts" / "common" / "task_source_asset.md"
+        prompt_asset.write_text("Task source asset\n", encoding="utf-8")
+        state.project_preferences.update(root, {"workflow": str(mixed)})
+        state.tasks._workflow_requirements = state._task_workflow_requirements
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            context = browser.new_context(viewport=viewport, color_scheme=color_scheme)
+            page = context.new_page()
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            assert page.locator("html").get_attribute("data-appearance") == color_scheme
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksNewButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.select_option("#taskWorkspaceWorkflow", str(mixed))
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            page.fill("#taskWorkspaceItemTitle", "Source mode geometry")
+            page.fill("#taskWorkspaceValidator", str(root / "validate.py"))
+
+            def assert_inside_drawer(selector: str) -> dict:
+                shell = page.locator("#taskWorkspaceShell").bounding_box()
+                node = page.locator(selector).bounding_box()
+                assert shell and node
+                assert node["x"] >= shell["x"] - 1
+                assert node["x"] + node["width"] <= shell["x"] + shell["width"] + 1
+                assert node["width"] > 0
+                return node
+
+            shell_before = page.locator("#taskWorkspaceShell").bounding_box()
+            assert shell_before
+            assert shell_before["x"] >= -1
+            assert shell_before["x"] + shell_before["width"] <= viewport["width"] + 1
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+            prompt_tabs = page.locator("[data-task-source-group='prompt'] button")
+            prompt_widths = [button.bounding_box()["width"] for button in prompt_tabs.all()]
+            assert len(prompt_widths) == 3
+            assert max(prompt_widths) - min(prompt_widths) <= 2
+
+            ai_tabs = page.locator("[data-task-source-group='ai'] button")
+            ai_widths = [button.bounding_box()["width"] for button in ai_tabs.all()]
+            assert len(ai_widths) == 4
+            assert max(ai_widths) - min(ai_widths) <= 2
+            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
+
+            for mode, control in (
+                ("file", "#taskWorkspaceGoalFile"),
+                ("asset", "#taskWorkspaceGoalAsset"),
+                ("write", "#taskWorkspacePrompt"),
+            ):
+                page.locator(f"[data-task-source-group='prompt'] [data-task-source-mode='{mode}']").click()
+                page.wait_for_function("(selector) => document.querySelector(selector) !== null", arg=control)
+                assert_inside_drawer("[data-task-source-card='prompt']")
+                shell_now = page.locator("#taskWorkspaceShell").bounding_box()
+                assert shell_now
+                assert abs(shell_now["width"] - shell_before["width"]) <= 1
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                if mode == "file":
+                    page.fill(control, str(root / "goal.md"))
+                elif mode == "asset":
+                    assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
+                    page.select_option(control, str(prompt_asset))
+                else:
+                    page.fill(control, "Implement source mode geometry safely.")
+
+            validator_card = page.locator("[data-task-source-card='validator']")
+            ai_card = page.locator("[data-task-source-card='ai']")
+            assert validator_card.is_visible()
+            assert ai_card.is_visible()
+
+            for mode, control in (
+                ("write", "#taskWorkspaceAiValidatorPromptText"),
+                ("file", "#taskWorkspaceAiValidatorPrompt"),
+                ("asset", "#taskWorkspaceAiValidatorAsset"),
+                ("default", ".task-workspace-source-note"),
+            ):
+                page.locator(f"[data-task-source-group='ai'] [data-task-source-mode='{mode}']").click()
+                page.wait_for_function(
+                    """([mode, control]) => {
+                        if (mode === 'default') {
+                            return Boolean(document.querySelector("[data-task-source-card='ai'] " + control));
+                        }
+                        return Boolean(document.querySelector(control));
+                    }""",
+                    arg=[mode, control],
+                )
+                assert_inside_drawer("[data-task-source-card='ai']")
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                if mode == "write":
+                    page.fill(control, "Use custom AI validation evidence.")
+                elif mode == "file":
+                    page.fill(control, str(root / "ai-review.md"))
+                elif mode == "asset":
+                    assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
+                    page.select_option(control, str(prompt_asset))
+
+                if viewport["width"] > 760:
+                    validator_box = validator_card.bounding_box()
+                    ai_box = ai_card.bounding_box()
+                    assert validator_box and ai_box
+                    assert abs(validator_box["y"] - ai_box["y"]) <= 1
+                    assert abs(validator_box["height"] - ai_box["height"]) <= 1
+
+            page.fill("#taskWorkspaceDraftTitle", "Canonical source modes")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            created = state.tasks.list(root)["tasks"]
+            assert len(created) == 1
+            item = created[0]["items"][0]
+            assert item["prompt"] == "Implement source mode geometry safely."
+            assert item["goal_file"] == ""
+            assert item["validator"] == str(root / "validate.py")
+            assert item["ai_validator_prompt"] == ""
+            assert item["ai_validator_prompt_file"] == ""
+            assert not errors
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
