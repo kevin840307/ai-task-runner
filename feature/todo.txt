@@ -262,7 +262,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - 正式 production 不移植 random branching；`test_task_draft_auto_deterministically_accepts_single_or_list` 固定覆蓋 auto 產生 1/2 items，Browser fixture 另覆蓋 @task-single / @task-list。
 [x] Prototype 保留 @task mock:error 與 @task mock:invalid 路徑，驗證 Backend error / schema validation UX。
     - deterministic Browser bridge 以真 TaskDraftService owner 注入 mock:error / mock:invalid，驗證 backend failure 與 invalid structured data 皆走 production error UI。
-[ ] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在、Worktree 不可建立都要有測試。
+[x] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在都要有 deterministic 測試。
+    - TaskDraft boundary unit test 保留 multiline/bullet/特殊字元並驗證 24001 chars fail closed；missing Project 現在由 canonical task_models 檢查，TaskDraftService 在呼叫 Agent 前直接拒絕，TaskService validate 也使用同一規則。
+[ ] Worktree 不可建立的 Task/@goal 測試留在最後 Workspace phase，以正式 workspace resolver / Git preflight 驗證，不用 Mock 冒充。
 [x] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
     - Browser fixture 直接實例化 production TaskDraftService，response 經 validate_generated_draft / validate_task_draft_for_create；沒有 mock-only TaskDraft class/schema。
 
@@ -605,7 +607,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - `test_browser_workflow_settings_manager_and_prompt_crud` 的 deterministic Browser bridge 實際排入 3 筆 Queue，驗證 FIFO、Edit Save、Edit Cancel、空白 Save error、Delete、Stop 保留 queued item，以及切換新/舊 Chat session 後 Queue scope；2026-10-21 Browser lane PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
-[ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
+[x] Deterministic reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
+    - `tests/test_backends.py` 覆蓋 HTTP 503 transient classifier、backend timeout/process cleanup、non-zero Agent exit diagnostics；`ui/tests/test_ui.py` 覆蓋 BrokenPipe/ConnectionReset；`ui/tests/test_chat_service.py` 覆蓋 Queue/Ask restart、turn/Ask cancel、request-id 重送冪等、expired Agent session compare-and-clear/fresh-session recovery。這只代表 deterministic regression，不代表真 CLI live 或 24H soak。
 [x] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
     - service-level restart test 與 /api/tasks/create-from-draft HTTP retry 均重用同 request_id，要求 duplicate=true、task_id 相同且 durable Task count=1。
 [x] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
