@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from ui.server import UIServer
-from tool.task_draft_agent import (
+from tool.task_draft_contract import (
     TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
     TASK_DRAFT_ERROR_CHARS,
     TASK_DRAFT_WRAPPER_GRACE_SECONDS,
