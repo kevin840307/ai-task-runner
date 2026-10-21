@@ -7,8 +7,8 @@ from typing import Any
 
 from product_settings import AUTO_WORKSPACE_POLICIES
 
-from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution
-from .worktree import add_or_reuse_worktree, capture_target, repository_identity, repository_root
+from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
+from .worktree import add_or_reuse_worktree, capture_target, repository_identity, repository_root, snapshot_task_result, verify_worktree
 
 _REQUESTED_MODES = {"auto", "main", "worktree"}
 _TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
@@ -120,6 +120,67 @@ class WorkspaceManager:
             task_base_sha=target_head,
             repository_root=repo,
             repository_identity=repository_identity(repo),
+            source_project_root=project,
             worktree_path=worktree,
             project_root=runner_project,
+        )
+
+
+    def restore(self, value: PreparedWorkspace | dict[str, Any]) -> PreparedWorkspace:
+        """Restore one durable Task Run identity without recapturing target HEAD."""
+        prepared = value if isinstance(value, PreparedWorkspace) else PreparedWorkspace.from_dict(value)
+        identity = _run_identity(prepared.task_id, prepared.run_number)
+        if prepared.task_branch != f"local/task/{identity}":
+            raise WorkspaceError("Workspace Task branch does not match Task/Run identity")
+        if prepared.requested_mode not in _REQUESTED_MODES:
+            raise WorkspaceError("Workspace requested mode is invalid")
+        if prepared.effective_mode not in {"main", "worktree"}:
+            raise WorkspaceError("Workspace effective mode is invalid")
+        if not prepared.target_branch:
+            raise WorkspaceError("Workspace target branch is missing")
+        if prepared.target_head_sha_at_start != prepared.task_base_sha:
+            raise WorkspaceError("Workspace Task base does not match captured target HEAD")
+        repo = prepared.repository_root.resolve()
+        if repository_identity(repo) != prepared.repository_identity.resolve():
+            raise WorkspaceError("Workspace repository identity changed")
+        try:
+            relative_project = prepared.source_project_root.resolve().relative_to(repo)
+        except ValueError as exc:
+            raise WorkspaceError("Workspace source Project is outside repository root") from exc
+        expected_project = (prepared.worktree_path.resolve() / relative_project).resolve()
+        if prepared.project_root.resolve() != expected_project:
+            raise WorkspaceError("Workspace project_root does not match captured Project path")
+        verify_worktree(
+            repo,
+            prepared.worktree_path,
+            expected_branch=prepared.task_branch,
+            expected_base_sha=prepared.task_base_sha,
+        )
+        if not prepared.project_root.is_dir():
+            raise WorkspaceError("Workspace project_root is missing")
+        return prepared
+
+    def snapshot_result(
+        self,
+        prepared: PreparedWorkspace,
+        *,
+        commit_message: str = "",
+        excluded_paths: tuple[Path, ...] = (),
+    ) -> WorkspaceSnapshot:
+        """Freeze the completed Task branch before delivery/retention."""
+        message = str(commit_message or "").strip() or (
+            f"AI Task Runner: {prepared.task_id} run {prepared.run_number}"
+        )
+        sha, no_changes, created_commit = snapshot_task_result(
+            prepared.repository_root,
+            prepared.worktree_path,
+            expected_branch=prepared.task_branch,
+            expected_base_sha=prepared.task_base_sha,
+            commit_message=message,
+            excluded_paths=excluded_paths,
+        )
+        return WorkspaceSnapshot(
+            task_snapshot_sha=sha,
+            no_changes=no_changes,
+            created_commit=created_commit,
         )

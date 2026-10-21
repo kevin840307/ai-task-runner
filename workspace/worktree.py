@@ -181,3 +181,126 @@ def add_or_reuse_worktree(
             expected_branch=branch,
             expected_base_sha=base_sha,
         )
+
+
+_OPERATION_PATHS = (
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+    "rebase-merge",
+    "rebase-apply",
+    "BISECT_LOG",
+)
+
+
+def _git_path(worktree: Path, name: str) -> Path:
+    raw = Path(git(worktree, "rev-parse", "--git-path", name).stdout.strip())
+    return (raw if raw.is_absolute() else worktree / raw).resolve()
+
+
+def active_git_operation(worktree: Path) -> str:
+    for name in _OPERATION_PATHS:
+        path = _git_path(worktree, name)
+        if path.exists():
+            return name
+    return ""
+
+
+def snapshot_task_result(
+    repo: Path,
+    path: Path,
+    *,
+    expected_branch: str,
+    expected_base_sha: str,
+    commit_message: str,
+    excluded_paths: tuple[Path, ...] = (),
+) -> tuple[str, bool, bool]:
+    """Commit remaining Task changes without rewriting prior Agent commits."""
+    message = str(commit_message or "").strip()
+    if not message:
+        raise WorkspaceError("Task snapshot commit message is required")
+    worktree = path.resolve()
+    with repository_git_lock(repo):
+        verify_worktree(
+            repo,
+            worktree,
+            expected_branch=expected_branch,
+            expected_base_sha=expected_base_sha,
+        )
+        operation = active_git_operation(worktree)
+        if operation:
+            raise WorkspaceError(
+                f"Task worktree has an active Git operation: {operation}"
+            )
+        before = git(worktree, "rev-parse", "HEAD").stdout.strip()
+        dirty = bool(git(worktree, "status", "--porcelain=v1", "-z").stdout)
+        if dirty:
+            git(worktree, "add", "-A")
+            for value in excluded_paths:
+                excluded = Path(value).expanduser().resolve()
+                try:
+                    relative = excluded.relative_to(worktree)
+                except ValueError as exc:
+                    raise WorkspaceError(
+                        f"Snapshot exclude path is outside Task worktree: {excluded}"
+                    ) from exc
+                if not relative.parts:
+                    raise WorkspaceError("Snapshot exclude path cannot be the Task worktree root")
+                git(
+                    worktree,
+                    "reset",
+                    "--quiet",
+                    "HEAD",
+                    "--",
+                    relative.as_posix(),
+                )
+            staged = git(
+                worktree,
+                "diff",
+                "--cached",
+                "--quiet",
+                check=False,
+            )
+            if staged.returncode not in (0, 1):
+                raise WorkspaceError(f"Cannot inspect staged Task snapshot: {_detail(staged)}")
+            verify_worktree(
+                repo,
+                worktree,
+                expected_branch=expected_branch,
+                expected_base_sha=expected_base_sha,
+            )
+            operation = active_git_operation(worktree)
+            if operation:
+                raise WorkspaceError(
+                    f"Task worktree entered an active Git operation: {operation}"
+                )
+            if staged.returncode == 1:
+                git(
+                    worktree,
+                    "-c",
+                    "user.name=AI Task Runner",
+                    "-c",
+                    "user.email=ai-task-runner@localhost",
+                    "commit",
+                    "-m",
+                    message,
+                )
+        after = git(worktree, "rev-parse", "HEAD").stdout.strip()
+        verify_worktree(
+            repo,
+            worktree,
+            expected_branch=expected_branch,
+            expected_base_sha=expected_base_sha,
+        )
+        diff = git(
+            worktree,
+            "diff",
+            "--quiet",
+            expected_base_sha,
+            after,
+            "--",
+            check=False,
+        )
+        if diff.returncode not in (0, 1):
+            raise WorkspaceError(f"Cannot compare Task snapshot with its base: {_detail(diff)}")
+        return after, diff.returncode == 0, after != before

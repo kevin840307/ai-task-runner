@@ -87,6 +87,7 @@ def test_prepare_captures_branch_and_head_and_excludes_uncommitted_project_chang
     assert prepared.task_base_sha == captured
     assert prepared.task_branch == "local/task/task-0123456789abcdef0123456789abcdef-r1"
     assert prepared.worktree_path.parent == tmp_path / ".worktrees" / repo.name
+    assert prepared.source_project_root == repo.resolve()
     assert prepared.project_root == prepared.worktree_path
     assert (prepared.project_root / "app.txt").read_text(encoding="utf-8") == "committed\n"
     assert _git(repo, "rev-parse", prepared.task_branch) == captured
@@ -216,3 +217,241 @@ def test_workspace_identity_rejects_invalid_task_or_run(tmp_path: Path):
             execution_settings=settings,
             main_running=False,
         )
+
+
+def test_snapshot_commits_remaining_changes_and_preserves_prior_agent_commits(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-11111111111111111111111111111111",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+
+    (prepared.worktree_path / "agent.txt").write_text("agent commit\n", encoding="utf-8")
+    _git(prepared.worktree_path, "add", "agent.txt")
+    _git(prepared.worktree_path, "commit", "-m", "agent commit")
+    agent_sha = _git(prepared.worktree_path, "rev-parse", "HEAD")
+    (prepared.worktree_path / "remaining.txt").write_text("remaining\n", encoding="utf-8")
+
+    snapshot = manager.snapshot_result(prepared)
+
+    assert snapshot.no_changes is False
+    assert snapshot.created_commit is True
+    assert snapshot.task_snapshot_sha == _git(prepared.worktree_path, "rev-parse", "HEAD")
+    assert snapshot.task_snapshot_sha != agent_sha
+    assert _git(repo, "merge-base", "--is-ancestor", agent_sha, snapshot.task_snapshot_sha) == ""
+    assert (prepared.worktree_path / "remaining.txt").is_file()
+
+
+def test_snapshot_clean_base_returns_no_changes_without_empty_commit(tmp_path: Path):
+    repo = _repo(tmp_path)
+    prepared = WorkspaceManager().prepare(
+        repo,
+        task_id="task-22222222222222222222222222222222",
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "always-main",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    before = _git(prepared.worktree_path, "rev-parse", "HEAD")
+
+    snapshot = WorkspaceManager().snapshot_result(prepared)
+
+    assert snapshot.no_changes is True
+    assert snapshot.created_commit is False
+    assert snapshot.task_snapshot_sha == before
+    assert _git(prepared.worktree_path, "rev-list", "--count", prepared.task_base_sha + "..HEAD") == "0"
+
+
+def test_snapshot_clean_agent_commit_is_deliverable_without_new_commit(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-33333333333333333333333333333333",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    (prepared.worktree_path / "agent.txt").write_text("agent\n", encoding="utf-8")
+    _git(prepared.worktree_path, "add", "agent.txt")
+    _git(prepared.worktree_path, "commit", "-m", "agent")
+    before = _git(prepared.worktree_path, "rev-parse", "HEAD")
+
+    snapshot = manager.snapshot_result(prepared)
+
+    assert snapshot.no_changes is False
+    assert snapshot.created_commit is False
+    assert snapshot.task_snapshot_sha == before
+
+
+def test_snapshot_fails_closed_on_branch_or_git_operation_mismatch(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-44444444444444444444444444444444",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    _git(prepared.worktree_path, "checkout", "--detach")
+    with pytest.raises(WorkspaceError, match="branch mismatch"):
+        manager.snapshot_result(prepared)
+
+    _git(prepared.worktree_path, "checkout", prepared.task_branch)
+    raw = _git(prepared.worktree_path, "rev-parse", "--git-path", "MERGE_HEAD")
+    marker = Path(raw)
+    if not marker.is_absolute():
+        marker = prepared.worktree_path / marker
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(prepared.task_base_sha + "\n", encoding="ascii")
+    try:
+        with pytest.raises(WorkspaceError, match="active Git operation"):
+            manager.snapshot_result(prepared)
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def test_snapshot_rejects_task_branch_that_no_longer_descends_from_base(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-55555555555555555555555555555555",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    unrelated = _git(
+        prepared.worktree_path,
+        "commit-tree",
+        _git(prepared.worktree_path, "mktree"),
+        "-m",
+        "unrelated",
+    )
+    _git(prepared.worktree_path, "reset", "--hard", unrelated)
+
+    with pytest.raises(WorkspaceError, match="no longer descends"):
+        manager.snapshot_result(prepared)
+
+
+def test_restore_keeps_original_target_after_project_branch_advances(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-66666666666666666666666666666666",
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "always-main",
+            "allow_concurrent_main_tasks": True,
+        },
+        main_running=False,
+    )
+    original = prepared.target_head_sha_at_start
+    (repo / "later.txt").write_text("later target change\n", encoding="utf-8")
+    _git(repo, "add", "later.txt")
+    _git(repo, "commit", "-m", "advance target")
+    assert _git(repo, "rev-parse", "HEAD") != original
+
+    restored = manager.restore(prepared.as_dict())
+
+    assert restored == prepared
+    assert restored.target_head_sha_at_start == original
+    assert restored.task_base_sha == original
+    assert _git(restored.worktree_path, "rev-parse", "HEAD") == original
+
+
+def test_restore_rejects_tampered_workspace_metadata(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-77777777777777777777777777777777",
+        run_number=3,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    value = prepared.as_dict()
+    value["task_branch"] = "local/task/another-run"
+
+    with pytest.raises(WorkspaceError, match="Task branch"):
+        manager.restore(value)
+
+
+def test_snapshot_excludes_only_explicit_run_owned_runtime_path(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-88888888888888888888888888888888",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    runtime = prepared.project_root / ".ai-task-runner" / "task-runs" / "run-1"
+    runtime.mkdir(parents=True)
+    (runtime / "state.json").write_text('{"completed": true}\n', encoding="utf-8")
+    (prepared.worktree_path / ".github").mkdir()
+    (prepared.worktree_path / ".github" / "task.yml").write_text("name: task\n", encoding="utf-8")
+
+    snapshot = manager.snapshot_result(prepared, excluded_paths=(runtime,))
+
+    assert snapshot.no_changes is False
+    assert snapshot.created_commit is True
+    changed = set(_git(prepared.worktree_path, "show", "--pretty=", "--name-only", "HEAD").splitlines())
+    assert ".github/task.yml" in changed
+    assert not any(".ai-task-runner" in path for path in changed)
+    assert (runtime / "state.json").is_file()
+
+
+def test_snapshot_rejects_exclude_path_outside_task_worktree(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-99999999999999999999999999999999",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    (prepared.worktree_path / "change.txt").write_text("change\n", encoding="utf-8")
+
+    with pytest.raises(WorkspaceError, match="outside Task worktree"):
+        manager.snapshot_result(prepared, excluded_paths=(tmp_path / "outside",))

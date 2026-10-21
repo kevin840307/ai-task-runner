@@ -36,11 +36,70 @@ class PreparedWorkspace:
     task_base_sha: str
     repository_root: Path
     repository_identity: Path
+    source_project_root: Path
     worktree_path: Path
     project_root: Path
 
     def as_dict(self) -> dict[str, Any]:
         value = asdict(self)
-        for key in ("repository_root", "repository_identity", "worktree_path", "project_root"):
+        for key in (
+            "repository_root",
+            "repository_identity",
+            "source_project_root",
+            "worktree_path",
+            "project_root",
+        ):
             value[key] = str(value[key])
         return value
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PreparedWorkspace":
+        if not isinstance(value, dict):
+            raise WorkspaceError("Workspace metadata must be an object")
+        required = {
+            "task_id",
+            "run_number",
+            "requested_mode",
+            "effective_mode",
+            "target_branch",
+            "target_head_sha_at_start",
+            "task_branch",
+            "task_base_sha",
+            "repository_root",
+            "repository_identity",
+            "source_project_root",
+            "worktree_path",
+            "project_root",
+        }
+        missing = sorted(required - set(value))
+        if missing:
+            raise WorkspaceError("Workspace metadata is missing: " + ", ".join(missing))
+        try:
+            run_number = int(value["run_number"])
+        except (TypeError, ValueError) as exc:
+            raise WorkspaceError("Workspace run_number is invalid") from exc
+        return cls(
+            task_id=str(value["task_id"]),
+            run_number=run_number,
+            requested_mode=str(value["requested_mode"]),
+            effective_mode=str(value["effective_mode"]),
+            target_branch=str(value["target_branch"]),
+            target_head_sha_at_start=str(value["target_head_sha_at_start"]),
+            task_branch=str(value["task_branch"]),
+            task_base_sha=str(value["task_base_sha"]),
+            repository_root=Path(str(value["repository_root"])).expanduser().resolve(),
+            repository_identity=Path(str(value["repository_identity"])).expanduser().resolve(),
+            source_project_root=Path(str(value["source_project_root"])).expanduser().resolve(),
+            worktree_path=Path(str(value["worktree_path"])).expanduser().resolve(),
+            project_root=Path(str(value["project_root"])).expanduser().resolve(),
+        )
+
+
+@dataclass(frozen=True)
+class WorkspaceSnapshot:
+    task_snapshot_sha: str
+    no_changes: bool
+    created_commit: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
