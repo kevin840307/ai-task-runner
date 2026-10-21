@@ -555,7 +555,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
 [ ] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
 [ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
-[ ] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
+[x] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
+    - `test_project_chat_turn_http_uses_project_preferences_without_runner_task` 先以 HTTP Chat 成功再注入 Agent backend failure，逐 byte 驗證 `.ai-task-runner/state.json` / `runner-process.json` / `stop.request` 完全不變；既有 UIServer reopen regression 同樣鎖住 restart ownership。2026-10-21 CI Windows/Linux pytest PASS。
 [ ] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。
 [ ] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
 
@@ -578,14 +579,17 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
 [x] Browser 測試：Task Info → Add Task → Back to Info；Task List → Edit child → Back to List；Chat Draft → Edit → Back to Chat Draft。
     - 同一 production Browser E2E 實際走 Task Info→List→Add/Edit child→Back、Footer Back→Info，以及 single/multi Chat Draft→shared Editor/List→Back/X/Prompts→Chat；未建立第二套 Drawer/Editor。
-[ ] Browser 測試：Chat Draft 與 Tasks 頁開出的 Task Editor / Task List Workspace DOM 結構與欄位一致，驗證來源只差 return context。
-[ ] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
+[x] Browser 測試：Chat Draft 與 Tasks 頁開出的 Task Editor / Task List Workspace DOM 結構與欄位一致，驗證來源只差 return context。
+    - 真 Chromium E2E 保存 Chat Draft 開啟的實體 `#taskWorkspaceShell` reference，之後 durable Task List/Editor 仍必須是同一 DOM shell，且兩種入口的 Editor input/select/textarea id 集合完全一致。
+[x] Browser 測試：打開右側 Editor / Task List 時，Chat 不得改寬度、位移、重新排版；關閉後也不得留下錯誤 scroll / z-index。
+    - 真 Chromium E2E 比對 Drawer 前/List/Editor/關閉後 Chat x/y/width/height，確認 window + Chat message scroll 不變；同時驗證 Task Workspace overlay 為 fixed 且 z-index >= 520。2026-10-21 Browser 34/34 PASS。
 [ ] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
 [ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
 [ ] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
 [x] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
 [ ] Mock 測試：Ask 隨機觸發、@ask-demo 強制觸發、多題選項、Other、文字題、Next、Submit、Cancel。
-[ ] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
+[x] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
+    - `test_browser_workflow_settings_manager_and_prompt_crud` 的 deterministic Browser bridge 實際排入 3 筆 Queue，驗證 FIFO、Edit Save、Edit Cancel、空白 Save error、Delete、Stop 保留 queued item，以及切換新/舊 Chat session 後 Queue scope；2026-10-21 Browser lane PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
 [ ] Reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
