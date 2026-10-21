@@ -12,7 +12,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from tool.task_draft_agent import (
+from tool.task_draft_contract import (
     TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
     TASK_DRAFT_ERROR_CHARS,
     TASK_DRAFT_WRAPPER_GRACE_SECONDS,
