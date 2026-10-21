@@ -264,3 +264,29 @@ def test_retry_same_run_request_does_not_prepare_second_workspace(tmp_path: Path
     assert [name for name in branches if name.startswith("local/task/")] == [
         first["run"]["workspace"]["task_branch"]
     ]
+
+
+def test_reconcile_reuses_persisted_snapshot_instead_of_turning_pending_delivery_into_no_changes(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    service.start(repo, created["task_id"], request_id="stable-snapshot")
+    (repo / "target.txt").write_text("target advanced\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+
+    runtime.update({"running": False, "completed": True})
+    first = service.reconcile(repo, created["task_id"])
+    assert first["run"]["phase"] == "validation_required"
+    first_snapshot = dict(first["run"]["workspace_result"]["snapshot"])
+    assert first_snapshot["no_changes"] is False
+
+    second = service.reconcile(repo, created["task_id"])
+    assert second["status"] == "ongoing"
+    assert second["run"]["phase"] == "validation_required"
+    assert second["run"]["workspace_result"]["snapshot"] == first_snapshot
+    assert second["run"]["workspace_result"]["merge"]["status"] == "validation_required"
+    assert not (repo / "result.txt").exists()

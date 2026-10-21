@@ -190,11 +190,16 @@ class TaskRunService:
             return self.get(project, task_id)
 
         if runtime.get("completed"):
-            snapshot = self._workspaces.snapshot_result(
-                prepared,
-                excluded_paths=(prepared.project_root / ".ai-task-runner",),
-            )
+            run = task.get("run") if isinstance(task.get("run"), dict) else {}
+            current_result = run.get("workspace_result") if isinstance(run.get("workspace_result"), dict) else {}
+            snapshot = self._snapshot_from_result(current_result)
+            if snapshot is None:
+                snapshot = self._workspaces.snapshot_result(
+                    prepared,
+                    excluded_paths=(prepared.project_root / ".ai-task-runner",),
+                )
             base_result = {
+                **current_result,
                 "snapshot": snapshot.as_dict(),
                 "effective_mode": prepared.effective_mode,
                 "branch": prepared.task_branch,
@@ -371,6 +376,20 @@ class TaskRunService:
                 "last_error": f"{type(exc).__name__}: {exc}",
             }
         return value
+
+    @staticmethod
+    def _snapshot_from_result(result: dict[str, Any]) -> WorkspaceSnapshot | None:
+        raw = result.get("snapshot") if isinstance(result, dict) else None
+        if not isinstance(raw, dict):
+            return None
+        sha = str(raw.get("task_snapshot_sha") or "").strip()
+        if not sha:
+            return None
+        return WorkspaceSnapshot(
+            task_snapshot_sha=sha,
+            no_changes=bool(raw.get("no_changes")),
+            created_commit=bool(raw.get("created_commit")),
+        )
 
     def _current_workspace(self, project: Path, task_id: str) -> tuple[dict[str, Any], PreparedWorkspace]:
         task = self.tasks.get(project, task_id)
