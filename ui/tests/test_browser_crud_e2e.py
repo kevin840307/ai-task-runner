@@ -1783,11 +1783,26 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             assert delete_button.is_disabled()
             list_button = page.locator("#taskWorkspaceOpenList")
             assert list_button.is_visible()
-            assert list_button.is_disabled()
-            assert "Pause this Task before editing" in (list_button.get_attribute("title") or "")
+            assert list_button.is_enabled()
             restriction = page.locator(".task-workspace-action-note").inner_text()
             assert "Only New Tasks can be deleted safely" in restriction
-            assert "Pause this Task before editing runtime-affecting content." in restriction
+            assert "Task List is view-only. Pause this Task before editing runtime-affecting content." in restriction
+
+            list_button.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 2
+            assert page.locator(".task-workspace-durable-edit").count() == 2
+            assert all(button.is_disabled() for button in page.locator(".task-workspace-durable-edit").all())
+            add_button = page.locator("#taskWorkspaceAddTask")
+            yaml_button = page.locator("#taskWorkspaceYamlButton")
+            assert add_button.is_disabled()
+            assert yaml_button.is_disabled()
+            assert "Pause this Task before editing" in (add_button.get_attribute("title") or "")
+            assert "Pause this Task before editing" in (yaml_button.get_attribute("title") or "")
+            assert page.locator("#taskWorkspaceSave").is_hidden()
+            assert "Task List is view-only" in page.locator(".task-workspace-action-note").inner_text()
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             assert state.tasks.get(root, created["task_id"])["status"] == "ongoing"
             browser.close()
 

@@ -485,7 +485,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     render();
   }
 
-  function renderTaskRows(items, { editable = false, onEdit = null } = {}) {
+  function taskMutationBlockedReason(task = state?.task) {
+    const status = String(task?.status || "new");
+    if (status === "new") return "";
+    if (status === "ongoing") return "Pause this Task before editing runtime-affecting content";
+    const label = status.charAt(0).toUpperCase() + status.slice(1);
+    return `Task editing is unavailable while this Task is ${label}`;
+  }
+
+  function renderTaskRows(items, { editable = false, onEdit = null, disabledEditReason = "" } = {}) {
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
     list.className = "task-workspace-list";
@@ -529,14 +537,19 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         remove.onclick = () => removeItem(index);
         actions.append(edit, remove);
         row.appendChild(actions);
-      } else if (typeof onEdit === "function") {
+      } else if (typeof onEdit === "function" || disabledEditReason) {
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-durable-edit";
         edit.textContent = tr("task.edit_action", "Edit");
-        edit.onclick = () => onEdit(index);
+        if (disabledEditReason) {
+          edit.disabled = true;
+          edit.title = disabledEditReason;
+        } else {
+          edit.onclick = () => onEdit(index);
+        }
         actions.appendChild(edit);
         row.appendChild(actions);
       }
@@ -808,18 +821,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     edit.id = taskList ? "taskWorkspaceOpenList" : "taskWorkspaceEditTask";
     edit.type = "button";
     edit.textContent = taskList ? "Open Task List" : "Edit Task";
-    if (editable) {
-      edit.onclick = taskList ? () => beginTaskListEdit() : () => beginTaskEdit(0, "info");
+    if (taskList) {
+      edit.onclick = () => beginTaskListEdit();
+      if (!editable) restrictions.push("Task List is view-only. " + taskMutationBlockedReason(task) + ".");
+    } else if (editable) {
+      edit.onclick = () => beginTaskEdit(0, "info");
     } else {
       edit.disabled = true;
-      if (lifecycleStatus === "ongoing") {
-        edit.title = "Pause this Task before editing runtime-affecting content";
-        restrictions.push("Pause this Task before editing runtime-affecting content.");
-      } else {
-        const label = lifecycleStatus.charAt(0).toUpperCase() + lifecycleStatus.slice(1);
-        edit.title = `Task editing is unavailable while this Task is ${label}`;
-        restrictions.push(`Task editing is unavailable while this Task is ${label}.`);
-      }
+      edit.title = taskMutationBlockedReason(task);
+      restrictions.push(taskMutationBlockedReason(task) + ".");
     }
     actions.appendChild(edit);
 
@@ -902,26 +912,42 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       ? "<strong>Task order</strong><span>Add, edit, remove or reorder before Save.</span>"
       : "<strong>Task order</strong><span>Canonical ordered items</span>";
     body.appendChild(intro);
-    body.appendChild(renderTaskRows(editable ? state.editDraft.items : task.items, { editable }));
+    const blockedReason = editable ? "" : taskMutationBlockedReason(task);
+    body.appendChild(renderTaskRows(
+      editable ? state.editDraft.items : task.items,
+      { editable, disabledEditReason: blockedReason },
+    ));
 
+    const actions = document.createElement("div");
+    actions.className = "task-workspace-info-actions";
+    const add = document.createElement("button");
+    add.id = "taskWorkspaceAddTask";
+    add.type = "button";
+    add.textContent = tr("task.add", "+ Add task");
+    const yaml = document.createElement("button");
+    yaml.id = "taskWorkspaceYamlButton";
+    yaml.type = "button";
+    yaml.textContent = tr("task.edit_yaml", "Edit YAML");
     if (editable) {
-      const actions = document.createElement("div");
-      actions.className = "task-workspace-info-actions";
-      const add = document.createElement("button");
-      add.id = "taskWorkspaceAddTask";
-      add.type = "button";
-      add.textContent = tr("task.add", "+ Add task");
       add.onclick = addTaskListItem;
-      const yaml = document.createElement("button");
-      yaml.id = "taskWorkspaceYamlButton";
-      yaml.type = "button";
-      yaml.textContent = tr("task.edit_yaml", "Edit YAML");
       yaml.onclick = () => void openYaml();
-      actions.append(add, yaml);
+    } else {
+      add.disabled = true;
+      add.title = blockedReason;
+      yaml.disabled = true;
+      yaml.title = blockedReason;
+    }
+    actions.append(add, yaml);
+    if (editable) {
       const prompts = promptsButton();
       if (prompts) actions.appendChild(prompts);
-      body.appendChild(actions);
+    } else {
+      const note = document.createElement("p");
+      note.className = "task-workspace-action-note";
+      note.textContent = "Task List is view-only. " + blockedReason + ".";
+      body.appendChild(note);
     }
+    body.appendChild(actions);
     if (state.error) {
       const error = document.createElement("div");
       error.id = "taskWorkspaceError";
