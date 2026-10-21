@@ -1949,10 +1949,6 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
-def test_browser_workflow_settings_manager_and_prompt_crud() -> None:@pytest.mark.skipif(
-    _browser_unavailable(),
-    reason="Playwright/Chromium unavailable outside browser CI",
-)
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:

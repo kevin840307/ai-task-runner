@@ -996,7 +996,7 @@ def test_task_service_paused_edit_policy_locks_completed_prefix_and_restarts_cur
     assert updated["items"][4]["item_id"].startswith(paused["task_id"] + "-item-")
 
 
-def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:
+def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     service = TaskService()
