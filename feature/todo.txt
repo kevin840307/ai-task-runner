@@ -417,15 +417,20 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 11. Workspace / Worktree
 ------------------------
 
-[ ] Workspace policy 保留 Auto / Main / Isolated Worktree。
+[x] Workspace policy 保留 Auto / Main / Isolated Worktree。
+    - Production `workspace.manager.resolve_workspace_mode` 是唯一 resolver，正式支援 auto/main/worktree；`tests/test_workspace_manager.py` 覆蓋 policy matrix 與 busy Main block。
 [x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
 [x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
 [ ] 正式版 UI/Task flow 三種模式一律先建立獨立 Task Run worktree/local branch 再呼叫 Runner；這是外層 orchestration 規則，不是 Runner contract，CLI Runner 仍可直接跑任意 caller-supplied project_root。
-[ ] Project branch 是 canonical truth。
-[ ] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
-[ ] Task branch/worktree 直接從 captured target HEAD 建立；branch/path 使用 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
-[ ] Uncommitted Project working-tree 修改不自動進 Task base；要成為新 Task base 先 commit。
-[ ] Auto policy × Concurrent Main 規則固定如下：
+[x] Project branch 是 canonical truth。
+    - `WorkspaceManager.prepare` 只從目前 Project checkout 捕捉 branch/HEAD 作 Task base；`MergeManager` 的 delivery 只針對 captured target branch，不 hardcode main。
+[x] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
+    - `capture_target` 原子驗證 branch HEAD；`PreparedWorkspace` durable 保存 target branch/head，`restore` 不重新 capture，Project branch 後續前進也不 retarget 舊 run。
+[x] Task branch/worktree 直接從 captured target HEAD 建立；branch/path 使用 Task + Run identity，例如 local/task/T-001-r2、.worktrees/T-001-r2。
+    - Production identity 為 `local/task/<task-id>-r<run>` + `.worktrees/<repo>/<task-id>-r<run>`；existing branch/path 僅允許 exact identity/base idempotent reuse，否則 fail closed。
+[x] Uncommitted Project working-tree 修改不自動進 Task base；要成為新 Task base 先 commit。
+    - prepare 從 captured commit 建 isolated worktree；Git regression 實際保留 Project dirty file 並驗證 Task worktree只看到 committed base。
+[x] Auto policy × Concurrent Main 規則固定如下：
 
     | Auto policy / selection | Main 已 Running | Concurrent Off | Concurrent On |
     | --- | --- | --- | --- |
@@ -434,11 +439,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     | Always Worktree / Auto | yes | Isolated Worktree | Isolated Worktree |
     | Explicit Main | yes | Block Main start | Main |
 
-[ ] Concurrent Main 開關只控制 Main busy 時能否啟動 Main；不可改寫 Auto policy。
+[x] Concurrent Main 開關只控制 Main busy 時能否啟動 Main；不可改寫 Auto policy。
+    - Resolver regression 覆蓋 Busy→Worktree 永遠維持 worktree、Always Main/explicit Main 才由 concurrent switch 決定 block/Main。
 [ ] Concurrent Main=On 時多個 Main Task 可在各自 isolated worktree 平行跑；同 target branch direct merge 仍排隊。
-[ ] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
+[x] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
+    - 正式 Git identity/path 只由 top-level `workspace/manager.py` + `workspace/worktree.py` 產生；architecture test 鎖定 Runner 不 import workspace、workspace 不 import Runner/UI。
 [ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
-[ ] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
+[x] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
+    - `WorkspaceManager.snapshot_result`/`snapshot_task_result` 在 add/commit 前後重驗 ownership、branch/base ancestry 與 active Git operation；支援保留 Agent commits、只 commit remaining diff、no_changes 不造空 commit。
 [ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
 
 
