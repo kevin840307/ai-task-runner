@@ -2688,6 +2688,29 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.click("#themeButton")
             assert page.locator("#themePanel").is_visible()
 
+            # Execution settings share the same backend-owned Global Settings store.
+            # Exercise every Auto policy now; actual Main/worktree resolution stays
+            # in the final Workspace phase.
+            assert page.locator("#globalMergeFailureLimit").get_attribute("min") == "0"
+            assert page.locator("#globalMergeFailureLimit").get_attribute("max") == "99"
+            for policy in ("busy-worktree", "always-main", "always-worktree"):
+                page.select_option("#globalAutoWorkspacePolicy", policy)
+                page.wait_for_function(
+                    "(value) => document.querySelector('#globalAutoWorkspacePolicy')?.value === value",
+                    arg=policy,
+                )
+                page.wait_for_timeout(30)
+                assert state.global_settings.get()["execution"]["auto_workspace_policy"] == policy
+
+            page.fill("#globalMergeFailureLimit", "99")
+            page.locator("#globalMergeFailureLimit").press("Tab")
+            page.wait_for_timeout(30)
+            assert state.global_settings.get()["execution"]["merge_failure_limit"] == 99
+
+            page.locator("#globalAllowConcurrentMain").check()
+            page.wait_for_timeout(30)
+            assert state.global_settings.get()["execution"]["allow_concurrent_main_tasks"] is True
+
             for appearance in ("light", "dark"):
                 page.locator(f"[data-appearance-option='{appearance}']").click()
                 page.wait_for_function(
@@ -2873,6 +2896,12 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("html").get_attribute("data-appearance-preference") == "dark"
             assert page.locator("html").get_attribute("data-appearance") == "dark"
             assert page.locator("html").get_attribute("lang") == "en"
+            execution = state.global_settings.get()["execution"]
+            assert execution == {
+                "auto_workspace_policy": "always-worktree",
+                "merge_failure_limit": 99,
+                "allow_concurrent_main_tasks": True,
+            }
             assert not errors
             browser.close()
 
