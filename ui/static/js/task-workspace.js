@@ -246,10 +246,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     await openPrompts();
   }
 
-  function promptsButton() {
+  function promptsButton(id = "taskWorkspaceOpenPrompts") {
     if (typeof openPrompts !== "function") return null;
     const button = document.createElement("button");
-    button.id = "taskWorkspaceOpenPrompts";
+    button.id = id;
     button.type = "button";
     button.textContent = tr("task.open_prompts", "Open Prompts");
     button.onclick = () => void openPromptsFromWorkspace();
@@ -518,7 +518,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const meta = document.createElement("small");
       meta.textContent = [String(item.workflow || "Workflow"), String(item.workspace || "auto").toUpperCase()].join(" · ");
       const prompt = document.createElement("p");
-      prompt.textContent = String(item.prompt || "");
+      prompt.textContent = String(item.prompt || item.goal_file || "");
       copy.append(title, meta, prompt);
       row.append(number, copy);
       if (editable) {
@@ -725,7 +725,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const current = String(value || "");
     const empty = document.createElement("option");
     empty.value = "";
-    empty.textContent = rows.length ? "Select Prompt asset" : "No Prompt assets loaded";
+    empty.textContent = rows.length ? tr("task.select_prompt_asset", "Select Prompt asset") : tr("task.no_prompt_assets", "No Prompt assets loaded");
     select.appendChild(empty);
     for (const row of rows) {
       const option = document.createElement("option");
@@ -826,10 +826,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     const source = sourceState(item);
     const promptCard = sourceCard(
-      "Task Prompt",
-      "Write instructions, use a file, or reference an existing Prompt asset.",
+      tr("task.prompt_source_title", "Task Prompt"),
+      tr("task.prompt_source_help", "Write instructions, use a file, or reference an existing Prompt asset."),
       "prompt",
-      [["write", "Write"], ["file", "File"], ["asset", "Asset"]],
+      [["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
       source.promptMode,
     );
     promptCard.tabs.querySelectorAll("button").forEach((button) => {
@@ -856,7 +856,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.id = "taskWorkspaceGoalFile";
       input.value = String(item.goal_file || source.promptFile || "");
       input.maxLength = 4096;
-      input.placeholder = "Enter Task Prompt file path";
+      input.placeholder = tr("task.goal_file_placeholder", "Enter Task Prompt file path");
       input.addEventListener("input", () => {
         const previous = String(item.goal_file || "");
         if (previous !== input.value) queueUploadCancel(previous);
@@ -869,7 +869,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       upload.type = "button";
       upload.className = "task-workspace-upload";
       upload.dataset.taskUploadField = "goal_file";
-      upload.textContent = "Upload file";
+      upload.textContent = tr("task.upload_file", "Upload file");
       upload.addEventListener("click", () => chooseUpload("goal_file", upload));
       row.append(input, upload);
       promptCard.body.appendChild(row);
@@ -880,7 +880,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         updateItem(state.index, "goal_file", value);
       });
       promptCard.body.appendChild(select);
-      const prompts = promptsButton();
+      const prompts = promptsButton("taskWorkspaceGoalAssetOpenPrompts");
       if (prompts) promptCard.body.appendChild(prompts);
       appendFieldError(promptCard.card, select, "goal_file");
     }
@@ -916,14 +916,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     if (capability?.requires_python_validator) {
       const validatorCard = sourceCard(
-        "File Validator",
-        "Required by the selected Workflow.",
+        tr("task.file_validator", "File Validator"),
+        tr("task.file_validator_help", "Required by the selected Workflow."),
         "validator",
         [],
         "",
       );
       validatorCard.tabs.remove();
-      const control = pathControl("taskWorkspaceValidator", "validator", item.validator, "Enter validator path");
+      const control = pathControl("taskWorkspaceValidator", "validator", item.validator, tr("task.validator_placeholder", "Enter validator path"));
       validatorCard.body.appendChild(control.row);
       appendFieldError(validatorCard.card, control.input, "validator");
       validationGrid.appendChild(validatorCard.card);
@@ -931,10 +931,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     if (capability?.has_ai_validator) {
       const aiCard = sourceCard(
-        "AI Validation",
-        "Use the Workflow default or provide custom validation instructions.",
+        tr("task.ai_validation_title", "AI Validation"),
+        tr("task.ai_validation_help", "Use the Workflow default or provide custom validation instructions."),
         "ai",
-        [["default", "Default"], ["write", "Write"], ["file", "File"], ["asset", "Asset"]],
+        [["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
         source.aiMode,
       );
       aiCard.tabs.querySelectorAll("button").forEach((button) => {
@@ -948,7 +948,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (source.aiMode === "default") {
         const note = document.createElement("p");
         note.className = "task-workspace-source-note";
-        note.textContent = "Uses the AI Validator Stage default prompt.";
+        note.textContent = tr("task.ai_default_help", "Uses the AI Validator Stage default prompt.");
         aiCard.body.appendChild(note);
       } else if (source.aiMode === "write") {
         const textarea = document.createElement("textarea");
@@ -966,7 +966,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           "taskWorkspaceAiValidatorPrompt",
           "ai_validator_prompt_file",
           item.ai_validator_prompt_file || source.aiFile,
-          "Enter AI Validator Prompt file path",
+          tr("task.ai_file_placeholder", "Enter AI Validator Prompt file path"),
         );
         control.input.addEventListener("input", () => { source.aiFile = control.input.value; });
         aiCard.body.appendChild(control.row);
@@ -981,7 +981,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           },
         );
         aiCard.body.appendChild(select);
-        const prompts = promptsButton();
+        const prompts = promptsButton("taskWorkspaceAiAssetOpenPrompts");
         if (prompts) aiCard.body.appendChild(prompts);
         appendFieldError(aiCard.card, select, "ai_validator_prompt_file");
       }
@@ -1509,19 +1509,19 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       let message = "";
       if (source.promptMode === "file" && !String(item.goal_file || "").trim()) {
         field = "goal_file";
-        message = `Task item ${index + 1} goal_file is required for File mode`;
+        message = trf("task.goal_file_required", { index: index + 1 }, `Task item ${index + 1} goal_file is required for File mode`);
       } else if (source.promptMode === "asset" && !String(item.goal_file || "").trim()) {
         field = "goal_file";
-        message = `Task item ${index + 1} Prompt asset is required for Asset mode`;
+        message = trf("task.prompt_asset_required", { index: index + 1 }, `Task item ${index + 1} Prompt asset is required for Asset mode`);
       } else if (source.aiMode === "write" && !String(item.ai_validator_prompt || "").trim()) {
         field = "ai_validator_prompt";
-        message = `Task item ${index + 1} AI Validator Prompt text is required for Write mode`;
+        message = trf("task.ai_text_required", { index: index + 1 }, `Task item ${index + 1} AI Validator Prompt text is required for Write mode`);
       } else if (source.aiMode === "file" && !String(item.ai_validator_prompt_file || "").trim()) {
         field = "ai_validator_prompt_file";
-        message = `Task item ${index + 1} AI Validator Prompt file is required for File mode`;
+        message = trf("task.ai_file_required", { index: index + 1 }, `Task item ${index + 1} AI Validator Prompt file is required for File mode`);
       } else if (source.aiMode === "asset" && !String(item.ai_validator_prompt_file || "").trim()) {
         field = "ai_validator_prompt_file";
-        message = `Task item ${index + 1} AI Validator Prompt asset is required for Asset mode`;
+        message = trf("task.ai_asset_required", { index: index + 1 }, `Task item ${index + 1} AI Validator Prompt asset is required for Asset mode`);
       }
       if (!field) continue;
       state.index = index;

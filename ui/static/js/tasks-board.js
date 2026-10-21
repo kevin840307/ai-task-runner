@@ -137,7 +137,7 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
     meta.textContent = [String(task._project_name || ""), String(task.task_id || "")].filter(Boolean).join(" · ");
     const prompt = document.createElement("span");
     prompt.className = "tasks-board-card-prompt";
-    prompt.textContent = String(task.items?.[0]?.prompt || "");
+    prompt.textContent = String(task.items?.[0]?.prompt || task.items?.[0]?.goal_file || "");
     button.append(head, meta, prompt);
     button.addEventListener("click", () => openTask?.(task, { returnFocus: button }));
     return button;

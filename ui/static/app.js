@@ -386,16 +386,31 @@ const taskWorkspace = createTaskWorkspaceController({
   },
 });
 function taskWorkspaceAssets(options = {}) {
-  const supplied = Array.isArray(options.workflows) ? options.workflows : [];
+  const suppliedWorkflows = Array.isArray(options.workflows) ? options.workflows : [];
+  const suppliedPrompts = Array.isArray(options.prompts) ? options.prompts : [];
   return {
     ...options,
-    workflows: supplied.length ? supplied : (state.studioFiles.workflows || []),
-    prompts: state.studioFiles.prompts || [],
+    workflows: suppliedWorkflows.length ? suppliedWorkflows : (state.studioFiles.workflows || []),
+    prompts: suppliedPrompts.length ? suppliedPrompts : (state.studioFiles.prompts || []),
   };
+}
+async function openBoardTask(task, options = {}) {
+  const projectPath = String(task?.project || "").trim();
+  if (!projectPath) return showActionError("Task Project is missing.", "Open Task failed");
+  try {
+    const assets = await api("/api/studio/files?x=1&project=" + encodeURIComponent(projectPath), { timeoutMs: 15000 });
+    taskWorkspace.openTask(task, {
+      ...options,
+      workflows: Array.isArray(assets?.workflows) ? assets.workflows : [],
+      prompts: Array.isArray(assets?.prompts) ? assets.prompts : [],
+    });
+  } catch (error) {
+    showActionError(error.message, "Open Task failed");
+  }
 }
 tasksBoard = createTasksBoardController({
   api,
-  openTask: (task, options = {}) => taskWorkspace.openTask(task, taskWorkspaceAssets(options)),
+  openTask: openBoardTask,
   getProjects: () => state.projects,
   getCurrentProject: () => state.project,
   showError: showActionError,

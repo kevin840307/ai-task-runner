@@ -3163,6 +3163,95 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        second = root / "second-project"
+        second.mkdir()
+        state._write_projects([
+            {"name": "Fixture Project", "path": str(root)},
+            {"name": "Second Project", "path": str(second)},
+        ])
+        project_workflows = second / ".ai-task-runner" / "assets" / "workflows"
+        project_workflows.mkdir(parents=True)
+        second_workflow = project_workflows / "second-only.yaml"
+        second_workflow.write_text(
+            "stages:\n"
+            "  validate_file:\n    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "flow: [validate_file]\n",
+            encoding="utf-8",
+        )
+        state.tasks._workflow_requirements = state._task_workflow_requirements
+        second_row = next(row for row in state.projects() if row["name"] == "Second Project")
+        state.tasks.create(
+            second,
+            {
+                "title": "Second catalog task",
+                "items": [{
+                    "title": "Second child",
+                    "prompt": "Use the second Project catalog only",
+                    "workflow": str(second_workflow),
+                    "project": str(second),
+                    "workspace": "auto",
+                    "validator": str(second / "validate.py"),
+                }],
+            },
+            request_id="second-catalog-task",
+            project_id=second_row["project_id"],
+        )
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page, "Fixture Project")
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksProjectFilterButton")
+            page.click("#tasksProjectFilterAll")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
+            assert task_card.count() == 1
+            task_card.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceEditTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
+            assert page.locator("#taskWorkspaceWorkflow").input_value() == str(second_workflow.resolve())
+            assert page.locator("#taskWorkspaceWorkflow option").filter(has_text="second-only.yaml").count() == 1
+            assert page.locator("#taskWorkspaceValidator").is_visible()
+            assert page.locator("#taskWorkspaceValidator").input_value() == str(second / "validate.py")
+            assert not errors
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 @pytest.mark.parametrize(
     ("viewport", "color_scheme"),
     [
@@ -3250,6 +3339,13 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert shell_before["x"] + shell_before["width"] <= viewport["width"] + 1
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
+            initial_prompt_box = assert_inside_drawer("[data-task-source-card='prompt']")
+            initial_validator_box = assert_inside_drawer("[data-task-source-card='validator']")
+            initial_ai_box = assert_inside_drawer("[data-task-source-card='ai']")
+            for box in (initial_prompt_box, initial_validator_box, initial_ai_box):
+                assert box["y"] < viewport["height"]
+                assert box["y"] + min(32, box["height"]) <= viewport["height"] + 1
+
             prompt_tabs = page.locator("[data-task-source-group='prompt'] button")
             prompt_widths = [button.bounding_box()["width"] for button in prompt_tabs.all()]
             assert len(prompt_widths) == 3
@@ -3261,6 +3357,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert max(ai_widths) - min(ai_widths) <= 2
             assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
 
+            prompt_card_widths = []
             for mode, control in (
                 ("file", "#taskWorkspaceGoalFile"),
                 ("asset", "#taskWorkspaceGoalAsset"),
@@ -3268,18 +3365,23 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             ):
                 page.locator(f"[data-task-source-group='prompt'] [data-task-source-mode='{mode}']").click()
                 page.wait_for_function("(selector) => document.querySelector(selector) !== null", arg=control)
-                assert_inside_drawer("[data-task-source-card='prompt']")
+                prompt_card_widths.append(assert_inside_drawer("[data-task-source-card='prompt']")["width"])
                 shell_now = page.locator("#taskWorkspaceShell").bounding_box()
                 assert shell_now
                 assert abs(shell_now["width"] - shell_before["width"]) <= 1
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 if mode == "file":
                     page.fill(control, str(root / "goal.md"))
+                    assert_inside_drawer("[data-task-source-card='prompt'] .task-workspace-upload")
                 elif mode == "asset":
                     assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
                     page.select_option(control, str(prompt_asset))
+                    assert page.locator("#taskWorkspaceGoalAssetOpenPrompts").is_visible()
+                    assert_inside_drawer("#taskWorkspaceGoalAssetOpenPrompts")
+                    assert page.locator("[id='taskWorkspaceOpenPrompts']").count() == 1
                 else:
                     page.fill(control, "Implement source mode geometry safely.")
+            assert max(prompt_card_widths) - min(prompt_card_widths) <= 1
 
             page.locator("[data-task-source-group='prompt'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceGoalFile') !== null")
@@ -3293,6 +3395,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert validator_card.is_visible()
             assert ai_card.is_visible()
 
+            ai_card_widths = []
             for mode, control in (
                 ("write", "#taskWorkspaceAiValidatorPromptText"),
                 ("file", "#taskWorkspaceAiValidatorPrompt"),
@@ -3309,15 +3412,19 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     }""",
                     arg=[mode, control],
                 )
-                assert_inside_drawer("[data-task-source-card='ai']")
+                ai_card_widths.append(assert_inside_drawer("[data-task-source-card='ai']")["width"])
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 if mode == "write":
                     page.fill(control, "Use custom AI validation evidence.")
                 elif mode == "file":
                     page.fill(control, str(root / "ai-review.md"))
+                    assert_inside_drawer("[data-task-source-card='ai'] .task-workspace-upload")
                 elif mode == "asset":
                     assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
                     page.select_option(control, str(prompt_asset))
+                    assert page.locator("#taskWorkspaceAiAssetOpenPrompts").is_visible()
+                    assert_inside_drawer("#taskWorkspaceAiAssetOpenPrompts")
+                    assert page.locator("[id='taskWorkspaceOpenPrompts']").count() == 1
 
                 if viewport["width"] > 760:
                     validator_box = validator_card.bounding_box()
@@ -3325,12 +3432,24 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     assert validator_box and ai_box
                     assert abs(validator_box["y"] - ai_box["y"]) <= 1
                     assert abs(validator_box["height"] - ai_box["height"]) <= 1
+            assert max(ai_card_widths) - min(ai_card_widths) <= 1
 
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "ai-review.md")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
             page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-source-note') !== null")
+
+            if viewport["width"] == 820 and color_scheme == "light":
+                page.evaluate("window.I18n.setLanguage('zh-TW')")
+                page.wait_for_function(
+                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === '撰寫'"
+                )
+                assert page.locator("[data-task-source-card='ai']").get_by_text("AI 驗證", exact=True).is_visible()
+                page.evaluate("window.I18n.setLanguage('en')")
+                page.wait_for_function(
+                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
+                )
 
             page.fill("#taskWorkspaceDraftTitle", "Canonical source modes")
             page.click("#taskWorkspaceSave")
