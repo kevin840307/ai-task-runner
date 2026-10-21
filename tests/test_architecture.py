@@ -71,6 +71,20 @@ def test_project_chat_agent_metadata_reuses_runner_backend_contract():
         assert provider_specific not in generic_projection
 
 
+def test_task_draft_subprocess_contract_does_not_import_runner_into_ui():
+    service = (ROOT / "ui/task_draft_service.py").read_text(encoding="utf-8")
+    contract = (ROOT / "tool/task_draft_contract.py").read_text(encoding="utf-8")
+
+    assert "from tool.task_draft_contract import" in service
+    assert "tool.task_draft_agent" not in service
+    assert "from runner" not in service
+    assert "import runner" not in service
+    assert "runner." not in contract
+    assert "TASK_DRAFT_AGENT_TIMEOUT_SECONDS" in contract
+    assert "TASK_DRAFT_WRAPPER_GRACE_SECONDS" in contract
+    assert "TASK_DRAFT_ERROR_CHARS" in contract
+
+
 def test_project_chat_event_feed_is_separate_from_runner_runtime_projection():
     server = (ROOT / "ui/server.py").read_text(encoding="utf-8")
     chat_service = (ROOT / "ui/chat_service.py").read_text(encoding="utf-8")
