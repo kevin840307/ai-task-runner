@@ -1,8 +1,10 @@
 """Deterministic Git worktree mechanics for the workspace adapter."""
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -114,11 +116,10 @@ def verify_worktree(
 
 
 @contextmanager
-def repository_git_lock(repo: Path):
-    """Short cross-process lock for repository ref/worktree mutations only."""
+def _git_file_lock(repo: Path, filename: str, *, heartbeat: bool = False):
     common = repository_identity(repo)
     common.mkdir(parents=True, exist_ok=True)
-    lock = common / LOCK_FILENAME
+    lock = common / filename
     deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
     handle: int | None = None
     while handle is None:
@@ -132,17 +133,55 @@ def repository_git_lock(repo: Path):
             except OSError:
                 pass
             if time.monotonic() >= deadline:
-                raise WorkspaceError(f"Timed out waiting for repository Git lock: {lock}")
+                raise WorkspaceError(f"Timed out waiting for Git lock: {lock}")
             time.sleep(LOCK_POLL_SECONDS)
+    stop = threading.Event()
+    pulse: threading.Thread | None = None
     try:
         os.write(handle, f"{os.getpid()}\n".encode("ascii"))
+        if heartbeat:
+            def keep_fresh() -> None:
+                interval = max(1.0, STALE_LOCK_SECONDS / 3)
+                while not stop.wait(interval):
+                    try:
+                        os.utime(lock, None)
+                    except OSError:
+                        return
+            pulse = threading.Thread(
+                target=keep_fresh,
+                name="workspace-git-lock-heartbeat",
+                daemon=True,
+            )
+            pulse.start()
         yield
     finally:
+        stop.set()
+        if pulse is not None:
+            pulse.join(timeout=1)
         os.close(handle)
         try:
             lock.unlink()
         except FileNotFoundError:
             pass
+
+
+@contextmanager
+def repository_git_lock(repo: Path):
+    """Short cross-process lock for repository ref/worktree mutations only."""
+    with _git_file_lock(repo, LOCK_FILENAME):
+        yield
+
+
+@contextmanager
+def target_branch_git_lock(repo: Path, branch: str):
+    """Serialize delivery transactions for one repository + target branch."""
+    key = hashlib.sha256(str(branch).encode("utf-8")).hexdigest()[:24]
+    with _git_file_lock(
+        repo,
+        f"ai-task-runner-merge-{key}.lock",
+        heartbeat=True,
+    ):
+        yield
 
 
 def add_or_reuse_worktree(
@@ -198,12 +237,13 @@ def _git_path(worktree: Path, name: str) -> Path:
     return (raw if raw.is_absolute() else worktree / raw).resolve()
 
 
+def active_git_operations(worktree: Path) -> tuple[str, ...]:
+    return tuple(name for name in _OPERATION_PATHS if _git_path(worktree, name).exists())
+
+
 def active_git_operation(worktree: Path) -> str:
-    for name in _OPERATION_PATHS:
-        path = _git_path(worktree, name)
-        if path.exists():
-            return name
-    return ""
+    values = active_git_operations(worktree)
+    return values[0] if values else ""
 
 
 def snapshot_task_result(

@@ -5,9 +5,12 @@ here and pass that path through the existing Runner public contract.
 """
 
 from .manager import WorkspaceManager, resolve_workspace_mode
-from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
+from .merge import MergeManager
+from .model import MergeResult, PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
 
 __all__ = [
+    "MergeManager",
+    "MergeResult",
     "PreparedWorkspace",
     "WorkspaceBlockedError",
     "WorkspaceError",

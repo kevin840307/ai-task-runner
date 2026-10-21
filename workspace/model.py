@@ -103,3 +103,22 @@ class WorkspaceSnapshot:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class MergeResult:
+    status: str
+    target_head_sha: str = ""
+    merged_target_head_sha: str = ""
+    target_worktree: Path | None = None
+    validation_required: bool = False
+    verdict: str = ""
+    real_merge_failure: bool = False
+    conflict_files: tuple[str, ...] = ()
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        if self.target_worktree is not None:
+            value["target_worktree"] = str(self.target_worktree)
+        return value

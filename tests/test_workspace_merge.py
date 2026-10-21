@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from workspace import MergeManager, WorkspaceError, WorkspaceManager
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr or result.stdout
+    return result.stdout.strip()
+
+
+def _repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "project"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "merge-test@example.invalid")
+    _git(repo, "config", "user.name", "Merge Test")
+    (repo / "app.txt").write_text("base\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "checkout", "-b", "feature/base")
+    return repo
+
+
+def _task(repo: Path, suffix: str = "a"):
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id=f"task-{suffix * 32}",
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "always-main",
+            "allow_concurrent_main_tasks": True,
+        },
+        main_running=False,
+    )
+    return manager, prepared
+
+
+def _snapshot_with_file(repo: Path, suffix: str = "a"):
+    manager, prepared = _task(repo, suffix)
+    (prepared.worktree_path / "task.txt").write_text(f"task {suffix}\n", encoding="utf-8")
+    snapshot = manager.snapshot_result(prepared)
+    assert snapshot.no_changes is False
+    return manager, prepared, snapshot
+
+
+def test_direct_merge_uses_no_ff_boundary_without_redundant_validation(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    called = []
+
+    result = MergeManager().merge(
+        prepared,
+        snapshot,
+        validate=lambda _project: called.append(True) or "PASS",
+    )
+
+    assert result.status == "merged"
+    assert result.validation_required is False
+    assert called == []
+    assert (repo / "task.txt").read_text(encoding="utf-8") == "task a\n"
+    parents = _git(repo, "rev-list", "--parents", "-n", "1", "HEAD").split()
+    assert len(parents) == 3
+    assert snapshot.task_snapshot_sha in parents[1:]
+
+
+def test_advanced_target_requires_validation_before_merge_commit(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("new target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    before = _git(repo, "rev-parse", "HEAD")
+    seen = []
+
+    def validate(project: Path) -> str:
+        seen.append(project)
+        assert (project / "task.txt").read_text(encoding="utf-8") == "task a\n"
+        assert (project / "target.txt").read_text(encoding="utf-8") == "new target\n"
+        return "PASS"
+
+    result = MergeManager().merge(prepared, snapshot, validate=validate)
+
+    assert result.status == "merged"
+    assert result.validation_required is True
+    assert result.verdict == "PASS"
+    assert seen == [repo.resolve()]
+    assert result.target_head_sha == before
+    assert result.merged_target_head_sha != before
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_advanced_target_without_validation_aborts_cleanly(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "validation_required"
+    assert result.validation_required is True
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert _git(repo, "status", "--porcelain") == ""
+    merge_head = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+    assert merge_head.returncode != 0
+
+
+@pytest.mark.parametrize(
+    ("verdict", "status", "real_failure"),
+    [
+        ("SOURCE_FAIL", "source_fail", True),
+        ("TECHNICAL_ERROR", "technical_error", False),
+    ],
+)
+def test_merge_validation_verdicts_abort_without_mixing_target(
+    tmp_path: Path,
+    verdict: str,
+    status: str,
+    real_failure: bool,
+):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot, validate=lambda _project: verdict)
+
+    assert result.status == status
+    assert result.verdict == verdict
+    assert result.real_merge_failure is real_failure
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_validation_exception_is_technical_error_and_does_not_count_merge_failure(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    def fail(_project: Path) -> str:
+        raise RuntimeError("validator unavailable")
+
+    result = MergeManager().merge(prepared, snapshot, validate=fail)
+
+    assert result.status == "technical_error"
+    assert result.verdict == "TECHNICAL_ERROR"
+    assert result.real_merge_failure is False
+    assert "validator unavailable" in result.detail
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_real_git_conflict_aborts_and_reports_conflicting_files(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager, prepared = _task(repo)
+    (prepared.worktree_path / "app.txt").write_text("task side\n", encoding="utf-8")
+    snapshot = manager.snapshot_result(prepared)
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "target side")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot, validate=lambda _project: "PASS")
+
+    assert result.status == "conflict"
+    assert result.real_merge_failure is True
+    assert result.conflict_files == ("app.txt",)
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "target side\n"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_dirty_captured_target_checkout_waits_without_stash_or_reset(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "user.txt").write_text("uncommitted user work\n", encoding="utf-8")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "waiting_target_clean"
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert (repo / "user.txt").read_text(encoding="utf-8") == "uncommitted user work\n"
+
+
+def test_target_branch_not_checked_out_uses_managed_delivery_without_switching_user_checkout(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    _git(repo, "checkout", "-b", "user/other")
+    assert _git(repo, "branch", "--show-current") == "user/other"
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "merged"
+    assert _git(repo, "branch", "--show-current") == "user/other"
+    assert _git(repo, "show", "feature/base:task.txt") == "task a"
+    managed = prepared.worktree_path.parent / "_delivery"
+    assert not any(managed.glob("*")) if managed.exists() else True
+
+
+def test_target_branch_in_unmanaged_worktree_waits_without_mutation(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    _git(repo, "checkout", "-b", "user/other")
+    user_target = tmp_path / "user-target"
+    _git(repo, "worktree", "add", str(user_target), "feature/base")
+    before = _git(user_target, "rev-parse", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "waiting_target_workspace"
+    assert result.target_worktree == user_target.resolve()
+    assert _git(user_target, "rev-parse", "HEAD") == before
+    assert _git(user_target, "status", "--porcelain") == ""
+
+
+def test_deleted_target_branch_waits_without_guessing_replacement(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    _git(repo, "checkout", "-b", "user/other")
+    _git(repo, "branch", "-D", "feature/base")
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "waiting_target_branch"
+    assert _git(repo, "branch", "--show-current") == "user/other"
+
+
+def test_rewritten_target_history_waits_without_merge_failure(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    empty_tree = _git(repo, "mktree")
+    rewritten = _git(repo, "commit-tree", empty_tree, "-m", "rewritten target")
+    _git(repo, "reset", "--hard", rewritten)
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "waiting_target_history"
+    assert result.real_merge_failure is False
+    assert _git(repo, "rev-parse", "HEAD") == rewritten
+
+
+def test_already_merged_source_finalizes_idempotently_without_duplicate_merge(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    _git(repo, "merge", "--no-ff", prepared.task_branch, "-m", "manual delivery")
+    before = _git(repo, "rev-parse", "HEAD")
+    count = _git(repo, "rev-list", "--count", "HEAD")
+
+    result = MergeManager().merge(prepared, snapshot, validate=lambda _project: "SOURCE_FAIL")
+
+    assert result.status == "merged"
+    assert result.merged_target_head_sha == before
+    assert _git(repo, "rev-list", "--count", "HEAD") == count
+
+
+def test_source_branch_change_after_snapshot_fails_closed(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager, prepared, snapshot = _snapshot_with_file(repo)
+    (prepared.worktree_path / "late.txt").write_text("late\n", encoding="utf-8")
+    manager.snapshot_result(prepared)
+
+    with pytest.raises(WorkspaceError, match="snapshot no longer matches"):
+        MergeManager().merge(prepared, snapshot)
