@@ -2903,15 +2903,22 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
 
             page.click("#themeButton")
             page.select_option("#globalDefaultAgent", "opencode")
-            page.fill("#globalDefaultModel", "openai/gpt-5.2")
-            page.locator("#globalDefaultModel").press("Tab")
+            page.wait_for_function(
+                "() => document.querySelector('#globalDefaultModel')?.querySelector('option[value=\"openai/gpt-5.2\"]') !== null"
+            )
+            page.select_option("#globalDefaultModel", "openai/gpt-5.2")
+            page.wait_for_function(
+                "() => document.querySelector('#globalDefaultReasoning')?.querySelector('option[value=\"deep\"]') !== null"
+            )
             page.select_option("#globalDefaultMode", "read")
             page.select_option("#globalDefaultReasoning", "deep")
             page.fill("#globalDefaultWorkflow", workflow)
             page.locator("#globalDefaultWorkflow").press("Tab")
             page.wait_for_function(
                 """() => document.querySelector('#globalDefaultAgent')?.value === 'opencode'
-                    && document.querySelector('#globalDefaultMode')?.value === 'read'"""
+                    && document.querySelector('#globalDefaultModel')?.value === 'openai/gpt-5.2'
+                    && document.querySelector('#globalDefaultMode')?.value === 'read'
+                    && document.querySelector('#globalDefaultReasoning')?.value === 'deep'"""
             )
             defaults = state.global_settings.get()["defaults"]
             assert defaults == {

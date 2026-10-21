@@ -101,7 +101,7 @@ function rememberAiValidatorPrompt(workflow, value) {
 }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, globalSettingsWrite: Promise.resolve(), projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, globalSettingsWrite: Promise.resolve(), globalDefaultCatalog: { agent: "", models: [], modes: [], reasoning: [] }, globalDefaultCatalogLoading: false, globalDefaultCatalogToken: 0, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "project-chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -166,6 +166,76 @@ async function updateGlobalSettings(patch) {
   state.globalSettingsWrite = pending.then(() => undefined, () => undefined);
   return pending;
 }
+function addGlobalDefaultOption(select, value, label, { disabled = false } = {}) {
+  const option = document.createElement("option");
+  option.value = String(value ?? "");
+  option.textContent = String(label ?? value ?? "");
+  option.disabled = !!disabled;
+  select.appendChild(option);
+}
+function fillGlobalDefaultSelect(select, rows, selected, emptyLabel, mapper = (row) => [row, row]) {
+  if (!select) return;
+  select.innerHTML = "";
+  addGlobalDefaultOption(select, "", emptyLabel);
+  for (const row of rows) {
+    const [value, label, disabled] = mapper(row);
+    addGlobalDefaultOption(select, value, label, { disabled });
+  }
+  const values = [...select.options].map((option) => option.value);
+  if (selected && !values.includes(selected)) addGlobalDefaultOption(select, selected, selected + " · unavailable", { disabled: true });
+  select.value = selected || "";
+  select.disabled = state.globalDefaultCatalogLoading;
+}
+function globalDefaultProjectPath() {
+  return String(state.project?.path || state.projects?.[0]?.path || "");
+}
+function usableGlobalDefaultCatalog(defaults = state.globalSettings?.defaults || {}) {
+  const effectiveAgent = String(defaults.agent || state.defaultBackend || "");
+  return state.globalDefaultCatalog?.agent === effectiveAgent
+    ? state.globalDefaultCatalog
+    : { agent: "", models: [], modes: [], reasoning: [] };
+}
+async function refreshGlobalDefaultCatalog({ refresh = false, agent = "", model = "" } = {}) {
+  const project = globalDefaultProjectPath();
+  const defaults = state.globalSettings?.defaults || {};
+  const selectedAgent = String(agent || defaults.agent || state.defaultBackend || "");
+  const selectedModel = String(model || defaults.model || "");
+  const token = ++state.globalDefaultCatalogToken;
+  if (!project || !selectedAgent) {
+    state.globalDefaultCatalog = { agent: selectedAgent, models: [], modes: [], reasoning: [] };
+    state.globalDefaultCatalogLoading = false;
+    renderGlobalSettingsForm();
+    return state.globalDefaultCatalog;
+  }
+  state.globalDefaultCatalogLoading = true;
+  renderGlobalSettingsForm();
+  const query = new URLSearchParams({ project, agent: selectedAgent });
+  if (selectedModel) query.set("model", selectedModel);
+  if (refresh) query.set("refresh", "1");
+  try {
+    const data = await api("/api/chat/settings-catalog?" + query.toString(), { timeoutMs: 30000 });
+    if (token !== state.globalDefaultCatalogToken) return state.globalDefaultCatalog;
+    state.globalDefaultCatalog = {
+      agent: selectedAgent,
+      models: Array.isArray(data.models) ? data.models : [],
+      modes: Array.isArray(data.modes) ? data.modes.filter((row) => row && row.supported !== false) : [],
+      reasoning: Array.isArray(data.reasoning) ? data.reasoning : [],
+    };
+    return state.globalDefaultCatalog;
+  } catch (error) {
+    if (token === state.globalDefaultCatalogToken) {
+      state.globalDefaultCatalog = { agent: selectedAgent, models: [], modes: [], reasoning: [] };
+      showActionError(error.message, "Global defaults catalog unavailable");
+    }
+    return state.globalDefaultCatalog;
+  } finally {
+    if (token === state.globalDefaultCatalogToken) {
+      state.globalDefaultCatalogLoading = false;
+      renderGlobalSettingsForm();
+      if (!$("themePanel")?.hidden) requestAnimationFrame(positionThemePanel);
+    }
+  }
+}
 function renderGlobalSettingsForm() {
   const value = state.globalSettings; if (!value) return;
   const execution = value.execution || {}, defaults = value.defaults || {};
@@ -179,10 +249,24 @@ function renderGlobalSettingsForm() {
     const base = document.createElement("option"); base.value = ""; base.textContent = state.defaultBackend ? "Default · " + state.defaultBackend : "Runner default"; agent.appendChild(base);
     for (const name of state.backends) { const option = document.createElement("option"); option.value = name; option.textContent = name; agent.appendChild(option); }
     agent.value = [...agent.options].some((o) => o.value === selected) ? selected : "";
+    agent.disabled = state.globalDefaultCatalogLoading;
   }
-  if ($("globalDefaultModel")) $("globalDefaultModel").value = String(defaults.model || "");
-  if ($("globalDefaultMode")) $("globalDefaultMode").value = String(defaults.mode || "auto");
-  if ($("globalDefaultReasoning")) $("globalDefaultReasoning").value = String(defaults.reasoning || "medium");
+  const catalog = usableGlobalDefaultCatalog(defaults);
+  fillGlobalDefaultSelect($("globalDefaultModel"), catalog.models, String(defaults.model || ""), "Agent default");
+  fillGlobalDefaultSelect(
+    $("globalDefaultMode"),
+    catalog.modes,
+    String(defaults.mode || "auto"),
+    "Agent default",
+    (row) => [row.id, String(row.id || "").toUpperCase(), false],
+  );
+  fillGlobalDefaultSelect(
+    $("globalDefaultReasoning"),
+    catalog.reasoning,
+    String(defaults.reasoning || ""),
+    "Model default",
+    (row) => [row.id, String(row.label || row.id || ""), false],
+  );
   if ($("globalDefaultWorkflow")) $("globalDefaultWorkflow").value = String(defaults.workflow || "");
 }
 function renderThemeControls() {
@@ -198,7 +282,7 @@ function positionThemePanel() {
   const height = panel.getBoundingClientRect().height || 320; if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap); panel.style.left = `${Math.round(left)}px`; panel.style.top = `${Math.round(top)}px`;
 }
 function closeThemePanel() { const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false"); }
-function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); requestAnimationFrame(positionThemePanel); }
+function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); void refreshGlobalDefaultCatalog().catch((error) => showActionError(error.message, "Global defaults catalog unavailable")); requestAnimationFrame(positionThemePanel); }
 
 async function api(path, options = {}) {
   const { timeoutMs = 0, ...fetchOptions } = options;
@@ -2225,8 +2309,19 @@ $("themeCloseButton").onclick = closeThemePanel;
 $("globalAutoWorkspacePolicy")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { auto_workspace_policy: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalMergeFailureLimit")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { merge_failure_limit: Number(event.currentTarget.value) } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalAllowConcurrentMain")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { allow_concurrent_main_tasks: !!event.currentTarget.checked } }).catch((error) => showActionError(error.message, "Settings update failed")));
-$("globalDefaultAgent")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { agent: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
-$("globalDefaultModel")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { model: event.currentTarget.value.trim() } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultAgent")?.addEventListener("change", (event) => {
+  const agent = event.currentTarget.value;
+  void updateGlobalSettings({ defaults: { agent, model: "", reasoning: "" } })
+    .then(() => refreshGlobalDefaultCatalog({ refresh: true, agent, model: "" }))
+    .catch((error) => showActionError(error.message, "Settings update failed"));
+});
+$("globalDefaultModel")?.addEventListener("change", (event) => {
+  const model = event.currentTarget.value;
+  const agent = String(state.globalSettings?.defaults?.agent || state.defaultBackend || "");
+  void updateGlobalSettings({ defaults: { model, reasoning: "" } })
+    .then(() => refreshGlobalDefaultCatalog({ refresh: true, agent, model }))
+    .catch((error) => showActionError(error.message, "Settings update failed"));
+});
 $("globalDefaultMode")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { mode: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalDefaultReasoning")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { reasoning: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalDefaultWorkflow")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { workflow: event.currentTarget.value.trim() } }).catch((error) => showActionError(error.message, "Settings update failed")));
