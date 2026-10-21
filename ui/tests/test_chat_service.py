@@ -417,6 +417,16 @@ def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp
     (repo / "ui" / "static").mkdir(parents=True)
     project.mkdir()
 
+    runtime = project / ".ai-task-runner"
+    runtime.mkdir()
+    runtime_sentinels = {
+        runtime / "state.json": '{"run_id":"active-runner-task","completed":false}\n',
+        runtime / "runner-process.json": '{"supervisor_pid":12345,"worker_pid":12346}\n',
+        runtime / "stop.request": "runner-owned-stop-state\n",
+    }
+    for path, content in runtime_sentinels.items():
+        path.write_text(content, encoding="utf-8")
+
     calls: list[dict] = []
 
     def fake_runner(**kwargs):
@@ -454,6 +464,25 @@ def test_project_chat_turn_http_uses_project_preferences_without_runner_task(tmp
             "normal chat", "http reply"
         ]
         assert not (project / ".ai-task-runner" / "ui" / "messages.jsonl").exists()
+
+        server.state.chat_agent = ChatAgentService(
+            repo,
+            runner=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("chat backend unavailable")),
+        )
+        failed = _json_request(
+            f"http://127.0.0.1:{server.port}/api/chat/turn",
+            method="POST",
+            body={
+                "project": str(project),
+                "session_id": session_id,
+                "message": "failing ordinary chat",
+                "request_id": "http-normal-chat-failure-1",
+            },
+        )
+        assert failed["status"] == "error"
+        assert failed["error"] == "chat backend unavailable"
+        for path, content in runtime_sentinels.items():
+            assert path.read_text(encoding="utf-8") == content
     finally:
         server.shutdown()
         server.server_close()
