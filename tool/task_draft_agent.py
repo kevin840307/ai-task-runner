@@ -14,6 +14,9 @@ if str(ROOT) not in sys.path:
 from runner.agent import BackendError, configure_interaction_args, configure_model_args, create_backend
 
 PROMPT_FILE = ROOT / "ui" / "task_draft_prompt.md"
+TASK_DRAFT_AGENT_TIMEOUT_SECONDS = 1800
+TASK_DRAFT_WRAPPER_GRACE_SECONDS = 60
+TASK_DRAFT_ERROR_CHARS = 4000
 
 
 def _extract_object(text: str) -> dict:
@@ -63,14 +66,15 @@ def main(argv: list[str] | None = None) -> int:
         extra_args = configure_model_args(args.backend, extra_args, args.model)
         backend = create_backend(
             args.backend, None, Path(args.project_root).expanduser().resolve(),
-            extra_args, timeout=1800,
+            extra_args, timeout=TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
         )
         backend.configure_interaction("read")
         backend.configure_reasoning(args.reasoning)
         result = backend.ask(prompt, "")
         payload = _extract_object(result.text)
     except (BackendError, OSError, ValueError) as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        detail = str(exc)
+        print(json.dumps({"error": detail[-TASK_DRAFT_ERROR_CHARS:]}, ensure_ascii=False))
         return 1
     print(json.dumps({"draft": payload}, ensure_ascii=False))
     return 0
