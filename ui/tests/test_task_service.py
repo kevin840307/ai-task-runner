@@ -461,6 +461,27 @@ def test_task_upload_materializes_before_task_commit_and_is_fail_closed(tmp_path
     assert Path(staged["path"]).read_bytes() == b"print('ok')\n"
     assert uploads.staged_exists(project, staged["path"]) is False
 
+    goal_staged = uploads.stage(
+        project,
+        item_id="item-goal-upload",
+        kind="goal",
+        filename="goal.md",
+        content_base64=base64.b64encode(b"uploaded goal\n").decode("ascii"),
+    )
+    goal_draft = json.loads(json.dumps(draft))
+    goal_draft["title"] = "Goal upload task"
+    goal_draft["items"][0].update({
+        "item_id": "item-goal-upload",
+        "prompt": "",
+        "goal_file": goal_staged["path"],
+        "validator": "",
+    })
+    goal_created = service.create(project, goal_draft, request_id="goal-upload-create")
+    assert goal_created["items"][0]["prompt"] == ""
+    assert goal_created["items"][0]["goal_file"] == goal_staged["path"]
+    assert Path(goal_staged["path"]).read_bytes() == b"uploaded goal\n"
+    assert uploads.staged_exists(project, goal_staged["path"]) is False
+
     failed = uploads.stage(
         project,
         item_id="item-upload-fail",
@@ -479,7 +500,7 @@ def test_task_upload_materializes_before_task_commit_and_is_fail_closed(tmp_path
             service.create(project, bad_draft, request_id="upload-fail")
     finally:
         uploads._atomic_copy = original_copy
-    assert [row["title"] for row in service.list(project)["tasks"]] == ["Upload task"]
+    assert [row["title"] for row in service.list(project)["tasks"]] == ["Upload task", "Goal upload task"]
     assert uploads.staged_exists(project, failed["path"]) is True
 
 

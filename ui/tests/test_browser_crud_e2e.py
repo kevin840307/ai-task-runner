@@ -3281,6 +3281,13 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                 else:
                     page.fill(control, "Implement source mode geometry safely.")
 
+            page.locator("[data-task-source-group='prompt'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceGoalFile') !== null")
+            assert page.locator("#taskWorkspaceGoalFile").input_value() == str(root / "goal.md")
+            page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Implement source mode geometry safely."
+
             validator_card = page.locator("[data-task-source-card='validator']")
             ai_card = page.locator("[data-task-source-card='ai']")
             assert validator_card.is_visible()
@@ -3318,6 +3325,12 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     assert validator_box and ai_box
                     assert abs(validator_box["y"] - ai_box["y"]) <= 1
                     assert abs(validator_box["height"] - ai_box["height"]) <= 1
+
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "ai-review.md")
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
+            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-source-note') !== null")
 
             page.fill("#taskWorkspaceDraftTitle", "Canonical source modes")
             page.click("#taskWorkspaceSave")

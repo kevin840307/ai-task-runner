@@ -385,7 +385,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           }),
         });
         if (previous && previous !== data.path) queueUploadCancel(previous);
-        updateItem(state.index, field, String(data.path || ""));
+        const path = String(data.path || "");
+        updateItem(state.index, field, path);
+        const source = sourceState(item);
+        if (field === "goal_file") source.promptFile = path;
+        else if (field === "ai_validator_prompt_file") source.aiFile = path;
         render();
       } catch (error) {
         state.error = String(error?.message || "Upload failed");
@@ -640,33 +644,39 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function applySourceMode(item, group, mode) {
     const source = sourceState(item);
     if (group === "prompt") {
+      const previous = source.promptMode;
+      if (previous === "write") source.promptText = String(item.prompt || "");
+      else if (previous === "file") source.promptFile = String(item.goal_file || "");
+      else if (previous === "asset") source.promptAsset = String(item.goal_file || "");
+      if (previous === "file" && mode !== "file" && managedUploadPath(item.goal_file)) {
+        queueUploadCancel(item.goal_file);
+      }
       source.promptMode = mode;
       if (mode === "write") {
         item.prompt = source.promptText;
-        if (managedUploadPath(item.goal_file)) queueUploadCancel(item.goal_file);
         item.goal_file = "";
       } else {
-        source.promptText = String(item.prompt || source.promptText || "");
         item.prompt = "";
         item.goal_file = mode === "asset" ? source.promptAsset : source.promptFile;
       }
       clearFieldError("prompt");
       clearFieldError("goal_file");
     } else {
+      const previous = source.aiMode;
+      if (previous === "write") source.aiText = String(item.ai_validator_prompt || "");
+      else if (previous === "file") source.aiFile = String(item.ai_validator_prompt_file || "");
+      else if (previous === "asset") source.aiAsset = String(item.ai_validator_prompt_file || "");
+      if (previous === "file" && mode !== "file" && managedUploadPath(item.ai_validator_prompt_file)) {
+        queueUploadCancel(item.ai_validator_prompt_file);
+      }
       source.aiMode = mode;
       if (mode === "default") {
-        source.aiText = String(item.ai_validator_prompt || source.aiText || "");
-        source.aiFile = String(item.ai_validator_prompt_file || source.aiFile || "");
-        if (managedUploadPath(item.ai_validator_prompt_file)) queueUploadCancel(item.ai_validator_prompt_file);
         item.ai_validator_prompt = "";
         item.ai_validator_prompt_file = "";
       } else if (mode === "write") {
-        source.aiFile = String(item.ai_validator_prompt_file || source.aiFile || "");
-        if (managedUploadPath(item.ai_validator_prompt_file)) queueUploadCancel(item.ai_validator_prompt_file);
         item.ai_validator_prompt = source.aiText;
         item.ai_validator_prompt_file = "";
       } else {
-        source.aiText = String(item.ai_validator_prompt || source.aiText || "");
         item.ai_validator_prompt = "";
         item.ai_validator_prompt_file = mode === "asset" ? source.aiAsset : source.aiFile;
       }
