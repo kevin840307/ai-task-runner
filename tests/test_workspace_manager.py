@@ -115,7 +115,12 @@ def test_prepare_is_idempotent_for_same_task_run_identity(tmp_path: Path):
     assert second == first
     assert (second.worktree_path / "local.txt").read_text(encoding="utf-8") == "resume me\n"
     listed = _git(repo, "worktree", "list", "--porcelain")
-    assert listed.count(f"worktree {first.worktree_path}") == 1
+    paths = [
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in listed.splitlines()
+        if line.startswith("worktree ")
+    ]
+    assert paths.count(first.worktree_path.resolve()) == 1
 
 
 def test_prepare_maps_project_subdirectory_into_worktree(tmp_path: Path):
