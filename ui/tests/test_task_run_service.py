@@ -243,3 +243,24 @@ def test_task_run_request_is_durable_and_idempotent(tmp_path: Path):
     assert duplicate["duplicate"] is True
     raw = json.loads(tasks._state_path(repo).read_text(encoding="utf-8"))
     assert raw["run_requests"]["req-1"]["run_number"] == 1
+
+
+def test_retry_same_run_request_does_not_prepare_second_workspace(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    first = service.start(repo, created["task_id"], request_id="stable-start")
+    second = service.start(repo, created["task_id"], request_id="stable-start")
+
+    assert first["run"]["run_number"] == 1
+    assert second["run"]["run_number"] == 1
+    assert second["run"]["workspace"] == first["run"]["workspace"]
+    assert len(launches) == 1
+    branches = _git(repo, "branch", "--format=%(refname:short)").splitlines()
+    assert [name for name in branches if name.startswith("local/task/")] == [
+        first["run"]["workspace"]["task_branch"]
+    ]

@@ -8,7 +8,10 @@ from typing import Any, Callable
 
 from workspace import MergeManager, PreparedWorkspace, WorkspaceManager, WorkspaceSnapshot
 
-from .task_service import TaskService
+try:
+    from .task_service import TaskService
+except ImportError:
+    from task_service import TaskService
 
 
 RuntimeReader = Callable[[Path], dict[str, Any]]
@@ -64,6 +67,12 @@ class TaskRunService:
 
     def start(self, project: Path, task_id: str, *, request_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
+        existing = self.tasks.run_request(project, request_id)
+        if existing is not None:
+            if str(existing.get("task_id") or "") != str(task_id or "").strip():
+                raise ValueError("request_id belongs to another Task")
+            self._ensure_watcher(project, str(task_id))
+            return self.get(project, str(task_id))
         task = self.tasks.get(project, task_id)
         items = task.get("items") if isinstance(task.get("items"), list) else []
         completed = int(task.get("completed_item_count", 0))

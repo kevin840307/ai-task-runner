@@ -404,6 +404,28 @@ class TaskService:
             self._write(project, state)
             return {"task_id": task_key, "deleted": True, "duplicate": False}
 
+    def run_request(self, project: Path, request_id: str) -> dict[str, Any] | None:
+        """Return the durable Task Run bound to one idempotency key, if any."""
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        with self._lock:
+            state = self._load(project)
+            existing = state["run_requests"].get(request)
+            if existing is None:
+                return None
+            task_id = str(existing.get("task_id") or "")
+            run_number = int(existing.get("run_number") or 0)
+            task = next((row for row in state["tasks"] if row["task_id"] == task_id), None)
+            if task is None:
+                raise ValueError("Task Run request points to a missing Task")
+            run = task.get("run")
+            if not isinstance(run, dict) or int(run.get("run_number") or 0) != run_number:
+                raise ValueError("Task Run request points to stale Task state")
+            return self._project_task(task)
+
     def begin_run(
         self,
         project: Path,
