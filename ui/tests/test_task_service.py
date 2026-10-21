@@ -932,7 +932,14 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         )
         assert generated["draft"]["items"][0]["workflow"] == "workflow.yaml"
         assert generated["session_id"] == session_id
+        assert "task_id" not in generated
         assert server.state.tasks.list(project)["tasks"] == []
+        runtime_root = project / ".ai-task-runner"
+        assert not (runtime_root / "state.json").exists()
+        assert not (runtime_root / "runner-process.json").exists()
+        assert not (runtime_root / "stop.request").exists()
+        assert not (runtime_root / "ui" / "tasks.json").exists()
+        assert not (runtime_root / "ui" / "messages.jsonl").exists()
 
         edited_transient = json.loads(json.dumps(generated["draft"]))
         edited_transient["items"][0]["prompt"] = "Edited transient draft"
@@ -947,6 +954,9 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
             },
         )
         assert transient["draft"]["items"][0]["prompt"] == "Edited transient draft"
+        assert server.state.tasks.list(project)["tasks"] == []
+        assert not (runtime_root / "state.json").exists()
+        assert not (runtime_root / "runner-process.json").exists()
 
         validated = _json_request(
             f"{base}/api/tasks/validate-draft",
