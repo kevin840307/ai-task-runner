@@ -1238,6 +1238,38 @@ def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> Non
         assert updated["items"][0]["prompt"] == "Edited through API"
         assert updated["items"][0]["item_id"] == created["items"][0]["item_id"]
 
+        task_state_path = server.state.tasks._state_path(project)
+        raw_task_state = json.loads(task_state_path.read_text(encoding="utf-8"))
+        raw_task_state["tasks"][0]["status"] = "paused"
+        raw_task_state["tasks"][0]["completed_item_count"] = 0
+        task_state_path.write_text(json.dumps(raw_task_state), encoding="utf-8")
+        paused = server.state.tasks.get(project, created["task_id"])
+        paused_draft = {
+            "title": paused["title"],
+            "items": json.loads(json.dumps(paused["items"])),
+        }
+        paused_draft["items"][0]["prompt"] = "Paused API edit"
+        paused_updated = _json_request(
+            f"{base}/api/tasks/update",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": created["task_id"],
+                "draft": paused_draft,
+                "request_id": "http-paused-update-1",
+                "expected_updated_at": paused["updated_at"],
+            },
+        )
+        assert paused_updated["status"] == "paused"
+        assert paused_updated["restart_required"] is True
+        assert paused_updated["edit_policy"]["current_item_index"] == 0
+        assert paused_updated["edit_policy"]["items"][0]["editable"] is True
+
+        raw_task_state = json.loads(task_state_path.read_text(encoding="utf-8"))
+        raw_task_state["tasks"][0]["status"] = "new"
+        raw_task_state["tasks"][0]["restart_required"] = False
+        task_state_path.write_text(json.dumps(raw_task_state), encoding="utf-8")
+
         deleted = _json_request(
             f"{base}/api/tasks/delete",
             method="POST",
