@@ -19,6 +19,8 @@ THEMES = {"teal", "blue", "violet", "amber", "rose"}
 MOTIONS = {"full", "system", "reduced"}
 LANGUAGES = {"zh-TW", "en"}
 MODES = {"read", "auto", "yolo"}
+MERGE_FAILURE_LIMIT_MIN = 0
+MERGE_FAILURE_LIMIT_MAX = 99
 
 
 def default_global_settings() -> dict[str, Any]:
@@ -135,8 +137,11 @@ class GlobalSettingsStore:
             merge_limit = int(execution.get("merge_failure_limit"))
         except (TypeError, ValueError) as exc:
             raise ValueError("Merge failure limit must be an integer") from exc
-        if merge_limit < 0 or merge_limit > 100:
-            raise ValueError("Merge failure limit must be between 0 and 100")
+        if merge_limit < MERGE_FAILURE_LIMIT_MIN or merge_limit > MERGE_FAILURE_LIMIT_MAX:
+            raise ValueError(
+                f"Merge failure limit must be between {MERGE_FAILURE_LIMIT_MIN} "
+                f"and {MERGE_FAILURE_LIMIT_MAX}"
+            )
         concurrent = execution.get("allow_concurrent_main_tasks")
         if not isinstance(concurrent, bool):
             raise ValueError("Allow concurrent Main tasks must be boolean")
