@@ -594,8 +594,9 @@ def test_task_service_enforces_workflow_capability_inputs(tmp_path: Path) -> Non
         service.validate(project, draft)
 
     draft["items"][0]["validator"] = str(project / "validate.py")
-    with pytest.raises(ValueError, match="AI Validator Prompt is required"):
-        service.validate(project, draft)
+    default_ai = service.validate(project, draft)["draft"]
+    assert default_ai["items"][0]["ai_validator_prompt"] == ""
+    assert default_ai["items"][0]["ai_validator_prompt_file"] == ""
 
     draft["items"][0]["ai_validator_prompt_file"] = str(project / "review.md")
     validated = service.validate(project, draft)["draft"]

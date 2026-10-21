@@ -1540,7 +1540,9 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").is_visible()
+            assert page.locator("[data-task-source-card='ai']").is_visible()
+            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").count() == 0
 
             # A dirty child Editor and a dirty parent Task List Draft are two
             # separate discard decisions. Cancelling the parent decision must
@@ -1617,13 +1619,15 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert state.task_uploads.staged_exists(root, staged_validator) is True
             manual_validator = str(state.repo_root / "validate.py")
             page.fill("#taskWorkspaceValidator", manual_validator)
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").get_attribute("aria-invalid") == "true"
-            assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt is required", exact=False).is_visible()
+            assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt file is required", exact=False).is_visible()
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
 
             with page.expect_file_chooser() as chooser:

@@ -1487,6 +1487,46 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     await requestClose();
   }
 
+  function validateSelectedSourceModes() {
+    const draft = editorDraft();
+    if (!state || !draft || !Array.isArray(draft.items)) return true;
+    const modes = state.sourceModes || {};
+    for (let index = 0; index < draft.items.length; index += 1) {
+      const item = draft.items[index];
+      const source = modes[String(item?.item_id || "")];
+      if (!source) continue;
+      let field = "";
+      let message = "";
+      if (source.promptMode === "file" && !String(item.goal_file || "").trim()) {
+        field = "goal_file";
+        message = `Task item ${index + 1} goal_file is required for File mode`;
+      } else if (source.promptMode === "asset" && !String(item.goal_file || "").trim()) {
+        field = "goal_file";
+        message = `Task item ${index + 1} Prompt asset is required for Asset mode`;
+      } else if (source.aiMode === "write" && !String(item.ai_validator_prompt || "").trim()) {
+        field = "ai_validator_prompt";
+        message = `Task item ${index + 1} AI Validator Prompt text is required for Write mode`;
+      } else if (source.aiMode === "file" && !String(item.ai_validator_prompt_file || "").trim()) {
+        field = "ai_validator_prompt_file";
+        message = `Task item ${index + 1} AI Validator Prompt file is required for File mode`;
+      } else if (source.aiMode === "asset" && !String(item.ai_validator_prompt_file || "").trim()) {
+        field = "ai_validator_prompt_file";
+        message = `Task item ${index + 1} AI Validator Prompt asset is required for Asset mode`;
+      }
+      if (!field) continue;
+      state.index = index;
+      state.error = message;
+      state.fieldErrors = { [fieldErrorKey(field, index)]: message };
+      if (state.route === "list") {
+        if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        state.route = "editor";
+      }
+      render();
+      return false;
+    }
+    return true;
+  }
+
   async function saveWorkspace() {
     if (state?.route === "yaml") return applyYaml();
     if (state?.kind === "task") return saveTaskEdit();
@@ -1495,6 +1535,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   async function saveTaskEdit() {
     if (state?.kind !== "task" || !["list", "editor"].includes(state.route) || !state.editDraft) return;
+    if (!validateSelectedSourceModes()) return;
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
@@ -1544,6 +1585,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   async function saveDraft() {
     if (!isDraftState()) return;
+    if (!validateSelectedSourceModes()) return;
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
