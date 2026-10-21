@@ -12,11 +12,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from runner.agent import BackendError, configure_interaction_args, configure_model_args, create_backend
+from tool.task_draft_contract import (
+    TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
+    TASK_DRAFT_ERROR_CHARS,
+)
 
 PROMPT_FILE = ROOT / "ui" / "task_draft_prompt.md"
-TASK_DRAFT_AGENT_TIMEOUT_SECONDS = 1800
-TASK_DRAFT_WRAPPER_GRACE_SECONDS = 60
-TASK_DRAFT_ERROR_CHARS = 4000
 
 
 def _extract_object(text: str) -> dict:
