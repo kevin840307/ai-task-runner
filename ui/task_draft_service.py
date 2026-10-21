@@ -22,6 +22,8 @@ try:
     from .task_models import (
         DRAFT_MODES,
         bounded_text,
+        canonical_project_path,
+        canonical_project_path,
         validate_generated_draft,
         validate_task_draft_for_create,
     )
@@ -65,6 +67,7 @@ class TaskDraftService:
         request_id: str,
         session_id: str = "",
     ) -> dict[str, Any]:
+        canonical_project_path(project)
         mode = str(draft_mode or "").strip().lower()
         if mode not in DRAFT_MODES:
             raise ValueError("Unsupported TaskDraft mode")
