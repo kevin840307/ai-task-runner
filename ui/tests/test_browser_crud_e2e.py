@@ -2828,7 +2828,10 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         state = _write_fixture_repo(root)
-        workflow = str(root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml")
+        workflow_path = root / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"
+        workflow_path.parent.mkdir(parents=True, exist_ok=True)
+        workflow_path.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        workflow = str(workflow_path)
         old_project_preferences = {
             "agent": "qwen",
             "model": "qwen/model-a",
@@ -2877,7 +2880,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             page.fill("#globalDefaultModel", "openai/gpt-5.2")
             page.locator("#globalDefaultModel").press("Tab")
             page.select_option("#globalDefaultMode", "read")
-            page.select_option("#globalDefaultReasoning", "high")
+            page.select_option("#globalDefaultReasoning", "deep")
             page.fill("#globalDefaultWorkflow", workflow)
             page.locator("#globalDefaultWorkflow").press("Tab")
             page.wait_for_function(
@@ -2889,7 +2892,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
                 "agent": "opencode",
                 "model": "openai/gpt-5.2",
                 "mode": "read",
-                "reasoning": "high",
+                "reasoning": "deep",
                 "workflow": workflow,
             }
             # Existing Project remains independently owned.
@@ -2918,8 +2921,38 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             )
             second_session = state.chat_service.sessions(added_project)["active_session_id"]
             assert second_session != first_session
-            assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
-            assert page.locator("#projectChatModeQuick").input_value() == "read"
+
+            def assert_chat_preferences(expected: dict[str, str]) -> None:
+                assert page.locator("#projectChatAgentSelect").input_value() == expected["agent"]
+                assert page.locator("#projectChatModelSelect").input_value() == expected["model"]
+                assert page.locator("#projectChatModeQuick").input_value() == expected["mode"]
+                assert page.locator("#projectChatReasoningSelect").input_value() == expected["reasoning"]
+                assert page.locator("#projectChatWorkflowSelect").input_value() == expected["workflow"]
+
+            assert_chat_preferences(defaults)
+
+            # Switching Chat sessions within one Project must not fork Project-level
+            # Agent/Model/Mode/Reasoning/Workflow preferences.
+            page.locator("#projectChatSessionList .project-chat-session-row").filter(
+                has_not=page.locator(".active")
+            ).first.locator(".project-chat-session-open").click()
+            page.wait_for_function(
+                "(id) => document.querySelector('#projectChatSessionList .project-chat-session-row.active')?.textContent !== ''",
+                arg=first_session,
+            )
+            assert_chat_preferences(defaults)
+
+            # Switching Projects restores each Project's independently persisted
+            # five-value Chat preference set.
+            page.locator("#projectList .project-root").filter(has_text="Fixture Project").click()
+            page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
+            assert_chat_preferences(old_project_preferences)
+            page.locator("#projectList .project-root").filter(has_text=added_project.name).click()
+            page.wait_for_function(
+                "(name) => document.querySelector('#projectChatName')?.textContent === name",
+                arg=added_project.name,
+            )
+            assert_chat_preferences(defaults)
 
             # Display-name rename must not retarget Project path or Chat identity.
             row = page.locator("#projectList .project-tree").filter(has_text=added_project.name)
@@ -2941,8 +2974,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             page.wait_for_function(
                 "() => document.querySelector('#projectChatName')?.textContent === 'Renamed Default Project'"
             )
-            assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
-            assert page.locator("#projectChatModeQuick").input_value() == "read"
+            assert_chat_preferences(defaults)
             assert state.project_preferences.get(root)["agent"] == "qwen"
             assert not errors
             browser.close()

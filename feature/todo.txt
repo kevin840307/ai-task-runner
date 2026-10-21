@@ -569,7 +569,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] API 測試：Chat session CRUD、訊息串流、cancel / reconnect、Queue edit/delete、Ask submit/cancel、TaskDraft create。
     - ui/tests/test_chat_service.py + ui/tests/test_task_service.py 直接啟動 UIServer 驗證 session lifecycle、cursor event feed、turn cancel/reconnect、Queue CRUD、Ask submit/cancel、TaskDraft generate/update/create。
 [ ] Browser 測試：Project 點擊進 Chat、Project-level Agent/Model/Mode/Workflow、@ / 提示、TaskDraft Edit / Back / Create、Queue、Ask、錯誤框。
-[ ] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
+[x] Browser 測試：切換 Project 後各自保留 Agent / Model / Mode / Reasoning / Workflow；切換同 Project 的 Chat session 不改變這五項設定。
+    - Production Browser E2E 明確建立兩組不同 Project-level 五項設定，切換 Project 與同 Project Chat session 後逐項驗證 Agent / Model / Mode / Reasoning / Workflow，reload 後仍保持同一 canonical preference projection。
 [ ] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 normalization + Task merge_failure_count separation、Allow concurrent Main tasks Off/On 對 Main disabled/resolver 的一致性、Appearance / Theme palette / Language persistence。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
