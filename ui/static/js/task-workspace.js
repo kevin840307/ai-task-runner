@@ -342,7 +342,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     pendingUploadActions = pendingUploadActions
       .then(() => api("/api/tasks/upload/cancel", {
         method: "POST",
-        body: JSON.stringify({ project, path: value }),
+        body: JSON.stringify({
+          project,
+          path: value,
+          request_id: newRequestId("task-upload-cancel"),
+        }),
       }))
       .catch(() => {});
   }
@@ -382,6 +386,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             kind: uploadKind(field),
             filename: file.name,
             content_base64: await fileBase64(file),
+            request_id: newRequestId("task-upload-stage"),
           }),
         });
         if (previous && previous !== data.path) queueUploadCancel(previous);
