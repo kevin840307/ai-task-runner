@@ -12,6 +12,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from tool.task_draft_agent import (
+    TASK_DRAFT_AGENT_TIMEOUT_SECONDS,
+    TASK_DRAFT_ERROR_CHARS,
+    TASK_DRAFT_WRAPPER_GRACE_SECONDS,
+)
+
 try:
     from .task_models import (
         DRAFT_MODES,
@@ -211,7 +217,7 @@ class TaskDraftService:
                 input=spec,
                 text=True,
                 capture_output=True,
-                timeout=1860,
+                timeout=TASK_DRAFT_AGENT_TIMEOUT_SECONDS + TASK_DRAFT_WRAPPER_GRACE_SECONDS,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -221,10 +227,13 @@ class TaskDraftService:
             payload = json.loads(raw) if raw else {}
         except json.JSONDecodeError as exc:
             detail = completed.stderr.strip() or raw or f"exit {completed.returncode}"
-            raise ValueError(f"TaskDraft generator returned invalid JSON: {detail[-2000:]}") from exc
+            raise ValueError(
+                f"TaskDraft generator returned invalid JSON: {detail[-TASK_DRAFT_ERROR_CHARS:]}"
+            ) from exc
         if completed.returncode or payload.get("error"):
             detail = str(payload.get("error") or completed.stderr or f"exit {completed.returncode}").strip()
-            raise ValueError(detail or "TaskDraft generation failed")
+            detail = detail[-TASK_DRAFT_ERROR_CHARS:] if detail else "TaskDraft generation failed"
+            raise ValueError(detail)
         if not isinstance(payload, dict):
             raise ValueError("TaskDraft generator returned invalid payload")
         return payload
