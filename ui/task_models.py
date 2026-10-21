@@ -128,27 +128,43 @@ def validate_task_draft_for_create(
         if item_id:
             seen_item_ids.add(item_id)
         workflow = bounded_text(raw.get("workflow"), f"Task item {index + 1} Workflow", 4096)
+        prompt = bounded_text(raw.get("prompt"), f"Task item {index + 1} prompt", 24000, required=False)
+        goal_file = bounded_text(raw.get("goal_file"), f"Task item {index + 1} goal_file", 4096, required=False)
+        if not prompt and not goal_file:
+            raise ValueError(f"Task item {index + 1} prompt or goal_file is required")
+        if prompt and goal_file:
+            raise ValueError(f"Task item {index + 1} prompt and goal_file cannot both be set")
         validator = bounded_text(raw.get("validator"), f"Task item {index + 1} File Validator", 4096, required=False)
+        ai_validator_prompt = bounded_text(
+            raw.get("ai_validator_prompt"),
+            f"Task item {index + 1} AI Validator Prompt",
+            24000,
+            required=False,
+        )
         ai_validator_prompt_file = bounded_text(
             raw.get("ai_validator_prompt_file"),
-            f"Task item {index + 1} AI Validator Prompt",
+            f"Task item {index + 1} AI Validator Prompt file",
             4096,
             required=False,
         )
+        if ai_validator_prompt and ai_validator_prompt_file:
+            raise ValueError(f"Task item {index + 1} AI Validator Prompt text and file cannot both be set")
         requirements = workflow_requirements(project, workflow) if workflow_requirements else {}
         if workflow_requirements is not None and requirements.get("exists") is False:
             raise ValueError(f"Task item {index + 1} Workflow does not exist")
         if requirements.get("requires_python_validator") and not validator:
             raise ValueError(f"Task item {index + 1} File Validator is required by the selected Workflow")
-        if requirements.get("has_ai_validator") and not ai_validator_prompt_file:
-            raise ValueError(f"Task item {index + 1} AI Validator Prompt is required by the selected Workflow")
+        if not requirements.get("has_ai_validator") and (ai_validator_prompt or ai_validator_prompt_file):
+            raise ValueError(f"Task item {index + 1} AI Validator Prompt requires an AI validation Workflow")
         item = {
             "title": bounded_text(raw.get("title"), f"Task item {index + 1} title", 240),
-            "prompt": bounded_text(raw.get("prompt"), f"Task item {index + 1} prompt", 24000),
+            "prompt": prompt,
+            "goal_file": goal_file,
             "workflow": workflow,
             "project": project_path,
             "workspace": workspace,
             "validator": validator,
+            "ai_validator_prompt": ai_validator_prompt,
             "ai_validator_prompt_file": ai_validator_prompt_file,
         }
         if item_id:

@@ -366,6 +366,70 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     assert duplicate["task_id"] == created["task_id"]
 
 
+def test_task_prompt_sources_and_ai_default_follow_runner_resource_contract(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def requirements(_project: Path, workflow: str) -> dict:
+        return {
+            "exists": workflow in {"mixed.yaml", "plain.yaml"},
+            "requires_python_validator": workflow == "mixed.yaml",
+            "has_ai_validator": workflow == "mixed.yaml",
+        }
+
+    service = TaskService(workflow_requirements=requirements)
+    file_prompt = {
+        "title": "File prompt",
+        "items": [{
+            "title": "Child",
+            "prompt": "",
+            "goal_file": str(project / "goal.md"),
+            "workflow": "mixed.yaml",
+            "project": str(project),
+            "workspace": "auto",
+            "validator": str(project / "validate.py"),
+            "ai_validator_prompt": "",
+            "ai_validator_prompt_file": "",
+        }],
+    }
+    validated = service.validate(project, file_prompt)["draft"]
+    assert validated["items"][0]["prompt"] == ""
+    assert validated["items"][0]["goal_file"].endswith("goal.md")
+    assert validated["items"][0]["ai_validator_prompt"] == ""
+    assert validated["items"][0]["ai_validator_prompt_file"] == ""
+
+    inline_ai = json.loads(json.dumps(file_prompt))
+    inline_ai["items"][0]["ai_validator_prompt"] = "Check the merged result carefully."
+    validated_inline = service.validate(project, inline_ai)["draft"]
+    assert validated_inline["items"][0]["ai_validator_prompt"] == "Check the merged result carefully."
+
+    both_prompt_sources = json.loads(json.dumps(file_prompt))
+    both_prompt_sources["items"][0]["prompt"] = "inline"
+    with pytest.raises(ValueError, match="prompt and goal_file cannot both be set"):
+        service.validate(project, both_prompt_sources)
+
+    missing_prompt = json.loads(json.dumps(file_prompt))
+    missing_prompt["items"][0]["goal_file"] = ""
+    with pytest.raises(ValueError, match="prompt or goal_file is required"):
+        service.validate(project, missing_prompt)
+
+    both_ai_sources = json.loads(json.dumps(inline_ai))
+    both_ai_sources["items"][0]["ai_validator_prompt_file"] = str(project / "ai.md")
+    with pytest.raises(ValueError, match="AI Validator Prompt text and file cannot both be set"):
+        service.validate(project, both_ai_sources)
+
+    no_ai_workflow = json.loads(json.dumps(file_prompt))
+    no_ai_workflow["items"][0].update({
+        "prompt": "plain",
+        "goal_file": "",
+        "workflow": "plain.yaml",
+        "validator": "",
+        "ai_validator_prompt": "custom",
+    })
+    with pytest.raises(ValueError, match="requires an AI validation Workflow"):
+        service.validate(project, no_ai_workflow)
+
+
 def test_task_upload_materializes_before_task_commit_and_is_fail_closed(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

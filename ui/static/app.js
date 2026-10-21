@@ -385,9 +385,17 @@ const taskWorkspace = createTaskWorkspaceController({
     showToast("Prompt assets are managed in Prompts");
   },
 });
+function taskWorkspaceAssets(options = {}) {
+  const supplied = Array.isArray(options.workflows) ? options.workflows : [];
+  return {
+    ...options,
+    workflows: supplied.length ? supplied : (state.studioFiles.workflows || []),
+    prompts: state.studioFiles.prompts || [],
+  };
+}
 tasksBoard = createTasksBoardController({
   api,
-  openTask: (task, options) => taskWorkspace.openTask(task, options),
+  openTask: (task, options = {}) => taskWorkspace.openTask(task, taskWorkspaceAssets(options)),
   getProjects: () => state.projects,
   getCurrentProject: () => state.project,
   showError: showActionError,
@@ -399,9 +407,9 @@ const projectChat = createProjectChatController({
   showToast,
   showError: showActionError,
   autosizeTextarea,
-  openTaskDraft: (options) => taskWorkspace.openDraft(options),
-  openTask: (task, options) => taskWorkspace.openTask(task, options),
-  openTaskCreateMenu: (options) => taskWorkspace.openCreateMenu(options),
+  openTaskDraft: (options) => taskWorkspace.openDraft(taskWorkspaceAssets(options)),
+  openTask: (task, options = {}) => taskWorkspace.openTask(task, taskWorkspaceAssets(options)),
+  openTaskCreateMenu: (options) => taskWorkspace.openCreateMenu(taskWorkspaceAssets(options)),
   onPreferencesChanged: (data) => {
     state.projectPreferences = projectPreferencesProjection(data);
     renderBackendPicker();
@@ -2227,6 +2235,7 @@ $("tasksNewButton").onclick = async (event) => {
       anchor,
       project: projectPath,
       workflows: state.studioFiles.workflows || [],
+      prompts: state.studioFiles.prompts || [],
       workflow: currentProjectPreferences().workflow || "",
     });
   });
