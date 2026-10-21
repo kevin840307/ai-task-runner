@@ -1336,6 +1336,92 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_project_chat_ask_submit_cancel_and_queue_unblock() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            session_id = state.chat_service.sessions(root)["active_session_id"]
+            page.fill("#projectChatInput", "@ask-demo")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
+            assert page.locator(".project-chat-ask-head").get_by_text("1 / 3").is_visible()
+
+            # A normal Chat message while Ask is waiting remains a Chat Queue
+            # item; it must not be mistaken for an Ask answer.
+            page.fill("#projectChatInput", "queued while ask")
+            page.click("#projectChatSendButton")
+            page.wait_for_function(
+                "document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 1"
+            )
+            assert state.chat_service.ask(root, session_id)["ask"]["status"] == "waiting"
+
+            ask = page.locator(".project-chat-ask")
+            ask.locator(".project-chat-ask-option").filter(has_text="Safe").click()
+            ask.get_by_role("button", name="Next").click()
+            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('2 / 3')")
+            ask = page.locator(".project-chat-ask")
+            ask.locator(".project-chat-ask-option").filter(has_text="Queue").click()
+            ask.get_by_role("button", name="Next").click()
+            page.wait_for_function("document.querySelector('.project-chat-ask-head')?.textContent.includes('3 / 3')")
+            page.get_by_role("textbox", name="Ask text answer").fill("Preserve the canonical owners.")
+            page.locator(".project-chat-ask").get_by_role("button", name="Submit").click()
+
+            page.wait_for_function("document.querySelector('.project-chat-ask') === null")
+            page.wait_for_function("document.querySelector('#projectChatQueue')?.hidden === true")
+            page.wait_for_function(
+                "() => document.querySelector('#projectChatMessages')?.textContent.includes('Browser queued reply · queued while ask')"
+            )
+            assert getattr(state, "_browser_chat_queue", {}).get(session_id, []) == []
+            assert state.chat_service.ask(root, session_id)["ask"] is None
+
+            # Cancel follows the same normalized Ask owner and clears waiting
+            # state without manufacturing a Runner task or a second scheduler.
+            page.fill("#projectChatInput", "@ask-demo")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
+            page.locator(".project-chat-ask").get_by_role("button", name="Cancel").click()
+            page.wait_for_function("document.querySelector('.project-chat-ask') === null")
+            assert state.chat_service.ask(root, session_id)["ask"] is None
+            assert state.tasks.list(root)["tasks"] == []
+            assert errors == []
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_project_chat_task_draft_edit_back_create_and_error_contract() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
