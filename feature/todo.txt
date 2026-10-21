@@ -379,12 +379,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Mixed File Validator + AI Validation 對齊：兩張卡同列 stretch、header 使用相同兩列節奏（標題/說明 + control row），因此 AI Default/Write/File/Asset 切換時 body 起點與外框保持對齊。
 [x] Reset / Rerun 統一由 tasks-page.js 單一 lifecycle owner 處理並必須先確認；移除 core.js 舊 direct handler，避免 load-order 繞過 confirmation。
 [ ] Browser smoke：Paused → Reset → Confirm 後卡片移到 New；Cancel 不改狀態；Failed/Completed Rerun 必須先確認；Mixed File + AI 四種 AI mode 逐一切換確認兩卡頂端/body 起點/底部外框對齊。
-[ ] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
+[x] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
+    - `test_task_editor_source_modes_keep_shared_drawer_geometry` 在真 Chromium 逐一切換 Prompt Write/File/Asset 與 AI Default/Write/File/Asset，驗證 segmented tabs 等寬、卡片寬度、Upload/Open Prompts、Drawer width/viewport overflow 與 Mixed validator/AI row 對齊；最新 08d8f43d Browser lane PASS。
 [x] Regression 修正：compact New Task layout 移除 state-hint 後，同步移除舊 startup writer，並把 newTaskListDraft 初始化移到 task-editor.js 最前面，避免 Task Editor 載入中止後 Task Workspace 出現 TDZ ReferenceError。
 [x] Tasks header 移除 tasksProjectLine；HTML 與 task-editor / tasks-page / project-sidebar 所有 writer 一併刪除，不留下 null.textContent 路徑。
 [x] Browser smoke：reload 後 + New → Task / Task List、Board card → Info / Task List、刪除最後一個 Project、Chat New Task 都實際點擊一次且 console 0 error。
     - Production Browser E2E reload 後實際走 Tasks + New→Task/Task List、Board multi-item card→Info→Task List、Chat New Task 共用 create menu/editor；最後依序 Remove Project 到 0，並要求 pageerror=[]。
-[ ] Browser 視覺回歸：New Task 在常用 Drawer 寬度確認 Prompt / File Validator 首屏可見；切換 inline / file / asset、file / AI workflow、Light / Dark、820px / 620px breakpoint 不重疊、不截斷。
+[x] Browser 視覺回歸：New Task 在常用 Drawer 寬度確認 Prompt / File Validator 首屏可見；切換 inline / file / asset、file / AI workflow、Light / Dark、820px / 620px breakpoint 不重疊、不截斷。
+    - source-mode Browser E2E 以 820/620 × Light/Dark 驗證 New Task Drawer 首屏、Write/File/Asset 與 Mixed File+AI geometry；`test_task_validation_options_follow_builtin_workflow_capabilities` 另實際切 file-only / AI-only / mixed / plain workflow 並驗證 capability-driven fields 無 overflow。
 [ ] 正式 React 實作保持同樣 component boundary：TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskSourceCard、WorkspaceSelector、TaskRuntimePanel；不同入口只傳 props/context，不複製 JSX。
 [ ] React migration 先建立 shared UI primitives：AppShell、Sidebar、Drawer/Modal/Popover、Tabs、Field、Select、Button、Badge/Pill、EmptyState；Theme token 只由一處提供。
 [ ] React page components 建議拆成：ProjectSidebar、ChatWorkspace、ChatComposer、QueueList、AskFlow、TaskBoard、TaskCreateMenu、TaskEditor、TaskListWorkspace、TaskRuntimePanel、GlobalSettings。
@@ -547,7 +549,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
 [x] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
     - ChatService durable Ask state 保存 ask_id/turn_id/questions/status；ChatAgentService 將 native Qwen/OpenCode Ask normalized 後掛回同一 turn，Submit/Cancel 透過 adapter resolve 後繼續原 Agent turn，含 restart/rollback tests。
-[ ] Ask Cancel / timeout / client disconnect 要明確終止或取消等待狀態，避免 runner / agent process 永久卡住。
+[x] Ask Cancel / timeout / client disconnect 要明確終止或取消等待狀態，避免 runner / agent process 永久卡住。
+    - native Ask Cancel 會 reject/unblock 同一 turn；expired Ask 會 durable cancel 並放行下一 Queue item；HTTP BrokenPipe/ConnectionReset 只終止 response write、不清除 durable Ask/Queue，reconnect 由同一 state 接續，且 Agent/process 仍受既有 timeout/cancel cleanup 保護。
 [x] Queue 項目只由 Chat service / AgentAdapter 排隊，不混入 Runner Task List。
     - Durable FIFO queue 只存在 ChatService session state，使用 queue_item_id/turn_id；Runner Task store 與 Task List 使用獨立 TaskService schema，architecture regression 禁止 Chat service 進入 Runner workflow execution。
 [x] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
