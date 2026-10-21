@@ -1336,6 +1336,101 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",
 )
+def test_project_chat_task_draft_edit_back_create_and_error_contract() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        workflow = root / "runner" / "assets" / "workflows" / "workflow.yaml"
+        workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            assert state.tasks.list(root)["tasks"] == []
+            page.fill("#projectChatInput", "@task-single browser draft")
+            page.click("#projectChatSendButton")
+            page.wait_for_function("document.querySelector('.project-chat-task-draft') !== null")
+            draft = page.locator(".project-chat-task-draft")
+            assert draft.get_by_text("Do browser item 1", exact=True).is_visible()
+            assert state.tasks.list(root)["tasks"] == []
+
+            # Clean Back from the shared Chat Draft editor is navigation only:
+            # the transient Draft remains in Chat and no durable Task is created.
+            draft.get_by_role("button", name="Edit Draft").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            assert page.locator(".project-chat-task-draft").count() == 1
+            assert state.tasks.list(root)["tasks"] == []
+
+            # Save edits through the shared Task Workspace. The Chat-owned
+            # TaskDraft is updated, but the durable Task store stays empty.
+            page.locator(".project-chat-task-draft").get_by_role("button", name="Edit Draft").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspacePrompt", "Edited Chat Draft prompt")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.wait_for_function(
+                "() => document.querySelector('.project-chat-task-draft')?.textContent.includes('Edited Chat Draft prompt')"
+            )
+            assert state.tasks.list(root)["tasks"] == []
+
+            # Create is the only transition that allocates durable Task state.
+            page.locator(".project-chat-task-draft").get_by_role("button", name="Create Task").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            tasks = state.tasks.list(root)["tasks"]
+            assert len(tasks) == 1
+            assert tasks[0]["status"] == "new"
+            assert tasks[0]["items"][0]["prompt"] == "Edited Chat Draft prompt"
+            assert page.locator(".project-chat-task-draft").count() == 0
+
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            # Backend generation failure uses the same formal API/schema path
+            # and must surface an actionable error without creating another Task.
+            page.fill("#projectChatInput", "@task-single mock:error")
+            page.click("#projectChatSendButton")
+            page.wait_for_function(
+                "() => Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('Browser TaskDraft backend failure'))"
+            )
+            assert len(state.tasks.list(root)["tasks"]) == 1
+            assert page.locator(".project-chat-task-draft").count() == 0
+            assert errors == []
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
 def test_shared_new_task_menu_creates_task_and_task_list() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
