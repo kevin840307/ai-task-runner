@@ -460,17 +460,23 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [ ] Main merge 前先檢查 merge_source_sha 是否已是 target branch ancestry；是則 idempotent finalize merged，不重複 commit；否則在 captured target worktree 執行 `git merge --no-ff --no-commit <merge_source_branch>`，保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
 [ ] merge validation 必須 verdict-only / source-non-mutating，統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR；Git conflict 或 SOURCE_FAIL 才算 real merge fail，真正 source repair 只在 recovery worktree 透過 Runner 執行；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count。
 [ ] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
-[ ] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
+[x] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
+    - Production Task record 只持久化 `merge_failure_count`；唯一 limit owner 是 versioned `GlobalSettingsStore.execution.merge_failure_limit`（0~99，default 3），Task schema 不複製 limit。
 [ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
 [ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
 [ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
 [ ] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
 [ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
-[ ] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
-[ ] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
-[ ] captured target branch 被刪除/rename => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
-[ ] target force-reset/divergence 後若 merge_source_base_sha 不再是 current target HEAD ancestor => Ongoing · waiting_target_history / Needs Attention；不可 direct merge/recovery，也不增加 merge_failure_count，避免把被移除 history 重新帶回來。
-[ ] 不得自動 git switch 使用者 Project checkout。
+[x] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
+    - `MergeManager` 在 target transaction 前檢查 clean status，dirty 時回 `waiting_target_clean`；Git regression 驗證使用者修改原樣保留。
+[x] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
+    - Target 未 checkout 時可建立 system-managed delivery worktree；若已在 unmanaged/multiple worktree checkout 則 fail closed `waiting_target_workspace`，不修改該 worktree。
+[x] captured target branch 被刪除/rename => Ongoing · waiting_target_branch / Needs Attention；不可自動 recreate、猜 main、或 retarget。
+    - `MergeManager` 每次交易重新驗證 captured ref；ref 消失直接回 `waiting_target_branch`，沒有 recreate/switch/main fallback。
+[x] target force-reset/divergence 後若 merge_source_base_sha 不再是 current target HEAD ancestor => Ongoing · waiting_target_history / Needs Attention；不可 direct merge/recovery，也不增加 merge_failure_count，避免把被移除 history 重新帶回來。
+    - Direct merge preflight 用 ancestry 檢查 source base 對 current target；history rewrite regression 回 `waiting_target_history` 且不進 merge attempt。
+[x] 不得自動 git switch 使用者 Project checkout。
+    - Workspace/Merge path 不執行 Project checkout `git switch`；target 未 checkout 時只建立 managed delivery worktree，相關 regression 明確驗證 user checkout branch 不變。
 [ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
 [ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
 [ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
