@@ -275,7 +275,9 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] 一個 Board Task 可以有一個或多個有序 child Task；Task List 是父 Task 的 items[]，不是第二個 Scheduler。
 [x] New / Ongoing / Paused / Closed 是 Board lifecycle；Running / Recovering / Stopped / Completed 等是 Runner runtime projection。
 [x] Ongoing 不允許 New Task / Add Task / 編輯會改變 runtime 的內容；不合法動作需 disabled 並說明先 Pause。
-[ ] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
+[x] 已完成 child 不可修改；Paused 時只允許依目前編輯政策修改合法項目。
+    - `TaskService.edit_policy` 是單一 Backend owner：Paused completed prefix 永久 locked；current 可 Edit 但不可 move/remove，修改 current durable 設 `restart_required=true`；future 可編輯/重排/新增，Ongoing/Closed readonly。UI 只投影 `edit_policy`，Backend update 再驗證 item identity/content，繞過 UI 也會 fail closed。
+    - unit/API/Browser 已覆蓋 completed 修改拒絕、current 移除拒絕、future reorder/add、current edit→restart_required；CI run 39617139878 的 Browser E2E、Windows pytest、Ubuntu pytest、Studio build 全 PASS。
 [x] Task List child 的新增、編輯、刪除、排序與 YAML 必須使用同一份 canonical items[]。
 [x] Edit Task 的 Back 依來源回 Info / Task List / Chat Draft；關閉按鈕、Cancel、Escape 與遮罩關閉行為需一致。
 [x] Delete Task 前顯示確認視窗，指出 Task ID、名稱、Project 與刪除後果。
