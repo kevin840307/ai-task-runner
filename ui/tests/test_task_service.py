@@ -902,7 +902,101 @@ def test_task_service_updates_new_task_idempotently_and_preserves_item_identity(
     assert duplicate["updated_at"] == updated["updated_at"]
 
 
-def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:
+def test_task_service_paused_edit_policy_locks_completed_prefix_and_restarts_current(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+    draft = {
+        "title": "Paused list",
+        "items": [
+            {"title": "Done", "prompt": "Done prompt", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+            {"title": "Current", "prompt": "Current prompt", "workflow": "workflow.yaml", "project": str(project), "workspace": "main"},
+            {"title": "Future A", "prompt": "Future A", "workflow": "workflow.yaml", "project": str(project), "workspace": "auto"},
+            {"title": "Future B", "prompt": "Future B", "workflow": "workflow.yaml", "project": str(project), "workspace": "worktree"},
+        ],
+    }
+    created = service.create(project, draft, request_id="paused-create")
+    state_path = service._state_path(project)
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    raw["tasks"][0]["status"] = "paused"
+    raw["tasks"][0]["completed_item_count"] = 1
+    state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    paused = service.get(project, created["task_id"])
+    policy = paused["edit_policy"]
+    assert policy["editable"] is True
+    assert policy["completed_item_count"] == 1
+    assert policy["current_item_index"] == 1
+    assert policy["can_add_item"] is True
+    assert policy["can_edit_yaml"] is False
+    assert [row["state"] for row in policy["items"]] == [
+        "completed", "current", "future", "future",
+    ]
+    assert policy["items"][0]["editable"] is False
+    assert policy["items"][1]["editable"] is True
+    assert policy["items"][1]["restructure"] is False
+    assert policy["items"][2]["restructure"] is True
+
+    completed_changed = {
+        "title": paused["title"],
+        "items": json.loads(json.dumps(paused["items"])),
+    }
+    completed_changed["items"][0]["prompt"] = "rewrite completed history"
+    with pytest.raises(ValueError, match="Completed Task items cannot be modified"):
+        service.update(
+            project,
+            paused["task_id"],
+            completed_changed,
+            request_id="paused-change-completed",
+            expected_updated_at=paused["updated_at"],
+        )
+
+    current_removed = {
+        "title": paused["title"],
+        "items": [paused["items"][0], paused["items"][2], paused["items"][3]],
+    }
+    with pytest.raises(ValueError, match="Current paused Task item cannot be moved or removed"):
+        service.update(
+            project,
+            paused["task_id"],
+            current_removed,
+            request_id="paused-remove-current",
+            expected_updated_at=paused["updated_at"],
+        )
+
+    allowed = {
+        "title": "Paused list renamed",
+        "items": [
+            paused["items"][0],
+            {**paused["items"][1], "prompt": "Current prompt edited"},
+            paused["items"][3],
+            paused["items"][2],
+            {
+                "title": "Future C",
+                "prompt": "Future C",
+                "workflow": "workflow.yaml",
+                "project": str(project),
+                "workspace": "auto",
+            },
+        ],
+    }
+    updated = service.update(
+        project,
+        paused["task_id"],
+        allowed,
+        request_id="paused-allowed",
+        expected_updated_at=paused["updated_at"],
+    )
+    assert updated["status"] == "paused"
+    assert updated["restart_required"] is True
+    assert updated["edit_policy"]["restart_required"] is True
+    assert updated["items"][0]["item_id"] == paused["items"][0]["item_id"]
+    assert updated["items"][1]["item_id"] == paused["items"][1]["item_id"]
+    assert [row["title"] for row in updated["items"][2:4]] == ["Future B", "Future A"]
+    assert updated["items"][4]["item_id"].startswith(paused["task_id"] + "-item-")
+
+
+def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     service = TaskService()
@@ -927,7 +1021,7 @@ def test_task_service_update_rejects_stale_or_non_new_task(tmp_path: Path) -> No
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     raw["tasks"][0]["status"] = "ongoing"
     state_path.write_text(json.dumps(raw), encoding="utf-8")
-    with pytest.raises(ValueError, match="must be New"):
+    with pytest.raises(ValueError, match="must be New or Paused"):
         service.update(
             project,
             created["task_id"],
