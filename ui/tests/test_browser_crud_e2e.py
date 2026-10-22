@@ -497,6 +497,21 @@ def _bridge_for(state: UIState):
                         str(body.get("task_id", "")),
                         request_id=str(body.get("request_id", "")),
                     )
+                elif path == "/api/tasks/reset":
+                    data = state.tasks.reset_to_new(
+                        Path(body["project"]),
+                        str(body.get("task_id", "")),
+                        request_id=str(body.get("request_id", "")),
+                        action="reset",
+                    )
+                elif path == "/api/tasks/rerun":
+                    actions = getattr(state, "_browser_task_lifecycle_actions", [])
+                    actions.append(("rerun", str(body.get("task_id", ""))))
+                    state._browser_task_lifecycle_actions = actions
+                    data = state.tasks.get(
+                        Path(body["project"]),
+                        str(body.get("task_id", "")),
+                    )
                 elif path == "/api/chat/ask/demo":
                     session_id = str(body.get("session_id", ""))
                     data = state.chat_service.create_ask(
@@ -752,6 +767,151 @@ def _bridge_for(state: UIState):
             }
 
     return bridge
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        project_id = state.project_identity(root)["project_id"]
+
+        def lifecycle_task(title: str, request_id: str, *, status: str, phase: str) -> dict:
+            created = state.tasks.create(
+                root,
+                {
+                    "title": title,
+                    "items": [{
+                        "title": "One",
+                        "prompt": "Do lifecycle work",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "worktree",
+                    }],
+                },
+                request_id=request_id,
+                project_id=project_id,
+            )
+            task_id = created["task_id"]
+            state.tasks.begin_run(
+                root,
+                task_id,
+                request_id=request_id + "-run",
+                workspace={
+                    "task_id": task_id,
+                    "run_number": 1,
+                    "project_root": str(root.parent / "browser-worktrees" / task_id),
+                },
+            )
+            state.tasks.transition_run(
+                root,
+                task_id,
+                1,
+                phase=phase,
+                status=status,
+                completed_item_count=1 if status == "closed" else 0,
+            )
+            return state.tasks.get(root, task_id)
+
+        paused = lifecycle_task("Paused Reset", "browser-paused-reset", status="paused", phase="stopped")
+        failed = lifecycle_task("Failed Rerun", "browser-failed-rerun", status="paused", phase="launch_failed")
+        completed = lifecycle_task("Completed Rerun", "browser-completed-rerun", status="closed", phase="worktree_ready")
+        state._browser_task_lifecycle_actions = []
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+
+            page.locator("#tasksBoardPaused .tasks-board-card").filter(
+                has_text=paused["task_id"]
+            ).click()
+            page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
+            page.click("#taskWorkspaceResetTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text(
+                "Reset paused Task and move it to New?", exact=True
+            ).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert state.tasks.get(root, paused["task_id"])["status"] == "paused"
+
+            page.click("#taskWorkspaceResetTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => document.querySelector('#taskWorkspaceEyebrow')?.textContent?.includes('NEW')"
+            )
+            assert state.tasks.get(root, paused["task_id"])["status"] == "new"
+            page.click("#taskWorkspaceClose")
+            page.locator("#tasksBoardNew .tasks-board-card").filter(
+                has_text=paused["task_id"]
+            ).wait_for()
+
+            page.locator("#tasksBoardPaused .tasks-board-card").filter(
+                has_text=failed["task_id"]
+            ).click()
+            page.click("#taskWorkspaceRerunTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text(
+                "Rerun this Task from the beginning?", exact=True
+            ).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert state._browser_task_lifecycle_actions == []
+            page.click("#taskWorkspaceRerunTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_timeout(100)
+            assert state._browser_task_lifecycle_actions == [("rerun", failed["task_id"])]
+            page.click("#taskWorkspaceClose")
+
+            page.locator("#tasksBoardClosed .tasks-board-card").filter(
+                has_text=completed["task_id"]
+            ).click()
+            page.click("#taskWorkspaceRerunTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text(
+                "Rerun this completed Task?", exact=True
+            ).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert state._browser_task_lifecycle_actions == [("rerun", failed["task_id"])]
+            page.click("#taskWorkspaceRerunTask")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_timeout(100)
+            assert state._browser_task_lifecycle_actions == [
+                ("rerun", failed["task_id"]),
+                ("rerun", completed["task_id"]),
+            ]
+            browser.close()
 
 
 @pytest.mark.skipif(

@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from ui.task_run_service import TaskRunService
 from ui.task_service import TaskService
 from workspace import WorkspaceManager
@@ -409,6 +411,74 @@ def test_restart_finalizes_already_merged_current_source_without_duplicate_commi
     assert merge["merged_target_head_sha"] == before_head
     assert _git(repo, "rev-parse", "HEAD") == before_head
     assert _git(repo, "rev-list", "--count", "HEAD") == before_count
+
+
+def test_paused_reset_returns_task_to_new_and_retains_archived_workspace(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-reset")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {"stop": True}}
+    launches, stops, resumes = [], [], []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=stops, resumes=resumes)
+
+    started = service.start(repo, created["task_id"], request_id="reset-run")
+    retained = Path(started["run"]["workspace"]["worktree_path"])
+    service.stop(repo, created["task_id"])
+    tasks.transition_run(
+        repo,
+        created["task_id"],
+        1,
+        phase="stopped",
+        status="paused",
+    )
+
+    reset = service.reset(repo, created["task_id"], request_id="reset-lifecycle-1")
+    assert reset["status"] == "new"
+    assert reset["completed_item_count"] == 0
+    assert "run" not in reset
+    assert reset["history"][-1]["phase"] == "stopped"
+    assert reset["history"][-1]["lifecycle_end"] == "reset"
+    assert reset["edit_policy"]["can_delete"] is False
+    assert retained.is_dir()
+
+    duplicate = service.reset(repo, created["task_id"], request_id="reset-lifecycle-1")
+    assert duplicate["status"] == "new"
+    assert len(duplicate["history"]) == 1
+    with pytest.raises(ValueError, match="untouched New Tasks"):
+        tasks.delete(repo, created["task_id"], request_id="delete-retained-reset")
+
+
+def test_rerun_closed_task_uses_fresh_run_workspace_and_is_idempotent(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-rerun")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    first = service.start(repo, created["task_id"], request_id="first-rerun-source")
+    original_workspace = Path(first["run"]["workspace"]["worktree_path"])
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+
+    runtime.update({"running": True, "completed": False})
+    rerun = service.rerun(repo, created["task_id"], request_id="rerun-lifecycle-1")
+    fresh_workspace = Path(rerun["run"]["workspace"]["worktree_path"])
+    assert rerun["status"] == "ongoing"
+    assert rerun["run_count"] == 2
+    assert rerun["run"]["run_number"] == 2
+    assert fresh_workspace != original_workspace
+    assert original_workspace.is_dir()
+    assert fresh_workspace.is_dir()
+    assert rerun["history"][-1]["lifecycle_end"] == "rerun"
+    assert rerun["history"][-1]["phase"] == "worktree_ready"
+    assert len(launches) == 2
+
+    duplicate = service.rerun(repo, created["task_id"], request_id="rerun-lifecycle-1")
+    assert duplicate["run_count"] == 2
+    assert duplicate["run"]["workspace"]["worktree_path"] == str(fresh_workspace)
+    assert len(launches) == 2
 
 
 def test_stop_resume_and_service_restart_reuse_same_workspace_identity(tmp_path: Path):

@@ -22,6 +22,7 @@ CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
 DELETE_REQUEST_LIMIT = 512
 RUN_REQUEST_LIMIT = 512
+LIFECYCLE_REQUEST_LIMIT = 512
 TASK_YAML_LIMIT = 256 * 1024
 COMPLETED_ITEM_PHASES = frozenset({"merged", "no_changes", "worktree_ready"})
 _EDITABLE_ITEM_FIELDS = (
@@ -128,7 +129,7 @@ class TaskService:
             "can_rename": editable,
             "can_add_item": editable,
             "can_edit_yaml": status == "new" or (status == "paused" and completed == 0),
-            "can_delete": status == "new",
+            "can_delete": status == "new" and not task.get("run") and not task.get("history"),
             "restart_required": bool(task.get("restart_required", False)),
             "items": item_policies,
         }
@@ -396,14 +397,78 @@ class TaskService:
             if index < 0:
                 raise ValueError("Task does not exist")
             task = state["tasks"][index]
-            if task.get("status") != "new":
-                raise ValueError("Only New Tasks can be deleted safely; cleanup runtime state first")
+            if task.get("status") != "new" or task.get("run") or task.get("history"):
+                raise ValueError("Only untouched New Tasks can be deleted safely; cleanup retained runtime state first")
             state["tasks"].pop(index)
             state["delete_requests"][request] = task_key
             while len(state["delete_requests"]) > DELETE_REQUEST_LIMIT:
                 state["delete_requests"].pop(next(iter(state["delete_requests"])))
             self._write(project, state)
             return {"task_id": task_key, "deleted": True, "duplicate": False}
+
+    def reset_to_new(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+        action: str,
+    ) -> dict[str, Any]:
+        """Archive the current lifecycle state and return a retained Task to New."""
+        task_key = validate_task_id(task_id)
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        lifecycle_action = str(action or "").strip().lower()
+        if lifecycle_action not in {"reset", "rerun"}:
+            raise ValueError("Unsupported Task lifecycle action")
+
+        with self._lock:
+            state = self._load(project)
+            existing = state["lifecycle_requests"].get(request)
+            task = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
+            if task is None:
+                raise ValueError("Task does not exist")
+            if existing:
+                if (
+                    str(existing.get("task_id") or "") != task_key
+                    or str(existing.get("action") or "") != lifecycle_action
+                ):
+                    raise ValueError("request_id belongs to another Task lifecycle action")
+                return {**self._project_task(task), "duplicate": True}
+
+            if task.get("status") not in {"paused", "closed"}:
+                raise ValueError("Task must be Paused or Closed before Reset/Rerun")
+
+            now = time.time()
+            current_run = task.get("run")
+            if isinstance(current_run, dict):
+                history = task.get("history")
+                if not isinstance(history, list):
+                    history = []
+                archived = deepcopy(current_run)
+                archived["lifecycle_end"] = lifecycle_action
+                archived["archived_at"] = now
+                archived["merge_failure_count"] = int(task.get("merge_failure_count", 0))
+                history.append(archived)
+                task["history"] = history[-100:]
+
+            task.pop("run", None)
+            task["status"] = "new"
+            task["completed_item_count"] = 0
+            task["restart_required"] = False
+            task["merge_failure_count"] = 0
+            task["updated_at"] = now
+            state["lifecycle_requests"][request] = {
+                "task_id": task_key,
+                "action": lifecycle_action,
+            }
+            while len(state["lifecycle_requests"]) > LIFECYCLE_REQUEST_LIMIT:
+                state["lifecycle_requests"].pop(next(iter(state["lifecycle_requests"])))
+            self._write(project, state)
+            return {**self._project_task(task), "duplicate": False}
 
     def run_request(self, project: Path, request_id: str) -> dict[str, Any] | None:
         """Return the durable Task Run bound to one idempotency key, if any."""
@@ -584,6 +649,7 @@ class TaskService:
                 "update_requests": {},
                 "delete_requests": {},
                 "run_requests": {},
+                "lifecycle_requests": {},
             }
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -596,12 +662,14 @@ class TaskService:
         update_requests = raw.get("update_requests", {})
         delete_requests = raw.get("delete_requests", {})
         run_requests = raw.get("run_requests", {})
+        lifecycle_requests = raw.get("lifecycle_requests", {})
         if (
             not isinstance(tasks, list)
             or not isinstance(requests, dict)
             or not isinstance(update_requests, dict)
             or not isinstance(delete_requests, dict)
             or not isinstance(run_requests, dict)
+            or not isinstance(lifecycle_requests, dict)
         ):
             raise ValueError("Task store is invalid")
         ids: set[str] = set()
@@ -663,6 +731,19 @@ class TaskService:
                     and str(value.get("task_id") or "") in ids
                     and str(value.get("run_number") or "").isdigit()
                     and int(value.get("run_number") or 0) > 0
+                )
+            },
+            "lifecycle_requests": {
+                str(key): {
+                    "task_id": str(value.get("task_id") or ""),
+                    "action": str(value.get("action") or ""),
+                }
+                for key, value in lifecycle_requests.items()
+                if (
+                    str(key).strip()
+                    and isinstance(value, dict)
+                    and str(value.get("task_id") or "") in ids
+                    and str(value.get("action") or "") in {"reset", "rerun"}
                 )
             },
         }

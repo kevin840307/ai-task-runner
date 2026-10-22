@@ -1087,6 +1087,59 @@ def test_task_service_rejects_invalid_project_items_and_workspace(tmp_path: Path
         )
 
 
+def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    (repo / "ui" / "data").mkdir(parents=True)
+    (repo / "ui" / "static").mkdir(parents=True)
+    project.mkdir()
+    server = UIServer(repo, "127.0.0.1", 0)
+    calls: list[tuple[str, Path, str, str]] = []
+
+    def reset(project_path: Path, task_id: str, *, request_id: str):
+        calls.append(("reset", project_path, task_id, request_id))
+        return {"task_id": task_id, "status": "new"}
+
+    def rerun(project_path: Path, task_id: str, *, request_id: str):
+        calls.append(("rerun", project_path, task_id, request_id))
+        return {"task_id": task_id, "status": "ongoing"}
+
+    server.state.task_runs.reset = reset
+    server.state.task_runs.rerun = rerun
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.port}"
+    try:
+        reset_value = _json_request(
+            f"{base}/api/tasks/reset",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": "task-" + "a" * 32,
+                "request_id": "http-task-reset",
+            },
+        )
+        rerun_value = _json_request(
+            f"{base}/api/tasks/rerun",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": "task-" + "b" * 32,
+                "request_id": "http-task-rerun",
+            },
+        )
+        assert reset_value["status"] == "new"
+        assert rerun_value["status"] == "ongoing"
+        assert calls == [
+            ("reset", project.resolve(), "task-" + "a" * 32, "http-task-reset"),
+            ("rerun", project.resolve(), "task-" + "b" * 32, "http-task-rerun"),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_task_draft_and_create_http_contract_are_separate(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"

@@ -544,6 +544,20 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     str(body.get("task_id", "")),
                 ))
+            if parsed.path == "/api/tasks/reset":
+                project = self._project(body)
+                return self._json(self.state.task_runs.reset(
+                    project,
+                    str(body.get("task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
+            if parsed.path == "/api/tasks/rerun":
+                project = self._project(body)
+                return self._json(self.state.task_runs.rerun(
+                    project,
+                    str(body.get("task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
             if parsed.path == "/api/tasks/merge":
                 project = self._project(body)
                 return self._json(self.state.task_runs.merge(

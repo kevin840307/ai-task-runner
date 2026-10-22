@@ -1223,8 +1223,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       remove.onclick = () => void deleteTask();
     } else {
       remove.disabled = true;
-      remove.title = "Only New Tasks can be deleted safely";
-      restrictions.push("Delete is unavailable while this Task has runtime or lifecycle state. Only New Tasks can be deleted safely.");
+      remove.title = lifecycleStatus === "new"
+        ? "Retained Task Run history/workspaces must be cleaned up before deletion"
+        : "Only untouched New Tasks can be deleted safely";
+      restrictions.push(
+        lifecycleStatus === "new"
+          ? "Delete is unavailable because retained Task Run history/workspaces still exist."
+          : "Delete is unavailable while this Task has runtime or lifecycle state. Only untouched New Tasks can be deleted safely."
+      );
     }
     actions.appendChild(remove);
 
@@ -1248,6 +1254,23 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
     }
     actions.appendChild(edit);
+
+    if (lifecycleStatus === "paused") {
+      const reset = document.createElement("button");
+      reset.id = "taskWorkspaceResetTask";
+      reset.type = "button";
+      reset.textContent = "Reset";
+      reset.onclick = () => void runTaskLifecycleAction("reset");
+      actions.appendChild(reset);
+    }
+    if (lifecycleStatus === "paused" || lifecycleStatus === "closed") {
+      const rerun = document.createElement("button");
+      rerun.id = "taskWorkspaceRerunTask";
+      rerun.type = "button";
+      rerun.textContent = "Rerun";
+      rerun.onclick = () => void runTaskLifecycleAction("rerun");
+      actions.appendChild(rerun);
+    }
 
     if (policy.restart_required) {
       restrictions.unshift("Current paused Task configuration changed. Restart the current item instead of resuming its frozen run.");
@@ -1448,6 +1471,59 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       await onTaskChanged?.();
     } catch (error) {
       showError?.(error.message, "Merge Task failed");
+      render();
+    }
+  }
+
+  async function runTaskLifecycleAction(action) {
+    const task = state?.task;
+    if (!task || !["reset", "rerun"].includes(action)) return;
+    const status = String(task.status || "");
+    if (action === "reset" && status !== "paused") return;
+    if (action === "rerun" && !["paused", "closed"].includes(status)) return;
+
+    const completed = status === "closed";
+    const options = action === "reset"
+      ? {
+          title: "Reset paused Task and move it to New?",
+          message: "The current resumable run is archived and retained. Progress returns to Task 1; existing worktree/branch output is not deleted.",
+          confirmLabel: "Reset & Move to New",
+          danger: true,
+        }
+      : {
+          title: completed ? "Rerun this completed Task?" : "Rerun this Task from the beginning?",
+          message: completed
+            ? "The completed run stays in History. A fresh Task Run/worktree starts again from Task 1."
+            : "The current run is archived and retained. A fresh Task Run/worktree starts again from Task 1.",
+          confirmLabel: "Rerun",
+          danger: true,
+        };
+    const ok = await confirmDialog?.(options);
+    if (!ok) return;
+
+    const button = byId(action === "reset" ? "taskWorkspaceResetTask" : "taskWorkspaceRerunTask");
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    try {
+      const updated = await api("/api/tasks/" + action, {
+        method: "POST",
+        body: JSON.stringify({
+          project: task.project,
+          task_id: task.task_id,
+          request_id: newRequestId("task-" + action),
+        }),
+      });
+      state.task = cloneDraft(updated);
+      state.editDraft = null;
+      state.editOriginal = "";
+      state.saveRequestId = "";
+      state.error = "";
+      render();
+      await onTaskChanged?.();
+    } catch (error) {
+      showError?.(error.message, action === "reset" ? "Reset Task failed" : "Rerun Task failed");
       render();
     }
   }

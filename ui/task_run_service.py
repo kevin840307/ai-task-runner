@@ -1,6 +1,7 @@
 """Task execution orchestrator: Task lifecycle -> workspace -> existing Runner UI API."""
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from pathlib import Path
@@ -190,6 +191,41 @@ class TaskRunService:
             )
         self._ensure_watcher(project, task_id)
         return self.get(project, task_id)
+
+    def reset(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        project = Path(project).expanduser().resolve()
+        self.tasks.reset_to_new(
+            project,
+            task_id,
+            request_id=request_id,
+            action="reset",
+        )
+        return self.get(project, task_id)
+
+    def rerun(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        project = Path(project).expanduser().resolve()
+        self.tasks.reset_to_new(
+            project,
+            task_id,
+            request_id=request_id,
+            action="rerun",
+        )
+        run_request_id = "task-rerun-" + hashlib.sha256(
+            str(request_id or "").encode("utf-8")
+        ).hexdigest()
+        return self.start(project, task_id, request_id=run_request_id)
 
     def merge(self, project: Path, task_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
