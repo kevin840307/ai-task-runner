@@ -550,6 +550,15 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("task_id", "")),
                     request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/tasks/goal":
+                project = self._project(body)
+                identity = self.state.project_identity(project)
+                return self._json(self.state.task_runs.start_goal(
+                    project,
+                    str(body.get("spec", "")),
+                    request_id=str(body.get("request_id", "")),
+                    project_id=identity["project_id"],
+                ))
             if parsed.path == "/api/tasks/run":
                 project = self._project(body)
                 return self._json(self.state.task_runs.start(
