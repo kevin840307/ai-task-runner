@@ -224,8 +224,8 @@ def _bridge_for(state: UIState):
                             {
                                 "token": "@goal", "name": "goal", "description": "Run goal",
                                 "kind": "runner_command", "source": "Runner",
-                                "user_invocable": True, "enabled": False,
-                                "permission": "explicit", "availability": "workspace_phase_pending",
+                                "user_invocable": True, "enabled": True,
+                                "permission": "explicit", "availability": "available",
                             },
                             {
                                 "token": "@task", "name": "task", "description": "Generate TaskDraft",
@@ -455,6 +455,58 @@ def _bridge_for(state: UIState):
                         Path(body["project"]),
                         body.get("content"),
                     )
+                elif path == "/api/tasks/goal":
+                    project_path = Path(body["project"])
+                    spec = str(body.get("spec", "")).strip()
+                    request = str(body.get("request_id", "")).strip()
+                    if not spec:
+                        raise ValueError("@goal spec is required")
+                    workflow = str(state.project_preferences.get(project_path).get("workflow") or "").strip() or "workflow.yaml"
+                    task = state.tasks.create(
+                        project_path,
+                        {
+                            "title": spec[:160],
+                            "items": [{
+                                "title": spec[:160],
+                                "prompt": spec,
+                                "workflow": workflow,
+                                "project": str(project_path.resolve()),
+                                "workspace": "auto",
+                            }],
+                        },
+                        request_id="browser-goal-create-" + request,
+                        project_id=state.project_identity(project_path)["project_id"],
+                    )
+                    run_request = "browser-goal-run-" + request
+                    existing_run = state.tasks.run_request(project_path, run_request)
+                    if existing_run is None:
+                        run_number = int(task.get("run_count", 0)) + 1
+                        workspace = {
+                            "task_id": task["task_id"],
+                            "run_number": run_number,
+                            "requested_mode": "auto",
+                            "effective_mode": "worktree",
+                            "target_branch": "browser-target",
+                            "target_head_sha_at_start": "browser-head",
+                            "task_branch": f"local/task/{task['task_id']}-r{run_number}",
+                            "task_base_sha": "browser-head",
+                            "repository_root": str(project_path.resolve()),
+                            "repository_identity": str(project_path.resolve()),
+                            "source_project_root": str(project_path.resolve()),
+                            "worktree_path": str(project_path / ".browser-worktrees" / task["task_id"]),
+                            "project_root": str(project_path.resolve()),
+                        }
+                        state.tasks.begin_run(
+                            project_path, task["task_id"], request_id=run_request, workspace=workspace
+                        )
+                        state.tasks.transition_run(
+                            project_path, task["task_id"], run_number, phase="running", status="ongoing"
+                        )
+                    data = {
+                        **state.tasks.get(project_path, task["task_id"]),
+                        "goal_run_started": True,
+                        "goal_run_error": "",
+                    }
                 elif path == "/api/tasks/create":
                     state._browser_last_direct_task_create_draft = json.loads(
                         json.dumps(body.get("draft"))
@@ -3065,6 +3117,72 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page_errors == []
             browser.close()
 
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_project_chat_goal_uses_one_backend_create_run_action() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        state.project_preferences.update(root, {"workflow": "workflow.yaml"})
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+            page.locator("#projectList .project-root").first.click()
+            page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
+
+            page.fill("#projectChatInput", "@go")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
+            goal_suggestion = page.locator("#projectChatSuggestList .project-chat-suggest-item").filter(has_text="@goal")
+            assert goal_suggestion.count() == 1
+            assert "unavailable" not in goal_suggestion.inner_text().lower()
+            page.keyboard.press("Escape")
+
+            page.fill("#projectChatInput", "@goal browser quick run")
+            page.evaluate(
+                """() => {
+                    const button = document.querySelector('#projectChatSendButton');
+                    button.click();
+                    button.click();
+                }"""
+            )
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            tasks = state.tasks.list(root)["tasks"]
+            assert len(tasks) == 1
+            assert tasks[0]["status"] == "ongoing"
+            assert tasks[0]["run"]["phase"] == "running"
+            assert tasks[0]["items"][0]["prompt"] == "browser quick run"
+            assert page.locator("#projectChatInput").input_value() == ""
+            assert page.locator(".project-chat-task-draft").count() == 0
+            assert page.locator(".task-workspace-status-pill").inner_text() == "ONGOING"
+            browser.close()
 
 
 @pytest.mark.skipif(
