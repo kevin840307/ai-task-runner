@@ -135,6 +135,78 @@ def test_task_run_main_merges_unchanged_target_and_is_idempotent(tmp_path: Path)
     assert _git(repo, "branch", "--show-current") == "main"
 
 
+def test_main_no_changes_closes_with_explicit_no_changes_phase(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    started = service.start(repo, created["task_id"], request_id="main-no-changes")
+    task_root = Path(started["run"]["workspace"]["project_root"])
+    (task_root / "result.txt").unlink()
+    before_head = _git(repo, "rev-parse", "HEAD")
+    before_count = _git(repo, "rev-list", "--count", "HEAD")
+
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "no_changes"
+    merge = closed["run"]["workspace_result"]["merge"]
+    assert merge["status"] == "no_changes"
+    assert merge["merged_target_head_sha"] == before_head
+    assert _git(repo, "rev-list", "--count", "HEAD") == before_count
+
+
+def test_restart_finalizes_already_merged_current_source_without_duplicate_commit(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    started = service.start(repo, created["task_id"], request_id="restart-merged-source")
+    manager = WorkspaceManager(worktree_root=repo.parent / "worktrees")
+    prepared = manager.restore(started["run"]["workspace"])
+    snapshot = manager.snapshot_result(
+        prepared,
+        excluded_paths=(prepared.project_root / ".ai-task-runner",),
+    )
+    tasks.transition_run(
+        repo,
+        created["task_id"],
+        prepared.run_number,
+        phase="merging",
+        status="ongoing",
+        workspace_result={
+            "snapshot": snapshot.as_dict(),
+            "merge_source": {
+                "workspace": prepared.as_dict(),
+                "snapshot": snapshot.as_dict(),
+            },
+            "effective_mode": "main",
+            "branch": prepared.task_branch,
+            "path": str(prepared.worktree_path),
+        },
+    )
+
+    _git(repo, "merge", "--no-ff", prepared.task_branch, "-m", "external durable delivery")
+    before_head = _git(repo, "rev-parse", "HEAD")
+    before_count = _git(repo, "rev-list", "--count", "HEAD")
+
+    restarted = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+    closed = restarted.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    merge = closed["run"]["workspace_result"]["merge"]
+    assert merge["status"] == "merged"
+    assert merge["merged_target_head_sha"] == before_head
+    assert _git(repo, "rev-parse", "HEAD") == before_head
+    assert _git(repo, "rev-list", "--count", "HEAD") == before_count
+
+
 def test_stop_resume_and_service_restart_reuse_same_workspace_identity(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})

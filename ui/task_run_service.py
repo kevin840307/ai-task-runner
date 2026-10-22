@@ -449,7 +449,7 @@ class TaskRunService:
                 project,
                 task_id,
                 prepared.run_number,
-                phase="merged",
+                phase=result.status,
                 status="closed",
                 workspace_result=value,
                 completed_item_count=len(task.get("items") or []),

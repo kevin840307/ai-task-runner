@@ -68,8 +68,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Project 的 ... 僅做 Rename / Delete 等管理，不應因開啟選單而切頁。
 [x] 新增 Project 固定在左側清單上方；長清單只在清單區捲動。
 [x] 每個 Project 可以有多個獨立 Chat session；訊息 / Queue / Ask 為 Chat-session scoped；Agent / Model / Mode / Reasoning / Workflow 為 Project scoped，同 Project 的所有 Chat session 共用，Project 之間不可互相污染。
-[ ] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
-    - Production handoff 已實作：Workspace Result → Merge Chat 一律呼叫 canonical /api/chat/session/create 後才預填 context，不寫入原 session；待 Browser CI 通過後勾選。
+[x] Merge Chat 必須建立新的 Project Chat session，不污染使用者目前正在談話的既有 session。
+    - Production handoff 已實作：Workspace Result → Merge Chat 一律呼叫 canonical /api/chat/session/create 後才預填 context，不寫入原 session；2026-10-22 CI run 5845/5846 Browser E2E PASS。
 [x] Tasks 頁的 Project 多選篩選是頁面本地狀態，不得反過來切換左側 Project / Chat。
 [x] 對多個 child Task 的 Task List，只要有 child 符合 Project 篩選，就要顯示其父層 Task List。
 [x] Project path、ID 與 Chat session ID 要穩定；Rename 不能意外改變 Task 所引用的 Project 身分。
@@ -102,8 +102,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 
 [x] Composer 初始高度精簡；依文字內容自動長高，達到上限後在 textarea 內捲動。
 [x] 高度改變時同步更新訊息區底部留白，最後一則訊息不能被 Composer 遮住。
-[ ] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
-    - openMergeChat 預填後直接重用 canonical autosizeTextarea(min 46/max 180)；已補 Browser 高度 assertion，待 CI 通過後勾選。
+[x] Merge Chat 預填 Prompt 後立即重新計算 Composer 高度。
+    - openMergeChat 預填後直接重用 canonical autosizeTextarea(min 46/max 180)；2026-10-22 CI run 5845/5846 Browser E2E PASS。
 [x] 在輸入框開頭輸入 @，顯示 AI Task Runner 系統指令 / Prompt 清單。
 [x] 在輸入框開頭輸入 /，顯示目前選取 Agent 的 Skills / Slash Commands。
 [x] @ = Runner 系統能力；/ = Agent 原生能力。兩種提示視覺上要清楚區分。
@@ -484,8 +484,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Direct merge preflight 用 ancestry 檢查 source base 對 current target；history rewrite regression 回 `waiting_target_history` 且不進 merge attempt。
 [x] 不得自動 git switch 使用者 Project checkout。
     - Workspace/Merge path 不執行 Project checkout `git switch`；target 未 checkout 時只建立 managed delivery worktree，相關 regression 明確驗證 user checkout branch 不變。
-[ ] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
+[x] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
+    - TaskRunService 只在 MergeManager 回 merged/no_changes 時關閉 effective Main；no_changes 現在保留獨立 phase，兩者都持久化 merged_target_head_sha。另有 recovery/fallback 明確終態，不把 Runner Complete 誤當 Task Complete。
 [ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
+    - 已補 Task-orchestrator restart regression：durable current merge source 若已成 target ancestry，reconcile 直接 finalize 且 commit count 不增加；durable FIFO queue 既有 restart test 保留 seq。未完成 MERGE_HEAD 在 user Project worktree 的 ownership-safe reconcile 尚未完成，因此總項不勾。
 [ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
 [ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
 [ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
@@ -623,8 +625,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - 真 Chromium E2E 比對 Drawer 前/List/Editor/關閉後 Chat x/y/width/height，確認 window + Chat message scroll 不變；同時驗證 Task Workspace overlay 為 fixed 且 z-index >= 520。2026-10-21 Browser 34/34 PASS。
 [x] Browser 測試：所有不可用按鈕 disabled，包含 Ongoing 的 Add Task / New Task 等狀態限制。
     - `test_task_info_explains_non_new_edit_and_delete_block` 真 Chromium 驗證 Ongoing Task 的 Delete disabled；Task List 可進入唯讀檢視，但 child Edit、Add Task、YAML 全 disabled 並顯示 Pause 原因，Save 不出現。
-[ ] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
-    - 已新增 deterministic Chromium case 覆蓋 MAIN badge、Branch、Path、conflict status、Merge disabled、Merge Chat handoff/new session/composer autosize；待 Browser lane 實際 PASS 後勾選。
+[x] Browser 測試：Worktree badge、Branch、Path、Merge / Merge Chat、衝突時 Merge disabled。
+    - deterministic Chromium case 覆蓋 MAIN badge、Branch、Path、conflict status、Merge disabled、Merge Chat handoff/new session/composer autosize；2026-10-22 CI run 5845/5846 Browser E2E PASS。
 [x] Mock 測試：@task 隨機單筆 / 多筆；@task-single 僅一筆；@task-list 至少兩筆。
     - 自動化測試刻意移除 randomness：auto 用參數化 1/2-item unit fixture，Browser @task-single 固定 1 筆、@task-list 固定 2 筆，仍共用 production TaskDraft validator。
 [x] Mock 測試：mock:error、mock:invalid、空 spec、長 spec、多行 spec、Draft validation fail。
