@@ -61,6 +61,7 @@ class StaticContractTests(unittest.TestCase):
             "/api/chat/task-draft",
             "/api/tasks/validate-draft",
             "/api/tasks/create-from-draft",
+            "/api/tasks/workspace-options",
             "/api/tasks/merge",
             "/api/tasks/publish",
             "/api/tasks/cleanup",

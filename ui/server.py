@@ -263,6 +263,13 @@ class Handler(SimpleHTTPRequestHandler):
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})
                 return self._json(self.state.task_runs.list(project))
+            if parsed.path == "/api/tasks/workspace-options":
+                query = parse_qs(parsed.query)
+                project = self._project({"project": query.get("project", [""])[0]})
+                return self._json(self.state.task_runs.workspace_options(
+                    project,
+                    current_task_id=query.get("task_id", [""])[0],
+                ))
             if parsed.path == "/api/chat/sessions":
                 query = parse_qs(parsed.query)
                 project = self._project({"project": query.get("project", [""])[0]})

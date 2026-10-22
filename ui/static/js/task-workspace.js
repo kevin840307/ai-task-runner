@@ -11,6 +11,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let restoreFocus = null;
   let createMenu = null;
   let createContext = null;
+  let workspaceOptionsToken = 0;
   const byId = (id) => document.getElementById(id);
   const tr = (key, fallback) => window.I18n?.t?.(key, fallback) ?? fallback;
   const trf = (key, values, fallback) => window.I18n?.format?.(key, values, fallback) ?? fallback;
@@ -62,6 +63,39 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function newItemId() {
     return "item-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
+  }
+
+  async function loadWorkspaceOptions() {
+    if (!state) return;
+    const owner = state;
+    const token = ++workspaceOptionsToken;
+    const project = String(state.kind === "task" ? state.task?.project : state.project || "").trim();
+    const taskId = state.kind === "task" ? String(state.task?.task_id || "").trim() : "";
+    if (!project) return;
+    owner.workspaceOptionsLoading = true;
+    owner.workspaceOptionsError = "";
+    try {
+      const query = new URLSearchParams({ project });
+      if (taskId) query.set("task_id", taskId);
+      const data = await api("/api/tasks/workspace-options?" + query.toString(), { timeoutMs: 15000 });
+      if (state !== owner || token !== workspaceOptionsToken) return;
+      owner.workspaceOptions = data && typeof data === "object" ? data : null;
+      owner.workspaceOptionsError = "";
+    } catch (error) {
+      if (state !== owner || token !== workspaceOptionsToken) return;
+      owner.workspaceOptions = null;
+      owner.workspaceOptionsError = String(error?.message || "Workspace availability unavailable");
+    } finally {
+      if (state === owner && token === workspaceOptionsToken) {
+        owner.workspaceOptionsLoading = false;
+        render();
+      }
+    }
+  }
+
+  function workspaceOption(value) {
+    const rows = Array.isArray(state?.workspaceOptions?.options) ? state.workspaceOptions.options : [];
+    return rows.find((row) => String(row?.value || "") === String(value || "")) || null;
   }
 
   function blankItem(project, workflow) {
@@ -232,6 +266,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (overlay) overlay.hidden = true;
     document.body.classList.remove("task-workspace-open");
     const focus = restore ? restoreFocus : null;
+    workspaceOptionsToken += 1;
     state = null;
     restoreFocus = null;
     requestAnimationFrame(() => {
@@ -875,15 +910,49 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workspaceField.innerHTML = "<span>Workspace</span>";
     const workspace = document.createElement("select");
     workspace.id = "taskWorkspaceWorkspace";
+    const loadingWorkspace = !!state.workspaceOptionsLoading;
+    const workspaceProjectionMissing = !state.workspaceOptions && !loadingWorkspace;
     for (const [value, label] of [["auto", "Auto"], ["main", "Main"], ["worktree", "Isolated Worktree"]]) {
       const option = document.createElement("option");
+      const availability = workspaceOption(value);
       option.value = value;
       option.textContent = label;
+      option.dataset.effectiveMode = String(availability?.effective_mode || "");
+      option.dataset.reason = String(availability?.reason || "");
+      const failClosed = value !== "worktree" && (loadingWorkspace || workspaceProjectionMissing);
+      option.disabled = failClosed || availability?.enabled === false;
+      option.title = String(
+        availability?.error
+        || (loadingWorkspace && value !== "worktree" ? "Checking current Main availability" : "")
+        || (workspaceProjectionMissing && value !== "worktree" ? state.workspaceOptionsError || "Workspace availability unavailable" : "")
+      );
       workspace.appendChild(option);
     }
     workspace.value = String(item.workspace || "auto");
-    workspace.addEventListener("change", () => updateItem(state.index, "workspace", workspace.value));
+    workspace.addEventListener("change", () => {
+      updateItem(state.index, "workspace", workspace.value);
+      render();
+    });
     workspaceField.appendChild(workspace);
+    const selectedAvailability = workspaceOption(workspace.value);
+    const availabilityNote = document.createElement("small");
+    availabilityNote.id = "taskWorkspaceWorkspaceAvailability";
+    availabilityNote.className = "task-workspace-source-note";
+    if (loadingWorkspace) {
+      availabilityNote.textContent = "Checking current Workspace availability…";
+    } else if (state.workspaceOptionsError) {
+      availabilityNote.textContent = state.workspaceOptionsError + " · Auto/Main disabled until Backend availability is known.";
+    } else if (selectedAvailability?.enabled === false) {
+      availabilityNote.textContent = String(selectedAvailability.error || "This Workspace choice is currently unavailable.");
+    } else if (selectedAvailability?.effective_mode) {
+      const effective = selectedAvailability.effective_mode === "main" ? "Main" : "Isolated Worktree";
+      availabilityNote.textContent = workspace.value === "auto"
+        ? "Auto currently resolves to " + effective + "."
+        : "Current effective Workspace: " + effective + ".";
+    } else {
+      availabilityNote.textContent = "Isolated Worktree is always safe to select.";
+    }
+    workspaceField.appendChild(availabilityNote);
     appendFieldError(workspaceField, workspace, "workspace");
     grid.append(workflowField, workspaceField);
     body.appendChild(grid);
@@ -2150,9 +2219,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
+      workspaceOptions: null,
+      workspaceOptionsLoading: true,
+      workspaceOptionsError: "",
     };
     showNow();
     render();
+    void loadWorkspaceOptions();
   }
 
   function openDraft({ project, draft, workflows = [], prompts = [], onSave, returnFocus }) {
@@ -2180,9 +2253,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
+      workspaceOptions: null,
+      workspaceOptionsLoading: true,
+      workspaceOptionsError: "",
     };
     showNow();
     render();
+    void loadWorkspaceOptions();
   }
 
   function openTask(task, { returnFocus, workflows = [], prompts = [] } = {}) {
@@ -2210,9 +2287,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",
+      workspaceOptions: null,
+      workspaceOptionsLoading: true,
+      workspaceOptionsError: "",
     };
     showNow();
     render();
+    void loadWorkspaceOptions();
   }
 
   window.addEventListener("app-language-changed", () => {

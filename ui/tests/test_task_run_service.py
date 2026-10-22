@@ -474,6 +474,58 @@ def test_quick_goal_defaults_to_ralphy_and_fails_closed_for_invalid_inputs(tmp_p
 
 
 @pytest.mark.parametrize(
+    ("policy", "allow_concurrent", "expected"),
+    [
+        ("busy-worktree", False, {"auto": (True, "worktree"), "main": (False, ""), "worktree": (True, "worktree")}),
+        ("always-main", False, {"auto": (False, ""), "main": (False, ""), "worktree": (True, "worktree")}),
+        ("always-worktree", False, {"auto": (True, "worktree"), "main": (False, ""), "worktree": (True, "worktree")}),
+        ("busy-worktree", True, {"auto": (True, "worktree"), "main": (True, "main"), "worktree": (True, "worktree")}),
+        ("always-main", True, {"auto": (True, "main"), "main": (True, "main"), "worktree": (True, "worktree")}),
+        ("always-worktree", True, {"auto": (True, "worktree"), "main": (True, "main"), "worktree": (True, "worktree")}),
+    ],
+)
+def test_workspace_options_reuse_canonical_resolver_for_main_busy_matrix(
+    tmp_path: Path,
+    policy: str,
+    allow_concurrent: bool,
+    expected: dict[str, tuple[bool, str]],
+):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    running = _task(tasks, repo, workspace="main", request_id=f"workspace-options-running-{policy}-{allow_concurrent}")
+    tasks.begin_run(
+        repo,
+        running["task_id"],
+        request_id=f"workspace-options-run-{policy}-{allow_concurrent}",
+        workspace={"effective_mode": "main"},
+    )
+    service = _service(
+        tasks,
+        repo,
+        runtime={"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}},
+        launches=[],
+        stops=[],
+        resumes=[],
+        settings={
+            "auto_workspace_policy": policy,
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": allow_concurrent,
+        },
+    )
+
+    value = service.workspace_options(repo)
+    rows = {row["value"]: row for row in value["options"]}
+
+    assert value["main_running"] is True
+    assert value["auto_workspace_policy"] == policy
+    assert value["allow_concurrent_main_tasks"] is allow_concurrent
+    for mode, (enabled, effective_mode) in expected.items():
+        assert rows[mode]["enabled"] is enabled
+        assert rows[mode]["effective_mode"] == effective_mode
+        assert bool(rows[mode]["error"]) is (not enabled)
+
+
+@pytest.mark.parametrize(
     ("policy", "expected_mode", "expected_started"),
     [
         ("busy-worktree", "worktree", True),

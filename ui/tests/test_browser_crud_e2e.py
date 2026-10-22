@@ -190,6 +190,11 @@ def _bridge_for(state: UIState):
                     data = state.project_preferences.get(project)
                 elif path == "/api/tasks":
                     data = state.task_runs.list(project)
+                elif path == "/api/tasks/workspace-options":
+                    data = state.task_runs.workspace_options(
+                        project,
+                        current_task_id=query.get("task_id", [""])[0],
+                    )
                 elif path == "/api/chat/ask":
                     session_id = query.get("session_id", [""])[0]
                     data = state.chat_service.ask(project, session_id)
@@ -4375,5 +4380,218 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
 
             choose_workflow("plain.yaml")
             assert not page.locator("#validationPickers").is_visible()
+            assert not errors
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_workspace_options_follow_backend_resolver_and_merge_failure_count_is_task_local() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        workflow = str(root / "runner" / "assets" / "workflows" / "workflow.yaml")
+
+        active = state.tasks.create(
+            root,
+            {
+                "title": "Active Main Task",
+                "items": [{
+                    "title": "Active",
+                    "prompt": "Keep Main busy",
+                    "workflow": workflow,
+                    "project": str(root),
+                    "workspace": "main",
+                }],
+            },
+            request_id="browser-active-main-create",
+            project_id=state.project_identity(root)["project_id"],
+        )
+        state.tasks.begin_run(
+            root,
+            active["task_id"],
+            request_id="browser-active-main-run",
+            workspace={
+                "task_id": active["task_id"],
+                "run_number": 1,
+                "project_root": str(root),
+                "effective_mode": "main",
+            },
+        )
+
+        completed = state.tasks.create(
+            root,
+            {
+                "title": "Failure count task",
+                "items": [{
+                    "title": "Completed",
+                    "prompt": "Keep Task merge failures separate",
+                    "workflow": workflow,
+                    "project": str(root),
+                    "workspace": "worktree",
+                }],
+            },
+            request_id="browser-failure-count-create",
+            project_id=state.project_identity(root)["project_id"],
+        )
+        completed_workspace = {
+            "task_id": completed["task_id"],
+            "run_number": 1,
+            "project_root": str(root),
+            "effective_mode": "worktree",
+            "task_branch": f"local/task/{completed['task_id']}-r1",
+            "worktree_path": str(root / ".browser-worktrees" / completed["task_id"]),
+            "target_branch": "main",
+        }
+        state.tasks.begin_run(
+            root,
+            completed["task_id"],
+            request_id="browser-failure-count-run",
+            workspace=completed_workspace,
+        )
+        state.tasks.transition_run(
+            root,
+            completed["task_id"],
+            1,
+            phase="conflict",
+            status="ongoing",
+            increment_merge_failure=True,
+        )
+        state.tasks.transition_run(
+            root,
+            completed["task_id"],
+            1,
+            phase="source_fail",
+            status="ongoing",
+            increment_merge_failure=True,
+        )
+        state.tasks.transition_run(
+            root,
+            completed["task_id"],
+            1,
+            phase="worktree_ready",
+            status="closed",
+            completed_item_count=1,
+            workspace_result={
+                "snapshot": {
+                    "task_snapshot_sha": "browser-snapshot",
+                    "no_changes": False,
+                    "created_commit": True,
+                },
+                "effective_mode": "worktree",
+                "branch": completed_workspace["task_branch"],
+                "path": completed_workspace["worktree_path"],
+                "merge": {"status": "worktree_ready"},
+            },
+        )
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        def install(page) -> None:
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            install(page)
+
+            page.click("#themeButton")
+            page.fill("#globalMergeFailureLimit", "7")
+            page.locator("#globalMergeFailureLimit").press("Tab")
+            page.wait_for_timeout(50)
+            assert state.global_settings.get()["execution"]["merge_failure_limit"] == 7
+            page.click("#themeCloseButton")
+            page.click("#chatNav")
+
+            cases = [
+                ("busy-worktree", False, True, "worktree", False),
+                ("always-main", False, False, "", False),
+                ("always-worktree", False, True, "worktree", False),
+                ("busy-worktree", True, True, "worktree", True),
+                ("always-main", True, True, "main", True),
+                ("always-worktree", True, True, "worktree", True),
+            ]
+            for policy, allow_concurrent, auto_enabled, auto_effective, main_enabled in cases:
+                page.click("#themeButton")
+                page.select_option("#globalAutoWorkspacePolicy", policy)
+                concurrent = page.locator("#globalAllowConcurrentMain")
+                if allow_concurrent:
+                    concurrent.check()
+                else:
+                    concurrent.uncheck()
+                page.wait_for_timeout(50)
+                execution = state.global_settings.get()["execution"]
+                assert execution["auto_workspace_policy"] == policy
+                assert execution["allow_concurrent_main_tasks"] is allow_concurrent
+                page.click("#themeCloseButton")
+
+                page.click("#tasksNewButton")
+                page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+                page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+                page.wait_for_function(
+                    "() => document.querySelector('#taskWorkspaceWorkspaceAvailability')"
+                    " && !document.querySelector('#taskWorkspaceWorkspaceAvailability').textContent.includes('Checking')"
+                )
+                auto_option = page.locator("#taskWorkspaceWorkspace option[value='auto']")
+                main_option = page.locator("#taskWorkspaceWorkspace option[value='main']")
+                worktree_option = page.locator("#taskWorkspaceWorkspace option[value='worktree']")
+                assert auto_option.evaluate("(node) => node.disabled") is (not auto_enabled)
+                assert auto_option.get_attribute("data-effective-mode") == auto_effective
+                assert main_option.evaluate("(node) => node.disabled") is (not main_enabled)
+                assert main_option.get_attribute("data-effective-mode") == ("main" if main_enabled else "")
+                assert worktree_option.evaluate("(node) => node.disabled") is False
+                assert worktree_option.get_attribute("data-effective-mode") == "worktree"
+                page.click("#taskWorkspaceFooterBack")
+                page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            page.wait_for_function(
+                "() => document.querySelectorAll('#tasksBoardClosed .tasks-board-card').length >= 1"
+            )
+            page.locator("#tasksBoardClosed .tasks-board-card", has_text="Failure count task").click()
+            page.wait_for_function(
+                "() => document.querySelector('#taskWorkspaceMergeFailures')?.textContent === '2'"
+            )
+            assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "2"
+            page.click("#taskWorkspaceClose")
+
+            page.click("#themeButton")
+            assert page.locator("#globalMergeFailureLimit").input_value() == "7"
+            page.fill("#globalMergeFailureLimit", "9")
+            page.locator("#globalMergeFailureLimit").press("Tab")
+            page.wait_for_timeout(50)
+            assert state.global_settings.get()["execution"]["merge_failure_limit"] == 9
+            assert state.tasks.get(root, completed["task_id"])["merge_failure_count"] == 2
+            page.click("#themeCloseButton")
+
+            page.locator("#tasksBoardClosed .tasks-board-card", has_text="Failure count task").click()
+            page.wait_for_function(
+                "() => document.querySelector('#taskWorkspaceMergeFailures')?.textContent === '2'"
+            )
+            assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "2"
             assert not errors
             browser.close()

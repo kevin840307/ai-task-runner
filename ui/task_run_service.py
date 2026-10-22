@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from workspace import MergeManager, MergeResult, PreparedWorkspace, PublishManager, WorkspaceManager, WorkspaceSnapshot
+from workspace import MergeManager, MergeResult, PreparedWorkspace, PublishManager, WorkspaceBlockedError, WorkspaceManager, WorkspaceSnapshot, resolve_workspace_mode
 
 try:
     from .task_service import COMPLETED_ITEM_PHASES, TaskService
@@ -70,6 +70,53 @@ class TaskRunService:
 
     def get(self, project: Path, task_id: str) -> dict[str, Any]:
         return self._project_runtime(project, self.tasks.get(project, task_id))
+
+    def workspace_options(
+        self,
+        project: Path,
+        *,
+        current_task_id: str = "",
+    ) -> dict[str, Any]:
+        """Project current Workspace choices from the canonical backend resolver."""
+        project = Path(project).expanduser().resolve()
+        task_id = str(current_task_id or "").strip()
+        if task_id:
+            self.tasks.get(project, task_id)
+        settings = self._execution_settings()
+        policy = str(settings.get("auto_workspace_policy") or "").strip()
+        allow_concurrent = bool(settings.get("allow_concurrent_main_tasks", False))
+        main_running = self._main_running(project, task_id)
+        options: list[dict[str, Any]] = []
+        for requested in ("auto", "main", "worktree"):
+            try:
+                resolution = resolve_workspace_mode(
+                    requested,
+                    auto_policy=policy,
+                    main_running=main_running,
+                    allow_concurrent_main_tasks=allow_concurrent,
+                )
+            except WorkspaceBlockedError as exc:
+                options.append({
+                    "value": requested,
+                    "enabled": False,
+                    "effective_mode": "",
+                    "reason": "",
+                    "error": str(exc),
+                })
+                continue
+            options.append({
+                "value": requested,
+                "enabled": True,
+                "effective_mode": resolution.effective_mode,
+                "reason": resolution.reason,
+                "error": "",
+            })
+        return {
+            "auto_workspace_policy": policy,
+            "allow_concurrent_main_tasks": allow_concurrent,
+            "main_running": main_running,
+            "options": options,
+        }
 
     def start_goal(
         self,
