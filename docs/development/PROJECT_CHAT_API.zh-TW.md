@@ -16,7 +16,7 @@ Project Chat UI
   -> Task service / Runner public boundary
 ```
 
-普通 Chat 永遠不會建立或啟動 Runner Task。未來 Workspace/Merge layer 刻意延後到最後的 worktree phase，因此目前不屬於此 API。
+普通 Chat 永遠不會推測 Runner 執行意圖或自行建立 Task。明確輸入的 `@goal` 是刻意設計的例外：它只呼叫一個 Backend-owned、具冪等性的 create-then-run action，並重用既有 Task service、Workspace resolver 與 TaskRunService。`@task*` 仍只負責 Draft / Review / Create。
 
 ## Durable identity 與 state
 
@@ -35,6 +35,7 @@ Chat state 依 Project 儲存在 `.ai-task-runner/ui/chat/`。Message history �
 | Ask read/submit/cancel | `/api/chat/ask`, `/api/chat/ask/*` |
 | Durable event cursor | `/api/chat/events` |
 | TaskDraft generate/update/dismiss | `/api/chat/task-draft*` |
+| 明確 Quick Goal 建立 + 執行 | `/api/tasks/goal` |
 | Project Agent/Model/Mode/Reasoning/Workflow | Project preferences + backend capability/catalog APIs |
 
 Event feed 採 bounded durable polling，因為現有 UI 已擁有 non-overlapping polling。這不會建立第二套 SSE/WebSocket connection manager，而且 Chat event 與 Runner runtime event 保持分離。
