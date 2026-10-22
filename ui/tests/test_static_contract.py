@@ -63,6 +63,7 @@ class StaticContractTests(unittest.TestCase):
             "/api/tasks/create-from-draft",
             "/api/tasks/merge",
             "/api/tasks/publish",
+            "/api/tasks/cleanup",
         ):
             self.assertIn(endpoint, server)
         self.assertIn("function mergeChatPrompt", self.task_workspace_js)

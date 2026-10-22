@@ -405,6 +405,50 @@ class TaskRunService:
         )
         return self.get(project, task_id)
 
+    def cleanup(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """Explicitly clean retained Task/Recovery Git artifacts; preserve Task history."""
+        project = Path(project).expanduser().resolve()
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        existing = self.tasks.lifecycle_request(project, request)
+        if existing is not None:
+            if (
+                str(existing.get("task_id") or "") != str(task_id or "").strip()
+                or str(existing.get("action") or "") != "cleanup"
+            ):
+                raise ValueError("request_id belongs to another Task lifecycle action")
+            return self.get(project, task_id)
+
+        task = self.tasks.get(project, task_id)
+        if task.get("status") not in {"new", "closed"}:
+            raise ValueError("Task must be New or Closed before workspace cleanup")
+        policy = task.get("edit_policy") if isinstance(task.get("edit_policy"), dict) else {}
+        if not bool(policy.get("can_cleanup")):
+            raise ValueError("Task has no retained workspaces to clean up")
+        retained = self._retained_workspaces(task)
+        if not retained:
+            raise ValueError("Task retained workspace metadata is missing")
+
+        results: list[dict[str, Any]] = []
+        for workspace in retained:
+            results.append(self._workspaces.cleanup(workspace).as_dict())
+        self.tasks.record_workspace_cleanup(
+            project,
+            task_id,
+            request_id=request,
+            results=results,
+        )
+        return self.get(project, task_id)
+
     def reconcile(self, project: Path, task_id: str) -> dict[str, Any]:
         """Advance Task lifecycle while keeping Runner and Git orchestration separate."""
         project = Path(project).expanduser().resolve()
@@ -1075,6 +1119,10 @@ class TaskRunService:
 
     def _project_runtime(self, project: Path, task: dict[str, Any]) -> dict[str, Any]:
         value = dict(task)
+        cleanup = value.get("workspace_cleanup")
+        if isinstance(cleanup, dict) and str(cleanup.get("status") or "") == "cleaned":
+            value["runner_runtime"] = {}
+            return value
         run = value.get("run")
         if not isinstance(run, dict) or not isinstance(run.get("workspace"), dict):
             value["runner_runtime"] = {}
@@ -1089,6 +1137,43 @@ class TaskRunService:
                 "last_error": f"{type(exc).__name__}: {exc}",
             }
         return value
+
+    @staticmethod
+    def _retained_workspaces(task: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return unique owned Task/Recovery workspace metadata from current + history."""
+        rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        def add(value: Any) -> None:
+            if not isinstance(value, dict):
+                return
+            path = str(value.get("worktree_path") or "").strip()
+            if not path or path in seen:
+                return
+            seen.add(path)
+            rows.append(value)
+
+        records: list[dict[str, Any]] = []
+        current = task.get("run")
+        if isinstance(current, dict):
+            records.append(current)
+        history = task.get("history")
+        if isinstance(history, list):
+            records.extend(item for item in history if isinstance(item, dict))
+
+        for record in records:
+            add(record.get("workspace"))
+            result = record.get("workspace_result")
+            if not isinstance(result, dict):
+                continue
+            source = result.get("merge_source")
+            if isinstance(source, dict):
+                add(source.get("workspace"))
+            recovery = result.get("recovery")
+            if isinstance(recovery, dict):
+                add(recovery.get("workspace"))
+                add(recovery.get("source_workspace"))
+        return rows
 
     @staticmethod
     def _snapshot_from_result(result: dict[str, Any]) -> WorkspaceSnapshot | None:

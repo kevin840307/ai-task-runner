@@ -1108,9 +1108,14 @@ def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path)
         calls.append(("publish", project_path, task_id, request_id))
         return {"task_id": task_id, "status": "closed", "publish": "published"}
 
+    def cleanup(project_path: Path, task_id: str, *, request_id: str):
+        calls.append(("cleanup", project_path, task_id, request_id))
+        return {"task_id": task_id, "status": "closed", "cleanup": "cleaned"}
+
     server.state.task_runs.reset = reset
     server.state.task_runs.rerun = rerun
     server.state.task_runs.publish = publish
+    server.state.task_runs.cleanup = cleanup
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.port}"
@@ -1142,13 +1147,24 @@ def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path)
                 "request_id": "http-task-publish",
             },
         )
+        cleanup_value = _json_request(
+            f"{base}/api/tasks/cleanup",
+            method="POST",
+            body={
+                "project": str(project),
+                "task_id": "task-" + "d" * 32,
+                "request_id": "http-task-cleanup",
+            },
+        )
         assert reset_value["status"] == "new"
         assert rerun_value["status"] == "ongoing"
         assert publish_value["publish"] == "published"
+        assert cleanup_value["cleanup"] == "cleaned"
         assert calls == [
             ("reset", project.resolve(), "task-" + "a" * 32, "http-task-reset"),
             ("rerun", project.resolve(), "task-" + "b" * 32, "http-task-rerun"),
             ("publish", project.resolve(), "task-" + "c" * 32, "http-task-publish"),
+            ("cleanup", project.resolve(), "task-" + "d" * 32, "http-task-cleanup"),
         ]
     finally:
         server.shutdown()

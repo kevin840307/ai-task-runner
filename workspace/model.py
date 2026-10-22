@@ -96,6 +96,19 @@ class PreparedWorkspace:
 
 
 @dataclass(frozen=True)
+class WorkspaceCleanupResult:
+    status: str
+    branch: str
+    worktree_path: Path
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["worktree_path"] = str(self.worktree_path)
+        return value
+
+
+@dataclass(frozen=True)
 class WorkspaceSnapshot:
     task_snapshot_sha: str
     no_changes: bool

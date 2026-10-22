@@ -582,6 +582,13 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("task_id", "")),
                     request_id=str(body.get("request_id", "")),
                 ))
+            if parsed.path == "/api/tasks/cleanup":
+                project = self._project(body)
+                return self._json(self.state.task_runs.cleanup(
+                    project,
+                    str(body.get("task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                ))
             if parsed.path == "/api/chat/turn":
                 project = self._project(body)
                 preferences = self.state.project_preferences.get(project)

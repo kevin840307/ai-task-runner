@@ -598,6 +598,25 @@ def _bridge_for(state: UIState):
                         status=str(task.get("status") or "closed"),
                         workspace_result=result,
                     )
+                elif path == "/api/tasks/cleanup":
+                    project_path = Path(body["project"])
+                    task_id = str(body.get("task_id", ""))
+                    task = state.tasks.get(project_path, task_id)
+                    result = state.tasks.record_workspace_cleanup(
+                        project_path,
+                        task_id,
+                        request_id=str(body.get("request_id", "")),
+                        results=[{
+                            "status": "cleaned",
+                            "branch": str((task.get("run") or {}).get("workspace", {}).get("task_branch") or ""),
+                            "worktree_path": str((task.get("run") or {}).get("workspace", {}).get("worktree_path") or ""),
+                            "detail": "",
+                        }],
+                    )
+                    actions = getattr(state, "_browser_cleanup_actions", [])
+                    actions.append(task_id)
+                    state._browser_cleanup_actions = actions
+                    data = result
                 elif path == "/api/chat/ask/demo":
                     session_id = str(body.get("session_id", ""))
                     data = state.chat_service.create_ask(
@@ -1198,6 +1217,19 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
             assert getattr(state, "_browser_publish_actions", []) == [
                 (fallback_id, fallback_workspace["task_branch"])
             ]
+            assert page.locator("#taskWorkspaceCleanupWorktrees").is_enabled()
+            assert page.locator("#taskWorkspaceDeleteTask").is_disabled()
+            page.click("#taskWorkspaceCleanupWorktrees")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text(
+                "Cleanup retained Task worktrees?", exact=True
+            ).is_visible()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "document.querySelector('#taskWorkspaceDeleteTask')?.disabled === false"
+            )
+            assert getattr(state, "_browser_cleanup_actions", []) == [fallback_id]
+            assert page.locator("#taskWorkspaceCleanupWorktrees").count() == 0
             page.click("#taskWorkspaceClose")
 
             page.locator(".tasks-board-card").filter(has_text="Conflict delivery").click()

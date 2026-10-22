@@ -1168,7 +1168,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Support unique Task + Run identity.
 - [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch, expected source-base ancestry and absence of active Git operation; fail closed on mismatch.
 - [ ] Create recovery worktree only after a merge failure that needs source integration repair.
-- [ ] Ownership-safe cleanup.
+- [x] Ownership-safe cleanup.
 
 ### Phase C — Runner Complete snapshot
 

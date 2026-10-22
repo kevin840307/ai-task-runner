@@ -527,3 +527,60 @@ def test_snapshot_rejects_exclude_path_outside_task_worktree(tmp_path: Path):
 
     with pytest.raises(WorkspaceError, match="outside Task worktree"):
         manager.snapshot_result(prepared, excluded_paths=(tmp_path / "outside",))
+
+
+def test_explicit_cleanup_removes_only_owned_worktree_and_branch(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-" + "c" * 32,
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    source_project = prepared.source_project_root
+    (prepared.worktree_path / "discard.txt").write_text("explicit cleanup\n", encoding="utf-8")
+    assert prepared.worktree_path.is_dir()
+
+    result = manager.cleanup(prepared)
+
+    assert result.status == "cleaned"
+    assert result.worktree_path == prepared.worktree_path
+    assert not prepared.worktree_path.exists()
+    branch = subprocess.run(
+        ["git", "rev-parse", "--verify", f"refs/heads/{prepared.task_branch}"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+    assert branch.returncode != 0
+    assert source_project.is_dir()
+
+    repeated = manager.cleanup(prepared)
+    assert repeated.status == "already_cleaned"
+
+
+def test_cleanup_rejects_tampered_recovery_identity(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    prepared = manager.prepare(
+        repo,
+        task_id="task-" + "d" * 32,
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    tampered = prepared.as_dict()
+    tampered["task_branch"] = "user/not-owned"
+
+    with pytest.raises(WorkspaceError, match="Task branch"):
+        manager.cleanup(tampered)

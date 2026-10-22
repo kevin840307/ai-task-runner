@@ -1228,15 +1228,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       merge.type = "button";
       merge.textContent = "Merge";
       const mergeStatus = String(mergeResult?.status || "");
+      const cleanupComplete = String(task?.workspace_cleanup?.status || "") === "cleaned";
       const mergeBlocked = new Set(["conflict", "source_fail", "technical_error", "validation_required", "waiting_target_history"]);
-      merge.disabled = mergeBlocked.has(mergeStatus) || mergeStatus === "merged" || mergeStatus === "no_changes";
+      merge.disabled = cleanupComplete || mergeBlocked.has(mergeStatus) || mergeStatus === "merged" || mergeStatus === "no_changes";
       merge.title = merge.disabled && mergeBlocked.has(mergeStatus)
         ? "Resolve this merge state before retrying direct Merge"
         : "";
       merge.onclick = () => void mergeTaskResult();
       resultActions.appendChild(merge);
 
-      const publishable = String(task.status || "") === "closed"
+      const publishable = !cleanupComplete
+        && String(task.status || "") === "closed"
         && new Set(["merged", "no_changes", "worktree_ready"]).has(mergeStatus);
       if (publishable) {
         const publish = document.createElement("button");
@@ -1267,6 +1269,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     actions.className = "task-workspace-info-actions";
     const restrictions = [];
 
+    if (policy.can_cleanup) {
+      const cleanup = document.createElement("button");
+      cleanup.id = "taskWorkspaceCleanupWorktrees";
+      cleanup.type = "button";
+      cleanup.textContent = "Cleanup Worktrees";
+      cleanup.title = "Explicitly remove retained Task/Recovery worktrees and local branches";
+      cleanup.onclick = () => void cleanupTaskWorkspaces();
+      actions.appendChild(cleanup);
+    }
+
     const remove = document.createElement("button");
     remove.id = "taskWorkspaceDeleteTask";
     remove.type = "button";
@@ -1276,13 +1288,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       remove.onclick = () => void deleteTask();
     } else {
       remove.disabled = true;
-      remove.title = lifecycleStatus === "new"
-        ? "Retained Task Run history/workspaces must be cleaned up before deletion"
-        : "Only New Tasks can be deleted safely";
+      remove.title = policy.can_cleanup
+        ? "Cleanup retained Task worktrees before deletion"
+        : "Task cannot be deleted in its current lifecycle state";
       restrictions.push(
-        lifecycleStatus === "new"
-          ? "Delete is unavailable because retained Task Run history/workspaces still exist."
-          : "Delete is unavailable while this Task has runtime or lifecycle state. Only New Tasks can be deleted safely."
+        policy.can_cleanup
+          ? "Delete is unavailable until retained Task worktrees are explicitly cleaned up."
+          : "Delete is unavailable while this Task has active or resumable lifecycle state."
       );
     }
     actions.appendChild(remove);
@@ -1577,6 +1589,46 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       await onTaskChanged?.();
     } catch (error) {
       showError?.(error.message, "Publish failed");
+      render();
+    }
+  }
+
+  async function cleanupTaskWorkspaces() {
+    const task = state?.task;
+    const policy = taskEditPolicy(task);
+    if (!task || !policy.can_cleanup) return;
+    const ok = await confirmDialog?.({
+      title: "Cleanup retained Task worktrees?",
+      message: "This explicitly deletes only AI Task Runner-owned Task/Recovery worktrees and their local branches. Task history is preserved. Remote branches are not deleted.",
+      details: [
+        { label: "Task:", value: String(task.title || task.task_id || "") },
+        { label: "Status:", value: String(task.status || "") },
+      ],
+      confirmLabel: "Cleanup Worktrees",
+      danger: true,
+    });
+    if (!ok) return;
+
+    const button = byId("taskWorkspaceCleanupWorktrees");
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    try {
+      const updated = await api("/api/tasks/cleanup", {
+        method: "POST",
+        body: JSON.stringify({
+          project: task.project,
+          task_id: task.task_id,
+          request_id: newRequestId("task-cleanup"),
+        }),
+      });
+      state.task = cloneDraft(updated);
+      state.error = "";
+      render();
+      await onTaskChanged?.();
+    } catch (error) {
+      showError?.(error.message, "Cleanup Worktrees failed");
       render();
     }
   }

@@ -7,11 +7,12 @@ from typing import Any
 
 from product_settings import AUTO_WORKSPACE_POLICIES
 
-from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
+from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceCleanupResult, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
 from .worktree import (
     add_or_reuse_worktree,
     branch_head,
     capture_target,
+    cleanup_owned_worktree,
     git,
     is_ancestor,
     repository_identity,
@@ -243,7 +244,7 @@ class WorkspaceManager:
         """Restore either the original Task source or one owned recovery source."""
         return self._restore(value, allow_recovery=True)
 
-    def _restore(
+    def _validate_metadata(
         self,
         value: PreparedWorkspace | dict[str, Any],
         *,
@@ -279,8 +280,17 @@ class WorkspaceManager:
         expected_project = (prepared.worktree_path.resolve() / relative_project).resolve()
         if prepared.project_root.resolve() != expected_project:
             raise WorkspaceError("Workspace project_root does not match captured Project path")
+        return prepared
+
+    def _restore(
+        self,
+        value: PreparedWorkspace | dict[str, Any],
+        *,
+        allow_recovery: bool,
+    ) -> PreparedWorkspace:
+        prepared = self._validate_metadata(value, allow_recovery=allow_recovery)
         verify_worktree(
-            repo,
+            prepared.repository_root.resolve(),
             prepared.worktree_path,
             expected_branch=prepared.task_branch,
             expected_base_sha=prepared.task_base_sha,
@@ -288,6 +298,24 @@ class WorkspaceManager:
         if not prepared.project_root.is_dir():
             raise WorkspaceError("Workspace project_root is missing")
         return prepared
+
+    def cleanup(
+        self,
+        value: PreparedWorkspace | dict[str, Any],
+    ) -> WorkspaceCleanupResult:
+        """Explicitly remove one owned Task/Recovery worktree and local branch."""
+        prepared = self._validate_metadata(value, allow_recovery=True)
+        status = cleanup_owned_worktree(
+            prepared.repository_root.resolve(),
+            prepared.worktree_path,
+            expected_branch=prepared.task_branch,
+            expected_base_sha=prepared.task_base_sha,
+        )
+        return WorkspaceCleanupResult(
+            status=status,
+            branch=prepared.task_branch,
+            worktree_path=prepared.worktree_path.resolve(),
+        )
 
     def snapshot_result(
         self,

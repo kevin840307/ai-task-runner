@@ -121,6 +121,16 @@ class TaskService:
                 "restructure": can_restructure,
                 "reason": item_reason,
             })
+        retained_runtime = bool(task.get("run") or task.get("history"))
+        cleanup = task.get("workspace_cleanup")
+        cleanup_complete = (
+            isinstance(cleanup, dict)
+            and str(cleanup.get("status") or "") == "cleaned"
+        )
+        can_delete = (
+            status in {"new", "closed"}
+            and (not retained_runtime or cleanup_complete)
+        )
         return {
             "editable": editable,
             "reason": reason,
@@ -129,7 +139,12 @@ class TaskService:
             "can_rename": editable,
             "can_add_item": editable,
             "can_edit_yaml": status == "new" or (status == "paused" and completed == 0),
-            "can_delete": status == "new" and not task.get("run") and not task.get("history"),
+            "can_delete": can_delete,
+            "can_cleanup": (
+                status in {"new", "closed"}
+                and retained_runtime
+                and not cleanup_complete
+            ),
             "restart_required": bool(task.get("restart_required", False)),
             "items": item_policies,
         }
@@ -397,8 +412,10 @@ class TaskService:
             if index < 0:
                 raise ValueError("Task does not exist")
             task = state["tasks"][index]
-            if task.get("status") != "new" or task.get("run") or task.get("history"):
-                raise ValueError("Only New Tasks can be deleted safely; retained runtime/history must be cleaned up first")
+            if not self.edit_policy(task)["can_delete"]:
+                raise ValueError(
+                    "Task runtime/workspaces must be explicitly cleaned up before deletion"
+                )
             state["tasks"].pop(index)
             state["delete_requests"][request] = task_key
             while len(state["delete_requests"]) > DELETE_REQUEST_LIMIT:
@@ -459,6 +476,7 @@ class TaskService:
                 task["history"] = history[-100:]
 
             task.pop("run", None)
+            task.pop("workspace_cleanup", None)
             task["status"] = "new"
             task["completed_item_count"] = 0
             task["restart_required"] = False
@@ -472,6 +490,53 @@ class TaskService:
                 state["lifecycle_requests"].pop(next(iter(state["lifecycle_requests"])))
             self._write(project, state)
             return {**self._project_task(task), "duplicate": False}
+
+    def record_workspace_cleanup(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+        results: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Record completed explicit workspace cleanup without deleting Task history."""
+        task_key = validate_task_id(task_id)
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
+            raise ValueError("Workspace cleanup results must be a list of objects")
+        with self._lock:
+            state = self._load(project)
+            existing = state["lifecycle_requests"].get(request)
+            current = next((row for row in state["tasks"] if row["task_id"] == task_key), None)
+            if current is None:
+                raise ValueError("Task does not exist")
+            if existing:
+                if (
+                    str(existing.get("task_id") or "") != task_key
+                    or str(existing.get("action") or "") != "cleanup"
+                ):
+                    raise ValueError("request_id belongs to another Task lifecycle action")
+                return {**self._project_task(current), "duplicate": True}
+            if str(current.get("status") or "") not in {"new", "closed"}:
+                raise ValueError("Task must be New or Closed before workspace cleanup")
+            current["workspace_cleanup"] = {
+                "status": "cleaned",
+                "cleaned_at": time.time(),
+                "results": deepcopy(results),
+            }
+            current["updated_at"] = time.time()
+            state["lifecycle_requests"][request] = {
+                "task_id": task_key,
+                "action": "cleanup",
+            }
+            while len(state["lifecycle_requests"]) > LIFECYCLE_REQUEST_LIMIT:
+                state["lifecycle_requests"].pop(next(iter(state["lifecycle_requests"])))
+            self._write(project, state)
+            return {**self._project_task(current), "duplicate": False}
 
     def lifecycle_request(self, project: Path, request_id: str) -> dict[str, Any] | None:
         """Return one durable Reset/Rerun request without mutating Task state."""
@@ -571,6 +636,7 @@ class TaskService:
 
             now = time.time()
             task["status"] = "ongoing"
+            task.pop("workspace_cleanup", None)
             task["run_count"] = run_number
             task["restart_required"] = False
             task["run"] = {
@@ -755,7 +821,7 @@ class TaskService:
                     str(key).strip()
                     and isinstance(value, dict)
                     and str(value.get("task_id") or "") in ids
-                    and str(value.get("action") or "") in {"reset", "rerun"}
+                    and str(value.get("action") or "") in {"reset", "rerun", "cleanup"}
                 )
             },
         }

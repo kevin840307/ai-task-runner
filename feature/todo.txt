@@ -613,7 +613,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - top-level workspace/ 是唯一 Git worktree/merge/publish mechanics owner；TaskRunService 只協調 PreparedWorkspace/MergeResult，frontend 只呼叫 Task API。tests/test_workspace_architecture.py 鎖定 workspace 不 import Runner/UI、Runner 不 import workspace。
 [x] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
     - MergeManager 已具 repository/target locks、durable FIFO、target/history/dirty/ownership preflight、--no-ff --no-commit + validation transaction；真 conflict/SOURCE_FAIL abort 後 TaskRunService durable dedupe increment 並啟動既有 Runner incremental recovery。workspace merge + Task orchestration regression 覆蓋 conflict、restart、queue、technical error 與 fallback。
-[ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
+[x] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
+    - Reset/Rerun 只 archive durable Run/history，不再隱含刪 worktree；新增 explicit /api/tasks/cleanup + Cleanup Worktrees confirmation，僅 New/Closed 且有 retained workspace 時可執行。workspace/ 先驗證 repository/Task-Run branch/base/worktree ownership 與 active Git operation，再移除 owned worktree/local branch；Task history 保留並記 workspace_cleanup。Delete 本身不執行 Git，只有無 retained runtime 或 explicit cleanup 完成後才可刪 Task record。
 [x] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
     - `test_project_chat_turn_http_uses_project_preferences_without_runner_task` 先以 HTTP Chat 成功再注入 Agent backend failure，逐 byte 驗證 `.ai-task-runner/state.json` / `runner-process.json` / `stop.request` 完全不變；既有 UIServer reopen regression 同樣鎖住 restart ownership。2026-10-21 CI Windows/Linux pytest PASS。
 [x] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。

@@ -253,6 +253,67 @@ def active_git_operation(worktree: Path) -> str:
     return values[0] if values else ""
 
 
+def cleanup_owned_worktree(
+    repo: Path,
+    path: Path,
+    *,
+    expected_branch: str,
+    expected_base_sha: str,
+) -> str:
+    """Remove one owned Task/Recovery worktree and local branch, idempotently."""
+    worktree = path.resolve()
+    with repository_git_lock(repo):
+        head = branch_head(repo, expected_branch)
+        if not worktree.exists():
+            # Recover safely from a crash after worktree removal but before
+            # local branch deletion. Pruning only stale Git worktree metadata.
+            git(repo, "worktree", "prune")
+            if not head:
+                return "already_cleaned"
+            if not is_ancestor(repo, expected_base_sha, head):
+                raise WorkspaceError(
+                    "Cleanup branch no longer descends from the captured source base"
+                )
+            deleted = git(repo, "branch", "-D", expected_branch, check=False)
+            if deleted.returncode != 0:
+                raise WorkspaceError(
+                    "Could not delete cleaned Task branch: "
+                    + (_detail(deleted) or expected_branch)
+                )
+            return "cleaned"
+
+        verify_worktree(
+            repo,
+            worktree,
+            expected_branch=expected_branch,
+            expected_base_sha=expected_base_sha,
+        )
+        operation = active_git_operation(worktree)
+        if operation:
+            raise WorkspaceError(
+                f"Task worktree has an active Git operation: {operation}"
+            )
+        head = git(worktree, "rev-parse", "HEAD").stdout.strip()
+        removed = git(repo, "worktree", "remove", "--force", str(worktree), check=False)
+        if removed.returncode != 0:
+            raise WorkspaceError(
+                "Could not remove Task worktree: " + (_detail(removed) or str(worktree))
+            )
+        current = branch_head(repo, expected_branch)
+        if current and current != head:
+            raise WorkspaceError(
+                "Task branch changed while its worktree was being cleaned"
+            )
+        if current:
+            deleted = git(repo, "branch", "-D", expected_branch, check=False)
+            if deleted.returncode != 0:
+                raise WorkspaceError(
+                    "Could not delete cleaned Task branch: "
+                    + (_detail(deleted) or expected_branch)
+                )
+        return "cleaned"
+
+
 def snapshot_task_result(
     repo: Path,
     path: Path,

@@ -178,6 +178,50 @@ def test_publish_is_explicit_closed_result_action_and_idempotent_by_request(tmp_
     assert len(publisher.calls) == 1
 
 
+def test_explicit_workspace_cleanup_preserves_history_and_enables_delete(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-cleanup")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    started = service.start(repo, created["task_id"], request_id="cleanup-run")
+    retained = Path(started["run"]["workspace"]["worktree_path"])
+    branch = str(started["run"]["workspace"]["task_branch"])
+    assert retained.is_dir()
+
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+    assert closed["edit_policy"]["can_cleanup"] is True
+    assert closed["edit_policy"]["can_delete"] is False
+
+    cleaned = service.cleanup(repo, created["task_id"], request_id="cleanup-1")
+    assert cleaned["status"] == "closed"
+    assert cleaned["workspace_cleanup"]["status"] == "cleaned"
+    assert cleaned["edit_policy"]["can_cleanup"] is False
+    assert cleaned["edit_policy"]["can_delete"] is True
+    assert cleaned["run"]["workspace_result"]["snapshot"]
+    assert not retained.exists()
+    missing_branch = subprocess.run(
+        ["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+    assert missing_branch.returncode != 0
+
+    repeated = service.cleanup(repo, created["task_id"], request_id="cleanup-1")
+    assert repeated["workspace_cleanup"] == cleaned["workspace_cleanup"]
+
+    deleted = tasks.delete(
+        repo,
+        created["task_id"],
+        request_id="delete-after-cleanup",
+    )
+    assert deleted["deleted"] is True
+
+
 def test_invalid_run_request_is_rejected_before_workspace_creation(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
