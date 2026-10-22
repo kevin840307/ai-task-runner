@@ -113,6 +113,7 @@ def _service(
             "model": "model-a",
             "mode": "auto",
             "reasoning": "high",
+            "workflow": str(repo / "workflow.yaml"),
         },
         backend_default=lambda _project: "qwen",
         resolve_workflow=lambda _project, selected: Path(selected),
@@ -265,6 +266,204 @@ def test_restart_relaunches_durable_launching_workspace_without_new_identity(tmp
     assert len(launches) == 1
     assert launches[0][0] == prepared.project_root
     assert launches[0][1] == "Implement one"
+
+
+def test_quick_goal_create_and_run_is_idempotent(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, w: {"exists": Path(w).name == "workflow.yaml"})
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    first = service.start_goal(
+        repo,
+        "Implement the quick goal",
+        request_id="goal-command-1",
+        project_id="project-fixture",
+    )
+    duplicate = service.start_goal(
+        repo,
+        "Implement the quick goal",
+        request_id="goal-command-1",
+        project_id="project-fixture",
+    )
+
+    assert first["goal_run_started"] is True
+    assert first["status"] == "ongoing"
+    assert first["run"]["phase"] == "running"
+    assert first["run"]["workspace"]["requested_mode"] == "auto"
+    assert first["items"][0]["prompt"] == "Implement the quick goal"
+    assert first["items"][0]["workflow"] == str(repo / "workflow.yaml")
+    assert duplicate["task_id"] == first["task_id"]
+    assert duplicate["run_count"] == 1
+    assert len(tasks.list(repo)["tasks"]) == 1
+    assert len(launches) == 1
+
+
+def test_quick_goal_defaults_to_ralphy_and_fails_closed_for_invalid_inputs(tmp_path: Path):
+    repo = _repo(tmp_path)
+    accepted = []
+
+    def requirements(_project: Path, workflow: str):
+        accepted.append(workflow)
+        return {
+            "exists": workflow == "ralphy_ai_validate.yaml",
+            "requires_python_validator": workflow == "validator.workflow.yaml",
+        }
+
+    tasks = TaskService(workflow_requirements=requirements)
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {
+            "auto_workspace_policy": "busy-worktree",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": False,
+        },
+        preferences=lambda _project: {"agent": "qwen", "model": "", "mode": "auto", "workflow": ""},
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=lambda *_args, **_kwargs: None,
+        read_runtime=lambda _project: {"running": True, "launching": False, "completed": False, "actions": {}},
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        auto_watch=False,
+    )
+
+    with pytest.raises(ValueError, match="@goal spec is required"):
+        service.start_goal(repo, "   ", request_id="empty-goal")
+    assert tasks.list(repo)["tasks"] == []
+
+    started = service.start_goal(repo, "Fallback workflow", request_id="goal-fallback")
+    assert started["items"][0]["workflow"] == "ralphy_ai_validate.yaml"
+    assert "ralphy_ai_validate.yaml" in accepted
+
+    missing_tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": False})
+    missing = TaskRunService(
+        missing_tasks,
+        execution_settings=lambda: {"auto_workspace_policy": "busy-worktree", "merge_failure_limit": 3, "allow_concurrent_main_tasks": False},
+        preferences=lambda _project: {"agent": "qwen", "model": "", "mode": "auto", "workflow": "missing.workflow.yaml"},
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=lambda *_args, **_kwargs: None,
+        read_runtime=lambda _project: {},
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "missing-worktrees"),
+        auto_watch=False,
+    )
+    with pytest.raises(ValueError, match="Workflow does not exist"):
+        missing.start_goal(repo, "Missing workflow", request_id="goal-missing")
+    assert missing_tasks.list(repo)["tasks"] == []
+
+    validator_tasks = TaskService(
+        workflow_requirements=lambda _p, _w: {"exists": True, "requires_python_validator": True}
+    )
+    validator = TaskRunService(
+        validator_tasks,
+        execution_settings=lambda: {"auto_workspace_policy": "busy-worktree", "merge_failure_limit": 3, "allow_concurrent_main_tasks": False},
+        preferences=lambda _project: {"agent": "qwen", "model": "", "mode": "auto", "workflow": "validator.workflow.yaml"},
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=lambda *_args, **_kwargs: None,
+        read_runtime=lambda _project: {},
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "validator-worktrees"),
+        auto_watch=False,
+    )
+    with pytest.raises(ValueError, match="File Validator is required"):
+        validator.start_goal(repo, "Needs validator", request_id="goal-validator")
+    assert validator_tasks.list(repo)["tasks"] == []
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected_mode", "expected_started"),
+    [
+        ("busy-worktree", "worktree", True),
+        ("always-worktree", "worktree", True),
+        ("always-main", None, False),
+    ],
+)
+def test_quick_goal_main_busy_uses_global_auto_policy(
+    tmp_path: Path, policy: str, expected_mode: str | None, expected_started: bool
+):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    existing = _task(tasks, repo, workspace="main", request_id=f"existing-{policy}")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=launches,
+        stops=[],
+        resumes=[],
+        settings={
+            "auto_workspace_policy": policy,
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": False,
+        },
+    )
+    service.start(repo, existing["task_id"], request_id=f"existing-run-{policy}")
+
+    goal = service.start_goal(repo, "Busy quick goal", request_id=f"goal-busy-{policy}")
+
+    assert goal["goal_run_started"] is expected_started
+    if expected_started:
+        assert goal["status"] == "ongoing"
+        assert goal["run"]["workspace"]["effective_mode"] == expected_mode
+        assert len(launches) == 2
+    else:
+        assert goal["status"] == "new"
+        assert "run" not in goal
+        assert "busy" in goal["goal_run_error"].lower()
+        assert len(launches) == 1
+        tasks.transition_run(
+            repo, existing["task_id"], 1, phase="stopped", status="paused"
+        )
+        retried = service.start_goal(repo, "Busy quick goal", request_id=f"goal-busy-{policy}")
+        assert retried["task_id"] == goal["task_id"]
+        assert retried["goal_run_started"] is True
+        assert retried["run"]["workspace"]["effective_mode"] == "main"
+        assert len(tasks.list(repo)["tasks"]) == 2
+
+
+def test_quick_goal_launch_failure_is_durable_paused_and_not_relaunched(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    calls = []
+
+    def fail_launch(project: Path, _goal: str | None, **_kwargs):
+        calls.append(Path(project))
+        raise RuntimeError("quick goal launch failed")
+
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {"auto_workspace_policy": "busy-worktree", "merge_failure_limit": 3, "allow_concurrent_main_tasks": False},
+        preferences=lambda _project: {"agent": "qwen", "model": "", "mode": "auto", "workflow": str(repo / "workflow.yaml")},
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=fail_launch,
+        read_runtime=lambda _project: {"running": False, "launching": False, "completed": False, "actions": {}},
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        auto_watch=False,
+    )
+
+    failed = service.start_goal(repo, "Launch failure", request_id="goal-launch-fail")
+    duplicate = service.start_goal(repo, "Launch failure", request_id="goal-launch-fail")
+
+    assert failed["goal_run_started"] is False
+    assert failed["status"] == "paused"
+    assert failed["run"]["phase"] == "launch_failed"
+    assert "quick goal launch failed" in failed["goal_run_error"]
+    assert duplicate["task_id"] == failed["task_id"]
+    assert duplicate["run"]["workspace"] == failed["run"]["workspace"]
+    assert duplicate["goal_run_started"] is False
+    assert len(calls) == 1
 
 
 def test_concurrent_main_tasks_run_in_distinct_isolated_worktrees(tmp_path: Path):
