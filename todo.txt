@@ -557,7 +557,8 @@ LIVE REGRESSION NOTES
       verifier and other worker routing remain unchanged.
     - fail-start now resumes at probe 44.
 
-[ ] Revalidate high-density soak after front-loading mixed Final AI coverage.
+[x] Revalidate high-density soak after front-loading mixed Final AI coverage.
+    - Closed by the later green high-density soak plus final clean 46/46 and 24H/450-run release evidence recorded below.
     - 2026-10-12 focused rerun started at probe 40 on source revision
       a37d08f645f3f35af7efff2993aed087aee7f420, DIRTY=False.
     - Soak itself completed without a task/runtime exception, but final dense acceptance
@@ -573,7 +574,8 @@ LIVE REGRESSION NOTES
       and cadence=0 fully disabled.
     - fail-start remains at probe 40 for the focused soak rerun.
 
-[ ] Revalidate true 24H soak after separator-dropped malformed Windows write-path fix.
+[x] Revalidate true 24H soak after separator-dropped malformed Windows write-path fix.
+    - Closed by the later full release gate: runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5 passed 24H and final cleanup records clean 46/46 + 24H/450-run soak.
     - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
       timeout-recovery-budget PASS, then soak-yaml-0140 failed inside yaml_list_resume_probe.
     - Durable task evidence recorded changed_files=['C<U+F03A>Userskevin...item-1health.txt']
@@ -591,7 +593,8 @@ LIVE REGRESSION NOTES
     - Runner semantic/runtime ownership is unchanged; validator and loop detection
       remain strict. Real-Qwen soak rerun from probe 40 is required before checking this item.
 
-[ ] Revalidate API-recovery soak semantic repair budget after soak-api-502-0454.
+[x] Revalidate API-recovery soak semantic repair budget after soak-api-502-0454.
+    - Closed by the later clean full-gate/API-recovery evidence and final 24H/450-run soak; the bounded repair-budget regression remained in deterministic CI.
     - 2026-10-11 Windows soak reached [38/46] final-ai-quorum PASS and [39/46]
       timeout-recovery-budget PASS, then soak-api-502-0454 failed closed.
     - Durable evidence: validate_file FAILed at cycle=4 with missing health.txt and
@@ -607,7 +610,8 @@ LIVE REGRESSION NOTES
     - Deterministic regression locks the eight-cycle bounded repair budget.
     - fail-start now resumes at probe 40 (soak) for the focused real-Qwen rerun.
 
-[ ] Revalidate true 24H soak after malformed Windows write-path recovery fix.
+[x] Revalidate true 24H soak after malformed Windows write-path recovery fix.
+    - Closed by the later full 24H release pass and final 24H/450-run evidence; malformed-write regressions remained covered deterministically.
     - 2026-10-08 true 24H gate progressed through [39/46] timeout-recovery-budget PASS, then soak run
       soak-api-502-0028 failed closed at max_cycles_exhausted (cycle=5) instead of hanging forever.
     - Uploaded project evidence proves HTTP/API recovery was not the final failure: every Execute invocation returned PASS,
@@ -1542,7 +1546,8 @@ FINAL CODE REVIEW (2026-10-04)
 
 OPTIMIZATION FREEZE
 -------------------
-[ ] Freeze proactive architecture/UI optimization after this pass
+[x] Freeze proactive architecture/UI optimization after this pass
+    - Historical optimization freeze accepted after deterministic + real-Qwen release gates. Current future-ui-implementation work is explicit product backlog, not proactive cleanup/refactor.
     - Once FINAL OPTIMIZATION ACCEPTANCE and the release gates are green, do not continue cleanup/refactor work
       solely to reduce LOC, split files, generalize abstractions or copy features from n8n/Langflow/Flowise/Dify.
     - Future changes require one of:
@@ -1774,7 +1779,8 @@ RELEASE GATES
     - retry/backoff spin: PASS; 15 observed waits, max 30s cap reached.
     - ownership/orphan leak: PASS; active_process_markers stayed 0 and completed-run technical maps stayed empty.
 
-[ ] Full 24H Windows soak green:
+[x] Full 24H Windows soak green:
+    - Historical Runner gate completed on runtime source 7b239c300a482519bab72ebdbcf86045ef01c8f5; final release cleanup records clean 46/46 and 24H/450-run soak. Current Future UI/Workspace changes do not claim a new 24H rerun from this historical checkbox.
     tool\qwen_live_reliability_24h.bat
 
     Acceptance:

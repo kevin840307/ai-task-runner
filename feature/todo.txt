@@ -387,7 +387,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task Prompt / AI source mode 排版收斂：Write / File / Asset（AI 另含 Default）保持等寬 segmented tabs 與 100% 內容寬度；高度依模式自然變化。Mixed workflow 時 Task Prompt 先佔完整一列，File Validator + AI Validation 下一列並排，避免 Prompt 下方大片留白。
 [x] Mixed File Validator + AI Validation 對齊：兩張卡同列 stretch、header 使用相同兩列節奏（標題/說明 + control row），因此 AI Default/Write/File/Asset 切換時 body 起點與外框保持對齊。
 [x] Reset / Rerun 統一由 tasks-page.js 單一 lifecycle owner 處理並必須先確認；移除 core.js 舊 direct handler，避免 load-order 繞過 confirmation。
-[ ] Browser smoke：Paused → Reset → Confirm 後卡片移到 New；Cancel 不改狀態；Failed/Completed Rerun 必須先確認。
+[x] Browser smoke：Paused → Reset → Confirm 後卡片移到 New；Cancel 不改狀態；Failed/Completed Rerun 必須先確認。
+    - Production Task lifecycle 由 TaskService/TaskRunService 擁有；Reset/Rerun 皆需 confirm。真 Chromium test_task_lifecycle_reset_and_rerun_require_confirmation 覆蓋 Paused Reset Cancel/Confirm→New 與 Failed/Completed Rerun Cancel/Confirm；exact code HEAD d3b57d4376c1bdfd72e9bb415f87783b300f3de7 在 CI 39779685643 Browser lane PASS。
 [x] Browser 視覺回歸：Mixed File + AI 四種 AI mode 逐一切換，確認兩卡頂端/body 起點/底部外框對齊。
     - `test_task_editor_source_modes_keep_shared_drawer_geometry` 以 820/620 × Light/Dark 真 Chromium 逐一切換 Prompt Write/File/Asset 與 AI Write/File/Asset/Default；桌面寬度時要求 File Validator / AI Validation y 與 height 對齊，所有模式保持同 Drawer width、無 page overflow。
 [x] Browser 視覺回歸：Task Prompt Write ↔ File ↔ Asset、AI Default ↔ Write ↔ File ↔ Asset 逐一切換，確認 header / tabs / body / Upload/Open Prompts 寬度穩定且 Drawer 不跳動。
@@ -452,7 +453,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - TaskRunService 以 durable task_id + run_number workspace metadata 作唯一 identity；launch_failed / Stop / Resume restore 同一 worktree。Ordered Task List child 完成後先 durable completed_item_count/terminal phase，再以 deterministic internal request id 啟動下一 child；restart 在 child boundary 只啟動下一筆。另補 prepare+begin_run 後 process crash、Runner 尚無 state 時在同一 prepared workspace relaunch；UI server restart 仍只重掛 canonical lifecycle watcher。
 [x] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
     - `WorkspaceManager.snapshot_result`/`snapshot_task_result` 在 add/commit 前後重驗 ownership、branch/base ancestry 與 active Git operation；支援保留 Agent commits、只 commit remaining diff、no_changes 不造空 commit。
-[ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
+[x] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。
+    - Reset/Rerun 只封存 durable run/history 並保留舊 Task/recovery worktree/branch；retained history 會使 Delete disabled/backend fail-closed。Explicit abandonment 只釋放 owned merge queue head，不執行 worktree remove。service regression 同時驗證 fresh rerun workspace、舊 workspace retention、queue release 後下一 Main 可 merge。
 
 
 11. Workspace Results / Direct Merge
@@ -489,7 +491,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - TaskRunService 只在 MergeManager 回 merged/no_changes 時關閉 effective Main；no_changes 現在保留獨立 phase，兩者都持久化 merged_target_head_sha。另有 recovery/fallback 明確終態，不把 Runner Complete 誤當 Task Complete。
 [ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
     - 已補 Task-orchestrator restart regression：durable current merge source 若已成 target ancestry，reconcile 直接 finalize 且 commit count 不增加；durable FIFO queue 既有 restart test 保留 seq。未完成 MERGE_HEAD 在 user Project worktree 的 ownership-safe reconcile 尚未完成，因此總項不勾。
-[ ] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
+[x] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
+    - 單一 Task Drawer Result card 投影 canonical Task/Run/workspace_result；新增 Project、Run/item、captured target、current source branch/path、merge failures、fallback reason，保留 conflict detail。真 Chromium conflict + merge_failure_limit_exceeded fallback fixture 已納入 CI 39779685643。
 [ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
 [ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
 [ ] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
