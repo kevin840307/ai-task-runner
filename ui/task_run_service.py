@@ -200,6 +200,8 @@ class TaskRunService:
         request_id: str,
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
+        task = self.tasks.get(project, task_id)
+        self._release_abandoned_merge_slot(task)
         self.tasks.reset_to_new(
             project,
             task_id,
@@ -216,6 +218,8 @@ class TaskRunService:
         request_id: str,
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
+        task = self.tasks.get(project, task_id)
+        self._release_abandoned_merge_slot(task)
         self.tasks.reset_to_new(
             project,
             task_id,
@@ -927,6 +931,23 @@ class TaskRunService:
             and str(workspace.get("task_branch") or "") == prepared.task_branch
             and prepared.task_branch.startswith("local/recovery/")
         )
+
+    def _release_abandoned_merge_slot(self, task: dict[str, Any]) -> None:
+        """Release only an owned real-failure queue head before explicit lifecycle abandonment."""
+        result = self._workspace_result(task)
+        merge = result.get("merge")
+        if not isinstance(merge, dict):
+            return
+        if str(merge.get("status") or "") not in {"conflict", "source_fail"}:
+            return
+        try:
+            queue_seq = int(merge.get("merge_queue_seq") or 0)
+        except (TypeError, ValueError):
+            queue_seq = 0
+        if queue_seq <= 0:
+            return
+        prepared, snapshot = self._current_merge_source(task)
+        self._merges.release_merge_slot(prepared, snapshot)
 
     def _current_merge_source(
         self,

@@ -668,6 +668,81 @@ def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(
     assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
+def test_reset_abandons_conflict_recovery_and_releases_main_merge_queue(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    first = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-reset-conflict",
+        title="Conflict head",
+    )
+    runtime = {
+        "running": True,
+        "launching": False,
+        "completed": False,
+        "resumable": False,
+        "actions": {},
+    }
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    started = service.start(repo, first["task_id"], request_id="reset-conflict-run")
+    original_root = Path(started["run"]["workspace"]["project_root"])
+    (original_root / "app.txt").write_text("task side\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "target side")
+
+    runtime.update({"running": False, "completed": True})
+    recovering = service.reconcile(repo, first["task_id"])
+    assert recovering["run"]["phase"] == "conflict_recovery"
+    recovery_root = Path(
+        recovering["run"]["workspace_result"]["recovery"]["workspace"]["project_root"]
+    )
+    assert recovery_root.is_dir()
+
+    runtime.update({
+        "running": False,
+        "completed": False,
+        "resumable": True,
+        "actions": {"resume": True},
+    })
+    paused = service.reconcile(repo, first["task_id"])
+    assert paused["status"] == "paused"
+    assert paused["run"]["phase"] == "recovery_stopped"
+
+    reset = service.reset(
+        repo,
+        first["task_id"],
+        request_id="reset-conflict-lifecycle",
+    )
+    assert reset["status"] == "new"
+    assert original_root.is_dir()
+    assert recovery_root.is_dir()
+
+    second = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-after-reset",
+        title="Next Main",
+    )
+    runtime.update({
+        "running": True,
+        "completed": False,
+        "resumable": False,
+        "actions": {},
+    })
+    service.start(repo, second["task_id"], request_id="after-reset-run")
+    runtime.update({"running": False, "completed": True})
+    delivered = service.reconcile(repo, second["task_id"])
+    assert delivered["status"] == "closed"
+    assert delivered["run"]["phase"] == "merged"
+    assert delivered["run"]["workspace_result"]["merge"]["status"] == "merged"
+
+
 def test_task_run_request_is_durable_and_idempotent(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
