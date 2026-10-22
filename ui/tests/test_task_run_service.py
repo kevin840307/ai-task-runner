@@ -58,6 +58,31 @@ def _task(
     )
 
 
+def _task_list(
+    service: TaskService,
+    repo: Path,
+    *,
+    workspaces: tuple[str, ...] = ("worktree", "worktree"),
+) -> dict:
+    return service.create(
+        repo,
+        {
+            "title": "Ordered list",
+            "items": [
+                {
+                    "title": f"Item {index + 1}",
+                    "prompt": f"Implement item {index + 1}",
+                    "workflow": str(repo / "workflow.yaml"),
+                    "project": str(repo),
+                    "workspace": workspace,
+                }
+                for index, workspace in enumerate(workspaces)
+            ],
+        },
+        request_id="create-list-" + "-".join(workspaces),
+    )
+
+
 def _service(
     tasks: TaskService,
     repo: Path,
@@ -95,6 +120,130 @@ def _service(
         poll_interval=0.05,
         auto_watch=False,
     )
+
+
+def test_task_list_runs_children_in_order_with_distinct_run_workspaces(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task_list(tasks, repo)
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    first = service.start(repo, created["task_id"], request_id="run-list")
+    first_workspace = dict(first["run"]["workspace"])
+    assert first["run"]["run_number"] == 1
+    assert first["run"]["item_index"] == 0
+    assert first["completed_item_count"] == 0
+    assert launches[0][1] == "Implement item 1"
+
+    runtime.update({"running": False, "completed": True})
+    second = service.reconcile(repo, created["task_id"])
+    second_workspace = dict(second["run"]["workspace"])
+    assert second["status"] == "ongoing"
+    assert second["run"]["run_number"] == 2
+    assert second["run"]["item_index"] == 1
+    assert second["completed_item_count"] == 1
+    assert first_workspace["project_root"] != second_workspace["project_root"]
+    assert first_workspace["task_branch"] != second_workspace["task_branch"]
+    assert launches[1][1] == "Implement item 2"
+    assert len(second["history"]) == 1
+    assert second["history"][0]["phase"] == "worktree_ready"
+
+    duplicate_first_request = service.start(
+        repo,
+        created["task_id"],
+        request_id="run-list",
+    )
+    assert duplicate_first_request["run"]["run_number"] == 2
+    assert len(launches) == 2
+
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+    assert closed["completed_item_count"] == 2
+    assert closed["run"]["run_number"] == 2
+    assert closed["run"]["item_index"] == 1
+    assert closed["run"]["phase"] == "worktree_ready"
+
+
+def test_task_list_restart_between_children_starts_only_next_child(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task_list(tasks, repo)
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    first_service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    first = first_service.start(repo, created["task_id"], request_id="run-list-restart")
+    first_workspace = dict(first["run"]["workspace"])
+    tasks.transition_run(
+        repo,
+        created["task_id"],
+        1,
+        phase="worktree_ready",
+        status="ongoing",
+        workspace_result={"merge": {"status": "worktree_ready"}},
+        completed_item_count=1,
+    )
+
+    restarted = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+    second = restarted.reconcile(repo, created["task_id"])
+
+    assert second["status"] == "ongoing"
+    assert second["run"]["run_number"] == 2
+    assert second["run"]["item_index"] == 1
+    assert second["completed_item_count"] == 1
+    assert second["history"][0]["workspace"] == first_workspace
+    assert second["run"]["workspace"]["project_root"] != first_workspace["project_root"]
+    assert [entry[1] for entry in launches] == [
+        "Implement item 1",
+        "Implement item 2",
+    ]
+
+
+def test_restart_relaunches_durable_launching_workspace_without_new_identity(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree")
+    manager = WorkspaceManager(worktree_root=repo.parent / "worktrees")
+    prepared = manager.prepare(
+        repo,
+        task_id=created["task_id"],
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "busy-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    tasks.begin_run(
+        repo,
+        created["task_id"],
+        request_id="durable-before-launch",
+        workspace=prepared.as_dict(),
+    )
+    runtime = {
+        "running": False,
+        "launching": False,
+        "completed": False,
+        "resumable": False,
+        "stale": False,
+        "has_state": False,
+        "actions": {},
+    }
+    launches = []
+    restarted = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    running = restarted.reconcile(repo, created["task_id"])
+
+    assert running["status"] == "ongoing"
+    assert running["run"]["phase"] == "running"
+    assert running["run"]["run_number"] == 1
+    assert running["run"]["workspace"] == prepared.as_dict()
+    assert len(launches) == 1
+    assert launches[0][0] == prepared.project_root
+    assert launches[0][1] == "Implement one"
 
 
 def test_concurrent_main_tasks_run_in_distinct_isolated_worktrees(tmp_path: Path):

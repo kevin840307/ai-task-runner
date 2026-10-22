@@ -423,7 +423,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Production `workspace.manager.resolve_workspace_mode` 是唯一 resolver，正式支援 auto/main/worktree；`tests/test_workspace_manager.py` 覆蓋 policy matrix 與 busy Main block。
 [x] Prototype 的 Auto 已讀 Global Auto workspace policy；所有已知 Run 入口共用 prepareTaskWorkspaceForRun / resolveTaskWorkspace。
 [x] Prototype `Allow concurrent Main tasks` 預設 Off；Off 維持 Main busy 禁選/阻擋，On 時 resolver 與 Main selector 都解除 busy 限制。
-[ ] 正式版 UI/Task flow 三種模式一律先建立獨立 Task Run worktree/local branch 再呼叫 Runner；這是外層 orchestration 規則，不是 Runner contract，CLI Runner 仍可直接跑任意 caller-supplied project_root。
+[x] 正式版 UI/Task flow 三種模式一律先建立獨立 Task Run worktree/local branch 再呼叫 Runner；這是外層 orchestration 規則，不是 Runner contract，CLI Runner 仍可直接跑任意 caller-supplied project_root。
+    - Canonical /api/tasks/run → TaskRunService 對單 Task 與 ordered Task List child 一律先 WorkspaceManager.prepare，再把 prepared.project_root 交既有 Runner launch；Main/Auto 也不直接在 Project checkout 執行。Task List 每個 child 使用新 run_number/worktree，Runner 不知道 Git/Task List。
 [x] Project branch 是 canonical truth。
     - `WorkspaceManager.prepare` 只從目前 Project checkout 捕捉 branch/HEAD 作 Task base；`MergeManager` 的 delivery 只針對 captured target branch，不 hardcode main。
 [x] Task Run 啟動時捕捉 target_branch + target_head_sha_at_start；不可 hardcode main，也不可因使用者之後切 branch 偷偷 retarget。
@@ -447,8 +448,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - `/api/tasks/run` 直接委派 canonical TaskRunService；allow_concurrent_main_tasks=true 時兩個 effective Main Task 各自取得不同 Task/Run worktree 並可同時 Ongoing。repository + captured target branch scoped durable FIFO queue 既有 regression 保證 direct merge 不超車且 restart 保留 merge_queue_seq。
 [x] Workspace resolver 是唯一決定 target branch / Task worktree / branch identity 的來源；UI 不自行拼正式路徑。
     - 正式 Git identity/path 只由 top-level `workspace/manager.py` + `workspace/worktree.py` 產生；architecture test 鎖定 Runner 不 import workspace、workspace 不 import Runner/UI。
-[ ] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
-    - TaskRunService 已接入 durable task_id + run_number workspace metadata；Run 前 prepare、launch_failed / Stop / Resume 均 restore 同一 worktree identity，UI server restart 會掃描 Ongoing Run 並重新掛 lifecycle watcher。Task List / Restart 全路徑尚未完成，因此本項暫不勾。
+[x] Stop / Resume / Restart / process recovery 保留同一 Task Run workspace identity。
+    - TaskRunService 以 durable task_id + run_number workspace metadata 作唯一 identity；launch_failed / Stop / Resume restore 同一 worktree。Ordered Task List child 完成後先 durable completed_item_count/terminal phase，再以 deterministic internal request id 啟動下一 child；restart 在 child boundary 只啟動下一筆。另補 prepare+begin_run 後 process crash、Runner 尚無 state 時在同一 prepared workspace relaunch；UI server restart 仍只重掛 canonical lifecycle watcher。
 [x] Runner Complete snapshot / cleanup 前必須驗證 worktree registration、repo identity、expected Task branch、expected source-base ancestry、無 active merge/rebase/cherry-pick/revert/bisect；不符即 fail closed，不能自動 switch/猜 branch/rewrite history。
     - `WorkspaceManager.snapshot_result`/`snapshot_task_result` 在 add/commit 前後重驗 ownership、branch/base ancestry 與 active Git operation；支援保留 Agent commits、只 commit remaining diff、no_changes 不造空 commit。
 [ ] Task 刪除、Reset/Rerun、Run 完成與 Worktree cleanup policy 分開；不能默默刪 retained/unmerged 結果。

@@ -23,6 +23,7 @@ UPDATE_REQUEST_LIMIT = 512
 DELETE_REQUEST_LIMIT = 512
 RUN_REQUEST_LIMIT = 512
 TASK_YAML_LIMIT = 256 * 1024
+COMPLETED_ITEM_PHASES = frozenset({"merged", "no_changes", "worktree_ready"})
 _EDITABLE_ITEM_FIELDS = (
     "title",
     "prompt",
@@ -422,7 +423,8 @@ class TaskService:
             if task is None:
                 raise ValueError("Task Run request points to a missing Task")
             run = task.get("run")
-            if not isinstance(run, dict) or int(run.get("run_number") or 0) != run_number:
+            current_run = int(run.get("run_number") or 0) if isinstance(run, dict) else 0
+            if current_run < run_number:
                 raise ValueError("Task Run request points to stale Task state")
             return self._project_task(task)
 
@@ -465,17 +467,24 @@ class TaskService:
                     raise ValueError("request_id belongs to another Task Run")
                 return {**self._project_task(task), "duplicate": True}
 
-            if task.get("status") not in {"new", "paused"}:
-                raise ValueError("Task must be New or Paused before starting")
+            status = str(task.get("status") or "")
             items = task.get("items") if isinstance(task.get("items"), list) else []
             completed = int(task.get("completed_item_count", 0))
+            previous = task.get("run")
+            sequence_ready = (
+                status == "ongoing"
+                and isinstance(previous, dict)
+                and str(previous.get("phase") or "") in COMPLETED_ITEM_PHASES
+                and completed == int(previous.get("item_index") or 0) + 1
+            )
+            if status not in {"new", "paused"} and not sequence_ready:
+                raise ValueError("Task must be New, Paused, or between completed Task List items before starting")
             if completed >= len(items):
                 raise ValueError("Task has no remaining item to run")
             expected_run = int(task.get("run_count", 0)) + 1
             if run_number != expected_run:
                 raise ValueError("Workspace run_number does not match the next Task Run")
 
-            previous = task.get("run")
             if isinstance(previous, dict):
                 history = task.get("history")
                 if not isinstance(history, list):

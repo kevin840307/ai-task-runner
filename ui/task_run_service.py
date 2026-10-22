@@ -9,9 +9,9 @@ from typing import Any, Callable
 from workspace import MergeManager, MergeResult, PreparedWorkspace, WorkspaceManager, WorkspaceSnapshot
 
 try:
-    from .task_service import TaskService
+    from .task_service import COMPLETED_ITEM_PHASES, TaskService
 except ImportError:
-    from task_service import TaskService
+    from task_service import COMPLETED_ITEM_PHASES, TaskService
 
 
 RuntimeReader = Callable[[Path], dict[str, Any]]
@@ -76,8 +76,6 @@ class TaskRunService:
         task = self.tasks.get(project, task_id)
         items = task.get("items") if isinstance(task.get("items"), list) else []
         completed = int(task.get("completed_item_count", 0))
-        if len(items) != 1:
-            raise ValueError("Task List Run must use the ordered YAML execution path")
         if completed >= len(items):
             raise ValueError("Task has no remaining item to run")
         item = items[completed]
@@ -211,6 +209,8 @@ class TaskRunService:
 
         run = task.get("run") if isinstance(task.get("run"), dict) else {}
         phase = str(run.get("phase") or "")
+        if self._ready_for_next_item(task):
+            return self._start_next_item(project, task_id, task)
         if phase in {
             "merging",
             "pending_merge",
@@ -240,6 +240,30 @@ class TaskRunService:
                     status="ongoing",
                 )
             return self.get(project, task_id)
+
+        has_runtime_evidence = bool(
+            runtime.get("completed")
+            or runtime.get("resumable")
+            or runtime.get("stale")
+            or runtime.get("has_state")
+            or (runtime.get("actions") or {}).get("resume")
+        )
+        if not has_runtime_evidence and phase == "launching":
+            item_index = int(run.get("item_index") or 0)
+            items = task.get("items") if isinstance(task.get("items"), list) else []
+            if item_index < 0 or item_index >= len(items):
+                raise ValueError("Task Run item_index is invalid")
+            return self._launch_task(project, task_id, items[item_index], prepared)
+        recovery_record = self._recovery_record(task)
+        if (
+            in_recovery
+            and not has_runtime_evidence
+            and str(recovery_record.get("status") or "") == "prepared"
+        ):
+            prompt = str(recovery_record.get("prompt") or "")
+            if not prompt:
+                raise ValueError("Merge recovery prompt is missing")
+            return self._launch_merge_recovery(project, task_id, prepared, prompt)
 
         if runtime.get("completed"):
             current_result = self._workspace_result(task)
@@ -290,16 +314,16 @@ class TaskRunService:
                 "path": str(prepared.worktree_path),
             }
             if prepared.effective_mode == "worktree":
-                self.tasks.transition_run(
+                return self._complete_item(
                     project,
                     task_id,
                     prepared.run_number,
                     phase="worktree_ready",
-                    status="closed",
-                    workspace_result={**base_result, "merge": {"status": "worktree_ready"}},
-                    completed_item_count=len(task.get("items") or []),
+                    workspace_result={
+                        **base_result,
+                        "merge": {"status": "worktree_ready"},
+                    },
                 )
-                return self.get(project, task_id)
             self.tasks.transition_run(
                 project,
                 task_id,
@@ -445,14 +469,12 @@ class TaskRunService:
         result = self._merges.merge(prepared, snapshot, validate=None)
         value["merge"] = result.as_dict()
         if result.status in {"merged", "no_changes"}:
-            self.tasks.transition_run(
+            return self._complete_item(
                 project,
                 task_id,
                 prepared.run_number,
                 phase=result.status,
-                status="closed",
                 workspace_result=value,
-                completed_item_count=len(task.get("items") or []),
             )
         elif result.real_merge_failure:
             failure = self._merge_failure_record(prepared, snapshot, result)
@@ -692,17 +714,75 @@ class TaskRunService:
             "mode": "isolated_worktree",
             "reason": "merge_failure_limit_exceeded",
         }
-        self.tasks.transition_run(
+        return self._complete_item(
             project,
             task_id,
             prepared.run_number,
             phase="worktree_ready",
-            status="closed",
             workspace_result=fallback,
-            completed_item_count=len(task.get("items") or []),
             error=str(merge.get("detail") or ""),
         )
-        return self.get(project, task_id)
+
+    def _complete_item(
+        self,
+        project: Path,
+        task_id: str,
+        run_number: int,
+        *,
+        phase: str,
+        workspace_result: dict[str, Any],
+        error: str = "",
+    ) -> dict[str, Any]:
+        task = self.tasks.get(project, task_id)
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        if int(run.get("run_number") or 0) != int(run_number):
+            raise ValueError("Task Run identity is stale")
+        item_index = int(run.get("item_index") or 0)
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        completed = item_index + 1
+        if completed <= 0 or completed > len(items):
+            raise ValueError("Task Run item_index is invalid")
+        final = completed >= len(items)
+        updated = self.tasks.transition_run(
+            project,
+            task_id,
+            run_number,
+            phase=phase,
+            status="closed" if final else "ongoing",
+            workspace_result=workspace_result,
+            completed_item_count=completed,
+            error=error,
+        )
+        if final:
+            return self.get(project, task_id)
+        return self._start_next_item(project, task_id, updated)
+
+    def _start_next_item(
+        self,
+        project: Path,
+        task_id: str,
+        task: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        current = task or self.tasks.get(project, task_id)
+        if not self._ready_for_next_item(current):
+            return self.get(project, task_id)
+        next_run = int(current.get("run_count", 0)) + 1
+        request_id = f"task-sequence:{task_id}:{next_run}"
+        return self.start(project, task_id, request_id=request_id)
+
+    @staticmethod
+    def _ready_for_next_item(task: dict[str, Any]) -> bool:
+        if task.get("status") != "ongoing":
+            return False
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        completed = int(task.get("completed_item_count", 0))
+        if completed <= 0 or completed >= len(items):
+            return False
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        return (
+            str(run.get("phase") or "") in COMPLETED_ITEM_PHASES
+            and completed == int(run.get("item_index") or 0) + 1
+        )
 
     def _merge_failure_limit(self) -> int:
         settings = self._execution_settings()
