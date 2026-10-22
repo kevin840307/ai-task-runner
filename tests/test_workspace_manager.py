@@ -407,6 +407,78 @@ def test_restore_rejects_tampered_workspace_metadata(tmp_path: Path):
         manager.restore(value)
 
 
+def test_prepare_recovery_uses_latest_target_and_preserves_current_source(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    source = manager.prepare(
+        repo,
+        task_id="task-recovery111111111111111111111111",
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "always-main",
+            "allow_concurrent_main_tasks": True,
+        },
+        main_running=False,
+    )
+    (source.worktree_path / "feature.txt").write_text("task result\n", encoding="utf-8")
+    snapshot = manager.snapshot_result(source)
+    original_source_head = _git(source.worktree_path, "rev-parse", "HEAD")
+
+    (repo / "target.txt").write_text("latest target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    latest_target = _git(repo, "rev-parse", "HEAD")
+
+    recovery = manager.prepare_recovery(source, snapshot, failure_number=1)
+
+    assert recovery.task_branch == f"local/recovery/{source.task_id}-r1-f1"
+    assert recovery.task_base_sha == latest_target
+    assert recovery.target_head_sha_at_start == latest_target
+    assert recovery.project_root == recovery.worktree_path
+    assert (recovery.project_root / "target.txt").read_text(encoding="utf-8") == "latest target\n"
+    assert not (recovery.project_root / "feature.txt").exists()
+    assert (source.worktree_path / "feature.txt").read_text(encoding="utf-8") == "task result\n"
+    assert _git(source.worktree_path, "rev-parse", "HEAD") == original_source_head
+
+    patch = manager.recovery_patch(source, snapshot)
+    assert "feature.txt" in patch
+    assert "task result" in patch
+    assert manager.restore_merge_source(recovery.as_dict()) == recovery
+    with pytest.raises(WorkspaceError, match="Task branch"):
+        manager.restore(recovery.as_dict())
+
+    (recovery.worktree_path / "resume.txt").write_text("keep me\n", encoding="utf-8")
+    reused = manager.prepare_recovery(source, snapshot, failure_number=1)
+    assert reused == recovery
+    assert (reused.worktree_path / "resume.txt").read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_prepare_recovery_rejects_rewritten_target_history(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager()
+    source = manager.prepare(
+        repo,
+        task_id="task-recovery222222222222222222222222",
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "always-main",
+            "allow_concurrent_main_tasks": True,
+        },
+        main_running=False,
+    )
+    (source.worktree_path / "feature.txt").write_text("task result\n", encoding="utf-8")
+    snapshot = manager.snapshot_result(source)
+
+    empty_tree = _git(repo, "mktree")
+    rewritten = _git(repo, "commit-tree", empty_tree, "-m", "rewritten target")
+    _git(repo, "reset", "--hard", rewritten)
+
+    with pytest.raises(WorkspaceError, match="target history"):
+        manager.prepare_recovery(source, snapshot, failure_number=1)
+
+
 def test_snapshot_excludes_only_explicit_run_owned_runtime_path(tmp_path: Path):
     repo = _repo(tmp_path)
     manager = WorkspaceManager()

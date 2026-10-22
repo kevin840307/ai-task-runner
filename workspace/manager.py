@@ -8,7 +8,17 @@ from typing import Any
 from product_settings import AUTO_WORKSPACE_POLICIES
 
 from .model import PreparedWorkspace, WorkspaceBlockedError, WorkspaceError, WorkspaceResolution, WorkspaceSnapshot
-from .worktree import add_or_reuse_worktree, capture_target, repository_identity, repository_root, snapshot_task_result, verify_worktree
+from .worktree import (
+    add_or_reuse_worktree,
+    branch_head,
+    capture_target,
+    git,
+    is_ancestor,
+    repository_identity,
+    repository_root,
+    snapshot_task_result,
+    verify_worktree,
+)
 
 _REQUESTED_MODES = {"auto", "main", "worktree"}
 _TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
@@ -65,6 +75,17 @@ def _run_identity(task_id: str, run_number: int) -> str:
     if run <= 0:
         raise WorkspaceError("Task run number must be a positive integer")
     return f"{task}-r{run}"
+
+
+def _recovery_identity(task_id: str, run_number: int, failure_number: int) -> tuple[str, int]:
+    identity = _run_identity(task_id, run_number)
+    try:
+        failure = int(failure_number)
+    except (TypeError, ValueError) as exc:
+        raise WorkspaceError("Merge recovery failure number must be a positive integer") from exc
+    if failure <= 0:
+        raise WorkspaceError("Merge recovery failure number must be a positive integer")
+    return identity, failure
 
 
 class WorkspaceManager:
@@ -126,12 +147,120 @@ class WorkspaceManager:
         )
 
 
+    def prepare_recovery(
+        self,
+        source: PreparedWorkspace | dict[str, Any],
+        snapshot: WorkspaceSnapshot,
+        *,
+        failure_number: int,
+    ) -> PreparedWorkspace:
+        """Prepare one recovery worktree from the latest captured target branch HEAD."""
+        current = self.restore_merge_source(source)
+        if current.effective_mode != "main":
+            raise WorkspaceError("Merge recovery is only valid for effective Main Tasks")
+        if snapshot.no_changes:
+            raise WorkspaceError("Cannot prepare merge recovery for a no-change source")
+        repo = current.repository_root.resolve()
+        if branch_head(repo, current.task_branch) != snapshot.task_snapshot_sha:
+            raise WorkspaceError("Current merge source no longer matches its durable snapshot")
+        if not is_ancestor(repo, current.task_base_sha, snapshot.task_snapshot_sha):
+            raise WorkspaceError("Current merge source no longer descends from its source base")
+
+        latest_target = branch_head(repo, current.target_branch)
+        if not latest_target:
+            raise WorkspaceError("Captured target branch no longer exists")
+        if not is_ancestor(repo, current.task_base_sha, latest_target):
+            raise WorkspaceError("Captured target history no longer contains the current merge-source base")
+
+        identity, failure = _recovery_identity(
+            current.task_id,
+            current.run_number,
+            failure_number,
+        )
+        recovery_branch = f"local/recovery/{identity}-f{failure}"
+        recovery_path = (current.worktree_path.parent / f"{identity}-recovery-f{failure}").resolve()
+        add_or_reuse_worktree(
+            repo,
+            recovery_path,
+            branch=recovery_branch,
+            base_sha=latest_target,
+        )
+        relative_project = current.source_project_root.resolve().relative_to(repo)
+        recovery_project = (recovery_path / relative_project).resolve()
+        if not recovery_project.is_dir():
+            raise WorkspaceError(
+                f"Prepared recovery project_root does not exist: {recovery_project}"
+            )
+        return PreparedWorkspace(
+            task_id=current.task_id,
+            run_number=current.run_number,
+            requested_mode=current.requested_mode,
+            effective_mode="main",
+            target_branch=current.target_branch,
+            target_head_sha_at_start=latest_target,
+            task_branch=recovery_branch,
+            task_base_sha=latest_target,
+            repository_root=repo,
+            repository_identity=current.repository_identity,
+            source_project_root=current.source_project_root,
+            worktree_path=recovery_path,
+            project_root=recovery_project,
+        )
+
+    def recovery_patch(
+        self,
+        source: PreparedWorkspace | dict[str, Any],
+        snapshot: WorkspaceSnapshot,
+    ) -> str:
+        """Return the committed current-source delta without exposing Git to Runner."""
+        current = self.restore_merge_source(source)
+        repo = current.repository_root.resolve()
+        if branch_head(repo, current.task_branch) != snapshot.task_snapshot_sha:
+            raise WorkspaceError("Current merge source no longer matches its durable snapshot")
+        if not is_ancestor(repo, current.task_base_sha, snapshot.task_snapshot_sha):
+            raise WorkspaceError("Current merge source no longer descends from its source base")
+        patch = git(
+            repo,
+            "diff",
+            "--binary",
+            "--find-renames",
+            current.task_base_sha,
+            snapshot.task_snapshot_sha,
+            "--",
+        ).stdout
+        if not patch.strip():
+            raise WorkspaceError("Current merge source has no committed diff to recover")
+        return patch
+
     def restore(self, value: PreparedWorkspace | dict[str, Any]) -> PreparedWorkspace:
-        """Restore one durable Task Run identity without recapturing target HEAD."""
+        """Restore the original durable Task Run workspace identity."""
+        return self._restore(value, allow_recovery=False)
+
+    def restore_merge_source(
+        self,
+        value: PreparedWorkspace | dict[str, Any],
+    ) -> PreparedWorkspace:
+        """Restore either the original Task source or one owned recovery source."""
+        return self._restore(value, allow_recovery=True)
+
+    def _restore(
+        self,
+        value: PreparedWorkspace | dict[str, Any],
+        *,
+        allow_recovery: bool,
+    ) -> PreparedWorkspace:
         prepared = value if isinstance(value, PreparedWorkspace) else PreparedWorkspace.from_dict(value)
         identity = _run_identity(prepared.task_id, prepared.run_number)
-        if prepared.task_branch != f"local/task/{identity}":
-            raise WorkspaceError("Workspace Task branch does not match Task/Run identity")
+        task_branch = f"local/task/{identity}"
+        if prepared.task_branch != task_branch:
+            prefix = f"local/recovery/{identity}-f"
+            suffix = prepared.task_branch[len(prefix):] if prepared.task_branch.startswith(prefix) else ""
+            if (
+                not allow_recovery
+                or not suffix.isdigit()
+                or int(suffix) <= 0
+            ):
+                raise WorkspaceError("Workspace Task branch does not match Task/Run identity")
         if prepared.requested_mode not in _REQUESTED_MODES:
             raise WorkspaceError("Workspace requested mode is invalid")
         if prepared.effective_mode not in {"main", "worktree"}:
