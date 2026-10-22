@@ -52,6 +52,7 @@ class MergeQueue:
                 if raw["source_sha"] != source_sha or raw["source_base_sha"] != source_base_sha:
                     raw["source_sha"] = str(source_sha)
                     raw["source_base_sha"] = str(source_base_sha)
+                    raw.pop("transaction", None)
                     self._write(state)
                 return self._entry(raw), index == 0
 
@@ -67,6 +68,46 @@ class MergeQueue:
             state["next_seq"] = seq + 1
             self._write(state)
             return self._entry(raw), len(entries) == 1
+
+    def transaction(self, entry: MergeQueueEntry) -> dict[str, str] | None:
+        """Return the durable active merge transaction for the queue head."""
+        with merge_queue_lock(self.repo, self.target_branch):
+            state = self._load()
+            raw = self._require_head(state, entry)
+            value = raw.get("transaction")
+            return dict(value) if isinstance(value, dict) else None
+
+    def begin_transaction(
+        self,
+        entry: MergeQueueEntry,
+        *,
+        target_worktree: Path,
+        target_head_sha: str,
+        source_sha: str,
+    ) -> None:
+        """Persist ownership before mutating a target worktree."""
+        with merge_queue_lock(self.repo, self.target_branch):
+            state = self._load()
+            raw = self._require_head(state, entry)
+            if str(source_sha) != entry.source_sha:
+                raise WorkspaceError("Merge transaction source no longer matches queue head")
+            raw["transaction"] = {
+                "target_worktree": str(Path(target_worktree).expanduser().resolve()),
+                "target_head_sha": str(target_head_sha),
+                "source_sha": str(source_sha),
+            }
+            self._write(state)
+
+    def clear_transaction(self, entry: MergeQueueEntry) -> bool:
+        """Clear a reconciled/aborted transaction without changing FIFO order."""
+        with merge_queue_lock(self.repo, self.target_branch):
+            state = self._load()
+            raw = self._require_head(state, entry)
+            if "transaction" not in raw:
+                return False
+            raw.pop("transaction", None)
+            self._write(state)
+            return True
 
     def complete(self, entry: MergeQueueEntry) -> None:
         """Remove only the current queue head; retries are idempotent."""
@@ -96,6 +137,22 @@ class MergeQueue:
             entries.pop(0)
             self._write(state)
             return True
+
+    @staticmethod
+    def _require_head(state: dict[str, Any], entry: MergeQueueEntry) -> dict[str, Any]:
+        entries = state["entries"]
+        if not entries:
+            raise WorkspaceError("Merge queue no longer has an active head")
+        raw = entries[0]
+        if (
+            int(raw["seq"]) != entry.seq
+            or str(raw["task_id"]) != entry.task_id
+            or int(raw["run_number"]) != entry.run_number
+            or str(raw["source_sha"]) != entry.source_sha
+            or str(raw["source_base_sha"]) != entry.source_base_sha
+        ):
+            raise WorkspaceError("Merge queue head changed during delivery")
+        return raw
 
     @staticmethod
     def _entry(raw: dict[str, Any]) -> MergeQueueEntry:
@@ -157,15 +214,32 @@ class MergeQueue:
             seen_seq.add(seq)
             seen_identity.add(identity)
             previous_seq = seq
-            normalized.append(
-                {
-                    "seq": seq,
-                    "task_id": task_id,
-                    "run_number": run_number,
-                    "source_sha": source_sha,
-                    "source_base_sha": source_base_sha,
+            normalized_entry: dict[str, Any] = {
+                "seq": seq,
+                "task_id": task_id,
+                "run_number": run_number,
+                "source_sha": source_sha,
+                "source_base_sha": source_base_sha,
+            }
+            transaction = value.get("transaction")
+            if transaction is not None:
+                if not isinstance(transaction, dict):
+                    raise WorkspaceError("Merge queue contains an invalid transaction")
+                target_worktree = str(transaction.get("target_worktree") or "").strip()
+                target_head_sha = str(transaction.get("target_head_sha") or "").strip()
+                transaction_source = str(transaction.get("source_sha") or "").strip()
+                if (
+                    not target_worktree
+                    or not target_head_sha
+                    or transaction_source != source_sha
+                ):
+                    raise WorkspaceError("Merge queue contains an invalid transaction")
+                normalized_entry["transaction"] = {
+                    "target_worktree": target_worktree,
+                    "target_head_sha": target_head_sha,
+                    "source_sha": transaction_source,
                 }
-            )
+            normalized.append(normalized_entry)
         if normalized and next_seq <= normalized[-1]["seq"]:
             raise WorkspaceError("Merge queue next sequence is invalid")
         return {

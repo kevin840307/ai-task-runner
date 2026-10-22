@@ -293,6 +293,48 @@ def test_already_merged_source_finalizes_idempotently_without_duplicate_merge(tm
     assert _git(repo, "rev-list", "--count", "HEAD") == count
 
 
+def test_restart_reconciles_owned_unfinished_merge_in_project_checkout(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("advanced target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    target_head = _git(repo, "rev-parse", "HEAD")
+
+    def crash_during_validation(_project: Path) -> str:
+        raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        MergeManager().merge(
+            prepared,
+            snapshot,
+            validate=crash_during_validation,
+        )
+
+    assert _git(repo, "rev-parse", "HEAD") == target_head
+    assert _git(repo, "rev-parse", "MERGE_HEAD") == snapshot.task_snapshot_sha
+
+    restarted = MergeManager().merge(
+        prepared,
+        snapshot,
+        validate=lambda _project: "PASS",
+    )
+
+    assert restarted.status == "merged"
+    assert restarted.merge_queue_seq == 1
+    assert restarted.target_head_sha == target_head
+    assert (repo / "task.txt").read_text(encoding="utf-8") == "task a\n"
+    assert (repo / "target.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert _git(repo, "status", "--porcelain") == ""
+    missing_merge_head = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+    assert missing_merge_head.returncode != 0
+
+
 def test_source_branch_change_after_snapshot_fails_closed(tmp_path: Path):
     repo = _repo(tmp_path)
     manager, prepared, snapshot = _snapshot_with_file(repo)

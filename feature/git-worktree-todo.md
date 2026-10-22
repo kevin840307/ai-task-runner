@@ -1245,7 +1245,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Before commit, unexpected target HEAD / MERGE_HEAD / worktree transaction changes fail closed and never commit mixed state.
 - [ ] Merge success commits and closes Main.
 - [ ] Main no_changes closes without a Project merge.
-- [ ] Restart/external pre-delivery merge recognizes merge_source_sha ancestry and does not duplicate merge.
+- [x] Restart/external pre-delivery merge recognizes merge_source_sha ancestry and does not duplicate merge.
+  - Durable queue transaction ownership also reconciles an AI Task Runner MERGE_HEAD left in the Project target worktree by a crash; mismatched Git operations remain untouched.
 
 ### Merge conflict
 

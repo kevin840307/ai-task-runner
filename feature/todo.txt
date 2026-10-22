@@ -498,8 +498,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Workspace/Merge path 不執行 Project checkout `git switch`；target 未 checkout 時只建立 managed delivery worktree，相關 regression 明確驗證 user checkout branch 不變。
 [x] Main completion boundary：current merge_source_sha 已成為 target branch ancestry 且 merged_target_head_sha 已持久化；no_changes 是唯一正常免 merge 例外。
     - TaskRunService 只在 MergeManager 回 merged/no_changes 時關閉 effective Main；no_changes 現在保留獨立 phase，兩者都持久化 merged_target_head_sha。另有 recovery/fallback 明確終態，不把 Runner Complete 誤當 Task Complete。
-[ ] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
-    - 已補 Task-orchestrator restart regression：durable current merge source 若已成 target ancestry，reconcile 直接 finalize 且 commit count 不增加；durable FIFO queue 既有 restart test 保留 seq。未完成 MERGE_HEAD 在 user Project worktree 的 ownership-safe reconcile 尚未完成，因此總項不勾。
+[x] Restart 時恢復 durable merge_queue_seq + current merge source；若 merge_source_sha 已是 target branch ancestor，直接 finalize Closed · merged，不可重複 merge；若留下本系統未完成 merge state，先 ownership reconcile 後安全 finalize/abort。
+    - Task-orchestrator restart regression 已覆蓋 durable current merge source 已成 target ancestry時直接 finalize且不重複 commit；durable FIFO queue restart保留 seq。MergeQueue 現在會在 target mutation 前持久化 transaction owner（target worktree / pre-merge HEAD / source SHA），restart 只會 abort/retry 完全吻合的殘留 MERGE_HEAD；KeyboardInterrupt crash regression 同時覆蓋 user Project target worktree，不吻合的 Git operation 仍 fail closed。
 [x] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
     - 單一 Task Drawer Result card 投影 canonical Task/Run/workspace_result；新增 Project、Run/item、captured target、current source branch/path、merge failures、fallback reason，保留 conflict detail。真 Chromium conflict + merge_failure_limit_exceeded fallback fixture 已納入 CI 39779685643。
 [ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。

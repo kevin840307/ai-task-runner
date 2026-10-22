@@ -308,15 +308,32 @@ class MergeManager:
                         detail="Target worktree no longer matches captured target branch HEAD",
                     )
 
+                transaction = queue.transaction(queue_entry)
                 operations = active_git_operations(target)
                 if operations:
-                    if managed and operations == ("MERGE_HEAD",):
-                        merge_head = git(
-                            target, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False
-                        ).stdout.strip()
-                        if merge_head == source_sha:
-                            _abort_owned_merge(target, source_sha)
-                            operations = ()
+                    merge_head = git(
+                        target, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False
+                    ).stdout.strip()
+                    owned_transaction = (
+                        operations == ("MERGE_HEAD",)
+                        and transaction is not None
+                        and Path(transaction["target_worktree"]).expanduser().resolve()
+                        == target.resolve()
+                        and transaction["target_head_sha"] == target_head
+                        and transaction["source_sha"] == source_sha
+                        and merge_head == source_sha
+                    )
+                    legacy_managed_transaction = (
+                        managed
+                        and transaction is None
+                        and operations == ("MERGE_HEAD",)
+                        and merge_head == source_sha
+                    )
+                    if owned_transaction or legacy_managed_transaction:
+                        _abort_owned_merge(target, source_sha)
+                        queue.clear_transaction(queue_entry)
+                        transaction = None
+                        operations = ()
                     if operations:
                         return queued_result(
                             status="waiting_target_workspace",
@@ -324,6 +341,11 @@ class MergeManager:
                             target_worktree=target,
                             detail="Target worktree has an active Git operation: " + ", ".join(operations),
                         )
+                elif transaction is not None:
+                    # A crash before `git merge` (or after a successful abort) can
+                    # leave only the durable marker. With no active Git operation,
+                    # the target is safe to re-evaluate from its current HEAD.
+                    queue.clear_transaction(queue_entry)
 
                 if _target_has_source_changes(prepared, target):
                     return queued_result(
@@ -332,6 +354,17 @@ class MergeManager:
                         target_worktree=target,
                         detail="Captured target worktree has uncommitted changes",
                     )
+
+                queue.begin_transaction(
+                    queue_entry,
+                    target_worktree=target,
+                    target_head_sha=target_head,
+                    source_sha=source_sha,
+                )
+
+                def abort_transaction() -> None:
+                    _abort_owned_merge(target, source_sha)
+                    queue.clear_transaction(queue_entry)
 
                 merge = git(
                     target,
@@ -350,7 +383,7 @@ class MergeManager:
                         if line.strip()
                     )
                     if conflicts:
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="conflict",
                             target_head_sha=target_head,
@@ -359,7 +392,7 @@ class MergeManager:
                             conflict_files=conflicts,
                             detail=(merge.stderr or merge.stdout or "").strip(),
                         )
-                    _abort_owned_merge(target, source_sha)
+                    abort_transaction()
                     return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
@@ -371,7 +404,7 @@ class MergeManager:
                 index_tree = git(target, "write-tree", check=False)
                 working_diff = git(target, "diff", "--quiet", check=False)
                 if index_tree.returncode != 0 or working_diff.returncode != 0:
-                    _abort_owned_merge(target, source_sha)
+                    abort_transaction()
                     return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
@@ -384,7 +417,7 @@ class MergeManager:
                 verdict = "PASS"
                 if validation_required:
                     if validate is None:
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="validation_required",
                             target_head_sha=target_head,
@@ -395,7 +428,7 @@ class MergeManager:
                     try:
                         verdict = str(validate(_target_project(prepared, target)) or "").strip().upper()
                     except Exception as exc:
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
@@ -405,7 +438,7 @@ class MergeManager:
                             detail=f"{type(exc).__name__}: {exc}",
                         )
                     if verdict not in _VALIDATION_RESULTS:
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
@@ -415,7 +448,7 @@ class MergeManager:
                             detail=f"Unsupported merge validation verdict: {verdict or '<empty>'}",
                         )
                     if verdict == "SOURCE_FAIL":
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="source_fail",
                             target_head_sha=target_head,
@@ -425,7 +458,7 @@ class MergeManager:
                             real_merge_failure=True,
                         )
                     if verdict == "TECHNICAL_ERROR":
-                        _abort_owned_merge(target, source_sha)
+                        abort_transaction()
                         return queued_result(
                             status="technical_error",
                             target_head_sha=target_head,
@@ -441,7 +474,7 @@ class MergeManager:
                     source_sha=source_sha,
                     expected_index_tree=index_tree.stdout.strip(),
                 ):
-                    _abort_owned_merge(target, source_sha)
+                    abort_transaction()
                     return queued_result(
                         status="technical_error",
                         target_head_sha=target_head,
