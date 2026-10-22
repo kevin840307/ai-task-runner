@@ -35,10 +35,14 @@ Chat state 依 Project 儲存在 `.ai-task-runner/ui/chat/`。Message history �
 | Ask read/submit/cancel | `/api/chat/ask`, `/api/chat/ask/*` |
 | Durable event cursor | `/api/chat/events` |
 | TaskDraft generate/update/dismiss | `/api/chat/task-draft*` |
+| TaskDraft validate/create | `/api/tasks/validate-draft`、`/api/tasks/create-from-draft` |
 | 明確 Quick Goal 建立 + 執行 | `/api/tasks/goal` |
+| Task Workspace result / direct merge / explicit Publish | `/api/tasks`、`/api/tasks/merge`、`/api/tasks/publish` |
 | Project Agent/Model/Mode/Reasoning/Workflow | Project preferences + backend capability/catalog APIs |
 
 Event feed 採 bounded durable polling，因為現有 UI 已擁有 non-overlapping polling。這不會建立第二套 SSE/WebSocket connection manager，而且 Chat event 與 Runner runtime event 保持分離。
+
+Queue 順序刻意由 service 擁有並維持 FIFO。公開操作只有 Edit/Delete；產品契約不允許使用者排序，因此不提供 reorder endpoint。Merge preflight/status 透過 canonical Task Workspace result 與 `/api/tasks/merge` 回傳；Merge Chat 也直接用同一份 Task result 組 handoff prompt，不建立重複的 merge-context API。Publish 是獨立且明確的結果動作，正常 Task lifecycle 永遠不會自動呼叫。
 
 ## Cancel、reconnect、restart
 

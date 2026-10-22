@@ -38,6 +38,36 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('id="themeButton"', self.html)
         self.assertIn('id="themePanel"', self.html)
 
+    def test_project_chat_and_task_api_capability_surface_is_complete(self):
+        server = (self.root / "server.py").read_text(encoding="utf-8")
+        for endpoint in (
+            "/api/chat/sessions",
+            "/api/chat/session/create",
+            "/api/chat/session/select",
+            "/api/chat/session/rename",
+            "/api/chat/session/delete",
+            "/api/chat/messages",
+            "/api/chat/turn",
+            "/api/chat/turn/cancel",
+            "/api/chat/events",
+            "/api/chat/settings-catalog",
+            "/api/chat/capabilities",
+            "/api/chat/queue",
+            "/api/chat/queue/update",
+            "/api/chat/queue/delete",
+            "/api/chat/ask",
+            "/api/chat/ask/submit",
+            "/api/chat/ask/cancel",
+            "/api/chat/task-draft",
+            "/api/tasks/validate-draft",
+            "/api/tasks/create-from-draft",
+            "/api/tasks/merge",
+            "/api/tasks/publish",
+        ):
+            self.assertIn(endpoint, server)
+        self.assertIn("function mergeChatPrompt", self.task_workspace_js)
+        self.assertNotIn("/api/chat/queue/reorder", server)
+
     def test_api_errors_use_structured_contract(self):
         self.assertIn('data?.message || `HTTP ${response.status}`', self.app_js)
         self.assertIn('error.code = String(data?.code || "http_error")', self.app_js)

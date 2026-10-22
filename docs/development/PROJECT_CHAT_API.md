@@ -35,10 +35,14 @@ Chat state is stored per Project under `.ai-task-runner/ui/chat/`. Message histo
 | Ask read/submit/cancel | `/api/chat/ask`, `/api/chat/ask/*` |
 | Durable event cursor | `/api/chat/events` |
 | TaskDraft generate/update/dismiss | `/api/chat/task-draft*` |
+| TaskDraft validate/create | `/api/tasks/validate-draft`, `/api/tasks/create-from-draft` |
 | Explicit Quick Goal create + run | `/api/tasks/goal` |
+| Task Workspace result / direct merge / explicit Publish | `/api/tasks`, `/api/tasks/merge`, `/api/tasks/publish` |
 | Project Agent/Model/Mode/Reasoning/Workflow | Project preferences + backend capability/catalog APIs |
 
 The event feed is bounded durable polling because the existing UI already owns non-overlapping polling. It does not introduce a second SSE/WebSocket connection manager, and Chat events remain separate from Runner runtime events.
+
+Queue order is intentionally service-owned FIFO. Edit/delete are public operations; there is no reorder endpoint because the product contract does not allow user sorting. Merge preflight/status is returned through the canonical Task Workspace result used by `/api/tasks/merge`; Merge Chat builds its handoff prompt from that same Task result instead of maintaining a duplicate merge-context API. Publish is an explicit, separate result action and is never invoked by the normal Task lifecycle.
 
 ## Cancel, reconnect, and restart
 

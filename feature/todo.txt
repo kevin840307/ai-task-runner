@@ -519,7 +519,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Production coordination 沿用單一 UIServer boundary，並依 concern 分 owner：ChatService 持久化 Session/Message/Queue/Ask/Event，ChatAgentService 協調普通 Agent turn，Agent capability/settings service 投影 adapter 能力，TaskDraftService 負責 Draft；不新增平行 server/store/runtime。
 [x] Chat 不直接執行 Runner workflow；要執行時由明確的 Task Create / Run API 進入既有 Runner。
     - Production chat_service / chat_agent_service / chat_ask / task_draft_service 不引用 WorkflowRunner / FlowEngine / StageExecutor / runner.api；architecture regression 鎖定此邊界。@goal 在 Workspace phase 前仍 fail closed。
-[ ] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
+[x] 對外 API 命名可依現有專案慣例調整，但能力至少包含：
     - 取得 / 建立 / Rename / 切換 / 刪除 Chat session
     - 取得訊息歷史、送出訊息、取消目前 turn、重新連線
     - Project-level Agent / Model / Mode / Reasoning / Workflow capability 與目前選擇
@@ -528,6 +528,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Ask request event / answer submit / cancel
     - generate TaskDraft / validate TaskDraft / create Task
     - Merge preflight / direct merge / Merge Chat handoff context
+    - Production API surface 已完整覆蓋上述能力；Queue 契約固定 service FIFO，因此不允許 user reorder。Merge preflight/status 由 canonical Task Workspace result + /api/tasks/merge 投影，Merge Chat 直接重用同一 Task result 組 handoff context，不新增 duplicate merge-context store/API；static contract + 中英文 API 文件鎖定 endpoint surface。
 [x] 所有 API 使用穩定的 session_id、turn_id、message_id、queue_item_id、ask_id、draft_id、task_id。
     - Chat state v8 分離 durable turn_id 與 request_id，Queue canonical field 統一為 queue_item_id；v1-v7 僅在 state migration read 接受舊 queue_id，寫回與 HTTP/UI contract 不保留 alias。Draft/Task/Session/Message/Ask IDs 均由 backend 產生與驗證。
 [x] POST / send / create 等操作需要 request ID 或 idempotency key，避免重試後重複建立訊息或 Task。
