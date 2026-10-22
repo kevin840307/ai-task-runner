@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from workspace import MergeManager, MergeResult, PreparedWorkspace, WorkspaceManager, WorkspaceSnapshot
+from workspace import MergeManager, MergeResult, PreparedWorkspace, PublishManager, WorkspaceManager, WorkspaceSnapshot
 
 try:
     from .task_service import COMPLETED_ITEM_PHASES, TaskService
@@ -43,6 +43,7 @@ class TaskRunService:
         validate_merge: MergeValidation | None = None,
         workspace_manager: WorkspaceManager | None = None,
         merge_manager: MergeManager | None = None,
+        publish_manager: PublishManager | None = None,
         poll_interval: float = 1.0,
         auto_watch: bool = True,
     ) -> None:
@@ -58,6 +59,7 @@ class TaskRunService:
         self._validate_merge = validate_merge
         self._workspaces = workspace_manager or WorkspaceManager()
         self._merges = merge_manager or MergeManager()
+        self._publisher = publish_manager or PublishManager()
         self._poll_interval = max(0.05, float(poll_interval))
         self._auto_watch = bool(auto_watch)
         self._watch_lock = threading.Lock()
@@ -345,6 +347,63 @@ class TaskRunService:
             raise ValueError("Task merge recovery is still in progress")
         prepared, snapshot = self._current_merge_source(task)
         return self._apply_merge(project, task_id, prepared, snapshot)
+
+    def publish(
+        self,
+        project: Path,
+        task_id: str,
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """Explicit remote publication; never part of Task merge/recovery lifecycle."""
+        project = Path(project).expanduser().resolve()
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+
+        task = self.tasks.get(project, task_id)
+        if task.get("status") != "closed":
+            raise ValueError("Task must be Closed before Publish")
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        value = self._workspace_result(task)
+        existing = value.get("publish")
+        if isinstance(existing, dict) and str(existing.get("request_id") or "") == request:
+            return self.get(project, task_id)
+
+        source, snapshot = self._current_merge_source(task)
+        merge = value.get("merge") if isinstance(value.get("merge"), dict) else {}
+        merge_status = str(merge.get("status") or run.get("phase") or "")
+        if merge_status in {"merged", "no_changes"}:
+            branch = source.target_branch
+            expected_sha = str(merge.get("merged_target_head_sha") or "")
+        elif merge_status == "worktree_ready":
+            branch = source.task_branch
+            expected_sha = snapshot.task_snapshot_sha
+        else:
+            raise ValueError("Task result is not ready to Publish")
+        if not expected_sha:
+            raise ValueError("Task Publish SHA is missing")
+
+        published = self._publisher.publish(
+            source,
+            branch=branch,
+            expected_sha=expected_sha,
+        )
+        record = published.as_dict()
+        record["request_id"] = request
+        value["publish"] = record
+        self.tasks.transition_run(
+            project,
+            task_id,
+            int(run.get("run_number") or 0),
+            phase=str(run.get("phase") or merge_status),
+            status="closed",
+            error=str(run.get("error") or ""),
+            workspace_result=value,
+        )
+        return self.get(project, task_id)
 
     def reconcile(self, project: Path, task_id: str) -> dict[str, Any]:
         """Advance Task lifecycle while keeping Runner and Git orchestration separate."""

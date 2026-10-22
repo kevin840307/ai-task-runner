@@ -106,6 +106,18 @@ class WorkspaceSnapshot:
 
 
 @dataclass(frozen=True)
+class PublishResult:
+    status: str
+    branch: str
+    sha: str
+    remote: str = "origin"
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class MergeResult:
     status: str
     target_head_sha: str = ""

@@ -564,6 +564,40 @@ def _bridge_for(state: UIState):
                         Path(body["project"]),
                         str(body.get("task_id", "")),
                     )
+                elif path == "/api/tasks/publish":
+                    project_path = Path(body["project"])
+                    task_id = str(body.get("task_id", ""))
+                    task = state.tasks.get(project_path, task_id)
+                    run = task.get("run") or {}
+                    result = dict(run.get("workspace_result") or {})
+                    source = (result.get("merge_source") or {}).get("workspace") or {}
+                    merge = result.get("merge") or {}
+                    merge_status = str(merge.get("status") or run.get("phase") or "")
+                    branch = (
+                        str(source.get("target_branch") or (run.get("workspace") or {}).get("target_branch") or "")
+                        if merge_status in {"merged", "no_changes"}
+                        else str(source.get("task_branch") or result.get("branch") or (run.get("workspace") or {}).get("task_branch") or "")
+                    )
+                    snapshot = result.get("snapshot") or {}
+                    result["publish"] = {
+                        "status": "published",
+                        "branch": branch,
+                        "sha": str(snapshot.get("task_snapshot_sha") or merge.get("merged_target_head_sha") or ""),
+                        "remote": "origin",
+                        "detail": "",
+                        "request_id": str(body.get("request_id", "")),
+                    }
+                    actions = getattr(state, "_browser_publish_actions", [])
+                    actions.append((task_id, branch))
+                    state._browser_publish_actions = actions
+                    data = state.tasks.transition_run(
+                        project_path,
+                        task_id,
+                        int(run.get("run_number") or 0),
+                        phase=str(run.get("phase") or merge_status),
+                        status=str(task.get("status") or "closed"),
+                        workspace_result=result,
+                    )
                 elif path == "/api/chat/ask/demo":
                     session_id = str(body.get("session_id", ""))
                     data = state.chat_service.create_ask(
@@ -1151,6 +1185,19 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
             assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "1"
             assert "isolated_worktree" in page.locator("#taskWorkspaceFallback").inner_text()
             assert "merge_failure_limit_exceeded" in page.locator("#taskWorkspaceFallback").inner_text()
+            assert page.locator("#taskWorkspacePublish").is_enabled()
+            page.click("#taskWorkspacePublish")
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text(
+                "Publish completed result to origin?", exact=True
+            ).is_visible()
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "document.querySelector('#taskWorkspacePublishState')?.textContent.includes('published')"
+            )
+            assert getattr(state, "_browser_publish_actions", []) == [
+                (fallback_id, fallback_workspace["task_branch"])
+            ]
             page.click("#taskWorkspaceClose")
 
             page.locator(".tasks-board-card").filter(has_text="Conflict delivery").click()

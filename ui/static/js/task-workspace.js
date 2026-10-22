@@ -1193,6 +1193,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         resultCard.appendChild(fallbackDetail);
       }
 
+      const publishResult = workspaceResult?.publish && typeof workspaceResult.publish === "object"
+        ? workspaceResult.publish
+        : null;
+      if (publishResult) {
+        const publishDetail = document.createElement("p");
+        publishDetail.id = "taskWorkspacePublishState";
+        publishDetail.className = "task-workspace-result-detail";
+        publishDetail.textContent = [
+          "Publish: " + String(publishResult.status || "unknown"),
+          String(publishResult.remote || "origin") + "/" + String(publishResult.branch || ""),
+          String(publishResult.detail || ""),
+        ].filter(Boolean).join(" · ");
+        resultCard.appendChild(publishDetail);
+      }
+
       if (Array.isArray(mergeResult?.conflict_files) && mergeResult.conflict_files.length) {
         const conflicts = document.createElement("p");
         conflicts.id = "taskWorkspaceConflicts";
@@ -1220,6 +1235,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         : "";
       merge.onclick = () => void mergeTaskResult();
       resultActions.appendChild(merge);
+
+      const publishable = String(task.status || "") === "closed"
+        && new Set(["merged", "no_changes", "worktree_ready"]).has(mergeStatus);
+      if (publishable) {
+        const publish = document.createElement("button");
+        publish.id = "taskWorkspacePublish";
+        publish.type = "button";
+        publish.textContent = "Publish";
+        publish.title = "Push this completed durable result to origin without force";
+        publish.onclick = () => void publishTaskResult();
+        resultActions.appendChild(publish);
+      }
 
       if (typeof openMergeChat === "function") {
         const mergeChat = document.createElement("button");
@@ -1497,6 +1524,59 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       await onTaskChanged?.();
     } catch (error) {
       showError?.(error.message, "Merge Task failed");
+      render();
+    }
+  }
+
+  async function publishTaskResult() {
+    const task = state?.task;
+    if (!task || String(task.status || "") !== "closed") return;
+    const run = task.run && typeof task.run === "object" ? task.run : {};
+    const result = run.workspace_result && typeof run.workspace_result === "object" ? run.workspace_result : {};
+    const merge = result.merge && typeof result.merge === "object" ? result.merge : {};
+    const mergeStatus = String(merge.status || run.phase || "");
+    if (!["merged", "no_changes", "worktree_ready"].includes(mergeStatus)) return;
+    const source = result?.merge_source?.workspace && typeof result.merge_source.workspace === "object"
+      ? result.merge_source.workspace
+      : {};
+    const branch = ["merged", "no_changes"].includes(mergeStatus)
+      ? String(source.target_branch || run?.workspace?.target_branch || "")
+      : String(source.task_branch || result.branch || run?.workspace?.task_branch || "");
+    const ok = await confirmDialog?.({
+      title: "Publish completed result to origin?",
+      message: "This runs an explicit non-force Git push only. It does not change Task merge/recovery state.",
+      details: [
+        { label: "Branch:", value: branch || "—" },
+        { label: "Task:", value: String(task.title || task.task_id || "") },
+      ],
+      confirmLabel: "Publish",
+    });
+    if (!ok) return;
+
+    const button = byId("taskWorkspacePublish");
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    try {
+      const updated = await api("/api/tasks/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          project: task.project,
+          task_id: task.task_id,
+          request_id: newRequestId("task-publish"),
+        }),
+      });
+      state.task = cloneDraft(updated);
+      state.error = "";
+      render();
+      const published = updated?.run?.workspace_result?.publish;
+      if (published && !["published", "already_published"].includes(String(published.status || ""))) {
+        showError?.(String(published.detail || published.status || "Publish failed"), "Publish failed");
+      }
+      await onTaskChanged?.();
+    } catch (error) {
+      showError?.(error.message, "Publish failed");
       render();
     }
   }

@@ -9,7 +9,7 @@ import pytest
 
 from ui.task_run_service import TaskRunService
 from ui.task_service import TaskService
-from workspace import WorkspaceManager
+from workspace import PublishResult, WorkspaceManager
 
 
 def _git(path: Path, *args: str) -> str:
@@ -96,6 +96,7 @@ def _service(
     resumes: list,
     settings: dict | None = None,
     merge_validator=None,
+    publish_manager=None,
 ) -> TaskRunService:
     def launch(project: Path, goal: str | None, **kwargs):
         launches.append((Path(project), goal, dict(kwargs)))
@@ -123,9 +124,58 @@ def _service(
         resume_runtime=lambda project: resumes.append(Path(project)),
         validate_merge=merge_validator,
         workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        publish_manager=publish_manager,
         poll_interval=0.05,
         auto_watch=False,
     )
+
+
+def test_publish_is_explicit_closed_result_action_and_idempotent_by_request(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-publish")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+
+    class Publisher:
+        def __init__(self):
+            self.calls = []
+
+        def publish(self, prepared, *, branch: str, expected_sha: str):
+            self.calls.append((prepared, branch, expected_sha))
+            return PublishResult("published", branch, expected_sha)
+
+    publisher = Publisher()
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=[],
+        stops=[],
+        resumes=[],
+        publish_manager=publisher,
+    )
+
+    with pytest.raises(ValueError, match="Closed before Publish"):
+        service.publish(repo, created["task_id"], request_id="publish-too-early")
+    assert publisher.calls == []
+
+    service.start(repo, created["task_id"], request_id="publish-run")
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "worktree_ready"
+
+    published = service.publish(repo, created["task_id"], request_id="publish-1")
+    record = published["run"]["workspace_result"]["publish"]
+    assert record["status"] == "published"
+    assert record["remote"] == "origin"
+    assert record["branch"].startswith("local/task/")
+    assert record["sha"] == published["run"]["workspace_result"]["snapshot"]["task_snapshot_sha"]
+    assert len(publisher.calls) == 1
+
+    repeated = service.publish(repo, created["task_id"], request_id="publish-1")
+    assert repeated["run"]["workspace_result"]["publish"] == record
+    assert len(publisher.calls) == 1
 
 
 def test_invalid_run_request_is_rejected_before_workspace_creation(tmp_path: Path):

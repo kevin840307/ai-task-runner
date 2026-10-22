@@ -1207,15 +1207,15 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Phase F — UI
 
-- [ ] Effective Main remains Ongoing from Runner Complete until merge succeeds or fallback closes it.
-- [ ] Show pending_merge / merging / conflict_recovery / waiting_target_clean / waiting_target_workspace / merged / worktree_ready.
-- [ ] Main fallback visibly indicates original Main + merge_failure_limit_exceeded reason.
-- [ ] No top-level Git Worktree page; Task Info + Project Workspace Results remain enough.
+- [x] Effective Main remains Ongoing from Runner Complete until merge succeeds or fallback closes it.
+- [x] Show pending_merge / merging / conflict_recovery / waiting_target_clean / waiting_target_workspace / merged / worktree_ready.
+- [x] Main fallback visibly indicates original Main + merge_failure_limit_exceeded reason.
+- [x] No top-level Git Worktree page; Task Info + Project Workspace Results remain enough.
 
 ### Phase G — remote
 
-- [ ] Normal lifecycle never executes `git push origin`.
-- [ ] Keep Publish explicit and separate.
+- [x] Normal lifecycle never executes `git push origin`.
+- [x] Keep Publish explicit and separate.
 
 ---
 

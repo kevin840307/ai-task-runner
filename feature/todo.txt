@@ -506,7 +506,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - production Board 的唯一 lifecycle columns 是 new/ongoing/paused/closed；TaskRunService 只在 merged/no_changes/worktree_ready completion boundary 才讓最後 child 關成 Closed，pending_merge/merging/conflict_recovery/waiting_* 都維持 Ongoing。現有 Chromium lifecycle test + static contract 鎖定四欄。
 [x] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
     - Primary navigation 仍只有 Tasks / Workflows / Prompts（Settings 為 panel）；Task/Workspace 結果留在單一 Task Drawer，static contract 明確禁止 worktreeNav/worktreeView/data-view=worktree。
-[ ] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
+[x] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
+    - Workspace Result 新增 explicit Publish；UI 必須二次確認後才 POST /api/tasks/publish。TaskRunService 只允許 Closed merged/no_changes/worktree_ready result，workspace/PublishManager 核對 durable branch HEAD/SHA 後以 non-force push 發佈到 origin；結果記錄在 workspace_result.publish，merge/recovery/Runner 完全不呼叫 Publish。
 
 
 12. 共用 Chat Backend 與 API
