@@ -591,11 +591,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - ui/task_models.py 是 canonical TaskDraft/Create validator；mode/item count、Project identity、Workflow existence/capability、prompt/title bounds、workspace policy、File/AI Validator requirements 都由 Backend 驗證。invalid/empty/long/multiline/missing-workflow deterministic tests 已覆蓋。
 [x] TaskDraft Create 必須呼叫既有 Task 建立服務；不在 UI 直接寫正式 Task store。
     - /api/tasks/create-from-draft 只取 transient canonical Draft 後呼叫 TaskService.create；request_id/idempotency 與 durable store 由 TaskService 單一 owner。
-[ ] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
+[x] 建立 Task 時使用既有 durable Task ID、History、Project identity、Workspace resolver 與狀態轉換。
+    - TaskService 單一 owner 產生 durable task-/item identity、project_id 與 run/history；TaskRunService 只透過 WorkspaceManager resolver 建立 Run workspace 並用 transition_run 推進 canonical lifecycle。HTTP/Create/Run/restart regression 已覆蓋 identity 與 durable state。
 [x] TaskDraft / Create Task 建立後只進 New / idle；@goal 是另一個明確 command，可在同一 Backend service 中完成 Create + Run。
     - TaskService.create 固定建立 status=new 且不寫 runtime；@goal 目前在 Workspace phase 前明確 fail closed，不會偷偷把普通 Draft 變成 Running。
-[ ] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
-[ ] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
+[x] 同一實際 worktree path 不允許兩個 Task 同時執行；不同 Task Run 必須有不同 worktree path。Concurrent Main 依 Global setting 決定，不再用 Project path busy 作為 filesystem safety 限制。
+    - Workspace identity 固定為 task_id + run_number；同一 Run idempotently reuse 自己的 registered worktree，不同 Task/Run 路徑與 local branch 均不同。Concurrent Main On 的兩個 Main Task 真 regression 驗證各自獨立 project_root，Off/Auto policy 仍由 Global resolver 決定。
+[x] Task List 的 child 仍依現有 RunRequest / FlowEngine 依序執行；不新增平行 Task scheduler。
+    - TaskRunService 只在前一 child 到 durable completion boundary 後 _start_next_item；每個 child 仍呼叫同一 Runner launch/public contract。ordered-list + restart regression 驗證 item_index/history/Run workspace 依序前進，沒有第二個 scheduler。
 [x] UI 不得直接修改 runtime truth；Stop / Resume / Restart / Close 都呼叫既有 Runner action API。
     - production UI 的 Stop/Resume/Reset/Rerun 只呼叫 `/api/project/*`；UIServer 再交給 ProjectRuntimeMixin 的 stop/resume/reset_runtime/rerun_last。architecture regression 鎖定 Task Workspace/Board 不可讀寫 runner-process.json、stop.request 或 Runner state.json。
 [x] Ask 發生時，Agent turn 需有明確的 pending-question 狀態與 ask_id；Submit 後回傳結構化答案並繼續原 turn。
@@ -606,8 +609,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Durable FIFO queue 只存在 ChatService session state，使用 queue_item_id/turn_id；Runner Task store 與 Task List 使用獨立 TaskService schema，architecture regression 禁止 Chat service 進入 Runner workflow execution。
 [x] Agent tool permission / YOLO 設定由 Adapter / Backend 生效；不可只在前端顯示模式。
     - Qwen/OpenCode interaction_modes + configure_interaction_args/process_environment 是正式 owner；tests/test_backends.py 驗證 Qwen safe/yolo flags、OpenCode permission policy 與 runtime environment propagation。
-[ ] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
-[ ] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
+[x] Workspace path、Worktree 建立、Git preflight、Merge 都走共用的 Backend service；不可讓 UI 自行組路徑或執行 Git。
+    - top-level workspace/ 是唯一 Git worktree/merge/publish mechanics owner；TaskRunService 只協調 PreparedWorkspace/MergeResult，frontend 只呼叫 Task API。tests/test_workspace_architecture.py 鎖定 workspace 不 import Runner/UI、Runner 不 import workspace。
+[x] Merge preflight / direct normal merge 必須有安全檢查、lock、結果紀錄與可重試錯誤；真實 merge conflict 時 abort merge、增加 merge_failure_count，並進入既有 Runner recovery / retry 流程。
+    - MergeManager 已具 repository/target locks、durable FIFO、target/history/dirty/ownership preflight、--no-ff --no-commit + validation transaction；真 conflict/SOURCE_FAIL abort 後 TaskRunService durable dedupe increment 並啟動既有 Runner incremental recovery。workspace merge + Task orchestration regression 覆蓋 conflict、restart、queue、technical error 與 fallback。
 [ ] Task reset、delete、run history 與 Worktree cleanup 的生命週期分開處理。
 [x] 確保 Chat API 故障不影響正在跑的 Runner Task；Chat server 重啟不得清除或破壞 Runner recovery state。
     - `test_project_chat_turn_http_uses_project_preferences_without_runner_task` 先以 HTTP Chat 成功再注入 Agent backend failure，逐 byte 驗證 `.ai-task-runner/state.json` / `runner-process.json` / `stop.request` 完全不變；既有 UIServer reopen regression 同樣鎖住 restart ownership。2026-10-21 CI Windows/Linux pytest PASS。
