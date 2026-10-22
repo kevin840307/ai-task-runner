@@ -95,6 +95,7 @@ def _service(
     stops: list,
     resumes: list,
     settings: dict | None = None,
+    merge_validator=None,
 ) -> TaskRunService:
     def launch(project: Path, goal: str | None, **kwargs):
         launches.append((Path(project), goal, dict(kwargs)))
@@ -119,6 +120,7 @@ def _service(
         read_runtime=lambda _project: dict(runtime),
         stop_runtime=lambda project: stops.append(Path(project)),
         resume_runtime=lambda project: resumes.append(Path(project)),
+        validate_merge=merge_validator,
         workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
         poll_interval=0.05,
         auto_watch=False,
@@ -651,6 +653,107 @@ def test_main_target_advance_fails_closed_at_validation_required(tmp_path: Path)
     assert waiting["run"]["phase"] == "validation_required"
     assert waiting["run"]["workspace_result"]["merge"]["validation_required"] is True
     assert not (repo / "result.txt").exists()
+
+
+def test_main_target_advance_runs_validation_only_callback_before_commit(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main", request_id="create-validated-main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    validations = []
+
+    def validate(project: Path, goal: str, **kwargs):
+        validations.append((Path(project), goal, dict(kwargs)))
+        assert (Path(project) / "result.txt").read_text(encoding="utf-8") == "done\n"
+        assert (Path(project) / "target.txt").read_text(encoding="utf-8") == "target advanced\n"
+        return "PASS"
+
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=[],
+        stops=[],
+        resumes=[],
+        merge_validator=validate,
+    )
+    service.start(repo, created["task_id"], request_id="validated-main")
+    (repo / "target.txt").write_text("target advanced\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    runtime.update({"running": False, "completed": True})
+
+    closed = service.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    assert closed["run"]["workspace_result"]["merge"]["verdict"] == "PASS"
+    assert len(validations) == 1
+    assert validations[0][1] == "Implement one"
+    assert validations[0][2]["workflow"] == str(repo / "workflow.yaml")
+
+
+def test_merge_validation_source_fail_counts_once_and_starts_recovery(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main", request_id="create-source-fail")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=launches,
+        stops=[],
+        resumes=[],
+        merge_validator=lambda _project, _goal, **_kwargs: "SOURCE_FAIL",
+    )
+
+    service.start(repo, created["task_id"], request_id="source-fail-run")
+    (repo / "target.txt").write_text("target advanced\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    runtime.update({"running": False, "completed": True})
+
+    recovering = service.reconcile(repo, created["task_id"])
+
+    assert recovering["status"] == "ongoing"
+    assert recovering["run"]["phase"] == "conflict_recovery"
+    assert recovering["merge_failure_count"] == 1
+    failure = recovering["run"]["workspace_result"]["last_merge_failure"]
+    assert failure["status"] == "source_fail"
+    assert failure["verdict"] == "SOURCE_FAIL"
+    assert recovering["run"]["workspace_result"]["recovery"]["status"] == "running"
+    assert "Merge-repair task only" in launches[-1][1]
+
+
+def test_merge_validation_technical_error_does_not_count_or_create_recovery(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main", request_id="create-technical-validation")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=[],
+        stops=[],
+        resumes=[],
+        merge_validator=lambda _project, _goal, **_kwargs: "TECHNICAL_ERROR",
+    )
+
+    service.start(repo, created["task_id"], request_id="technical-validation-run")
+    (repo / "target.txt").write_text("target advanced\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target")
+    runtime.update({"running": False, "completed": True})
+
+    blocked = service.reconcile(repo, created["task_id"])
+
+    assert blocked["status"] == "ongoing"
+    assert blocked["run"]["phase"] == "technical_error"
+    assert blocked["merge_failure_count"] == 0
+    assert "recovery" not in blocked["run"]["workspace_result"]
 
 
 def test_real_merge_failure_over_limit_falls_back_to_retained_worktree(tmp_path: Path):

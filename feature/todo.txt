@@ -460,19 +460,28 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 11. Workspace Results / Direct Merge
 ------------------------------------
 
-[ ] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
-[ ] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
-[ ] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
-[ ] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序；queue head 在 conflict Runner recovery 期間保留順位，但短期 Git lock 必須釋放。
-[ ] Main merge 前先檢查 merge_source_sha 是否已是 target branch ancestry；是則 idempotent finalize merged，不重複 commit；否則在 captured target worktree 執行 `git merge --no-ff --no-commit <merge_source_branch>`，保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
-[ ] merge validation 必須 verdict-only / source-non-mutating，統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR；Git conflict 或 SOURCE_FAIL 才算 real merge fail，真正 source repair 只在 recovery worktree 透過 Runner 執行；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count。
-[ ] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
+[x] 詳細 source of truth 使用 feature/git-worktree-todo.md；正式流程只保留 Project branch → Task worktree/local branch → Runner → local commit → direct normal merge → finish / fail recovery。
+    - Production owner 已收斂為 top-level workspace/ + TaskRunService orchestration；Runner public contract 只收到 project_root/Workflow input，不感知 branch/worktree/merge queue。
+[x] effective Main：Runner Complete 後 git add -A + commit remaining changes 到 local Task branch；此時 Task 仍 Ongoing。
+    - WorkspaceManager.snapshot_result 先 ownership preflight，再保留 Agent commits/commit remaining diff；TaskRunService 只有 direct merge/no_changes 成功才完成 child/Task。
+[x] effective Isolated Worktree：Runner Complete 後 commit result，直接 Closed · worktree_ready，不自動 merge。
+    - Worktree mode snapshot 後直接 durable worktree_ready；不呼叫 MergeManager。
+[x] Main merge queue 以 repository + captured target branch 序列化；Runner execution 可平行；Runner Complete 有 deliverable commit 時原子分配 durable FIFO merge_queue_seq，restart 必須保留順序；queue head 在 conflict Runner recovery 期間保留順位，但短期 Git lock 必須釋放。
+    - MergeQueue durable FIFO + repository/target scoped Git lock 已有 restart/concurrent regression；conflict recovery 保留同一 queue identity，fallback/abandon 才顯式 release head。
+[x] Main merge 前先檢查 merge_source_sha 是否已是 target branch ancestry；是則 idempotent finalize merged，不重複 commit；否則在 captured target worktree執行 `git merge --no-ff --no-commit <merge_source_branch>`，保持可 abort，configured merge validation PASS 後才 git commit，merge success 才 Closed · merged。
+    - TaskRunService 現在把 Runner public validate_only verdict callback 接到 MergeManager；target advanced 時 PASS 才 commit，already-ancestor 仍直接 idempotent finalize。
+[x] merge validation 必須 verdict-only / source-non-mutating，統一 PASS / SOURCE_FAIL / TECHNICAL_ERROR；Git conflict 或 SOURCE_FAIL 才算 real merge fail，真正 source repair 只在 recovery worktree 透過 Runner 執行；TECHNICAL_ERROR abort merge 但不增加 merge_failure_count。
+    - runner.api.validate_only 只執行 canonical Workflow 的 deterministic validation Command Stage，強制 readonly_safety=restore 並重用 StageExecutor/SafetyHook/Git guard；mutation 會 restore + TECHNICAL_ERROR，非零 validator verdict 為 SOURCE_FAIL。
+[x] real merge conflict / SOURCE_FAIL：git merge --abort → merge_failure_count += 1 → 記錄 structured failure。
+    - MergeManager 對 conflict/SOURCE_FAIL 都先 abort；TaskRunService 只對 real_merge_failure 做 durable dedupe increment + structured last_merge_failure。
 [x] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
     - Production Task record 只持久化 `merge_failure_count`；唯一 limit owner 是 versioned `GlobalSettingsStore.execution.merge_failure_limit`（0~99，default 3），Task schema 不複製 limit。
-[ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
-    - Production conflict path 已接上 incremental merge-repair orchestration：real conflict 會保留 queue head、建立 latest-target recovery worktree、沿用同一 Runner/Workflow，recovery 完成 snapshot 後才切換 durable current merge source 並重試 direct merge；merge validation/SOURCE_FAIL owner 尚未接線，因此本總項暫不勾。
-[ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
-[ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
+[x] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
+    - Git conflict 與 deterministic SOURCE_FAIL 現在共用同一 incremental merge-repair orchestration；recovery 完成 snapshot 後才 durable 替換 merge_source，下一次 direct merge只讀 current source。
+[x] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
+    - Dynamic Global limit 每次 merge failure 後重讀；超限才 release queue head並把 latest current merge source保留為 worktree_ready fallback。
+[x] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
+    - increment owner 只接受 MergeResult.real_merge_failure；pending/waiting/technical_error/Runner launch-recovery failures都不 increment，已有 queue/target/technical regression。
 [x] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
     - TaskRunService 只在 MergeResult.real_merge_failure 且未超過 Global limit 時呼叫 WorkspaceManager.prepare_recovery；normal merge / queue wait / target blocked / technical_error 不建立 recovery。
 [x] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。

@@ -8,9 +8,10 @@ import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from .bootstrap import execute
+from .bootstrap import execute, runtime_scope
 from .config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
@@ -33,9 +34,13 @@ from .plugins.registry import (
 )
 from .runtime.events import retry_event
 from .runtime.events import sleep_with_heartbeat
+from .runtime.run_state import RunState, StateStore, set_stage
 from .utils import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
+from .workflow.execution import StageExecutor
+from .workflow.registry import create_stage
+from .workflow.stages import StageContext
 from .resources import load_run_resource, load_snapshot
 
 
@@ -255,6 +260,12 @@ class RunRequest:
 
 
 @dataclass(frozen=True)
+class ValidationResult:
+    verdict: str
+    detail: str = ""
+
+
+@dataclass(frozen=True)
 class RunResult:
     exit_code: int
     state_files: tuple[str, ...]
@@ -270,6 +281,98 @@ class RunResult:
                 for state in self.states
             )
         )
+
+
+def validate_only(
+    request: RunRequest | Mapping[str, Any],
+) -> ValidationResult:
+    """Run configured deterministic validation Stages without allowing source edits."""
+    if not isinstance(request, RunRequest):
+        request = RunRequest.from_mapping(request)
+
+    config = request.normalized_config()
+    validation_stages = [
+        dict(definition)
+        for definition in config.workflow
+        if definition.get("type") == "command"
+        and definition.get("result_kind") == "validation"
+    ]
+    if not validation_stages:
+        return ValidationResult("PASS", "No deterministic validation Stage configured")
+
+    config = replace(
+        config,
+        work_dir=str(Path(config.work_dir) / "validation-only"),
+        stage_retries=0,
+        retry_delay=0,
+        resume=False,
+        force_new=True,
+        human_output=False,
+        json_events=False,
+        auto_register_ui_project=False,
+        readonly_safety="restore",
+    )
+    config.validate()
+
+    root = Path(config.project_root).resolve()
+    work = root / config.work_dir
+    state_store = StateStore(root, work)
+    state = RunState(
+        run_id="validation-only",
+        goal=config.goal or "Validation only",
+        project_root=str(root),
+    )
+    state_store.save(state)
+    state_file = state_store.path
+    validator_is_ai = bool(config.validator) and config.validator.lower() == "ai"
+    validator_path = (
+        None
+        if not config.validator or validator_is_ai
+        else Path(config.validator).expanduser().resolve()
+    )
+
+    def save_state() -> None:
+        state_store.save(state)
+
+    def update_stage(stage: str, detail: str = "") -> None:
+        set_stage(state, stage, detail)
+        save_state()
+
+    context = StageContext(
+        config=config,
+        root=root,
+        work=work,
+        state=state,
+        ai_client=SimpleNamespace(session_id=""),
+        state_file=state_file,
+        validator_path=validator_path,
+        validator_is_ai=validator_is_ai,
+        save_state=save_state,
+        set_stage=update_stage,
+    )
+
+    outputs: list[str] = []
+    with runtime_scope(config):
+        executor = StageExecutor()
+        for definition in validation_stages:
+            # Merge validation is verdict-only. Reuse the normal Stage and
+            # StageExecutor safety boundary, but force source restoration if a
+            # validator attempts to mutate maintained project files.
+            definition["mode"] = "readonly"
+            definition["tolerate_restored_changes"] = False
+            stage = create_stage(definition)
+            result = executor.run(stage, context, retry_limit=0)
+            if result.output:
+                outputs.append(result.output)
+            if result.status == "error":
+                return ValidationResult(
+                    "TECHNICAL_ERROR",
+                    result.output or str(result.error or "Validation Stage failed"),
+                )
+            if result.status == "fail":
+                return ValidationResult("SOURCE_FAIL", result.output)
+
+    return ValidationResult("PASS", "\n".join(outputs))
 
 
 def run(
@@ -479,7 +582,9 @@ __all__ = [
     "EventHandler",
     "RunRequest",
     "RunResult",
+    "ValidationResult",
     "__version__",
     "run",
     "state_files",
+    "validate_only",
 ]

@@ -98,6 +98,30 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
     def _task_backend_default(self, project: Path) -> str:
         return str(self.backend_catalog(project).get("default") or "").strip()
 
+    @staticmethod
+    def _task_merge_validate(
+        project: Path,
+        goal: str,
+        *,
+        backend: str = "",
+        validator: str = "",
+        workflow: str = "",
+    ) -> str:
+        from runner.api import RunRequest, validate_only
+
+        result = validate_only(
+            RunRequest(
+                goal=goal or "Merge validation",
+                project_root=str(Path(project).expanduser().resolve()),
+                validator=validator or None,
+                workflow_file=workflow or None,
+                backend=backend or "qwen",
+                auto_register_ui_project=False,
+                human_output=False,
+            )
+        )
+        return result.verdict
+
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.ui_root = self.repo_root / "ui"
@@ -144,6 +168,7 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
             read_runtime=self.read_runtime,
             stop_runtime=self.stop,
             resume_runtime=self.resume,
+            validate_merge=self._task_merge_validate,
         )
         self.task_runs.recover([
             Path(row["path"]).resolve()

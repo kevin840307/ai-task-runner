@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner.api import RunRequest, __version__, run
+from runner.api import RunRequest, __version__, run, validate_only
 from runner.errors import RunnerError
 
 
@@ -130,6 +130,82 @@ def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypat
 
     assert result.completed
     assert result.state_files == (str(state_file),)
+
+
+def _validation_only_workflow(path: Path) -> Path:
+    path.write_text(
+        "stages:\n"
+        "  validate_file:\n"
+        "    type: command\n"
+        "    result_kind: validation\n"
+        "    command: \"{python} {validator} --project-root {project_root} --state-file {state_file}\"\n"
+        "flow:\n"
+        "  - validate_file\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _validation_only_script(path: Path, *, exit_code: int = 0, mutate: bool = False) -> Path:
+    lines = [
+        "import argparse",
+        "from pathlib import Path",
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');p.add_argument('--state-file')",
+        "args=p.parse_args()",
+    ]
+    if mutate:
+        lines.append("(Path(args.project_root) / 'app.txt').write_text('mutated\\n', encoding='utf-8')")
+    lines.append(f"raise SystemExit({int(exit_code)})")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_validation_only_maps_deterministic_pass_and_source_fail(tmp_path):
+    workflow = _validation_only_workflow(tmp_path / "validation.yaml")
+    passing = _validation_only_script(tmp_path / "pass.py", exit_code=0)
+    failing = _validation_only_script(tmp_path / "fail.py", exit_code=7)
+
+    passed = validate_only(
+        RunRequest(
+            goal="validate merged tree",
+            project_root=str(tmp_path),
+            validator=str(passing),
+            workflow_file=str(workflow),
+            backend="qwen",
+        )
+    )
+    failed = validate_only(
+        RunRequest(
+            goal="validate merged tree",
+            project_root=str(tmp_path),
+            validator=str(failing),
+            workflow_file=str(workflow),
+            backend="qwen",
+        )
+    )
+
+    assert passed.verdict == "PASS"
+    assert failed.verdict == "SOURCE_FAIL"
+
+
+def test_validation_only_restores_source_mutation_and_returns_technical_error(tmp_path):
+    workflow = _validation_only_workflow(tmp_path / "validation.yaml")
+    validator = _validation_only_script(tmp_path / "mutating.py", mutate=True)
+    (tmp_path / "app.txt").write_text("original\n", encoding="utf-8")
+
+    result = validate_only(
+        RunRequest(
+            goal="validate merged tree",
+            project_root=str(tmp_path),
+            validator=str(validator),
+            workflow_file=str(workflow),
+            backend="qwen",
+        )
+    )
+
+    assert result.verdict == "TECHNICAL_ERROR"
+    assert "modified files" in result.detail
+    assert (tmp_path / "app.txt").read_text(encoding="utf-8") == "original\n"
 
 
 def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):

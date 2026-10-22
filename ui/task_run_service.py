@@ -22,6 +22,7 @@ WorkflowResolver = Callable[[Path, str], Path]
 PreferencesReader = Callable[[Path], dict[str, Any]]
 ExecutionSettingsReader = Callable[[], dict[str, Any]]
 BackendResolver = Callable[[Path], str]
+MergeValidation = Callable[..., str]
 
 
 class TaskRunService:
@@ -39,6 +40,7 @@ class TaskRunService:
         read_runtime: RuntimeReader,
         stop_runtime: RuntimeAction,
         resume_runtime: RuntimeAction,
+        validate_merge: MergeValidation | None = None,
         workspace_manager: WorkspaceManager | None = None,
         merge_manager: MergeManager | None = None,
         poll_interval: float = 1.0,
@@ -53,6 +55,7 @@ class TaskRunService:
         self._read_runtime = read_runtime
         self._stop_runtime = stop_runtime
         self._resume_runtime = resume_runtime
+        self._validate_merge = validate_merge
         self._workspaces = workspace_manager or WorkspaceManager()
         self._merges = merge_manager or MergeManager()
         self._poll_interval = max(0.05, float(poll_interval))
@@ -548,7 +551,8 @@ class TaskRunService:
                 value,
             )
 
-        result = self._merges.merge(prepared, snapshot, validate=None)
+        validate = self._merge_validation_callback(project, task)
+        result = self._merges.merge(prepared, snapshot, validate=validate)
         value["merge"] = result.as_dict()
         if result.status in {"merged", "no_changes"}:
             return self._complete_item(
@@ -604,6 +608,47 @@ class TaskRunService:
                 error=result.detail,
             )
         return self.get(project, task_id)
+
+    def _merge_validation_callback(
+        self,
+        source_project: Path,
+        task: dict[str, Any],
+    ) -> Callable[[Path], str] | None:
+        if self._validate_merge is None:
+            return None
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        item_index = int(run.get("item_index") or 0)
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        if item_index < 0 or item_index >= len(items):
+            raise ValueError("Task Run item_index is invalid")
+        item = items[item_index]
+        preferences = self._preferences(source_project)
+        backend = (
+            str(preferences.get("agent") or "").strip()
+            or self._backend_default(source_project)
+        )
+        workflow = self._resolve_workflow(
+            source_project,
+            str(item.get("workflow") or ""),
+        )
+        goal = str(item.get("prompt") or task.get("title") or "Merge validation").strip()
+
+        def validate(target_project: Path) -> str:
+            validator = self._runtime_input_path(
+                source_project,
+                target_project,
+                str(item.get("validator") or ""),
+            )
+            verdict = self._validate_merge(
+                target_project,
+                goal,
+                backend=backend,
+                validator=validator,
+                workflow=str(workflow),
+            )
+            return str(verdict or "").strip().upper()
+
+        return validate
 
     def _start_merge_recovery(
         self,
