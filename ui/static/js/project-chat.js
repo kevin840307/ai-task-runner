@@ -1254,6 +1254,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     return { mode, spec: String(match[2] || "").trim(), token: "@" + match[1].toLowerCase() };
   }
 
+  function goalCommand(text) {
+    const match = String(text || "").match(/^@goal(?:\s+([\s\S]*))?$/i);
+    if (!match) return null;
+    return { spec: String(match[1] || "").trim() };
+  }
+
   async function dismissTaskDraft(draftId) {
     const path = projectPath();
     const viewSession = activeSessionId;
@@ -1335,6 +1341,33 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     applyAskState(data);
   }
 
+  async function runGoal(command, returnFocus = null) {
+    if (!command.spec) {
+      showError?.("Usage: @goal <spec>", "Goal spec required");
+      return;
+    }
+    const path = projectPath();
+    if (!path) return;
+    const task = await api("/api/tasks/goal", {
+      method: "POST",
+      body: JSON.stringify({
+        project: path,
+        spec: command.spec,
+        request_id: requestId(),
+      }),
+    });
+    if (projectPath() !== path) return;
+    if (task.goal_run_started) {
+      showToast?.("Goal started · Ongoing · " + String(task.title || task.task_id || ""));
+    } else {
+      showError?.(
+        task.goal_run_error || "Task was created but Runner did not start.",
+        "Goal created · Run needs attention",
+      );
+    }
+    openTask?.(task, { returnFocus, workflows: settingsCatalog.workflows });
+  }
+
   async function generateTaskDraft(command) {
     if (!command.spec) {
       showError?.("Usage: " + command.token + " <spec>", "TaskDraft spec required");
@@ -1363,17 +1396,25 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const text = String(input?.value || "").trim();
     if (!project || !activeSessionId || !text) return;
     const command = taskCommand(text);
+    const goal = goalCommand(text);
     const askDemo = /^@ask-demo\s*$/i.test(text);
-    if (/^@goal(?:\s|$)/i.test(text)) {
-      showError?.(
-        "@goal is reserved for the atomic Task create+run path and is not enabled until the Workspace phase is installed.",
-        "@goal unavailable",
-      );
+    if (goal && !goal.spec) {
+      showError?.("Usage: @goal <spec>", "Goal spec required");
       return;
     }
     input.value = "";
     autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
     panelHideSuggestions();
+    if (goal) {
+      try {
+        await runGoal(goal, input);
+      } catch (error) {
+        showError?.(error.message, "Start Goal failed");
+      } finally {
+        input?.focus();
+      }
+      return;
+    }
     if (askDemo) {
       try {
         await openAskDemo();
