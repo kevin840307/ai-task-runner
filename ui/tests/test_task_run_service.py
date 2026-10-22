@@ -339,6 +339,7 @@ def test_quick_goal_defaults_to_ralphy_and_fails_closed_for_invalid_inputs(tmp_p
     assert "ralphy_ai_validate.yaml" in accepted
 
     missing_tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": False})
+    before_missing = missing_tasks.list(repo)["tasks"]
     missing = TaskRunService(
         missing_tasks,
         execution_settings=lambda: {"auto_workspace_policy": "busy-worktree", "merge_failure_limit": 3, "allow_concurrent_main_tasks": False},
@@ -354,11 +355,12 @@ def test_quick_goal_defaults_to_ralphy_and_fails_closed_for_invalid_inputs(tmp_p
     )
     with pytest.raises(ValueError, match="Workflow does not exist"):
         missing.start_goal(repo, "Missing workflow", request_id="goal-missing")
-    assert missing_tasks.list(repo)["tasks"] == []
+    assert missing_tasks.list(repo)["tasks"] == before_missing
 
     validator_tasks = TaskService(
         workflow_requirements=lambda _p, _w: {"exists": True, "requires_python_validator": True}
     )
+    before_validator = validator_tasks.list(repo)["tasks"]
     validator = TaskRunService(
         validator_tasks,
         execution_settings=lambda: {"auto_workspace_policy": "busy-worktree", "merge_failure_limit": 3, "allow_concurrent_main_tasks": False},
@@ -374,7 +376,7 @@ def test_quick_goal_defaults_to_ralphy_and_fails_closed_for_invalid_inputs(tmp_p
     )
     with pytest.raises(ValueError, match="File Validator is required"):
         validator.start_goal(repo, "Needs validator", request_id="goal-validator")
-    assert validator_tasks.list(repo)["tasks"] == []
+    assert validator_tasks.list(repo)["tasks"] == before_validator
 
 
 @pytest.mark.parametrize(
