@@ -69,6 +69,67 @@ class TaskRunService:
     def get(self, project: Path, task_id: str) -> dict[str, Any]:
         return self._project_runtime(project, self.tasks.get(project, task_id))
 
+    def start_goal(
+        self,
+        project: Path,
+        spec: str,
+        *,
+        request_id: str,
+        project_id: str = "",
+    ) -> dict[str, Any]:
+        """Backend-owned idempotent Quick Goal create -> run command."""
+        project = Path(project).expanduser().resolve()
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        goal = str(spec or "").strip()
+        if not goal:
+            raise ValueError("@goal spec is required")
+
+        preferences = self._preferences(project)
+        workflow = str(preferences.get("workflow") or "").strip() or "ralphy_ai_validate.yaml"
+        normalized_title = " ".join(goal.split())
+        title = normalized_title if len(normalized_title) <= 160 else normalized_title[:157].rstrip() + "..."
+        digest = hashlib.sha256(request.encode("utf-8")).hexdigest()
+        task = self.tasks.create(
+            project,
+            {
+                "title": title,
+                "items": [{
+                    "title": title,
+                    "prompt": goal,
+                    "workflow": workflow,
+                    "project": str(project),
+                    "workspace": "auto",
+                }],
+            },
+            request_id=f"goal-create-{digest}",
+            project_id=project_id,
+        )
+        try:
+            value = self.start(
+                project,
+                str(task["task_id"]),
+                request_id=f"goal-run-{digest}",
+            )
+        except Exception as exc:
+            value = self.get(project, str(task["task_id"]))
+            return {
+                **value,
+                "goal_run_started": False,
+                "goal_run_error": f"{type(exc).__name__}: {exc}",
+            }
+
+        run = value.get("run") if isinstance(value.get("run"), dict) else None
+        launch_failed = bool(run) and str(run.get("phase") or "") == "launch_failed"
+        return {
+            **value,
+            "goal_run_started": bool(run) and not launch_failed,
+            "goal_run_error": str(run.get("error") or "") if launch_failed and run else "",
+        }
+
     def start(self, project: Path, task_id: str, *, request_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
         request = str(request_id or "").strip()
