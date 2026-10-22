@@ -988,6 +988,64 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
             },
         )
 
+        fallback_created = state.tasks.create(
+            root,
+            {
+                "title": "Fallback delivery",
+                "items": [{
+                    "title": "Fallback item",
+                    "prompt": "Keep retained result",
+                    "workflow": "workflow.yaml",
+                    "project": str(root),
+                    "workspace": "main",
+                }],
+            },
+            request_id="browser-fallback-task",
+            project_id=state.project_identity(root)["project_id"],
+        )
+        fallback_id = fallback_created["task_id"]
+        fallback_workspace = {
+            **workspace_meta,
+            "task_id": fallback_id,
+            "task_branch": f"local/task/{fallback_id}-r1",
+            "worktree_path": str(root.parent / "worktrees" / f"{fallback_id}-r1"),
+            "project_root": str(root.parent / "worktrees" / f"{fallback_id}-r1"),
+        }
+        state.tasks.begin_run(
+            root,
+            fallback_id,
+            request_id="browser-fallback-run",
+            workspace=fallback_workspace,
+        )
+        state.tasks.transition_run(
+            root,
+            fallback_id,
+            1,
+            phase="worktree_ready",
+            status="closed",
+            increment_merge_failure=True,
+            completed_item_count=1,
+            workspace_result={
+                "snapshot": {
+                    "task_snapshot_sha": "fedcba",
+                    "no_changes": False,
+                    "created_commit": True,
+                },
+                "effective_mode": "main",
+                "branch": fallback_workspace["task_branch"],
+                "path": fallback_workspace["worktree_path"],
+                "delivery_fallback": {
+                    "mode": "isolated_worktree",
+                    "reason": "merge_failure_limit_exceeded",
+                },
+                "merge": {
+                    "status": "worktree_ready",
+                    "attempt_status": "conflict",
+                    "real_merge_failure": True,
+                },
+            },
+        )
+
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
@@ -1017,18 +1075,34 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
 
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
-            page.wait_for_function("document.querySelectorAll('.tasks-board-card').length === 1")
-            page.locator(".tasks-board-card").click()
+            page.wait_for_function("document.querySelectorAll('.tasks-board-card').length === 2")
+            page.locator(".tasks-board-card").filter(has_text="Conflict delivery").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             assert page.locator("#taskWorkspaceWorktreeBadge").inner_text() == "MAIN"
+            assert page.locator("#taskWorkspaceResultProject").inner_text() == str(root)
+            assert page.locator("#taskWorkspaceRun").inner_text() == "Run #1 · Item 1/1"
+            assert page.locator("#taskWorkspaceTargetBranch").inner_text() == "future-ui-implementation"
             assert page.locator("#taskWorkspaceBranch").inner_text() == workspace_meta["task_branch"]
             assert page.locator("#taskWorkspacePath").inner_text() == workspace_meta["worktree_path"]
             assert page.locator("#taskWorkspaceMergeStatus").inner_text() == "conflict"
+            assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "1"
             assert page.locator("#taskWorkspaceMerge").is_disabled()
             assert page.locator("#taskWorkspaceMergeChat").is_enabled()
             assert "app.py" in page.locator("#taskWorkspaceConflicts").inner_text()
 
+            page.click("#taskWorkspaceClose")
+            page.locator(".tasks-board-card").filter(has_text="Fallback delivery").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceMergeStatus')?.textContent === 'worktree_ready'")
+            assert page.locator("#taskWorkspaceRun").inner_text() == "Run #1 · Item 1/1"
+            assert page.locator("#taskWorkspaceTargetBranch").inner_text() == "future-ui-implementation"
+            assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "1"
+            assert "isolated_worktree" in page.locator("#taskWorkspaceFallback").inner_text()
+            assert "merge_failure_limit_exceeded" in page.locator("#taskWorkspaceFallback").inner_text()
+            page.click("#taskWorkspaceClose")
+
+            page.locator(".tasks-board-card").filter(has_text="Conflict delivery").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceMergeStatus')?.textContent === 'conflict'")
             page.click("#taskWorkspaceMergeChat")
             page.wait_for_function("!document.querySelector('#projectChatView')?.hidden")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")

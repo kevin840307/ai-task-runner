@@ -1156,16 +1156,42 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
       const resultMeta = document.createElement("dl");
       resultMeta.className = "task-workspace-result-meta";
+      const run = task?.run && typeof task.run === "object" ? task.run : {};
+      const prepared = run.workspace && typeof run.workspace === "object" ? run.workspace : {};
+      const mergeSource = workspaceResult?.merge_source?.workspace && typeof workspaceResult.merge_source.workspace === "object"
+        ? workspaceResult.merge_source.workspace
+        : {};
+      const itemCount = Array.isArray(task.items) ? task.items.length : 0;
+      const itemIndex = Number(run.item_index || 0);
+      const runLabel = run.run_number
+        ? "Run #" + String(run.run_number) + (itemCount ? " · Item " + String(Math.min(itemIndex + 1, itemCount)) + "/" + String(itemCount) : "")
+        : "—";
       for (const [label, value, id] of [
-        ["Branch", String(workspaceResult.branch || task?.run?.workspace?.task_branch || ""), "taskWorkspaceBranch"],
-        ["Path", String(workspaceResult.path || task?.run?.workspace?.worktree_path || ""), "taskWorkspacePath"],
-        ["Merge", String(mergeResult?.status || task?.run?.phase || "ready"), "taskWorkspaceMergeStatus"],
+        ["Project", String(task.project || ""), "taskWorkspaceResultProject"],
+        ["Task Run", runLabel, "taskWorkspaceRun"],
+        ["Target branch", String(mergeSource.target_branch || prepared.target_branch || ""), "taskWorkspaceTargetBranch"],
+        ["Source branch", String(mergeSource.task_branch || workspaceResult.branch || prepared.task_branch || ""), "taskWorkspaceBranch"],
+        ["Source path", String(mergeSource.worktree_path || workspaceResult.path || prepared.worktree_path || ""), "taskWorkspacePath"],
+        ["Merge", String(mergeResult?.status || run.phase || "ready"), "taskWorkspaceMergeStatus"],
+        ["Merge failures", String(Number(task.merge_failure_count || 0)), "taskWorkspaceMergeFailures"],
       ]) {
         const dt = document.createElement("dt"); dt.textContent = label;
         const dd = document.createElement("dd"); dd.id = id; dd.textContent = value || "—";
         resultMeta.append(dt, dd);
       }
       resultCard.appendChild(resultMeta);
+
+      const fallback = workspaceResult?.delivery_fallback;
+      if (fallback && typeof fallback === "object") {
+        const fallbackDetail = document.createElement("p");
+        fallbackDetail.id = "taskWorkspaceFallback";
+        fallbackDetail.className = "task-workspace-result-detail";
+        fallbackDetail.textContent = [
+          "Fallback: " + String(fallback.mode || "worktree"),
+          String(fallback.reason || ""),
+        ].filter(Boolean).join(" · ");
+        resultCard.appendChild(fallbackDetail);
+      }
 
       if (Array.isArray(mergeResult?.conflict_files) && mergeResult.conflict_files.length) {
         const conflicts = document.createElement("p");
