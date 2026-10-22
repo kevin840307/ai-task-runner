@@ -229,14 +229,14 @@ def test_main_target_advance_fails_closed_at_validation_required(tmp_path: Path)
     assert not (repo / "result.txt").exists()
 
 
-def test_real_merge_failure_counts_once_and_dynamic_limit_falls_back_to_retained_worktree(tmp_path: Path):
+def test_real_merge_failure_over_limit_falls_back_to_retained_worktree(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
     created = _task(tasks, repo, workspace="main")
     runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
     settings = {
         "auto_workspace_policy": "busy-worktree",
-        "merge_failure_limit": 3,
+        "merge_failure_limit": 0,
         "allow_concurrent_main_tasks": False,
     }
     service = _service(
@@ -257,18 +257,7 @@ def test_real_merge_failure_counts_once_and_dynamic_limit_falls_back_to_retained
     _git(repo, "commit", "-m", "target side")
 
     runtime.update({"running": False, "completed": True})
-    first = service.reconcile(repo, created["task_id"])
-    assert first["status"] == "ongoing"
-    assert first["run"]["phase"] == "conflict"
-    assert first["merge_failure_count"] == 1
-    assert first["run"]["workspace_result"]["last_merge_failure"]["status"] == "conflict"
-
-    duplicate = service.merge(repo, created["task_id"])
-    assert duplicate["status"] == "ongoing"
-    assert duplicate["merge_failure_count"] == 1
-
-    settings["merge_failure_limit"] = 0
-    fallback = service.merge(repo, created["task_id"])
+    fallback = service.reconcile(repo, created["task_id"])
     assert fallback["status"] == "closed"
     assert fallback["run"]["phase"] == "worktree_ready"
     assert fallback["merge_failure_count"] == 1
@@ -279,8 +268,58 @@ def test_real_merge_failure_counts_once_and_dynamic_limit_falls_back_to_retained
         "mode": "isolated_worktree",
         "reason": "merge_failure_limit_exceeded",
     }
+    assert result["last_merge_failure"]["source_branch"] == started["run"]["workspace"]["task_branch"]
     assert (repo / "app.txt").read_text(encoding="utf-8") == "target side\n"
     assert (task_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
+
+
+def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    started = service.start(repo, created["task_id"], request_id="merge-recovery")
+    original_root = Path(started["run"]["workspace"]["project_root"])
+    original_branch = started["run"]["workspace"]["task_branch"]
+    (original_root / "app.txt").write_text("task side\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "target side")
+    latest_target = _git(repo, "rev-parse", "HEAD")
+
+    runtime.update({"running": False, "completed": True})
+    recovering = service.reconcile(repo, created["task_id"])
+    assert recovering["status"] == "ongoing"
+    assert recovering["run"]["phase"] == "conflict_recovery"
+    assert recovering["merge_failure_count"] == 1
+    recovery = recovering["run"]["workspace_result"]["recovery"]
+    recovery_root = Path(recovery["workspace"]["project_root"])
+    recovery_branch = recovery["workspace"]["task_branch"]
+    assert recovery_branch.startswith(f"local/recovery/{created['task_id']}-r1-f1")
+    assert recovery["workspace"]["task_base_sha"] == latest_target
+    assert recovery_root != original_root
+    assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
+    assert (recovery_root / "app.txt").read_text(encoding="utf-8") == "target side\n"
+    assert "task side" in Path(recovery["patch_path"]).read_text(encoding="utf-8")
+    assert "Merge-repair task only" in launches[-1][1]
+    assert "Original Task base SHA" in launches[-1][1]
+    assert "Committed Task snapshot SHA" in launches[-1][1]
+    assert "Latest target HEAD" in launches[-1][1]
+    assert "app.txt" in launches[-1][1]
+
+    (recovery_root / "app.txt").write_text("integrated task + target\n", encoding="utf-8")
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    result = closed["run"]["workspace_result"]
+    assert result["merge"]["status"] == "merged"
+    assert result["merge_source"]["workspace"]["task_branch"] == recovery_branch
+    assert result["merge_source"]["workspace"]["task_branch"] != original_branch
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "integrated task + target\n"
+    assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
 def test_task_run_request_is_durable_and_idempotent(tmp_path: Path):

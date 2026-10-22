@@ -119,9 +119,10 @@ class TaskRunService:
 
     def stop(self, project: Path, task_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
-        task, prepared = self._current_workspace(project, task_id)
+        task = self.tasks.get(project, task_id)
         if task.get("status") != "ongoing":
             raise ValueError("Task is not Ongoing")
+        prepared = self._runtime_workspace(task)
         self._stop_runtime(prepared.project_root)
         self.tasks.transition_run(
             project,
@@ -134,10 +135,11 @@ class TaskRunService:
 
     def resume(self, project: Path, task_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
-        task, prepared = self._current_workspace(project, task_id)
+        task = self.tasks.get(project, task_id)
         if task.get("status") != "paused":
             raise ValueError("Task is not Paused")
         run = task.get("run") or {}
+        prepared = self._runtime_workspace(task)
         if run.get("phase") == "launch_failed":
             item = task["items"][int(run.get("item_index") or 0)]
             self.tasks.transition_run(
@@ -149,49 +151,127 @@ class TaskRunService:
                 error="",
             )
             return self._launch_task(project, task_id, item, prepared)
+        if run.get("phase") == "recovery_launch_failed":
+            recovery = self._recovery_record(task)
+            prompt = str(recovery.get("prompt") or "")
+            if not prompt:
+                raise ValueError("Merge recovery prompt is missing")
+            self.tasks.transition_run(
+                project,
+                task_id,
+                prepared.run_number,
+                phase="conflict_recovery",
+                status="ongoing",
+                error="",
+            )
+            return self._launch_merge_recovery(project, task_id, prepared, prompt)
         self._resume_runtime(prepared.project_root)
-        self.tasks.transition_run(
-            project,
-            task_id,
-            prepared.run_number,
-            phase="running",
-            status="ongoing",
-            error="",
-        )
+        if self._is_recovery_workspace(task, prepared):
+            value = self._workspace_result(task)
+            recovery = dict(value.get("recovery") or {})
+            recovery["status"] = "running"
+            value["recovery"] = recovery
+            phase = "conflict_recovery"
+            self.tasks.transition_run(
+                project,
+                task_id,
+                prepared.run_number,
+                phase=phase,
+                status="ongoing",
+                error="",
+                workspace_result=value,
+            )
+        else:
+            self.tasks.transition_run(
+                project,
+                task_id,
+                prepared.run_number,
+                phase="running",
+                status="ongoing",
+                error="",
+            )
         self._ensure_watcher(project, task_id)
         return self.get(project, task_id)
 
     def merge(self, project: Path, task_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
-        task, prepared = self._current_workspace(project, task_id)
-        run = task.get("run") or {}
-        result = run.get("workspace_result") if isinstance(run.get("workspace_result"), dict) else {}
-        snapshot_data = result.get("snapshot")
-        if not isinstance(snapshot_data, dict):
-            raise ValueError("Task result has not been snapshotted")
-        snapshot = WorkspaceSnapshot(
-            task_snapshot_sha=str(snapshot_data.get("task_snapshot_sha") or ""),
-            no_changes=bool(snapshot_data.get("no_changes")),
-            created_commit=bool(snapshot_data.get("created_commit")),
-        )
+        task = self.tasks.get(project, task_id)
+        recovery = self._recovery_record(task)
+        if str(recovery.get("status") or "") in {"prepared", "running", "launch_failed", "stopped"}:
+            raise ValueError("Task merge recovery is still in progress")
+        prepared, snapshot = self._current_merge_source(task)
         return self._apply_merge(project, task_id, prepared, snapshot)
 
     def reconcile(self, project: Path, task_id: str) -> dict[str, Any]:
-        """Advance only lifecycle projection for one already-started Task Run."""
+        """Advance Task lifecycle while keeping Runner and Git orchestration separate."""
         project = Path(project).expanduser().resolve()
-        task, prepared = self._current_workspace(project, task_id)
+        task = self.tasks.get(project, task_id)
         if task.get("status") != "ongoing":
             return self.get(project, task_id)
+
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        phase = str(run.get("phase") or "")
+        if phase in {
+            "merging",
+            "pending_merge",
+            "validation_required",
+            "waiting_target_clean",
+            "waiting_target_workspace",
+            "waiting_target_branch",
+            "waiting_target_history",
+            "technical_error",
+        }:
+            prepared, snapshot = self._current_merge_source(task)
+            return self._apply_merge(project, task_id, prepared, snapshot)
+
+        prepared = self._runtime_workspace(task)
         runtime = self._read_runtime(prepared.project_root)
+        in_recovery = self._is_recovery_workspace(task, prepared)
         if runtime.get("running") or runtime.get("launching"):
-            phase = "running" if runtime.get("running") else "launching"
-            if (task.get("run") or {}).get("phase") != phase:
-                self.tasks.transition_run(project, task_id, prepared.run_number, phase=phase, status="ongoing")
+            next_phase = "conflict_recovery" if in_recovery else (
+                "running" if runtime.get("running") else "launching"
+            )
+            if phase != next_phase:
+                self.tasks.transition_run(
+                    project,
+                    task_id,
+                    prepared.run_number,
+                    phase=next_phase,
+                    status="ongoing",
+                )
             return self.get(project, task_id)
 
         if runtime.get("completed"):
-            run = task.get("run") if isinstance(task.get("run"), dict) else {}
-            current_result = run.get("workspace_result") if isinstance(run.get("workspace_result"), dict) else {}
+            current_result = self._workspace_result(task)
+            if in_recovery:
+                snapshot = self._workspaces.snapshot_result(
+                    prepared,
+                    excluded_paths=(prepared.project_root / ".ai-task-runner",),
+                )
+                recovery = dict(current_result.get("recovery") or {})
+                recovery["status"] = "completed"
+                recovery["snapshot"] = snapshot.as_dict()
+                current_result["recovery"] = recovery
+                current_result["merge_source"] = {
+                    "workspace": prepared.as_dict(),
+                    "snapshot": snapshot.as_dict(),
+                }
+                base_result = {
+                    **current_result,
+                    "effective_mode": prepared.effective_mode,
+                    "branch": prepared.task_branch,
+                    "path": str(prepared.worktree_path),
+                }
+                self.tasks.transition_run(
+                    project,
+                    task_id,
+                    prepared.run_number,
+                    phase="merging",
+                    status="ongoing",
+                    workspace_result=base_result,
+                )
+                return self._apply_merge(project, task_id, prepared, snapshot)
+
             snapshot = self._snapshot_from_result(current_result)
             if snapshot is None:
                 snapshot = self._workspaces.snapshot_result(
@@ -201,6 +281,10 @@ class TaskRunService:
             base_result = {
                 **current_result,
                 "snapshot": snapshot.as_dict(),
+                "merge_source": {
+                    "workspace": prepared.as_dict(),
+                    "snapshot": snapshot.as_dict(),
+                },
                 "effective_mode": prepared.effective_mode,
                 "branch": prepared.task_branch,
                 "path": str(prepared.worktree_path),
@@ -227,14 +311,29 @@ class TaskRunService:
             return self._apply_merge(project, task_id, prepared, snapshot)
 
         if runtime.get("resumable") or (runtime.get("actions") or {}).get("resume"):
-            self.tasks.transition_run(
-                project,
-                task_id,
-                prepared.run_number,
-                phase="stopped",
-                status="paused",
-                error=str(runtime.get("last_error") or ""),
-            )
+            if in_recovery:
+                value = self._workspace_result(task)
+                recovery = dict(value.get("recovery") or {})
+                recovery["status"] = "stopped"
+                value["recovery"] = recovery
+                self.tasks.transition_run(
+                    project,
+                    task_id,
+                    prepared.run_number,
+                    phase="recovery_stopped",
+                    status="paused",
+                    error=str(runtime.get("last_error") or ""),
+                    workspace_result=value,
+                )
+            else:
+                self.tasks.transition_run(
+                    project,
+                    task_id,
+                    prepared.run_number,
+                    phase="stopped",
+                    status="paused",
+                    error=str(runtime.get("last_error") or ""),
+                )
             return self.get(project, task_id)
 
         if runtime.get("stale") or runtime.get("has_state"):
@@ -320,6 +419,10 @@ class TaskRunService:
         current = (task.get("run") or {}).get("workspace_result")
         value = dict(current) if isinstance(current, dict) else {}
         value.setdefault("snapshot", snapshot.as_dict())
+        value.setdefault(
+            "merge_source",
+            {"workspace": prepared.as_dict(), "snapshot": snapshot.as_dict()},
+        )
         value.update({
             "effective_mode": prepared.effective_mode,
             "branch": prepared.task_branch,
@@ -352,7 +455,7 @@ class TaskRunService:
                 completed_item_count=len(task.get("items") or []),
             )
         elif result.real_merge_failure:
-            failure = self._merge_failure_record(snapshot, result)
+            failure = self._merge_failure_record(prepared, snapshot, result)
             increment = (
                 self._merge_failure_identity(value.get("last_merge_failure"))
                 != self._merge_failure_identity(failure)
@@ -377,6 +480,15 @@ class TaskRunService:
                     snapshot,
                     value,
                 )
+            return self._start_merge_recovery(
+                project,
+                task_id,
+                task,
+                prepared,
+                snapshot,
+                result,
+                value,
+            )
         else:
             self.tasks.transition_run(
                 project,
@@ -388,6 +500,174 @@ class TaskRunService:
                 error=result.detail,
             )
         return self.get(project, task_id)
+
+    def _start_merge_recovery(
+        self,
+        project: Path,
+        task_id: str,
+        task: dict[str, Any],
+        source: PreparedWorkspace,
+        snapshot: WorkspaceSnapshot,
+        failure: MergeResult,
+        value: dict[str, Any],
+    ) -> dict[str, Any]:
+        failure_number = int(task.get("merge_failure_count", 0))
+        recovery = self._workspaces.prepare_recovery(
+            source,
+            snapshot,
+            failure_number=failure_number,
+        )
+        patch = self._workspaces.recovery_patch(source, snapshot)
+        patch_path = self._write_recovery_patch(recovery, failure_number, patch)
+        prompt = self._merge_recovery_prompt(
+            task,
+            source,
+            snapshot,
+            recovery,
+            failure,
+            patch_path,
+        )
+        recovery_record = {
+            "status": "prepared",
+            "failure_number": failure_number,
+            "workspace": recovery.as_dict(),
+            "source_workspace": source.as_dict(),
+            "source_snapshot": snapshot.as_dict(),
+            "patch_path": str(patch_path),
+            "prompt": prompt,
+        }
+        value = dict(value)
+        value["recovery"] = recovery_record
+        self.tasks.transition_run(
+            project,
+            task_id,
+            recovery.run_number,
+            phase="conflict_recovery",
+            status="ongoing",
+            error="",
+            workspace_result=value,
+        )
+        return self._launch_merge_recovery(project, task_id, recovery, prompt)
+
+    def _launch_merge_recovery(
+        self,
+        source_project: Path,
+        task_id: str,
+        recovery: PreparedWorkspace,
+        prompt: str,
+    ) -> dict[str, Any]:
+        task = self.tasks.get(source_project, task_id)
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        item_index = int(run.get("item_index") or 0)
+        item = task["items"][item_index]
+        preferences = self._preferences(source_project)
+        backend = str(preferences.get("agent") or "").strip() or self._backend_default(source_project)
+        workflow = self._resolve_workflow(source_project, str(item.get("workflow") or ""))
+        mode = str(preferences.get("mode") or "auto")
+        try:
+            self._launch(
+                recovery.project_root,
+                prompt,
+                mode="run",
+                backend=backend,
+                model=str(preferences.get("model") or ""),
+                validator=self._runtime_input_path(
+                    source_project,
+                    recovery.project_root,
+                    str(item.get("validator") or ""),
+                ),
+                workflow=str(workflow),
+                goal_file=None,
+                ai_validator_prompt_file=self._ai_prompt_path(
+                    source_project,
+                    recovery,
+                    item,
+                ),
+                readonly_safety="observe" if mode == "read" else "restore",
+            )
+        except Exception as exc:
+            task = self.tasks.get(source_project, task_id)
+            value = self._workspace_result(task)
+            recovery_record = dict(value.get("recovery") or {})
+            recovery_record["status"] = "launch_failed"
+            value["recovery"] = recovery_record
+            self.tasks.transition_run(
+                source_project,
+                task_id,
+                recovery.run_number,
+                phase="recovery_launch_failed",
+                status="paused",
+                error=f"{type(exc).__name__}: {exc}",
+                workspace_result=value,
+            )
+            raise
+
+        task = self.tasks.get(source_project, task_id)
+        value = self._workspace_result(task)
+        recovery_record = dict(value.get("recovery") or {})
+        recovery_record["status"] = "running"
+        value["recovery"] = recovery_record
+        self.tasks.transition_run(
+            source_project,
+            task_id,
+            recovery.run_number,
+            phase="conflict_recovery",
+            status="ongoing",
+            error="",
+            workspace_result=value,
+        )
+        self._ensure_watcher(source_project, task_id)
+        return self.get(source_project, task_id)
+
+    @staticmethod
+    def _merge_recovery_prompt(
+        task: dict[str, Any],
+        source: PreparedWorkspace,
+        snapshot: WorkspaceSnapshot,
+        recovery: PreparedWorkspace,
+        failure: MergeResult,
+        patch_path: Path,
+    ) -> str:
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        item_index = int(run.get("item_index") or 0)
+        items = task.get("items") if isinstance(task.get("items"), list) else []
+        item = items[item_index] if 0 <= item_index < len(items) else {}
+        intent = str(item.get("prompt") or task.get("title") or "").strip()
+        conflicts = ", ".join(failure.conflict_files) or "(validation/source failure)"
+        try:
+            patch_label = patch_path.resolve().relative_to(recovery.project_root.resolve()).as_posix()
+        except ValueError:
+            patch_label = str(patch_path)
+        return (
+            "Merge-repair task only. Do not redo the original feature from scratch.\n\n"
+            f"Original Task intent:\n{intent}\n\n"
+            f"Original Task base SHA: {source.task_base_sha}\n"
+            f"Committed Task snapshot SHA: {snapshot.task_snapshot_sha}\n"
+            f"Current merge source branch: {source.task_branch}\n"
+            f"Latest target HEAD used by this recovery workspace: {recovery.task_base_sha}\n"
+            f"Conflict/source-failure files: {conflicts}\n"
+            f"Git/validation detail: {failure.detail or failure.status}\n"
+            f"Committed Task diff is stored at: {patch_label}\n\n"
+            "Work incrementally in this latest-target-based workspace. Preserve current Project changes, "
+            "port the completed Task behavior from the patch, and resolve only integration differences. "
+            "Do not replace the whole tree, re-clone, re-pull, or restart full feature development. "
+            "Read and obey AGENTS.md, DevFollow.txt, and any project-local development rules visible here. "
+            "Leave unrelated files unchanged. The normal Workflow review/validation remains authoritative."
+        )
+
+    @staticmethod
+    def _write_recovery_patch(
+        recovery: PreparedWorkspace,
+        failure_number: int,
+        patch: str,
+    ) -> Path:
+        root = recovery.project_root / ".ai-task-runner" / "ui" / "merge-recovery"
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / (
+            f"{recovery.task_id}-r{recovery.run_number}-f{int(failure_number)}.patch"
+        )
+        path.write_text(str(patch), encoding="utf-8")
+        return path
 
     def _finalize_merge_fallback(
         self,
@@ -436,12 +716,16 @@ class TaskRunService:
 
     @staticmethod
     def _merge_failure_record(
+        prepared: PreparedWorkspace,
         snapshot: WorkspaceSnapshot,
         result: MergeResult,
     ) -> dict[str, Any]:
         return {
             "status": result.status,
+            "source_branch": prepared.task_branch,
             "source_sha": snapshot.task_snapshot_sha,
+            "source_base_sha": prepared.task_base_sha,
+            "source_worktree": str(prepared.worktree_path),
             "target_head_sha": result.target_head_sha,
             "verdict": result.verdict,
             "conflict_files": list(result.conflict_files),
@@ -469,7 +753,7 @@ class TaskRunService:
             value["runner_runtime"] = {}
             return value
         try:
-            prepared = self._workspaces.restore(run["workspace"])
+            prepared = self._runtime_workspace(value)
             value["runner_runtime"] = self._read_runtime(prepared.project_root)
         except Exception as exc:
             value["runner_runtime"] = {
@@ -493,12 +777,65 @@ class TaskRunService:
             created_commit=bool(raw.get("created_commit")),
         )
 
-    def _current_workspace(self, project: Path, task_id: str) -> tuple[dict[str, Any], PreparedWorkspace]:
-        task = self.tasks.get(project, task_id)
+    @staticmethod
+    def _workspace_result(task: dict[str, Any]) -> dict[str, Any]:
+        run = task.get("run") if isinstance(task.get("run"), dict) else {}
+        result = run.get("workspace_result")
+        return dict(result) if isinstance(result, dict) else {}
+
+    def _recovery_record(self, task: dict[str, Any]) -> dict[str, Any]:
+        value = self._workspace_result(task).get("recovery")
+        return dict(value) if isinstance(value, dict) else {}
+
+    def _runtime_workspace(self, task: dict[str, Any]) -> PreparedWorkspace:
         run = task.get("run")
         if not isinstance(run, dict) or not isinstance(run.get("workspace"), dict):
             raise ValueError("Task does not have a prepared Run workspace")
-        return task, self._workspaces.restore(run["workspace"])
+        recovery = self._recovery_record(task)
+        if (
+            str(recovery.get("status") or "") in {"prepared", "running", "launch_failed", "stopped"}
+            and isinstance(recovery.get("workspace"), dict)
+        ):
+            return self._workspaces.restore_merge_source(recovery["workspace"])
+        return self._workspaces.restore(run["workspace"])
+
+    def _is_recovery_workspace(
+        self,
+        task: dict[str, Any],
+        prepared: PreparedWorkspace,
+    ) -> bool:
+        recovery = self._recovery_record(task)
+        workspace = recovery.get("workspace")
+        return (
+            isinstance(workspace, dict)
+            and str(workspace.get("task_branch") or "") == prepared.task_branch
+            and prepared.task_branch.startswith("local/recovery/")
+        )
+
+    def _current_merge_source(
+        self,
+        task: dict[str, Any],
+    ) -> tuple[PreparedWorkspace, WorkspaceSnapshot]:
+        run = task.get("run")
+        if not isinstance(run, dict) or not isinstance(run.get("workspace"), dict):
+            raise ValueError("Task does not have a prepared Run workspace")
+        result = self._workspace_result(task)
+        source = result.get("merge_source")
+        if isinstance(source, dict) and isinstance(source.get("workspace"), dict):
+            prepared = self._workspaces.restore_merge_source(source["workspace"])
+            snapshot = self._snapshot_from_result({"snapshot": source.get("snapshot")})
+            if snapshot is None:
+                raise ValueError("Current merge source snapshot is missing")
+            return prepared, snapshot
+        prepared = self._workspaces.restore(run["workspace"])
+        snapshot = self._snapshot_from_result(result)
+        if snapshot is None:
+            raise ValueError("Task result has not been snapshotted")
+        return prepared, snapshot
+
+    def _current_workspace(self, project: Path, task_id: str) -> tuple[dict[str, Any], PreparedWorkspace]:
+        task = self.tasks.get(project, task_id)
+        return task, self._runtime_workspace(task)
 
     def _main_running(self, project: Path, current_task_id: str) -> bool:
         for task in self.tasks.list(project)["tasks"]:
@@ -567,7 +904,8 @@ class TaskRunService:
                     task = self.reconcile(project, task_id)
                 except Exception as exc:
                     try:
-                        current, prepared = self._current_workspace(project, task_id)
+                        current = self.tasks.get(project, task_id)
+                        prepared = self._runtime_workspace(current)
                         self.tasks.transition_run(
                             project,
                             task_id,
@@ -583,7 +921,14 @@ class TaskRunService:
                 phase = str(run.get("phase") or "")
                 if task.get("status") != "ongoing":
                     return
-                if phase in {"validation_required", "waiting_target_history", "waiting_target_branch", "conflict", "source_fail", "technical_error"}:
+                if phase in {
+                    "validation_required",
+                    "waiting_target_history",
+                    "waiting_target_branch",
+                    "waiting_target_workspace",
+                    "waiting_target_clean",
+                    "technical_error",
+                }:
                     return
                 time.sleep(self._poll_interval)
         finally:

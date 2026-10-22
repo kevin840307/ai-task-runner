@@ -467,10 +467,13 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Task 只保存實際 merge_failure_count；Global Settings 只保存 merge_failure_limit。
     - Production Task record 只持久化 `merge_failure_count`；唯一 limit owner 是 versioned `GlobalSettingsStore.execution.merge_failure_limit`（0~99，default 3），Task schema 不複製 limit。
 [ ] 每次 real merge fail 後讀 Global merge_failure_limit：count <= limit → existing Runner 基於 latest Project branch 重做/Recovery → commit recovery branch → 原子更新 merge_source_branch / merge_source_sha / merge_source_worktree → retry direct merge；之後不可再 merge stale original Task source。
+    - Production conflict path 已接上 incremental merge-repair orchestration：real conflict 會保留 queue head、建立 latest-target recovery worktree、沿用同一 Runner/Workflow，recovery 完成 snapshot 後才切換 durable current merge source 並重試 direct merge；merge validation/SOURCE_FAIL owner 尚未接線，因此本總項暫不勾。
 [ ] merge_failure_count > Global limit → 停止 automatic Main merge，保留最新 current merge source branch/worktree，fallback=isolated_worktree，Closed · worktree_ready，reason=merge_failure_limit_exceeded。
 [ ] queue wait、merge lock busy、target dirty/unavailable、transient Git error、Runner 在下一次 merge 前失敗都不增加 merge_failure_count。
-[ ] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
-[ ] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
+[x] Recovery worktree/branch 只有真實 merge fail 且需要改 Code 才建立；不是 normal integration layer。
+    - TaskRunService 只在 MergeResult.real_merge_failure 且未超過 Global limit 時呼叫 WorkspaceManager.prepare_recovery；normal merge / queue wait / target blocked / technical_error 不建立 recovery。
+[x] Recovery Runner 必須帶 original Task intent、Task base/snapshot SHA、latest target HEAD、conflict files、Git error、Project dev rules。
+    - Merge-repair prompt 明確限制為 incremental integration repair，帶 intent/base/snapshot/current source/latest target/conflict/Git detail；完整 committed Task diff 放 recovery runtime patch file，避免把大型 diff 重複塞入 prompt。
 [x] target checkout dirty => Ongoing · waiting_target_clean / Needs Attention；不可 auto-stash/reset/discard/stage/commit 使用者修改。
     - `MergeManager` 在 target transaction 前檢查 clean status，dirty 時回 `waiting_target_clean`；Git regression 驗證使用者修改原樣保留。
 [x] captured target branch 無安全 managed worktree，或被 unmanaged/user worktree checkout => Ongoing · waiting_target_workspace / Needs Attention。
