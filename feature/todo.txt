@@ -502,8 +502,10 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Task-orchestrator restart regression 已覆蓋 durable current merge source 已成 target ancestry時直接 finalize且不重複 commit；durable FIFO queue restart保留 seq。MergeQueue 現在會在 target mutation 前持久化 transaction owner（target worktree / pre-merge HEAD / source SHA），restart 只會 abort/retry 完全吻合的殘留 MERGE_HEAD；KeyboardInterrupt crash regression 同時覆蓋 user Project target worktree，不吻合的 Git operation 仍 fail closed。
 [x] Workspace Results 顯示 Project / Task Run、target branch、source branch/path、merge_status、merge_failure_count、fallback/conflict summary。
     - 單一 Task Drawer Result card 投影 canonical Task/Run/workspace_result；新增 Project、Run/item、captured target、current source branch/path、merge failures、fallback reason，保留 conflict detail。真 Chromium conflict + merge_failure_limit_exceeded fallback fixture 已納入 CI 39779685643。
-[ ] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
-[ ] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
+[x] Board 維持 New / Ongoing / Paused / Closed；Main merge 是完成流程的一部分，不是 Closed 後的 post-processing。
+    - production Board 的唯一 lifecycle columns 是 new/ongoing/paused/closed；TaskRunService 只在 merged/no_changes/worktree_ready completion boundary 才讓最後 child 關成 Closed，pending_merge/merging/conflict_recovery/waiting_* 都維持 Ongoing。現有 Chromium lifecycle test + static contract 鎖定四欄。
+[x] UI 不新增 top-level Git Worktree 主頁；日常走 Task Info，Project Workspace Results 管 retained/fallback worktree。
+    - Primary navigation 仍只有 Tasks / Workflows / Prompts（Settings 為 panel）；Task/Workspace 結果留在單一 Task Drawer，static contract 明確禁止 worktreeNav/worktreeView/data-view=worktree。
 [ ] Remote push 是獨立 Publish action；正常 lifecycle 沒有 local push，也不自動 git push origin。
 
 

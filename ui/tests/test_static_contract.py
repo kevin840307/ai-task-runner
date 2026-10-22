@@ -9,7 +9,8 @@ class StaticContractTests(unittest.TestCase):
         self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
         self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
         self.task_workspace_js = (self.root / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
-        self.js = self.app_js + "\n" + self.generator_js + "\n" + self.task_workspace_js
+        self.tasks_board_js = (self.root / "static" / "js" / "tasks-board.js").read_text(encoding="utf-8")
+        self.js = self.app_js + "\n" + self.generator_js + "\n" + self.task_workspace_js + "\n" + self.tasks_board_js
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
 
@@ -20,6 +21,15 @@ class StaticContractTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("from runner", text, str(path))
             self.assertNotIn("import runner", text, str(path))
+
+    def test_task_board_lifecycle_and_no_top_level_worktree_contract(self):
+        self.assertIn('const LIFECYCLES = ["new", "ongoing", "paused", "closed"]', self.tasks_board_js)
+        for suffix in ("New", "Ongoing", "Paused", "Closed"):
+            self.assertIn(f'id="tasksBoard{suffix}"', self.html)
+            self.assertIn(f'id="tasksBoard{suffix}Count"', self.html)
+        self.assertNotIn('id="worktreeNav"', self.html)
+        self.assertNotIn('id="worktreeView"', self.html)
+        self.assertNotIn('data-view="worktree"', self.html)
 
     def test_primary_navigation_is_tasks_workflows_prompts_only(self):
         for token in ('id="chatNav"', 'id="workflowNav"', 'id="promptNav"'):
