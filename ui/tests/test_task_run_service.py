@@ -34,11 +34,18 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _task(service: TaskService, repo: Path, *, workspace: str) -> dict:
+def _task(
+    service: TaskService,
+    repo: Path,
+    *,
+    workspace: str,
+    request_id: str | None = None,
+    title: str = "Run me",
+) -> dict:
     return service.create(
         repo,
         {
-            "title": "Run me",
+            "title": title,
             "items": [{
                 "title": "One",
                 "prompt": "Implement one",
@@ -47,7 +54,7 @@ def _task(service: TaskService, repo: Path, *, workspace: str) -> dict:
                 "workspace": workspace,
             }],
         },
-        request_id=f"create-{workspace}",
+        request_id=request_id or f"create-{workspace}",
     )
 
 
@@ -88,6 +95,54 @@ def _service(
         poll_interval=0.05,
         auto_watch=False,
     )
+
+
+def test_concurrent_main_tasks_run_in_distinct_isolated_worktrees(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    first = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-main-a",
+        title="Main A",
+    )
+    second = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-main-b",
+        title="Main B",
+    )
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=launches,
+        stops=[],
+        resumes=[],
+        settings={
+            "auto_workspace_policy": "always-main",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": True,
+        },
+    )
+
+    running_a = service.start(repo, first["task_id"], request_id="run-main-a")
+    running_b = service.start(repo, second["task_id"], request_id="run-main-b")
+
+    workspace_a = running_a["run"]["workspace"]
+    workspace_b = running_b["run"]["workspace"]
+    assert running_a["status"] == running_b["status"] == "ongoing"
+    assert workspace_a["effective_mode"] == workspace_b["effective_mode"] == "main"
+    assert workspace_a["target_branch"] == workspace_b["target_branch"] == "main"
+    assert workspace_a["task_branch"] != workspace_b["task_branch"]
+    assert workspace_a["project_root"] != workspace_b["project_root"]
+    assert launches[0][0] == Path(workspace_a["project_root"])
+    assert launches[1][0] == Path(workspace_b["project_root"])
+    assert not (repo / "result.txt").exists()
 
 
 def test_task_run_worktree_closes_as_worktree_ready_without_touching_project(tmp_path: Path):
