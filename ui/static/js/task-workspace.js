@@ -1225,11 +1225,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       remove.disabled = true;
       remove.title = lifecycleStatus === "new"
         ? "Retained Task Run history/workspaces must be cleaned up before deletion"
-        : "Only untouched New Tasks can be deleted safely";
+        : "Only New Tasks can be deleted safely";
       restrictions.push(
         lifecycleStatus === "new"
           ? "Delete is unavailable because retained Task Run history/workspaces still exist."
-          : "Delete is unavailable while this Task has runtime or lifecycle state. Only untouched New Tasks can be deleted safely."
+          : "Delete is unavailable while this Task has runtime or lifecycle state. Only New Tasks can be deleted safely."
       );
     }
     actions.appendChild(remove);

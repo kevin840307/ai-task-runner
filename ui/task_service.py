@@ -398,7 +398,7 @@ class TaskService:
                 raise ValueError("Task does not exist")
             task = state["tasks"][index]
             if task.get("status") != "new" or task.get("run") or task.get("history"):
-                raise ValueError("Only untouched New Tasks can be deleted safely; cleanup retained runtime state first")
+                raise ValueError("Only New Tasks can be deleted safely; retained runtime/history must be cleaned up first")
             state["tasks"].pop(index)
             state["delete_requests"][request] = task_key
             while len(state["delete_requests"]) > DELETE_REQUEST_LIMIT:
