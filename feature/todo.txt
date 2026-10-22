@@ -619,7 +619,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - `test_project_chat_turn_http_uses_project_preferences_without_runner_task` 先以 HTTP Chat 成功再注入 Agent backend failure，逐 byte 驗證 `.ai-task-runner/state.json` / `runner-process.json` / `stop.request` 完全不變；既有 UIServer reopen regression 同樣鎖住 restart ownership。2026-10-21 CI Windows/Linux pytest PASS。
 [x] 所有新服務加入 bounded logs、request correlation ID、明確 timeout 與 deterministically testable return values。
     - Chat Agent 與 TaskDraft subprocess 皆有共用 timeout/grace + bounded error contract；TaskDraft contract 放在 Runner-free `tool/task_draft_contract.py`。POST error envelope 沿用 request_id；Task upload stage/cancel 也重用現有 newRequestId()，API regression 驗證 correlation。service/unit tests 覆蓋 timeout、oversized stderr、idempotent/deterministic return。
-[ ] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
+[x] 若要修改 Runner runtime contract，先補文件與測試，再接 UI；不要只用 Prototype 行為當作契約。
+    - 唯一新增的 Runner public extension 是 Git-unaware validate_only()；runner/README 已記錄 contract，tests/test_integration_api.py 覆蓋 PASS/SOURCE_FAIL/source mutation→TECHNICAL_ERROR，tests/test_workspace_architecture.py 繼續禁止 Runner import top-level workspace。UI/Task 只經 public API callback 使用，prototype 未被當成 runtime contract。
 
 
 16. 測試策略與驗收
