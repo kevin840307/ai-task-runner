@@ -439,8 +439,11 @@ class TaskService:
                     raise ValueError("request_id belongs to another Task lifecycle action")
                 return {**self._project_task(task), "duplicate": True}
 
-            if task.get("status") not in {"paused", "closed"}:
-                raise ValueError("Task must be Paused or Closed before Reset/Rerun")
+            status = str(task.get("status") or "")
+            if lifecycle_action == "reset" and status != "paused":
+                raise ValueError("Task must be Paused before Reset")
+            if lifecycle_action == "rerun" and status not in {"paused", "closed"}:
+                raise ValueError("Task must be Paused or Closed before Rerun")
 
             now = time.time()
             current_run = task.get("run")

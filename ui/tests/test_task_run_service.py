@@ -413,6 +413,32 @@ def test_restart_finalizes_already_merged_current_source_without_duplicate_commi
     assert _git(repo, "rev-list", "--count", "HEAD") == before_count
 
 
+def test_task_lifecycle_guards_reject_invalid_status_before_git_side_effects(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-lifecycle-guard")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    with pytest.raises(ValueError, match="Paused before Reset"):
+        service.reset(repo, created["task_id"], request_id="invalid-reset-new")
+    with pytest.raises(ValueError, match="Paused or Closed before Rerun"):
+        service.rerun(repo, created["task_id"], request_id="invalid-rerun-new")
+
+    started = service.start(repo, created["task_id"], request_id="guard-run")
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+    assert closed["status"] == "closed"
+    retained = Path(started["run"]["workspace"]["worktree_path"])
+
+    with pytest.raises(ValueError, match="Paused before Reset"):
+        service.reset(repo, created["task_id"], request_id="invalid-reset-closed")
+    unchanged = tasks.get(repo, created["task_id"])
+    assert unchanged["status"] == "closed"
+    assert unchanged["run"]["run_number"] == 1
+    assert retained.is_dir()
+
+
 def test_paused_reset_returns_task_to_new_and_retains_archived_workspace(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})

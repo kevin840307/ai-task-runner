@@ -201,6 +201,8 @@ class TaskRunService:
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
         task = self.tasks.get(project, task_id)
+        if task.get("status") != "paused":
+            raise ValueError("Task must be Paused before Reset")
         self._release_abandoned_merge_slot(task)
         self.tasks.reset_to_new(
             project,
@@ -219,6 +221,8 @@ class TaskRunService:
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
         task = self.tasks.get(project, task_id)
+        if task.get("status") not in {"paused", "closed"}:
+            raise ValueError("Task must be Paused or Closed before Rerun")
         self._release_abandoned_merge_slot(task)
         self.tasks.reset_to_new(
             project,
