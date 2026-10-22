@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from workspace import MergeManager, PreparedWorkspace, WorkspaceManager, WorkspaceSnapshot
+from workspace import MergeManager, MergeResult, PreparedWorkspace, WorkspaceManager, WorkspaceSnapshot
 
 try:
     from .task_service import TaskService
@@ -316,7 +316,6 @@ class TaskRunService:
         prepared: PreparedWorkspace,
         snapshot: WorkspaceSnapshot,
     ) -> dict[str, Any]:
-        result = self._merges.merge(prepared, snapshot, validate=None)
         task = self.tasks.get(project, task_id)
         current = (task.get("run") or {}).get("workspace_result")
         value = dict(current) if isinstance(current, dict) else {}
@@ -325,8 +324,23 @@ class TaskRunService:
             "effective_mode": prepared.effective_mode,
             "branch": prepared.task_branch,
             "path": str(prepared.worktree_path),
-            "merge": result.as_dict(),
         })
+
+        if (
+            int(task.get("merge_failure_count", 0)) > self._merge_failure_limit()
+            and isinstance(value.get("last_merge_failure"), dict)
+        ):
+            return self._finalize_merge_fallback(
+                project,
+                task_id,
+                task,
+                prepared,
+                snapshot,
+                value,
+            )
+
+        result = self._merges.merge(prepared, snapshot, validate=None)
+        value["merge"] = result.as_dict()
         if result.status in {"merged", "no_changes"}:
             self.tasks.transition_run(
                 project,
@@ -338,16 +352,31 @@ class TaskRunService:
                 completed_item_count=len(task.get("items") or []),
             )
         elif result.real_merge_failure:
-            self.tasks.transition_run(
+            failure = self._merge_failure_record(snapshot, result)
+            increment = (
+                self._merge_failure_identity(value.get("last_merge_failure"))
+                != self._merge_failure_identity(failure)
+            )
+            value["last_merge_failure"] = failure
+            task = self.tasks.transition_run(
                 project,
                 task_id,
                 prepared.run_number,
                 phase=result.status,
-                status="paused",
+                status="ongoing",
                 workspace_result=value,
-                increment_merge_failure=True,
+                increment_merge_failure=increment,
                 error=result.detail,
             )
+            if int(task.get("merge_failure_count", 0)) > self._merge_failure_limit():
+                return self._finalize_merge_fallback(
+                    project,
+                    task_id,
+                    task,
+                    prepared,
+                    snapshot,
+                    value,
+                )
         else:
             self.tasks.transition_run(
                 project,
@@ -359,6 +388,79 @@ class TaskRunService:
                 error=result.detail,
             )
         return self.get(project, task_id)
+
+    def _finalize_merge_fallback(
+        self,
+        project: Path,
+        task_id: str,
+        task: dict[str, Any],
+        prepared: PreparedWorkspace,
+        snapshot: WorkspaceSnapshot,
+        value: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._merges.release_merge_slot(prepared, snapshot)
+        fallback = dict(value)
+        merge = dict(fallback.get("merge") or {})
+        attempt_status = str(merge.get("attempt_status") or merge.get("status") or "")
+        merge.update({
+            "status": "worktree_ready",
+            "attempt_status": attempt_status,
+            "detail": str(merge.get("detail") or ""),
+        })
+        fallback["merge"] = merge
+        fallback["delivery_fallback"] = {
+            "mode": "isolated_worktree",
+            "reason": "merge_failure_limit_exceeded",
+        }
+        self.tasks.transition_run(
+            project,
+            task_id,
+            prepared.run_number,
+            phase="worktree_ready",
+            status="closed",
+            workspace_result=fallback,
+            completed_item_count=len(task.get("items") or []),
+            error=str(merge.get("detail") or ""),
+        )
+        return self.get(project, task_id)
+
+    def _merge_failure_limit(self) -> int:
+        settings = self._execution_settings()
+        try:
+            limit = int(settings.get("merge_failure_limit", 3))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Global merge_failure_limit is invalid") from exc
+        if limit < 0 or limit > 99:
+            raise ValueError("Global merge_failure_limit is out of range")
+        return limit
+
+    @staticmethod
+    def _merge_failure_record(
+        snapshot: WorkspaceSnapshot,
+        result: MergeResult,
+    ) -> dict[str, Any]:
+        return {
+            "status": result.status,
+            "source_sha": snapshot.task_snapshot_sha,
+            "target_head_sha": result.target_head_sha,
+            "verdict": result.verdict,
+            "conflict_files": list(result.conflict_files),
+            "merge_queue_seq": result.merge_queue_seq,
+            "detail": result.detail,
+        }
+
+    @staticmethod
+    def _merge_failure_identity(value: Any) -> tuple[Any, ...]:
+        if not isinstance(value, dict):
+            return ()
+        conflicts = value.get("conflict_files")
+        return (
+            str(value.get("status") or ""),
+            str(value.get("source_sha") or ""),
+            str(value.get("target_head_sha") or ""),
+            str(value.get("verdict") or ""),
+            tuple(str(item) for item in conflicts) if isinstance(conflicts, list) else (),
+        )
 
     def _project_runtime(self, project: Path, task: dict[str, Any]) -> dict[str, Any]:
         value = dict(task)

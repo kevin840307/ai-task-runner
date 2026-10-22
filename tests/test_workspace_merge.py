@@ -341,6 +341,34 @@ def test_concurrent_main_merge_queue_is_durable_fifo_and_prevents_overtake(tmp_p
     assert (repo / "b.txt").read_text(encoding="utf-8") == "task b\n"
 
 
+def test_failed_queue_head_can_be_released_for_fallback_without_blocking_next_task(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager_a, prepared_a = _task(repo, "a")
+    manager_b, prepared_b = _task(repo, "b")
+
+    (prepared_a.worktree_path / "app.txt").write_text("task a side\n", encoding="utf-8")
+    snapshot_a = manager_a.snapshot_result(prepared_a)
+    (prepared_b.worktree_path / "b.txt").write_text("task b\n", encoding="utf-8")
+    snapshot_b = manager_b.snapshot_result(prepared_b)
+
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "advance target with conflict")
+
+    blocked = MergeManager().merge(prepared_a, snapshot_a, validate=lambda _project: "PASS")
+    waiting = MergeManager().merge(prepared_b, snapshot_b, validate=lambda _project: "PASS")
+    assert blocked.status == "conflict"
+    assert waiting.status == "pending_merge"
+
+    manager = MergeManager()
+    assert manager.release_merge_slot(prepared_a, snapshot_a) is True
+    assert manager.release_merge_slot(prepared_a, snapshot_a) is False
+
+    delivered = manager.merge(prepared_b, snapshot_b, validate=lambda _project: "PASS")
+    assert delivered.status == "merged"
+    assert (repo / "b.txt").read_text(encoding="utf-8") == "task b\n"
+
+
 def test_merge_queue_assigns_stable_fifo_sequence_to_multiple_main_tasks(tmp_path: Path):
     repo = _repo(tmp_path)
     prepared = []

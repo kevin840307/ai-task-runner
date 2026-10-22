@@ -70,6 +70,13 @@ class MergeQueue:
 
     def complete(self, entry: MergeQueueEntry) -> None:
         """Remove only the current queue head; retries are idempotent."""
+        self._release(entry.task_id, entry.run_number, expected_seq=entry.seq)
+
+    def release_head(self, *, task_id: str, run_number: int) -> bool:
+        """Release one abandoned/fallback head without creating a new queue entry."""
+        return self._release(str(task_id), int(run_number), expected_seq=None)
+
+    def _release(self, task_id: str, run_number: int, *, expected_seq: int | None) -> bool:
         with merge_queue_lock(self.repo, self.target_branch):
             state = self._load()
             entries = state["entries"]
@@ -77,17 +84,18 @@ class MergeQueue:
                 (
                     i
                     for i, raw in enumerate(entries)
-                    if raw["task_id"] == entry.task_id and raw["run_number"] == entry.run_number
+                    if raw["task_id"] == task_id and raw["run_number"] == run_number
                 ),
                 -1,
             )
             if index < 0:
-                return
+                return False
             raw = entries[index]
-            if index != 0 or raw["seq"] != entry.seq:
+            if index != 0 or (expected_seq is not None and raw["seq"] != expected_seq):
                 raise WorkspaceError("Cannot complete a non-head merge queue entry")
             entries.pop(0)
             self._write(state)
+            return True
 
     @staticmethod
     def _entry(raw: dict[str, Any]) -> MergeQueueEntry:

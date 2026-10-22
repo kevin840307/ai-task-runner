@@ -199,6 +199,28 @@ def _transaction_owned(
 class MergeManager:
     """One direct merge transaction owner; orchestration/recovery stays outside."""
 
+    def release_merge_slot(
+        self,
+        prepared: PreparedWorkspace,
+        snapshot: WorkspaceSnapshot,
+    ) -> bool:
+        """Release a retained queue head after the caller durably chooses fallback."""
+        repo = prepared.repository_root.resolve()
+        if repository_identity(repo) != prepared.repository_identity.resolve():
+            raise WorkspaceError("Workspace repository identity changed before queue release")
+        verify_worktree(
+            repo,
+            prepared.worktree_path,
+            expected_branch=prepared.task_branch,
+            expected_base_sha=prepared.task_base_sha,
+        )
+        if branch_head(repo, prepared.task_branch) != snapshot.task_snapshot_sha:
+            raise WorkspaceError("Task snapshot no longer matches Task branch HEAD")
+        return MergeQueue(repo, prepared.target_branch).release_head(
+            task_id=prepared.task_id,
+            run_number=prepared.run_number,
+        )
+
     def merge(
         self,
         prepared: PreparedWorkspace,
