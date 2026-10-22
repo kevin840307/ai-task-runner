@@ -16,7 +16,7 @@ Explicit Task Create / Run
   -> Task service / Runner public boundary
 ```
 
-Ordinary Chat never creates or starts a Runner Task. The future Workspace/Merge layer is intentionally not part of this API until the final worktree phase.
+Ordinary Chat never infers Runner execution intent or creates a Task. The explicit `@goal` command is the exception by design: it calls one backend-owned idempotent create-then-run action, which reuses the canonical Task service, Workspace resolver, and TaskRunService. `@task*` remains Draft/Review/Create only.
 
 ## Durable identity and state
 
@@ -35,6 +35,7 @@ Chat state is stored per Project under `.ai-task-runner/ui/chat/`. Message histo
 | Ask read/submit/cancel | `/api/chat/ask`, `/api/chat/ask/*` |
 | Durable event cursor | `/api/chat/events` |
 | TaskDraft generate/update/dismiss | `/api/chat/task-draft*` |
+| Explicit Quick Goal create + run | `/api/tasks/goal` |
 | Project Agent/Model/Mode/Reasoning/Workflow | Project preferences + backend capability/catalog APIs |
 
 The event feed is bounded durable polling because the existing UI already owns non-overlapping polling. It does not introduce a second SSE/WebSocket connection manager, and Chat events remain separate from Runner runtime events.
