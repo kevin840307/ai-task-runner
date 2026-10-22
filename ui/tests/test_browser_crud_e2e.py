@@ -867,9 +867,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.click("#taskWorkspaceResetTask")
             page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function(
-                "() => document.querySelector('#taskWorkspaceEyebrow')?.textContent?.includes('NEW')"
-            )
+            page.wait_for_function("!document.querySelector('#taskWorkspaceResetTask')")
             assert state.tasks.get(root, paused["task_id"])["status"] == "new"
             page.click("#taskWorkspaceClose")
             page.locator("#tasksBoardNew .tasks-board-card").filter(
