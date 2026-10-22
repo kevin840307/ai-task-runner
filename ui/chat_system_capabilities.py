@@ -22,9 +22,9 @@ SYSTEM_COMMANDS = (
         "kind": "runner_command",
         "source": "Runner",
         "user_invocable": True,
-        "enabled": False,
+        "enabled": True,
         "permission": "explicit",
-        "availability": "workspace_phase_pending",
+        "availability": "available",
     },
     {
         "token": "@task",
