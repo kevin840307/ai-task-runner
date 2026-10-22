@@ -139,6 +139,23 @@ def _cleanup_delivery(repo: Path, path: Path, branch: str) -> str:
         return str(exc)
 
 
+def _target_has_source_changes(prepared: PreparedWorkspace, target: Path) -> bool:
+    """Ignore only AI Task Runner runtime state; keep real Project metadata dirty."""
+    project = _target_project(prepared, target)
+    runtime_state = (project / ".ai-task-runner").relative_to(target).as_posix()
+    result = git(
+        target,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--",
+        ".",
+        f":(exclude){runtime_state}",
+        f":(exclude){runtime_state}/**",
+    )
+    return bool(result.stdout)
+
+
 def _abort_owned_merge(target: Path, source_sha: str) -> None:
     merge_head = git(target, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False)
     if merge_head.returncode != 0:
@@ -286,7 +303,7 @@ class MergeManager:
                             detail="Target worktree has an active Git operation: " + ", ".join(operations),
                         )
 
-                if git(target, "status", "--porcelain=v1", "-z").stdout:
+                if _target_has_source_changes(prepared, target):
                     return queued_result(
                         status="waiting_target_clean",
                         target_head_sha=target_head,

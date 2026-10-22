@@ -190,6 +190,25 @@ def test_real_git_conflict_aborts_and_reports_conflicting_files(tmp_path: Path):
     assert _git(repo, "status", "--porcelain") == ""
 
 
+def test_runner_runtime_state_does_not_make_target_dirty_but_policy_file_still_does(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+
+    runtime_state = repo / ".ai-task-runner" / "ui"
+    runtime_state.mkdir(parents=True)
+    (runtime_state / "tasks.json").write_text('{"tasks": []}\n', encoding="utf-8")
+
+    delivered = MergeManager().merge(prepared, snapshot)
+    assert delivered.status == "merged"
+    assert (repo / "task.txt").read_text(encoding="utf-8") == "task a\n"
+
+    _, prepared_b, snapshot_b = _snapshot_with_file(repo, "b")
+    (repo / ".ai-task-runner.yaml").write_text("protected_paths: []\n", encoding="utf-8")
+    blocked = MergeManager().merge(prepared_b, snapshot_b)
+    assert blocked.status == "waiting_target_clean"
+    assert (repo / ".ai-task-runner.yaml").read_text(encoding="utf-8") == "protected_paths: []\n"
+
+
 def test_dirty_captured_target_checkout_waits_without_stash_or_reset(tmp_path: Path):
     repo = _repo(tmp_path)
     _, prepared, snapshot = _snapshot_with_file(repo)

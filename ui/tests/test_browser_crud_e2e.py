@@ -120,6 +120,16 @@ def _write_fixture_repo(root: Path) -> UIState:
         "def ai_rules(root): return ''\n",
         encoding="utf-8",
     )
+    (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+        "stages:\n"
+        "  execute:\n"
+        "    type: base\n"
+        "    profile: execute\n"
+        "    prompt: common/execution.md\n"
+        "flow:\n"
+        "  - execute\n",
+        encoding="utf-8",
+    )
     (root / "tool" / "workflow_dryrun.py").write_text(
         "import json; print(json.dumps({'closed':True,'valid':True,'paths_passed':1,'paths_total':1}))\n",
         encoding="utf-8",
