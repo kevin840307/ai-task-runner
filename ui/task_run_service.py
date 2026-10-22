@@ -200,6 +200,16 @@ class TaskRunService:
         request_id: str,
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
+        request = str(request_id or "").strip()
+        existing = self.tasks.lifecycle_request(project, request)
+        if existing is not None:
+            if (
+                str(existing.get("task_id") or "") != str(task_id or "").strip()
+                or str(existing.get("action") or "") != "reset"
+            ):
+                raise ValueError("request_id belongs to another Task lifecycle action")
+            return self.get(project, task_id)
+
         task = self.tasks.get(project, task_id)
         if task.get("status") != "paused":
             raise ValueError("Task must be Paused before Reset")
@@ -207,7 +217,7 @@ class TaskRunService:
         self.tasks.reset_to_new(
             project,
             task_id,
-            request_id=request_id,
+            request_id=request,
             action="reset",
         )
         return self.get(project, task_id)
@@ -220,6 +230,24 @@ class TaskRunService:
         request_id: str,
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
+        request = str(request_id or "").strip()
+        run_request_id = "task-rerun-" + hashlib.sha256(
+            request.encode("utf-8")
+        ).hexdigest()
+        existing = self.tasks.lifecycle_request(project, request)
+        if existing is not None:
+            if (
+                str(existing.get("task_id") or "") != str(task_id or "").strip()
+                or str(existing.get("action") or "") != "rerun"
+            ):
+                raise ValueError("request_id belongs to another Task lifecycle action")
+            if self.tasks.run_request(project, run_request_id) is not None:
+                return self.get(project, task_id)
+            task = self.tasks.get(project, task_id)
+            if task.get("status") != "new":
+                return self.get(project, task_id)
+            return self.start(project, task_id, request_id=run_request_id)
+
         task = self.tasks.get(project, task_id)
         if task.get("status") not in {"paused", "closed"}:
             raise ValueError("Task must be Paused or Closed before Rerun")
@@ -227,12 +255,9 @@ class TaskRunService:
         self.tasks.reset_to_new(
             project,
             task_id,
-            request_id=request_id,
+            request_id=request,
             action="rerun",
         )
-        run_request_id = "task-rerun-" + hashlib.sha256(
-            str(request_id or "").encode("utf-8")
-        ).hexdigest()
         return self.start(project, task_id, request_id=run_request_id)
 
     def merge(self, project: Path, task_id: str) -> dict[str, Any]:

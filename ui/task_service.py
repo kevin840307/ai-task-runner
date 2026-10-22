@@ -473,6 +473,15 @@ class TaskService:
             self._write(project, state)
             return {**self._project_task(task), "duplicate": False}
 
+    def lifecycle_request(self, project: Path, request_id: str) -> dict[str, Any] | None:
+        """Return one durable Reset/Rerun request without mutating Task state."""
+        request = str(request_id or "").strip()
+        if not request:
+            return None
+        with self._lock:
+            value = self._load(project)["lifecycle_requests"].get(request)
+            return deepcopy(value) if isinstance(value, dict) else None
+
     def run_request(self, project: Path, request_id: str) -> dict[str, Any] | None:
         """Return the durable Task Run bound to one idempotency key, if any."""
         request = str(request_id or "").strip()

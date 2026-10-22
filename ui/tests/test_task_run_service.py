@@ -413,6 +413,41 @@ def test_restart_finalizes_already_merged_current_source_without_duplicate_commi
     assert _git(repo, "rev-list", "--count", "HEAD") == before_count
 
 
+def test_rerun_request_recovers_when_lifecycle_reset_was_durable_before_start(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="worktree", request_id="create-rerun-gap")
+    runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    launches = []
+    service = _service(tasks, repo, runtime=runtime, launches=launches, stops=[], resumes=[])
+
+    service.start(repo, created["task_id"], request_id="rerun-gap-first")
+    runtime.update({"running": False, "completed": True})
+    assert service.reconcile(repo, created["task_id"])["status"] == "closed"
+
+    tasks.reset_to_new(
+        repo,
+        created["task_id"],
+        request_id="rerun-gap-lifecycle",
+        action="rerun",
+    )
+    assert tasks.get(repo, created["task_id"])["status"] == "new"
+    assert tasks.run_request(
+        repo,
+        "task-rerun-" + __import__("hashlib").sha256(b"rerun-gap-lifecycle").hexdigest(),
+    ) is None
+
+    runtime.update({"running": True, "completed": False})
+    resumed = service.rerun(
+        repo,
+        created["task_id"],
+        request_id="rerun-gap-lifecycle",
+    )
+    assert resumed["status"] == "ongoing"
+    assert resumed["run_count"] == 2
+    assert len(launches) == 2
+
+
 def test_task_lifecycle_guards_reject_invalid_status_before_git_side_effects(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
