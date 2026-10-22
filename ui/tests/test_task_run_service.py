@@ -444,7 +444,7 @@ def test_paused_reset_returns_task_to_new_and_retains_archived_workspace(tmp_pat
     duplicate = service.reset(repo, created["task_id"], request_id="reset-lifecycle-1")
     assert duplicate["status"] == "new"
     assert len(duplicate["history"]) == 1
-    with pytest.raises(ValueError, match="untouched New Tasks"):
+    with pytest.raises(ValueError, match="Only New Tasks"):
         tasks.delete(repo, created["task_id"], request_id="delete-retained-reset")
 
 
