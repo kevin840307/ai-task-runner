@@ -68,7 +68,12 @@ class TaskRunService:
 
     def start(self, project: Path, task_id: str, *, request_id: str) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
-        existing = self.tasks.run_request(project, request_id)
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+        existing = self.tasks.run_request(project, request)
         if existing is not None:
             if str(existing.get("task_id") or "") != str(task_id or "").strip():
                 raise ValueError("request_id belongs to another Task")
@@ -108,7 +113,7 @@ class TaskRunService:
         attached = self.tasks.begin_run(
             project,
             task_id,
-            request_id=request_id,
+            request_id=request,
             workspace=prepared.as_dict(),
         )
         if attached.get("duplicate"):
@@ -201,6 +206,10 @@ class TaskRunService:
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
         request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
         existing = self.tasks.lifecycle_request(project, request)
         if existing is not None:
             if (
@@ -231,6 +240,10 @@ class TaskRunService:
     ) -> dict[str, Any]:
         project = Path(project).expanduser().resolve()
         request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
         run_request_id = "task-rerun-" + hashlib.sha256(
             request.encode("utf-8")
         ).hexdigest()

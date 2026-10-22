@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -122,6 +123,22 @@ def _service(
         poll_interval=0.05,
         auto_watch=False,
     )
+
+
+def test_invalid_run_request_is_rejected_before_workspace_creation(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(tasks, repo, workspace="main", request_id="create-request-guard")
+    runtime = {"running": False, "launching": False, "completed": False, "resumable": False, "actions": {}}
+    service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
+
+    with pytest.raises(ValueError, match="request_id is required"):
+        service.start(repo, created["task_id"], request_id="")
+
+    branches = _git(repo, "branch", "--format=%(refname:short)").splitlines()
+    assert not [name for name in branches if name.startswith("local/task/")]
+    worktree_root = repo.parent / "worktrees"
+    assert not worktree_root.exists() or not any(worktree_root.iterdir())
 
 
 def test_task_list_runs_children_in_order_with_distinct_run_workspaces(tmp_path: Path):
@@ -434,7 +451,7 @@ def test_rerun_request_recovers_when_lifecycle_reset_was_durable_before_start(tm
     assert tasks.get(repo, created["task_id"])["status"] == "new"
     assert tasks.run_request(
         repo,
-        "task-rerun-" + __import__("hashlib").sha256(b"rerun-gap-lifecycle").hexdigest(),
+        "task-rerun-" + hashlib.sha256(b"rerun-gap-lifecycle").hexdigest(),
     ) is None
 
     runtime.update({"running": True, "completed": False})
