@@ -293,6 +293,22 @@ def test_already_merged_source_finalizes_idempotently_without_duplicate_merge(tm
     assert _git(repo, "rev-list", "--count", "HEAD") == count
 
 
+def test_restart_does_not_abort_unowned_same_source_merge(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    before = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "merge", "--no-ff", "--no-commit", prepared.task_branch)
+    assert _git(repo, "rev-parse", "MERGE_HEAD") == snapshot.task_snapshot_sha
+
+    result = MergeManager().merge(prepared, snapshot)
+
+    assert result.status == "waiting_target_workspace"
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert _git(repo, "rev-parse", "MERGE_HEAD") == snapshot.task_snapshot_sha
+    _git(repo, "merge", "--abort")
+    assert _git(repo, "status", "--porcelain") == ""
+
+
 def test_restart_reconciles_owned_unfinished_merge_in_project_checkout(tmp_path: Path):
     repo = _repo(tmp_path)
     _, prepared, snapshot = _snapshot_with_file(repo)
