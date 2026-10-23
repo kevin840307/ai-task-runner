@@ -521,6 +521,11 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "height:55px" in workspace
     assert "padding:14px 16px" in workspace
     assert "width:30px;height:30px" in workspace
+    assert "width:250px" in workspace
+    assert ".task-create-menu-icon" in workspace
+    task_workspace_js = (static / "js" / "task-workspace.js").read_text(encoding="utf-8")
+    assert "task-create-menu-icon" in task_workspace_js
+    assert "rect.right - width" in task_workspace_js
 
 
 def test_global_settings_sidebar_uses_one_icon_and_plain_copy():

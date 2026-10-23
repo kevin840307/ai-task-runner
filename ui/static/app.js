@@ -427,6 +427,23 @@ async function withButtonBusy(button, busyLabel, action) {
 const confirmDialog = (options) => window.UiDialogs.confirm(options);
 const inputDialog = (options) => window.UiDialogs.input(options);
 const choiceDialog = (options) => window.UiDialogs.choice(options);
+
+async function openTaskCreateMenuFromAnchor(anchor, projectPath = state.project?.path || "") {
+  const target = anchor instanceof HTMLElement ? anchor : $("tasksNewButton");
+  const requestedProject = String(projectPath || "").trim();
+  await withButtonBusy(target, "", async () => {
+    await refreshStudioFiles({ projectPath: requestedProject });
+    if (!sameProjectPath(state.project?.path || "", requestedProject)) return;
+    taskWorkspace.openCreateMenu({
+      anchor: target,
+      project: requestedProject,
+      workflows: state.studioFiles.workflows || [],
+      prompts: state.studioFiles.prompts || [],
+      workflow: currentProjectPreferences().workflow || "",
+    });
+  });
+}
+
 let tasksBoard = null;
 let projectChat = null;
 const taskWorkspace = createTaskWorkspaceController({
@@ -482,6 +499,7 @@ tasksBoard = createTasksBoardController({
   openTask: openBoardTask,
   getProjects: () => state.projects,
   getCurrentProject: () => state.project,
+  openCreateMenu: (anchor) => openTaskCreateMenuFromAnchor(anchor),
   confirmDialog,
   showToast,
   showError: showActionError,
@@ -2322,20 +2340,8 @@ $("emptyOpenProjectButton").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("tasks");
-$("tasksNewButton").onclick = async (event) => {
-  const anchor = event.currentTarget;
-  const projectPath = state.project?.path || "";
-  await withButtonBusy(anchor, "", async () => {
-    await refreshStudioFiles({ projectPath });
-    if (!sameProjectPath(state.project?.path || "", projectPath)) return;
-    taskWorkspace.openCreateMenu({
-      anchor,
-      project: projectPath,
-      workflows: state.studioFiles.workflows || [],
-      prompts: state.studioFiles.prompts || [],
-      workflow: currentProjectPreferences().workflow || "",
-    });
-  });
+$("tasksNewButton").onclick = (event) => {
+  void openTaskCreateMenuFromAnchor(event.currentTarget);
 };
 $("tasksCurrentRuntimeButton").onclick = () => switchView("tasks-runtime");
 $("tasksRuntimeBackButton").onclick = () => switchView("tasks");

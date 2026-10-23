@@ -42,12 +42,15 @@
 .task-workspace-info-actions button:disabled{cursor:not-allowed;opacity:.55}
 
 
-.task-create-menu{position:fixed;z-index:95;width:220px;padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 14px 34px color-mix(in srgb,var(--text) 16%,transparent)}
+.task-create-menu{position:fixed;z-index:260;width:250px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--popover-bg,var(--panel));box-shadow:var(--shadow-popover)}
 .task-create-menu[hidden]{display:none}
-.task-create-menu button{display:flex;width:100%;min-height:46px;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:var(--text);text-align:left;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px}
+.task-create-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left}
+.task-create-menu button+button{margin-top:2px}
 .task-create-menu button:hover,.task-create-menu button:focus-visible{background:var(--accent-soft);outline:none}
-.task-create-menu button strong{font-size:11px}
-.task-create-menu button small{color:var(--muted);font-size:9px}
+.task-create-menu-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:900}
+.task-create-menu-copy{min-width:0}
+.task-create-menu button strong{display:block;font-size:9px}
+.task-create-menu button small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.35}
 .project-chat-new-task{min-height:28px;padding:4px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text);font-size:10px;font-weight:800}
 
 /* The Task shell stays modal over the workspace, but the active Project action

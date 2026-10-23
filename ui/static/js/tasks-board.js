@@ -6,7 +6,7 @@ function pathKey(value) {
   return (/^[A-Za-z]:\//.test(text) || text.startsWith("//")) ? text.toLowerCase() : text;
 }
 
-export function createTasksBoardController({ api, openTask, getProjects, getCurrentProject, confirmDialog, showToast, showError }) {
+export function createTasksBoardController({ api, openTask, openCreateMenu, getProjects, getCurrentProject, confirmDialog, showToast, showError }) {
   let selected = new Set();
   let initialized = false;
   let tasks = [];
@@ -375,7 +375,13 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
       runningOnly = !runningOnly;
       render();
     });
-    byId("tasksNewColumnButton")?.addEventListener("click", () => byId("tasksNewButton")?.click());
+    byId("tasksNewColumnButton")?.addEventListener("click", (event) => {
+      if (typeof openCreateMenu === "function") {
+        void openCreateMenu(event.currentTarget);
+        return;
+      }
+      byId("tasksNewButton")?.click();
+    });
     document.querySelectorAll(".tasks-board-column").forEach((column) => {
       const zone = column.querySelector(".tasks-board-dropzone");
       if (!zone) return;

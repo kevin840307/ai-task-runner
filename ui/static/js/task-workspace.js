@@ -129,19 +129,26 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     createMenu.className = "task-create-menu";
     createMenu.hidden = true;
     createMenu.setAttribute("role", "menu");
-    for (const [kind, label, description] of [
-      ["task", "Task", "Create one durable Task"],
-      ["list", "Task List", "Create ordered child Tasks"],
+    for (const [kind, iconText, label, description] of [
+      ["task", "＋", "Task", "Create one Task. Opens the shared Task Editor."],
+      ["list", "≡", "Task List", "Create a Task List workspace, then add Tasks inside it."],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.taskCreateKind = kind;
       button.setAttribute("role", "menuitem");
+      const icon = document.createElement("span");
+      icon.className = "task-create-menu-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = iconText;
+      const copy = document.createElement("span");
+      copy.className = "task-create-menu-copy";
       const strong = document.createElement("strong");
       strong.textContent = label;
       const small = document.createElement("small");
       small.textContent = description;
-      button.append(strong, small);
+      copy.append(strong, small);
+      button.append(icon, copy);
       button.addEventListener("click", () => {
         const context = createContext;
         closeCreateMenu();
@@ -165,6 +172,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         anchor?.focus?.();
       }
     }, true);
+    window.addEventListener("resize", closeCreateMenu);
+    window.addEventListener("scroll", closeCreateMenu, true);
     return createMenu;
   }
 
@@ -188,12 +197,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       returnFocus: anchor,
     };
     menu.hidden = false;
-    const rect = anchor?.getBoundingClientRect?.() || { left: 16, bottom: 16, right: 160 };
-    const width = 220;
-    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
-    const top = Math.min(window.innerHeight - menu.offsetHeight - 8, rect.bottom + 6);
+    menu.style.visibility = "hidden";
+    const rect = anchor?.getBoundingClientRect?.() || { left: 16, top: 16, bottom: 16, right: 160 };
+    const width = menu.offsetWidth || 250;
+    const height = menu.offsetHeight || 112;
+    const gap = 6;
+    const left = Math.min(window.innerWidth - width - 10, Math.max(10, rect.right - width));
+    let top = rect.bottom + gap;
+    if (top + height > window.innerHeight - 10) top = Math.max(10, rect.top - height - gap);
     menu.style.left = left + "px";
-    menu.style.top = Math.max(8, top) + "px";
+    menu.style.top = top + "px";
+    menu.style.visibility = "";
     menu.querySelector("button")?.focus();
   }
 

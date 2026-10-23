@@ -975,8 +975,15 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.click("#tasksRunningFilterButton")
             assert page.locator("#tasksRunningFilterButton").get_attribute("aria-pressed") == "false"
 
+            column_add_box = page.locator("#tasksNewColumnButton").bounding_box()
             page.click("#tasksNewColumnButton")
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            create_menu_box = page.locator("#taskCreateMenu").bounding_box()
+            assert column_add_box and create_menu_box
+            assert abs((create_menu_box["x"] + create_menu_box["width"]) - (column_add_box["x"] + column_add_box["width"])) <= 2
+            assert 4 <= create_menu_box["y"] - (column_add_box["y"] + column_add_box["height"]) <= 8
+            assert abs(create_menu_box["width"] - 250) <= 1
+            assert page.locator("#taskCreateMenu .task-create-menu-icon").count() == 2
             page.keyboard.press("Escape")
             page.wait_for_function("document.querySelector('#taskCreateMenu')?.hidden === true")
 
