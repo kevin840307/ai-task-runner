@@ -431,6 +431,28 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
 
 
 
+
+
+def test_chat_mode_geometry_matches_feature_reference() -> None:
+    production_chat_css = (ROOT / "ui" / "static" / "css" / "project-chat.css").read_text(encoding="utf-8")
+    feature = _declarations(FEATURE_CSS, ".composer-mode-quick")
+    production = _declarations(production_chat_css, ".project-chat-mode-quick")
+    for prop in (
+        "display", "align-items", "gap", "height", "padding", "border",
+        "border-radius", "background", "color", "font-size", "font-weight",
+        "letter-spacing", "text-transform",
+    ):
+        assert production.get(prop) == feature.get(prop), (prop, feature, production)
+
+    feature_select = _declarations(FEATURE_CSS, ".composer-mode-quick select")
+    production_select = _declarations(production_chat_css, ".project-chat-mode-quick select")
+    for prop in (
+        "min-width", "height", "padding", "border", "background", "color",
+        "font-size", "font-weight", "text-transform", "letter-spacing", "outline",
+    ):
+        assert production_select.get(prop) == feature_select.get(prop), (prop, feature_select, production_select)
+
+
 def test_chat_quick_mode_matches_prototype_single_mode_control() -> None:
     project_chat = (ROOT / "ui" / "static" / "js" / "project-chat.js").read_text(encoding="utf-8")
     assert '{ includeEmpty: false, preserveSaved: true }' in project_chat
