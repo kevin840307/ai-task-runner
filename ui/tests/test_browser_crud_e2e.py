@@ -1555,6 +1555,16 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
+            assert page.locator("#tasksBoardView .tasks-title-line > .tasks-project-filter").count() == 1
+            assert page.locator(".tasks-board-toolbar-left .tasks-project-filter").count() == 0
+            task_filter_alignment = page.evaluate(
+                """() => {
+                    const title = document.querySelector('#tasksBoardView .tasks-title-line h1').getBoundingClientRect();
+                    const filter = document.querySelector('#tasksProjectFilterButton').getBoundingClientRect();
+                    return {titleCenter: title.top + title.height / 2, filterCenter: filter.top + filter.height / 2};
+                }"""
+            )
+            assert abs(task_filter_alignment["titleCenter"] - task_filter_alignment["filterCenter"]) <= 3
             page.click("#tasksProjectFilterButton")
             second_option = page.locator(".tasks-project-option").filter(has_text="Second Project")
             root_option = page.locator(".tasks-project-option").filter(has_text="Fixture Project")

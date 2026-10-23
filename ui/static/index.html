@@ -92,7 +92,16 @@
     <section id="tasksBoardView" class="tasks-board-page" hidden aria-label="Tasks Board">
       <header class="header">
         <div class="title-block">
-          <div class="title-line"><h1>Tasks</h1></div>
+          <div class="title-line tasks-title-line">
+            <h1>Tasks</h1>
+            <div class="tasks-project-filter">
+              <button id="tasksProjectFilterButton" class="tasks-project-trigger" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong id="tasksProjectFilterSummary">—</strong></button>
+              <div id="tasksProjectFilterMenu" class="tasks-project-menu" hidden>
+                <div class="tasks-project-menu-head"><strong>Show Tasks from</strong><div><button id="tasksProjectFilterAll" type="button">Select all</button><button id="tasksProjectFilterClear" type="button">Clear</button></div></div>
+                <div id="tasksProjectFilterOptions" class="tasks-project-options"></div>
+              </div>
+            </div>
+          </div>
           <p>Durable Task Board · lifecycle is separate from Runner runtime.</p>
         </div>
         <div class="tasks-board-header-actions">
@@ -102,13 +111,6 @@
       </header>
       <div class="tasks-board-toolbar">
         <div class="tasks-board-toolbar-left">
-          <div class="tasks-project-filter">
-            <button id="tasksProjectFilterButton" class="tasks-project-trigger" type="button" aria-haspopup="true" aria-expanded="false"><span>Projects</span><strong id="tasksProjectFilterSummary">—</strong></button>
-            <div id="tasksProjectFilterMenu" class="tasks-project-menu" hidden>
-              <div class="tasks-project-menu-head"><strong>Show Tasks from</strong><div><button id="tasksProjectFilterAll" type="button">Select all</button><button id="tasksProjectFilterClear" type="button">Clear</button></div></div>
-              <div id="tasksProjectFilterOptions" class="tasks-project-options"></div>
-            </div>
-          </div>
           <input id="tasksBoardSearch" class="tasks-board-search" type="search" placeholder="Search Task, Workflow, Prompt…" />
         </div>
         <div class="tasks-board-toolbar-right">

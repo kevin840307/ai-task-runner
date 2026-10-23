@@ -1985,6 +1985,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Reused the existing new-project-button styling/handler and added shared zh-TW/en button text.
     - Browser regression locks DOM order and scroll ownership.
 
+[x] Match Tasks Project filter placement to the latest feature header UX.
+    - Moved the existing page-local multi-Project filter beside the Tasks title, matching the prototype hierarchy.
+    - Reused the same #tasksProjectFilterButton/menu/options and TasksBoard controller; no duplicate filter state or Project switching side effect was added.
+    - Search remains in the second-row board toolbar, so filtering and search keep separate visual responsibilities.
+    - Browser regression locks the single filter DOM owner and title-row alignment while existing reload/multi-Project filter tests keep covering persistence.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
