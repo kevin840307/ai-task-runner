@@ -482,6 +482,8 @@ tasksBoard = createTasksBoardController({
   openTask: openBoardTask,
   getProjects: () => state.projects,
   getCurrentProject: () => state.project,
+  confirmDialog,
+  showToast,
   showError: showActionError,
 });
 projectChat = createProjectChatController({

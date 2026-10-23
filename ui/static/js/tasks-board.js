@@ -6,7 +6,7 @@ function pathKey(value) {
   return (/^[A-Za-z]:\//.test(text) || text.startsWith("//")) ? text.toLowerCase() : text;
 }
 
-export function createTasksBoardController({ api, openTask, getProjects, getCurrentProject, showError }) {
+export function createTasksBoardController({ api, openTask, getProjects, getCurrentProject, confirmDialog, showToast, showError }) {
   let selected = new Set();
   let initialized = false;
   let tasks = [];
@@ -14,7 +14,9 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
   let search = "";
   let runningOnly = false;
   let refreshToken = 0;
+  let draggedTaskId = "";
   const byId = (id) => document.getElementById(id);
+  const requestId = (prefix) => prefix + ":" + (globalThis.crypto?.randomUUID?.() || (Date.now() + "-" + Math.random().toString(16).slice(2)));
 
   function projects() {
     return (Array.isArray(getProjects?.()) ? getProjects() : []).filter((row) => row && row.exists !== false && row.path);
@@ -138,27 +140,137 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
     summary.textContent = !chosen.length ? "None" : chosen.length === rows.length ? "All" : chosen.length === 1 ? String(chosen[0].name || "1 selected") : chosen.length + " selected";
   }
 
+  function runtimeLabel(task) {
+    const phase = String(task?.run?.phase || "");
+    if (String(task?.status || "") === "ongoing") return phase ? phase.replaceAll("_", " ") : "Running";
+    if (String(task?.status || "") === "paused") return phase ? phase.replaceAll("_", " ") : "Stopped";
+    if (String(task?.status || "") === "closed") return "Completed";
+    return "Idle";
+  }
+
   function taskCard(task) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tasks-board-card";
     button.dataset.taskId = String(task.task_id || "");
-    const head = document.createElement("span");
-    head.className = "tasks-board-card-head";
+    button.draggable = true;
+
+    const top = document.createElement("span");
+    top.className = "tasks-board-card-top";
+    const handle = document.createElement("span");
+    handle.className = "tasks-board-card-handle";
+    handle.textContent = "⠿";
     const title = document.createElement("strong");
+    title.className = "tasks-board-card-title";
     title.textContent = String(task.title || task.task_id || "Task");
-    const badge = document.createElement("span");
-    badge.className = "tasks-board-kind";
-    badge.textContent = task.kind === "task_list" ? String(task.items?.length || 0) + " tasks" : "Task";
-    head.append(title, badge);
-    const meta = document.createElement("small");
-    meta.textContent = [String(task._project_name || ""), String(task.task_id || "")].filter(Boolean).join(" · ");
+    const runtime = document.createElement("span");
+    runtime.className = "tasks-board-runtime " + String(task.status || "new");
+    runtime.textContent = runtimeLabel(task);
+    top.append(handle, title, runtime);
+
     const prompt = document.createElement("span");
     prompt.className = "tasks-board-card-prompt";
     prompt.textContent = String(task.items?.[0]?.prompt || task.items?.[0]?.goal_file || "");
-    button.append(head, meta, prompt);
-    button.addEventListener("click", () => openTask?.(task, { returnFocus: button }));
+
+    const meta = document.createElement("span");
+    meta.className = "tasks-board-card-meta";
+    const projectTag = document.createElement("span");
+    projectTag.className = "tasks-board-tag";
+    projectTag.textContent = String(task._project_name || "Project");
+    const kindTag = document.createElement("span");
+    kindTag.className = "tasks-board-tag";
+    kindTag.textContent = task.kind === "task_list" ? String(task.items?.length || 0) + " tasks" : "Task";
+    meta.append(projectTag, kindTag);
+
+    const foot = document.createElement("span");
+    foot.className = "tasks-board-card-foot";
+    const progress = document.createElement("span");
+    progress.textContent = String(task.completed_item_count || 0) + " / " + String(task.items?.length || 0);
+    const id = document.createElement("span");
+    id.textContent = String(task.task_id || "");
+    foot.append(progress, id);
+
+    button.append(top, prompt, meta, foot);
+    button.addEventListener("click", () => {
+      if (!button.classList.contains("dragging")) openTask?.(task, { returnFocus: button });
+    });
+    button.addEventListener("dragstart", (event) => {
+      draggedTaskId = String(task.task_id || "");
+      button.classList.add("dragging");
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      paintDropHints(task);
+    });
+    button.addEventListener("dragend", () => {
+      draggedTaskId = "";
+      button.classList.remove("dragging");
+      clearDropHints();
+    });
     return button;
+  }
+
+  function boardMoveRule(task, target) {
+    const from = String(task?.status || "new");
+    if (!target) return { ok: false, reason: "Unknown target" };
+    if (from === target) return { ok: true, action: "none" };
+    if (from === "new" && target === "ongoing") return { ok: true, action: "run" };
+    if (from === "ongoing" && target === "paused") return { ok: true, action: "stop" };
+    if (from === "paused" && target === "ongoing") return { ok: true, action: "resume" };
+    if ((from === "paused" || from === "closed") && target === "new") return { ok: true, action: "reset" };
+    return { ok: false, reason: from + " → " + target + " is not a supported production lifecycle move" };
+  }
+
+  function clearDropHints() {
+    document.querySelectorAll(".tasks-board-dropzone").forEach((zone) => zone.classList.remove("over", "allowed", "blocked"));
+  }
+
+  function paintDropHints(task) {
+    document.querySelectorAll(".tasks-board-column").forEach((column) => {
+      const zone = column.querySelector(".tasks-board-dropzone");
+      if (!zone) return;
+      const rule = boardMoveRule(task, column.dataset.status);
+      zone.classList.toggle("allowed", rule.ok && column.dataset.status !== String(task?.status || ""));
+      zone.classList.toggle("blocked", !rule.ok);
+    });
+  }
+
+  async function moveTask(task, target) {
+    const rule = boardMoveRule(task, target);
+    if (!rule.ok) {
+      showError?.(rule.reason, "Task move blocked");
+      return;
+    }
+    if (rule.action === "none") return;
+    const project = String(task?.project || "");
+    const taskId = String(task?.task_id || "");
+    if (!project || !taskId) return;
+
+    if (rule.action === "reset") {
+      const confirmed = await confirmDialog?.({
+        title: String(task.status || "") === "closed" ? "Move completed Task back to New?" : "Move paused Task back to New?",
+        message: String(task.status || "") === "closed"
+          ? "Completed run history stays available. Runtime progress resets to the beginning."
+          : "The resumable execution is abandoned. Task configuration stays intact and progress resets to the beginning.",
+        confirmLabel: "Move to New",
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
+
+    const endpoint = {
+      run: "/api/tasks/run",
+      stop: "/api/tasks/stop",
+      resume: "/api/tasks/resume",
+      reset: "/api/tasks/reset",
+    }[rule.action];
+    const body = { project, task_id: taskId };
+    if (rule.action === "run" || rule.action === "reset") body.request_id = requestId("board-" + rule.action);
+    try {
+      await api(endpoint, { method: "POST", body: JSON.stringify(body), timeoutMs: 15000 });
+      showToast?.(rule.action === "stop" ? "Stop requested" : rule.action === "resume" ? "Task resumed" : rule.action === "run" ? "Task started" : "Task moved to New");
+      await refresh();
+    } catch (error) {
+      showError?.(error?.message || String(error), "Task move failed");
+    }
   }
 
   function renderBoard() {
@@ -249,6 +361,31 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
       render();
     });
     byId("tasksNewColumnButton")?.addEventListener("click", () => byId("tasksNewButton")?.click());
+    document.querySelectorAll(".tasks-board-column").forEach((column) => {
+      const zone = column.querySelector(".tasks-board-dropzone");
+      if (!zone) return;
+      zone.addEventListener("dragover", (event) => {
+        if (!draggedTaskId) return;
+        const task = tasks.find((row) => String(row.task_id || "") === draggedTaskId);
+        const rule = boardMoveRule(task, column.dataset.status);
+        if (rule.ok) {
+          event.preventDefault();
+          zone.classList.add("over");
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        } else if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "none";
+        }
+      });
+      zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+      zone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        zone.classList.remove("over");
+        const task = tasks.find((row) => String(row.task_id || "") === draggedTaskId);
+        draggedTaskId = "";
+        clearDropHints();
+        if (task) void moveTask(task, String(column.dataset.status || ""));
+      });
+    });
     document.querySelectorAll("[data-tasks-view-mode]").forEach((button) => button.addEventListener("click", () => {
       mode = button.dataset.tasksViewMode === "list" ? "list" : "board";
       render();

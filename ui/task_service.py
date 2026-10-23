@@ -457,8 +457,8 @@ class TaskService:
                 return {**self._project_task(task), "duplicate": True}
 
             status = str(task.get("status") or "")
-            if lifecycle_action == "reset" and status != "paused":
-                raise ValueError("Task must be Paused before Reset")
+            if lifecycle_action == "reset" and status not in {"paused", "closed"}:
+                raise ValueError("Task must be Paused or Closed before Reset")
             if lifecycle_action == "rerun" and status not in {"paused", "closed"}:
                 raise ValueError("Task must be Paused or Closed before Rerun")
 
