@@ -673,6 +673,11 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - HEAD 63c28bb 的 CI run 39884715632 已實跑 Windows/Linux full pytest、Browser E2E 與 Studio build，全數 PASS；後續 merge-safety tests 仍需以 final HEAD CI 再 gate。
 [x] Deterministic reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
     - `tests/test_backends.py` 覆蓋 HTTP 503 transient classifier、backend timeout/process cleanup、non-zero Agent exit diagnostics；`ui/tests/test_ui.py` 覆蓋 BrokenPipe/ConnectionReset；`ui/tests/test_chat_service.py` 覆蓋 Queue/Ask restart、turn/Ask cancel、request-id 重送冪等、expired Agent session compare-and-clear/fresh-session recovery。這只代表 deterministic regression，不代表真 CLI live 或 24H soak。
+[x] Native Ask owning Agent turn 失敗時立即清理 stale Ask，不等 2 小時 timeout。
+    - 僅匹配同一 turn_id + source=native；先通知 provider cancel，bridge 已消失時才 durable fallback cancel。
+    - 另一個 turn 的 Ask 不會被清理；正常使用者 answer transport failure 仍維持 rollback-to-waiting 語義。
+    - HEAD 6e392015 CI run 39895945912：Ubuntu/Windows 各 1392 passed、44 skipped、3 subtests；
+      真 Chromium Browser 44 passed；Studio build PASS。
 [x] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
     - service-level restart test 與 /api/tasks/create-from-draft HTTP retry 均重用同 request_id，要求 duplicate=true、task_id 相同且 durable Task count=1。
 [x] 測試 UI 不把 _chatDraft 納入 Board count、Preset、History 或 durable Task store。
