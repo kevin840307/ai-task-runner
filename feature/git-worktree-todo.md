@@ -1204,6 +1204,8 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Repair incrementally within the latest-target-based recovery worktree: preserve completed Task changes and current Project changes, resolve only integration differences; no full clone/pull/redevelopment or overwrite of the target tree.
 - [ ] Existing Runner reviews/validates the integrated result; resume repairs without discarding prior recovery progress. Publish the replacement merge-source pointer only after a durable recovery commit.
 - [ ] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
+  - [x] New target commit during repair + nonconflicting integration: service-level regression advances the captured target after recovery starts, then requires PASS validation on the latest integrated tree before merge commit.
+  - [x] Failure-limit fallback boundary: four successive real conflicts verify recoveries 1/2/3 and fallback on 4 while retaining the latest recovery merge source.
 
 ### Phase F — UI
 

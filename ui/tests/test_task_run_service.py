@@ -1244,6 +1244,131 @@ def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(
     assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
+def test_target_advance_during_merge_recovery_revalidates_latest_integrated_tree(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-recovery-target-advance",
+    )
+    runtimes: dict[Path, dict] = {}
+    launches = []
+    validations = []
+
+    def launch(project: Path, goal: str | None, **kwargs):
+        root = Path(project).resolve()
+        launches.append((root, goal, dict(kwargs)))
+        runtimes[root] = {
+            "running": True,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }
+
+    def read_runtime(project: Path):
+        return dict(runtimes.get(Path(project).resolve(), {
+            "running": False,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }))
+
+    def validate(project: Path, goal: str, **kwargs):
+        root = Path(project)
+        validations.append((root, goal, dict(kwargs)))
+        assert (root / "app.txt").read_text(encoding="utf-8") == "integrated repair\n"
+        assert (root / "late-target.txt").read_text(encoding="utf-8") == "late target\n"
+        return "PASS"
+
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {
+            "auto_workspace_policy": "always-main",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": False,
+        },
+        preferences=lambda _project: {
+            "agent": "qwen",
+            "model": "",
+            "mode": "auto",
+            "reasoning": "medium",
+            "workflow": str(repo / "workflow.yaml"),
+        },
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=launch,
+        read_runtime=read_runtime,
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        validate_merge=validate,
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        auto_watch=False,
+    )
+
+    started = service.start(
+        repo,
+        created["task_id"],
+        request_id="recovery-target-advance-run",
+    )
+    source_root = Path(started["run"]["workspace"]["project_root"])
+    (source_root / "app.txt").write_text("task side\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "create recovery conflict")
+    runtimes[source_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+
+    recovering = service.reconcile(repo, created["task_id"])
+    assert recovering["run"]["phase"] == "conflict_recovery"
+    assert recovering["merge_failure_count"] == 1
+    recovery = recovering["run"]["workspace_result"]["recovery"]
+    recovery_root = Path(recovery["workspace"]["project_root"])
+    recovery_branch = recovery["workspace"]["task_branch"]
+    recovery_base = recovery["workspace"]["task_base_sha"]
+    assert _git(repo, "rev-parse", "HEAD") == recovery_base
+
+    (recovery_root / "app.txt").write_text("integrated repair\n", encoding="utf-8")
+    (repo / "late-target.txt").write_text("late target\n", encoding="utf-8")
+    _git(repo, "add", "late-target.txt")
+    _git(repo, "commit", "-m", "advance target during recovery")
+    advanced_target = _git(repo, "rev-parse", "HEAD")
+    assert advanced_target != recovery_base
+
+    runtimes[recovery_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+    closed = service.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    assert closed["merge_failure_count"] == 1
+    result = closed["run"]["workspace_result"]
+    assert result["merge_source"]["workspace"]["task_branch"] == recovery_branch
+    assert result["merge_source"]["workspace"]["task_base_sha"] == recovery_base
+    assert result["merge"]["target_head_sha"] == advanced_target
+    assert result["merge"]["validation_required"] is True
+    assert result["merge"]["verdict"] == "PASS"
+    assert len(validations) == 1
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "integrated repair\n"
+    assert (repo / "late-target.txt").read_text(encoding="utf-8") == "late target\n"
+    assert len(launches) == 2
+
+
 def test_merge_failure_limit_three_recovers_first_three_and_falls_back_on_fourth(
     tmp_path: Path,
 ):
