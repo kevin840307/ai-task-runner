@@ -433,6 +433,18 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
 
 
 
+
+
+def test_reasoning_selector_keeps_feature_five_level_contract() -> None:
+    feature_task_editor = (ROOT / "feature" / "ui-prototype" / "task-editor.js").read_text(encoding="utf-8")
+    assert "const PROJECT_REASONING_LEVELS=Object.freeze(['low','medium','high','xhigh','max'])" in feature_task_editor
+    project_chat = (ROOT / "ui" / "static" / "js" / "project-chat.js").read_text(encoding="utf-8")
+    assert 'const FEATURE_REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"];' in project_chat
+    assert 'includeEmpty: selectedAgentForReasoning !== "qwen"' in project_chat
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'const featureReasoningLevels = ["low", "medium", "high", "xhigh", "max"];' in app
+
+
 def test_chat_mode_geometry_matches_feature_reference() -> None:
     production_chat_css = (ROOT / "ui" / "static" / "css" / "project-chat.css").read_text(encoding="utf-8")
     feature = _declarations(FEATURE_CSS, ".composer-mode-quick")

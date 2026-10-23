@@ -179,8 +179,21 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     select.disabled = settingsLoading || !project;
   }
 
+  const FEATURE_REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+
   function modeRows() {
     return settingsCatalog.modes.filter((row) => row && row.supported !== false);
+  }
+
+  function reasoningRows() {
+    const agent = preferenceValue("agent") || settingsCatalog.agent || settingsCatalog.default_agent;
+    if (agent !== "qwen") return settingsCatalog.reasoning;
+    const nativeById = new Map(
+      settingsCatalog.reasoning.map((row) => [String(row?.id || ""), row]),
+    );
+    return FEATURE_REASONING_LEVELS.map((id) => (
+      nativeById.get(id) || { id, label: id, native: id, description: "Qwen reasoning effort" }
+    ));
   }
 
   function renderSettingsControls() {
@@ -210,12 +223,14 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       (row) => [row.id, String(row.id || "").toUpperCase(), false],
       { includeEmpty: false, preserveSaved: true },
     );
+    const selectedAgentForReasoning = savedAgent || settingsCatalog.agent || settingsCatalog.default_agent;
     fillSelect(
       reasoning,
-      settingsCatalog.reasoning,
+      reasoningRows(),
       savedReasoning,
       "Model default",
       (row) => [row.id, row.label || row.id, false],
+      { includeEmpty: selectedAgentForReasoning !== "qwen", preserveSaved: selectedAgentForReasoning === "qwen" },
     );
     fillSelect(
       workflow,

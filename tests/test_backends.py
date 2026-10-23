@@ -1865,7 +1865,7 @@ def test_opencode_native_session_preserves_existing_id(monkeypatch, tmp_path):
     assert ensure_native_session("opencode", tmp_path, "ses_existing") == "ses_existing"
 
 
-def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_path, monkeypatch):
+def test_qwen_reasoning_options_keep_feature_reasoning_ladder_with_configured_model(tmp_path, monkeypatch):
     qwen_home = tmp_path / "qwen-home"
     qwen_home.mkdir()
     (qwen_home / "settings.json").write_text(
@@ -1887,7 +1887,7 @@ def test_qwen_reasoning_options_follow_configured_model_capability_subset(tmp_pa
     )
     monkeypatch.setenv("QWEN_HOME", str(qwen_home))
     values = reasoning_options("qwen", tmp_path, "model-a")
-    assert [item.id for item in values] == ["low", "high"]
+    assert [item.id for item in values] == ["low", "medium", "high", "xhigh", "max"]
     assert next(item for item in values if item.default).id == "high"
 
 

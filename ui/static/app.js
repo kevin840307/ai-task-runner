@@ -173,17 +173,20 @@ function addGlobalDefaultOption(select, value, label, { disabled = false } = {})
   option.disabled = !!disabled;
   select.appendChild(option);
 }
-function fillGlobalDefaultSelect(select, rows, selected, emptyLabel, mapper = (row) => [row, row]) {
+function fillGlobalDefaultSelect(select, rows, selected, emptyLabel, mapper = (row) => [row, row], { includeEmpty = true, preserveSelected = false } = {}) {
   if (!select) return;
   select.innerHTML = "";
-  addGlobalDefaultOption(select, "", emptyLabel);
+  if (includeEmpty) addGlobalDefaultOption(select, "", emptyLabel);
   for (const row of rows) {
     const [value, label, disabled] = mapper(row);
     addGlobalDefaultOption(select, value, label, { disabled });
   }
-  const values = [...select.options].map((option) => option.value);
-  if (selected && !values.includes(selected)) addGlobalDefaultOption(select, selected, selected + " · unavailable", { disabled: true });
-  select.value = selected || "";
+  let values = [...select.options].map((option) => option.value);
+  if (selected && !values.includes(selected)) {
+    addGlobalDefaultOption(select, selected, selected + (preserveSelected ? "" : " · unavailable"), { disabled: !preserveSelected });
+    values = [...select.options].map((option) => option.value);
+  }
+  select.value = values.includes(selected) ? selected : (includeEmpty ? "" : (values[0] || ""));
   select.disabled = state.globalDefaultCatalogLoading;
 }
 function globalDefaultProjectPath() {
@@ -282,12 +285,21 @@ function renderGlobalSettingsForm() {
     "Agent default",
     (row) => [row.id, String(row.id || "").toUpperCase(), false],
   );
+  const globalReasoningAgent = String(defaults.agent || state.defaultBackend || "");
+  const featureReasoningLevels = ["low", "medium", "high", "xhigh", "max"];
+  const globalReasoningRows = globalReasoningAgent === "qwen"
+    ? featureReasoningLevels.map((id) => (
+        catalog.reasoning.find((row) => String(row?.id || "") === id)
+        || { id, label: id }
+      ))
+    : catalog.reasoning;
   fillGlobalDefaultSelect(
     $("globalDefaultReasoning"),
-    catalog.reasoning,
+    globalReasoningRows,
     String(defaults.reasoning || ""),
     "Model default",
     (row) => [row.id, String(row.label || row.id || ""), false],
+    { includeEmpty: globalReasoningAgent !== "qwen", preserveSelected: globalReasoningAgent === "qwen" },
   );
   fillGlobalDefaultSelect(
     $("globalDefaultWorkflow"),

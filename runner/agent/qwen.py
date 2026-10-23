@@ -940,17 +940,6 @@ def _qwen_reasoning_options(root: Path, model: str) -> tuple[ReasoningOptionSpec
         if reasoning is False:
             return ()
         if isinstance(reasoning, dict):
-            raw_efforts = reasoning.get("efforts")
-            if raw_efforts is None:
-                raw_efforts = reasoning.get("effort")
-            if isinstance(raw_efforts, list):
-                narrowed = [
-                    str(value).strip().lower()
-                    for value in raw_efforts
-                    if str(value).strip().lower() in _QWEN_REASONING_LABELS
-                ]
-                if narrowed:
-                    efforts = [value for value in _QWEN_REASONING_ORDER if value in narrowed]
             default = str(
                 reasoning.get("defaultEffort")
                 or reasoning.get("default")
