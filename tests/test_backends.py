@@ -1293,9 +1293,10 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
         lambda *args, **kwargs: ProcessResult("qwen-code 0.23.2\n", 0),
     )
     qwen_features = chat_features("qwen", tmp_path)
-    assert qwen_features.ask is True
-    assert qwen_features.ask_transport == "daemon_permission_request"
+    assert qwen_features.ask is False
+    assert qwen_features.ask_transport == ""
     assert qwen_features.queue_mode == "service_fifo"
+    assert "fails closed" in qwen_features.detail
 
     monkeypatch.setattr(
         qwen_module,

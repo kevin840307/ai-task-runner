@@ -835,14 +835,21 @@ class QwenBackend(BaseBackend):
             return ChatFeatureSpec(detail=str(exc))
         supported = version >= _QWEN_NATIVE_ASK_MIN_VERSION
         version_text = ".".join(str(value) for value in version)
+        if not supported:
+            return ChatFeatureSpec(
+                detail=(
+                    f"Qwen {version_text} is older than the verified native Ask "
+                    "contract 0.23.2."
+                )
+            )
         return ChatFeatureSpec(
-            ask=supported,
-            ask_transport="daemon_permission_request" if supported else "",
             detail=(
-                f"Qwen {version_text} exposes ask_user_question through daemon permission requests."
-                if supported
-                else f"Qwen {version_text} is older than the verified native Ask contract 0.23.2."
-            ),
+                f"Qwen {version_text} exposes ask_user_question through daemon "
+                "permission requests, but Project Chat currently uses the one-shot "
+                "Qwen transport and cannot yet surface/resolve that live permission "
+                "request. Native Ask fails closed until the daemon bridge owns the "
+                "same Chat session."
+            )
         )
 
     @classmethod

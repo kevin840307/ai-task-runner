@@ -1875,3 +1875,38 @@ ARTIFACT REFRESH EVIDENCE (2026-10-05)
 [x] Rebuilt Workflow Studio from ui/studio-src/** using npm ci + npm run build; generated JS/CSS was not hand-edited.
 [x] Refreshed project.bundle.txt using tool/bundle.py pack + verify after removing node_modules and transient TypeScript build-info.
 [x] The one-shot artifact-refresh workflow removes itself before packing/committing, so it is not retained in the repository or canonical bundle.
+
+FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
+-------------------------------------------------------
+[x] Add one opt-in provider-neutral real-Agent probe: tool/agent_live_probe.py.
+    - Reuses tool.agent_catalog -> Runner adapter/plugin discovery; no UI-owned model/skill list.
+    - Verifies native Model catalog, read/auto Mode projection, native Slash commands,
+      a temporary shared .agents/skills Skill, Reasoning projection, Queue=service_fifo,
+      and an actual no-tool Project Chat ping through tool/chat_agent.py.
+    - Optional --model BACKEND=MODEL proves an explicit discovered model selection; the
+      probe refuses a model that the native catalog does not expose.
+    - Probe fixture never overwrites an existing Skill and removes only paths it owns.
+
+[x] Fail closed Qwen Native Ask availability until the executable Project Chat bridge exists.
+    - Current Qwen mapping already understands ask_user_question payloads, but normal Project
+      Chat still uses a one-shot qwen subprocess and therefore cannot observe/respond to the
+      daemon permission request in the same live session.
+    - Do not advertise a Native Ask capability that ChatAgentService cannot actually continue.
+      OpenCode question_api remains unchanged and usable.
+
+[ ] Implement Qwen Project Chat daemon permission Ask bridge with one clear adapter owner.
+    - Reuse the existing normalized Ask schema and Qwen ask_user_question encode/decode mapping.
+    - The same native session must own prompt, pending permission request, reply/cancel and cleanup.
+    - No UI provider branch, duplicate Queue scheduler, orphan qwen serve process or second Chat store.
+
+[ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
+    - Formal gate (after the Qwen Ask bridge is complete):
+      python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode
+    - Use --model qwen=<id> / --model opencode=<id> when explicit model-selection evidence is required.
+    - --allow-no-ask and --discovery-only are diagnostic modes only and do not satisfy this checkbox.
+    - Do not mark the feature/todo formal adapter-live item complete until both installed CLIs pass.
+
+[ ] Reconcile feature/todo Stage 7 only after the real adapter gate above and current-head
+    Windows/Linux/API/Browser regressions are green. Historical Runner 24H evidence remains
+    valid only for its recorded runtime source; Future UI/Workspace changes do not imply a new 24H pass.
+
