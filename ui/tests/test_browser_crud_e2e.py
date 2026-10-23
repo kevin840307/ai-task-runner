@@ -4770,7 +4770,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     firstHeight: getComputedStyle(node.querySelector('button')).height
                 })"""
             )
-            assert prompt_tab_geometry == {"gap": "2px", "height": "30px", "firstHeight": "30px"}
+            assert prompt_tab_geometry == {"gap": "3px", "height": "30px", "firstHeight": "30px"}
             assert page.locator("#taskWorkspacePrompt").evaluate(
                 "node => getComputedStyle(node).minHeight"
             ) == "112px"

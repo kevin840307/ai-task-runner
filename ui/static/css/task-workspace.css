@@ -218,7 +218,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-source-head strong{font-size:10px}
 .task-workspace-source-head small{font-size:8px;line-height:1.35}
 .task-workspace-source-tabs{
-  display:grid;height:30px;min-height:30px;gap:2px;padding:2px;
+  display:grid;height:30px;min-height:30px;gap:3px;padding:2px;
   border:1px solid var(--line);border-radius:8px;background:var(--panel-3)
 }
 [data-task-source-group="prompt"]{grid-template-columns:repeat(3,minmax(0,1fr))}

@@ -1,39 +1,119 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURE_CSS = (ROOT / "feature" / "ui-prototype" / "styles.css").read_text(encoding="utf-8")
-PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
+FEATURE_EDITOR_JS = (ROOT / "feature" / "ui-prototype" / "task-editor.js").read_text(encoding="utf-8")
+FEATURE_TEMPLATES = (ROOT / "feature" / "ui-prototype" / "task-ui-templates.js").read_text(encoding="utf-8")
 PROTOTYPE_HTML = (ROOT / "feature" / "ai-task-runner-ui-prototype.html").read_text(encoding="utf-8")
+PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
 PRODUCTION_JS = (ROOT / "ui" / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
-
-_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 
 
 def _normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip()).replace(" !important", "!important")
 
 
-def _declarations(css: str, selector: str, *, after: str | None = None) -> dict[str, str]:
-    source = css
-    if after:
-        assert after in source, f"missing CSS section marker: {after}"
-        source = source.split(after, 1)[1]
-    for match in _RULE.finditer(source):
-        selectors = [_normalize(part) for part in match.group(1).split(",")]
-        if _normalize(selector) not in selectors:
-            continue
-        result: dict[str, str] = {}
-        for raw in match.group(2).split(";"):
-            if ":" not in raw:
+@dataclass(frozen=True)
+class _Rule:
+    media: str | None
+    selectors: tuple[str, ...]
+    declarations: dict[str, str]
+
+
+def _matching_brace(source: str, open_index: int) -> int:
+    depth = 1
+    quote: str | None = None
+    index = open_index + 1
+    while index < len(source):
+        char = source[index]
+        if quote:
+            if char == "\\":
+                index += 2
                 continue
-            key, value = raw.split(":", 1)
-            result[key.strip()] = _normalize(value)
-        return result
-    raise AssertionError(f"selector not found after marker {after!r}: {selector}")
+            if char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end < 0 else end + 2
+            continue
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    raise AssertionError("unbalanced CSS braces")
+
+
+def _rules(source: str, *, media: str | None = None) -> list[_Rule]:
+    result: list[_Rule] = []
+    index = 0
+    while index < len(source):
+        if source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end < 0 else end + 2
+            continue
+        if source[index].isspace():
+            index += 1
+            continue
+
+        open_index = source.find("{", index)
+        if open_index < 0:
+            break
+        semicolon = source.find(";", index, open_index)
+        if semicolon >= 0:
+            index = semicolon + 1
+            continue
+
+        header = source[index:open_index].strip()
+        close_index = _matching_brace(source, open_index)
+        body = source[open_index + 1 : close_index]
+
+        if header.startswith("@media"):
+            query = _normalize(header[len("@media") :])
+            result.extend(_rules(body, media=query))
+        elif not header.startswith("@"):
+            declarations: dict[str, str] = {}
+            for raw in body.split(";"):
+                if ":" not in raw:
+                    continue
+                key, value = raw.split(":", 1)
+                declarations[key.strip()] = _normalize(value)
+            selectors = tuple(_normalize(part) for part in header.split(","))
+            result.append(_Rule(media=media, selectors=selectors, declarations=declarations))
+        index = close_index + 1
+    return result
+
+
+def _declarations(
+    css: str,
+    selector: str,
+    *,
+    media_contains: str | None = None,
+) -> dict[str, str]:
+    wanted = _normalize(selector)
+    result: dict[str, str] = {}
+    found = False
+    for rule in _rules(css):
+        if media_contains is None:
+            if rule.media is not None:
+                continue
+        elif rule.media is None or _normalize(media_contains) not in _normalize(rule.media):
+            continue
+        if wanted not in rule.selectors:
+            continue
+        found = True
+        result.update(rule.declarations)
+    assert found, f"selector not found ({media_contains or 'base'}): {selector}"
+    return result
 
 
 def _same(
@@ -41,11 +121,11 @@ def _same(
     production_selector: str,
     properties: tuple[str, ...],
     *,
-    feature_after: str | None = None,
-    production_after: str | None = None,
+    feature_media: str | None = None,
+    production_media: str | None = None,
 ) -> None:
-    feature = _declarations(FEATURE_CSS, feature_selector, after=feature_after)
-    production = _declarations(PRODUCTION_CSS, production_selector, after=production_after)
+    feature = _declarations(FEATURE_CSS, feature_selector, media_contains=feature_media)
+    production = _declarations(PRODUCTION_CSS, production_selector, media_contains=production_media)
     for prop in properties:
         assert prop in feature, f"{feature_selector} is missing {prop}"
         assert prop in production, f"{production_selector} is missing {prop}"
@@ -56,131 +136,233 @@ def _same(
         )
 
 
-def test_task_editor_geometry_matches_feature_reference() -> None:
-    feature_marker = "/* New Task editor density + input hierarchy */"
-    production_marker = "/* Feature prototype parity: Task Editor is the shared 920px workspace route. */"
-
+def test_new_task_editor_base_geometry_matches_final_feature_cascade() -> None:
     _same(
         "#newTaskModal>.modal-body",
         ".task-workspace-shell.task-editor-route .task-workspace-body",
         ("padding",),
-        feature_after=feature_marker,
-        production_after=production_marker,
     )
     _same(
         "#newTaskModal .task-basics",
         ".task-workspace-basics",
         ("grid-template-columns", "gap"),
-        feature_after=feature_marker,
-        production_after=production_marker,
     )
     _same(
         "#newTaskModal .task-input-grid",
         ".task-workspace-input-grid",
         ("grid-template-columns", "gap", "margin-top"),
-        feature_after=feature_marker,
-        production_after=production_marker,
     )
     _same(
         "#newTaskModal .task-editor-secondary .workspace-option",
         ".task-workspace-editor-secondary .task-workspace-workspace-option",
         ("min-height", "padding"),
-        feature_after=feature_marker,
-        production_after=production_marker,
     )
     _same(
         "#newTaskModal>.modal-foot",
         ".task-workspace-shell.task-editor-route .task-workspace-foot",
         ("padding",),
-        feature_after=feature_marker,
-        production_after=production_marker,
     )
-
-    feature_prompt = _declarations(
-        FEATURE_CSS,
-        "#newTaskModal .task-primary-source .primary-task-prompt",
-        after=feature_marker,
-    )
-    production_prompt = _declarations(
-        PRODUCTION_CSS,
-        ".task-workspace-task-primary-source textarea",
-        after=production_marker,
-    )
-    assert production_prompt["min-height"] == feature_prompt["min-height"]
-
-
-def test_task_workspace_shell_and_header_actions_match_feature_reference() -> None:
-    feature_marker = "/* Drawer */"
-    production_shell_marker = "/* Feature prototype parity: Task Editor is the shared 920px workspace route. */"
-    production_drawer_marker = "/* Feature Task Drawer shell parity; narrow-view full-width behavior remains responsive. */"
-    production_actions_marker = "/* Feature drawer header action group: List owns actions in the shared shell. */"
-
     _same(
         ".drawer.workspace-route",
         ".task-workspace-shell.workspace-route",
         ("width", "max-width"),
-        feature_after=feature_marker,
-        production_after=production_shell_marker,
     )
+
+
+def test_new_task_source_cards_match_final_feature_cascade() -> None:
+    _same(
+        ".source-card",
+        ".task-workspace-source-card",
+        ("border", "border-radius", "background", "overflow"),
+    )
+    _same(
+        ".source-head",
+        ".task-workspace-source-head",
+        ("padding", "border-bottom", "background"),
+    )
+    _same(
+        ".source-body",
+        ".task-workspace-source-body",
+        ("padding",),
+    )
+    # New Task-specific geometry overrides the generic .source-tabs values.
+    _same(
+        "#newTaskModal .task-primary-source .source-tabs",
+        ".task-workspace-source-tabs",
+        ("gap", "height"),
+    )
+    _same(
+        "#newTaskModal .task-primary-source .source-tabs button",
+        ".task-workspace-source-tabs button",
+        ("height", "padding", "font-size"),
+    )
+    _same(
+        "#newTaskModal .task-primary-source .task-source-mode-panel>textarea",
+        ".task-workspace-task-primary-source textarea",
+        ("min-height",),
+    )
+    _same(
+        "#newTaskModal .task-ai-source .task-source-mode-panel>textarea",
+        ".task-workspace-task-ai-source textarea",
+        ("min-height",),
+    )
+    _same(
+        ".workspace-selector-wrap",
+        ".task-workspace-workspace-selector",
+        ("margin-top", "padding", "border-radius", "background"),
+    )
+    _same(
+        ".workspace-option",
+        ".task-workspace-workspace-option",
+        ("border-radius", "background"),
+    )
+
+
+def test_new_task_responsive_geometry_matches_feature_reference() -> None:
+    _same(
+        "#newTaskModal .task-basics",
+        ".task-workspace-basics",
+        ("grid-template-columns",),
+        feature_media="max-width:820px",
+        production_media="max-width:820px",
+    )
+    _same(
+        "#newTaskModal .task-title-field",
+        ".task-workspace-title-field",
+        ("grid-column",),
+        feature_media="max-width:820px",
+        production_media="max-width:820px",
+    )
+    _same(
+        "#newTaskModal .task-input-grid",
+        ".task-workspace-input-grid",
+        ("grid-template-columns",),
+        feature_media="max-width:820px",
+        production_media="max-width:820px",
+    )
+    _same(
+        ".workspace-options",
+        ".task-workspace-workspace-options",
+        ("grid-template-columns",),
+        feature_media="max-width:900px",
+        production_media="max-width:900px",
+    )
+    _same(
+        ".workspace-option",
+        ".task-workspace-workspace-option",
+        ("min-height",),
+        feature_media="max-width:900px",
+        production_media="max-width:900px",
+    )
+    _same(
+        "#newTaskModal .task-basics",
+        ".task-workspace-basics",
+        ("grid-template-columns",),
+        feature_media="max-width:620px",
+        production_media="max-width:620px",
+    )
+    _same(
+        "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .validation-stack",
+        ".task-workspace-input-grid.has-mixed-validation .task-workspace-validation-stack",
+        ("grid-template-columns",),
+        feature_media="max-width:620px",
+        production_media="max-width:620px",
+    )
+
+
+def test_new_task_runtime_structure_matches_final_feature_override() -> None:
+    # task-editor.js intentionally reassigns renderNewTaskSources. The last
+    # assignment is canonical: Prompt=3 tabs, AI=4 tabs, File Validator=Required.
+    feature_final = FEATURE_EDITOR_JS[FEATURE_EDITOR_JS.rfind("renderNewTaskSources=function") :]
+    assert "sourceTabs(newTaskDraft.goalMode,[['inline','Write'],['file','File'],['asset','Asset']]" in feature_final
+    assert "sourceTabs(newTaskDraft.aiMode,[['default','Default'],['inline','Write'],['file','File'],['asset','Asset']]" in feature_final
+    assert "title:'File Validator'" in feature_final
+    assert "control:'<span class=\"cap-chip\">Required</span>'" in feature_final
+
+    assert '[["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
+    assert '[["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
+    assert 'required.textContent = "Required"' in PRODUCTION_JS
+    assert 'grid.append(projectField, workflowField, titleField)' in PRODUCTION_JS
+    assert 'body.appendChild(inputGrid)' in PRODUCTION_JS
+    assert 'body.appendChild(workspaceSection)' in PRODUCTION_JS
+
+
+def test_task_workspace_shell_and_header_actions_match_feature_reference() -> None:
     _same(
         ".drawer-back",
         ".task-workspace-back",
         ("width", "height", "border-radius", "font-size"),
-        feature_after=feature_marker,
-        production_after=production_drawer_marker,
     )
     _same(
         ".drawer-shell-actions .btn",
         ".task-workspace-header-actions button",
         ("height", "min-height", "padding", "font-size"),
-        feature_after=feature_marker,
-        production_after=production_actions_marker,
     )
 
 
-def test_task_list_geometry_and_drag_feedback_match_feature_reference() -> None:
-    feature_list_marker = "/* Full plan surface: same Task, deeper editing only when needed */"
-    production_list_marker = "/* Feature Task List Workspace: main list + List info / Quick use side rail. */"
-    feature_add_marker = "/* Task List row alignment + one stable Add task footer */"
-
+def test_new_task_list_geometry_matches_feature_reference() -> None:
     _same(
         ".plan-page-body",
         ".task-workspace-list-page",
         ("grid-template-columns", "gap", "padding"),
-        feature_after=feature_list_marker,
-        production_after=production_list_marker,
     )
     _same(
         ".plan-main",
         ".task-workspace-list-main",
         ("padding", "border-radius"),
-        feature_after=feature_list_marker,
-        production_after=production_list_marker,
+    )
+    _same(
+        ".plan-side",
+        ".task-workspace-list-side",
+        ("display", "gap", "align-content"),
+    )
+    _same(
+        ".plan-side-card",
+        ".task-workspace-list-side-card",
+        ("padding", "border-radius", "background"),
     )
     _same(
         ".plan-add-task-footer",
         ".task-workspace-add-task-footer",
         ("width", "min-height", "gap", "margin-top", "border-radius", "font-size"),
-        feature_after=feature_add_marker,
-        production_after=production_list_marker,
     )
     _same(
         ".plan-row-compact.dragging",
         ".task-workspace-list-row.dragging",
         ("opacity",),
-        feature_after=feature_add_marker,
     )
     _same(
         ".plan-row-compact.drag-over",
         ".task-workspace-list-row.drag-over",
         ("outline", "outline-offset"),
-        feature_after=feature_add_marker,
+    )
+    _same(
+        ".plan-row-head>.drag-grip",
+        ".task-workspace-drag-grip",
+        ("width", "height", "font-size"),
+    )
+    _same(
+        ".plan-workspace-chip",
+        ".task-workspace-list-chip",
+        ("font-size", "font-weight"),
+    )
+    _same(
+        ".plan-page-body",
+        ".task-workspace-list-page",
+        ("grid-template-columns",),
+        feature_media="max-width:960px",
+        production_media="max-width:960px",
+    )
+    _same(
+        ".plan-side",
+        ".task-workspace-list-side",
+        ("grid-template-columns",),
+        feature_media="max-width:960px",
+        production_media="max-width:960px",
     )
 
 
 def test_task_list_action_ownership_matches_prototype_html() -> None:
-    # The feature shell owns these Task List actions; production maps them to
-    # the same shared drawer header rather than duplicating controls in List info.
     feature_ids = {
         "planOpenWorkflow": "taskWorkspaceHeaderOpenWorkflow",
         "planAddTask": "taskWorkspaceHeaderAddTask",
@@ -193,6 +375,8 @@ def test_task_list_action_ownership_matches_prototype_html() -> None:
         assert f'id="{feature_id}"' in PROTOTYPE_HTML
         assert f'id="{production_id}"' in PRODUCTION_JS
 
+    assert "Task order" in FEATURE_TEMPLATES
+    assert "Right-click or <strong>⋯</strong> for Info / Workflow / Remove." in FEATURE_TEMPLATES
     assert 'className = "task-workspace-list-tools-wrap"' in PRODUCTION_JS
     assert 'wrap.hidden = true' in PRODUCTION_JS
     assert 'tools.appendChild(move)' not in PRODUCTION_JS
