@@ -432,6 +432,26 @@ def test_new_task_list_child_back_is_owned_by_parent_route() -> None:
     assert 'state.route === "editor" && state.editorReturn === "list"' in PRODUCTION_JS
     assert 'state.draft.items.length > 1' not in PRODUCTION_JS[PRODUCTION_JS.find("async function handleBack"):PRODUCTION_JS.find("function validateSelectedSourceModes")]
 
+
+
+def test_task_workspace_dynamic_copy_is_language_owned() -> None:
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    for key in (
+        "task.project_placeholder",
+        "task.workspace_recommended",
+        "task.prompt_placeholder",
+        "task.quick_use_drag",
+        "task.move_existing",
+        "task.workspace_result",
+    ):
+        assert f'"{key}"' in i18n
+        assert f'tr("{key}"' in PRODUCTION_JS or f'trf("{key}"' in PRODUCTION_JS
+
+    assert "syncCreateMenuCopy();" in PRODUCTION_JS
+    assert 'project.placeholder = "Select a project or type a path"' not in PRODUCTION_JS
+    assert 'workspaceRecommended.textContent = "Auto recommended"' not in PRODUCTION_JS
+    assert 'prompt.placeholder = "Describe what this task should do…"' not in PRODUCTION_JS
+
 def test_task_workspace_shell_and_header_actions_match_feature_reference() -> None:
     _same(
         ".drawer-back",

@@ -192,9 +192,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     createMenu.className = "task-create-menu";
     createMenu.hidden = true;
     createMenu.setAttribute("role", "menu");
-    for (const [kind, iconText, label, description] of [
-      ["task", "＋", "Task", "Create one Task. Opens the shared Task Editor."],
-      ["list", "≡", "Task List", "Create a Task List workspace, then add Tasks inside it."],
+    for (const [kind, iconText, labelKey, labelFallback, descriptionKey, descriptionFallback] of [
+      ["task", "＋", "task.type_task", "Task", "task.create_task_desc", "Create one Task. Opens the shared Task Editor."],
+      ["list", "≡", "task.type_list", "Task List", "task.create_list_desc", "Create a Task List workspace, then add Tasks inside it."],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
@@ -207,9 +207,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const copy = document.createElement("span");
       copy.className = "task-create-menu-copy";
       const strong = document.createElement("strong");
-      strong.textContent = label;
+      strong.dataset.taskCreateLabelKey = labelKey;
+      strong.dataset.taskCreateLabelFallback = labelFallback;
+      strong.textContent = tr(labelKey, labelFallback);
       const small = document.createElement("small");
-      small.textContent = description;
+      small.dataset.taskCreateDescriptionKey = descriptionKey;
+      small.dataset.taskCreateDescriptionFallback = descriptionFallback;
+      small.textContent = tr(descriptionKey, descriptionFallback);
       copy.append(strong, small);
       button.append(icon, copy);
       button.addEventListener("click", () => {
@@ -245,6 +249,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return createMenu;
   }
 
+  function syncCreateMenuCopy() {
+    if (!createMenu) return;
+    createMenu.querySelectorAll("[data-task-create-label-key]").forEach((node) => {
+      node.textContent = tr(node.dataset.taskCreateLabelKey, node.dataset.taskCreateLabelFallback || "");
+    });
+    createMenu.querySelectorAll("[data-task-create-description-key]").forEach((node) => {
+      node.textContent = tr(node.dataset.taskCreateDescriptionKey, node.dataset.taskCreateDescriptionFallback || "");
+    });
+  }
+
   function openCreateMenu({ anchor, project, workflows = [], prompts = [], workflow = "" }) {
     const projectPath = String(project || "").trim();
     if (!projectPath) {
@@ -252,6 +266,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     const menu = ensureCreateMenu();
+    syncCreateMenuCopy();
     if (!menu.hidden && createContext?.anchor === anchor) {
       closeCreateMenu();
       return;
@@ -604,7 +619,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (!file) { picker.remove(); return; }
       const original = button.textContent;
       button.disabled = true;
-      button.textContent = "Uploading…";
+      button.textContent = tr("task.uploading", "Uploading…");
       try {
         const previous = String(item[field] || "");
         const data = await api("/api/tasks/upload/stage", {
@@ -680,7 +695,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const wrap = document.createElement("label");
     wrap.className = "task-workspace-field";
     const label = document.createElement("span");
-    label.textContent = "Task title";
+    label.textContent = tr("task.task_title", "Task title");
     const input = document.createElement("input");
     input.id = "taskWorkspaceDraftTitle";
     const draft = editorDraft();
@@ -1114,7 +1129,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       owner.moveExistingError = "";
       render();
       await onTaskChanged?.();
-      showToast?.("New Task moved here");
+      showToast?.(tr("task.move_success", "New Task moved here"));
     } catch (error) {
       if (state !== owner) return;
       owner.moveExistingError = String(error?.message || "Move existing Task failed");
@@ -1134,9 +1149,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const note = document.createElement("div");
     note.className = "task-workspace-move-note";
     const strong = document.createElement("strong");
-    strong.textContent = "Move existing";
+    strong.textContent = tr("task.move_existing", "Move existing");
     const span = document.createElement("span");
-    span.textContent = "Only standalone New Tasks can be moved. Their Board identity is retired.";
+    span.textContent = tr("task.move_existing_help", "Only standalone New Tasks can be moved. Their Board identity is retired.");
     note.append(strong, span);
     chooser.appendChild(note);
 
@@ -1145,7 +1160,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (state.moveExistingLoading) {
       const loading = document.createElement("div");
       loading.className = "task-workspace-move-empty";
-      loading.textContent = "Loading eligible Tasks…";
+      loading.textContent = tr("task.move_loading", "Loading eligible Tasks…");
       list.appendChild(loading);
     } else if (state.moveExistingError) {
       const error = document.createElement("div");
@@ -1157,7 +1172,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (!candidates.length) {
         const empty = document.createElement("div");
         empty.className = "task-workspace-move-empty";
-        empty.textContent = "No eligible New tasks. Only standalone New Tasks can be moved.";
+        empty.textContent = tr("task.move_empty", "No eligible New tasks. Only standalone New Tasks can be moved.");
         list.appendChild(empty);
       }
       for (const task of candidates) {
@@ -1189,7 +1204,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     actions.className = "task-workspace-move-actions";
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.textContent = "Cancel";
+    cancel.textContent = tr("task.cancel", "Cancel");
     cancel.disabled = !!state.moveExistingBusy;
     cancel.onclick = () => {
       state.moveExistingOpen = false;
@@ -1201,7 +1216,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.className = "primary";
-    confirm.textContent = state.moveExistingBusy ? "Moving…" : "Move here";
+    confirm.textContent = state.moveExistingBusy ? tr("task.moving", "Moving…") : tr("task.move_here", "Move here");
     confirm.disabled = !state.moveExistingSelected || !!state.moveExistingBusy || !!state.moveExistingLoading;
     confirm.onclick = () => void moveExistingSelected();
     actions.append(cancel, confirm);
@@ -1261,12 +1276,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     introTitle.textContent = tr("task.order", "Task order");
     const introText = document.createElement("span");
     introText.textContent = durableTask && String(durableTask.status || "") === "paused"
-      ? "Paused · completed items are locked; current changes require restart."
+      ? tr("task.paused_order_desc", "Paused · completed items are locked; current changes require restart.")
       : tr("task.order_desc", "Tasks run top-to-bottom inside this Task List.");
     introCopy.append(introTitle, introText);
     const statePill = document.createElement("span");
     statePill.className = "task-workspace-list-state-pill";
-    statePill.textContent = editable ? "Editable" : "Read-only";
+    statePill.textContent = editable ? tr("task.editable", "Editable") : tr("task.read_only", "Read-only");
     intro.append(introCopy, statePill);
     main.appendChild(intro);
 
@@ -1299,33 +1314,33 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const info = document.createElement("section");
     info.className = "task-workspace-list-side-card";
     const infoTitle = document.createElement("h3");
-    infoTitle.textContent = "List info";
+    infoTitle.textContent = tr("task.list_info", "List info");
     const kv = document.createElement("div");
     kv.className = "task-workspace-list-kv";
     if (state.kind === "draft") {
-      listInfoRow(kv, "Title", listTitleControl());
-      listInfoRow(kv, "Project", listDraftProjectControl());
-      listInfoRow(kv, "Tasks", String(items.length));
-      listInfoRow(kv, "State", "Not created");
+      listInfoRow(kv, tr("task.title", "Title"), listTitleControl());
+      listInfoRow(kv, tr("task.project", "Project"), listDraftProjectControl());
+      listInfoRow(kv, tr("task.items_title", "Tasks"), String(items.length));
+      listInfoRow(kv, tr("task.state_label", "State"), tr("task.not_created", "Not created"));
     } else {
       const task = durableTask || {};
       const policy = taskEditPolicy(task);
-      if (editable && policy.can_rename) listInfoRow(kv, "List", listTitleControl());
-      else listInfoRow(kv, "List", String(task.title || ""));
-      listInfoRow(kv, "Status", String(task.status || "new").toUpperCase());
-      listInfoRow(kv, "Runtime", String(task.run?.phase || (task.status === "closed" ? "Completed" : "Idle")).replaceAll("_", " "));
-      listInfoRow(kv, "Progress", String(task.completed_item_count || 0) + " / " + String(items.length));
+      if (editable && policy.can_rename) listInfoRow(kv, tr("task.list_label", "List"), listTitleControl());
+      else listInfoRow(kv, tr("task.list_label", "List"), String(task.title || ""));
+      listInfoRow(kv, tr("task.status_label", "Status"), String(task.status || "new").toUpperCase());
+      listInfoRow(kv, tr("task.runtime_label", "Runtime"), String(task.run?.phase || (task.status === "closed" ? "Completed" : "Idle")).replaceAll("_", " "));
+      listInfoRow(kv, tr("task.progress_label", "Progress"), String(task.completed_item_count || 0) + " / " + String(items.length));
     }
     info.append(infoTitle, kv, createTaskListTools({ editable, canYaml, reason }));
 
     const help = document.createElement("section");
     help.className = "task-workspace-list-side-card task-workspace-list-help";
     const helpTitle = document.createElement("h3");
-    helpTitle.textContent = "Quick use";
+    helpTitle.textContent = tr("task.quick_use", "Quick use");
     const firstHelp = document.createElement("p");
-    firstHelp.innerHTML = "<strong>Click</strong> selects a task · <strong>Double-click</strong> edits it.";
+    firstHelp.textContent = tr("task.quick_use_select", "Click selects a task · Double-click edits it.");
     const secondHelp = document.createElement("p");
-    secondHelp.innerHTML = "Drag the grip to reorder. Edit / Remove stay on the selected row.";
+    secondHelp.textContent = tr("task.quick_use_drag", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
 
@@ -1526,24 +1541,24 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const projectField = document.createElement("label");
     projectField.className = "task-workspace-field task-workspace-project-field";
     const projectLabel = document.createElement("span");
-    projectLabel.textContent = "Project";
+    projectLabel.textContent = tr("task.project", "Project");
     const projectCombo = document.createElement("div");
     projectCombo.className = "task-workspace-project-combobox";
     const project = document.createElement("input");
     project.id = "taskWorkspaceProject";
     project.autocomplete = "off";
-    project.placeholder = "Select a project or type a path";
+    project.placeholder = tr("task.project_placeholder", "Select a project or type a path");
     project.value = String(item.project || state.project || "");
     const projectEditable = state.kind === "draft";
     project.readOnly = !projectEditable;
     project.title = projectEditable
-      ? "Select a Project or type a local path"
-      : "Existing Task Project is fixed by the durable Task contract";
+      ? tr("task.project_select_title", "Select a Project or type a local path")
+      : tr("task.project_fixed_title", "Existing Task Project is fixed by the durable Task contract");
 
     const projectToggle = document.createElement("button");
     projectToggle.type = "button";
     projectToggle.className = "task-workspace-project-toggle";
-    projectToggle.setAttribute("aria-label", "Show all projects");
+    projectToggle.setAttribute("aria-label", tr("task.project_show_all", "Show all projects"));
     projectToggle.setAttribute("aria-expanded", "false");
     projectToggle.disabled = !projectEditable;
     const chevron = document.createElement("span");
@@ -1579,7 +1594,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (!filtered.length) {
         const empty = document.createElement("div");
         empty.className = "task-workspace-project-dropdown-empty";
-        empty.textContent = state.projectOptionsLoading ? "Loading Projects…" : "No matching Project. Type a local path.";
+        empty.textContent = state.projectOptionsLoading ? tr("task.project_loading", "Loading Projects…") : tr("task.project_no_match", "No matching Project. Type a local path.");
         projectDropdown.appendChild(empty);
         return;
       }
@@ -1642,15 +1657,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const projectHelp = document.createElement("small");
     projectHelp.className = "task-workspace-field-help";
     projectHelp.textContent = projectEditable
-      ? "Current Project is used by default · type a local path to override."
-      : "Project is fixed for an existing durable Task.";
+      ? tr("task.project_current_help", "Current Project is used by default · type a local path to override.")
+      : tr("task.project_fixed_help", "Project is fixed for an existing durable Task.");
     projectField.append(projectLabel, projectCombo, projectHelp);
     appendFieldError(projectField, project, "project");
 
     const workflowField = document.createElement("label");
     workflowField.className = "task-workspace-field task-workspace-workflow-field";
     const workflowLabel = document.createElement("span");
-    workflowLabel.textContent = "Workflow";
+    workflowLabel.textContent = tr("task.workflow", "Workflow");
     const workflow = document.createElement("select");
     workflow.id = "taskWorkspaceWorkflow";
     const options = workflowOptions(String(item.workflow || ""));
@@ -1680,14 +1695,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     titleField.className = "task-workspace-field task-workspace-title-field";
     const titleLabel = document.createElement("span");
     titleLabel.className = "task-workspace-field-label";
-    titleLabel.append(document.createTextNode("Title "));
+    titleLabel.append(document.createTextNode(tr("task.title", "Title") + " "));
     const optional = document.createElement("em");
     optional.className = "task-workspace-field-optional";
-    optional.textContent = "optional";
+    optional.textContent = tr("task.optional", "optional");
     titleLabel.appendChild(optional);
     const title = document.createElement("input");
     title.id = "taskWorkspaceItemTitle";
-    title.placeholder = "Auto from prompt";
+    title.placeholder = tr("task.auto_from_prompt", "Auto from prompt");
     title.value = String(item.title || "");
     title.maxLength = 240;
     title.addEventListener("input", () => updateItem(state.index, "title", title.value));
@@ -1709,7 +1724,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     };
     if (capability?.requires_python_validator) addCap("File Validator");
     if (capability?.has_ai_validator) addCap("AI Validator");
-    if (!workflowCaps.children.length) addCap("No extra validation input", true);
+    if (!workflowCaps.children.length) addCap(tr("task.no_extra_validation", "No extra validation input"), true);
     body.appendChild(workflowCaps);
 
     const workspaceSection = document.createElement("section");
@@ -1718,25 +1733,25 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workspaceHead.className = "task-workspace-workspace-head";
     const workspaceCopy = document.createElement("div");
     const workspaceTitle = document.createElement("strong");
-    workspaceTitle.textContent = "Workspace";
+    workspaceTitle.textContent = tr("task.workspace", "Workspace");
     const workspaceHelp = document.createElement("small");
-    workspaceHelp.textContent = "Auto / Main / isolated Worktree";
+    workspaceHelp.textContent = tr("task.workspace_help", "Auto / Main / isolated Worktree");
     workspaceCopy.append(workspaceTitle, workspaceHelp);
     const workspaceRecommended = document.createElement("span");
     workspaceRecommended.className = "task-workspace-workspace-recommended";
-    workspaceRecommended.textContent = "Auto recommended";
+    workspaceRecommended.textContent = tr("task.workspace_recommended", "Auto recommended");
     workspaceHead.append(workspaceCopy, workspaceRecommended);
 
     const workspace = document.createElement("select");
     workspace.id = "taskWorkspaceWorkspace";
     workspace.className = "task-workspace-workspace-native";
-    workspace.setAttribute("aria-label", "Workspace");
+    workspace.setAttribute("aria-label", tr("task.workspace", "Workspace"));
     const loadingWorkspace = !!state.workspaceOptionsLoading;
     const workspaceProjectionMissing = !state.workspaceOptions && !loadingWorkspace;
     const workspaceRows = [
-      ["auto", "Auto", "Use the global Auto workspace policy."],
-      ["main", "Main", "Run against the Project target workspace when available."],
-      ["worktree", "Isolated worktree", "Create an isolated branch/path for this task."],
+      ["auto", tr("task.workspace_auto", "Auto"), tr("task.workspace_auto_desc", "Use the global Auto workspace policy.")],
+      ["main", tr("task.workspace_main", "Main"), tr("task.workspace_main_desc", "Run against the Project target workspace when available.")],
+      ["worktree", tr("task.workspace_worktree", "Isolated worktree"), tr("task.workspace_worktree_desc", "Create an isolated branch/path for this task.")],
     ];
     for (const [value, label] of workspaceRows) {
       const option = document.createElement("option");
@@ -1780,13 +1795,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       small.textContent = description;
       const status = document.createElement("span");
       status.className = "task-workspace-workspace-status";
-      if (loadingWorkspace && value !== "worktree") status.textContent = "Checking…";
-      else if (option?.disabled) status.textContent = String(option?.title || "Unavailable");
+      if (loadingWorkspace && value !== "worktree") status.textContent = tr("task.workspace_checking", "Checking…");
+      else if (option?.disabled) status.textContent = String(option?.title || tr("chat.capability_unavailable", "Unavailable"));
       else if (availability?.effective_mode) {
+        const effective = availability.effective_mode === "main"
+          ? tr("task.workspace_main", "Main")
+          : tr("task.workspace_worktree", "Isolated worktree");
         status.textContent = value === "auto"
-          ? "Resolves to " + (availability.effective_mode === "main" ? "Main" : "Isolated worktree")
-          : "Available";
-      } else status.textContent = value === "worktree" ? "Always available" : "Available";
+          ? trf("task.workspace_resolves_to", { mode: effective }, "Resolves to " + effective)
+          : tr("task.workspace_available", "Available");
+      } else status.textContent = value === "worktree"
+        ? tr("task.workspace_always_available", "Always available")
+        : tr("task.workspace_available", "Available");
 
       radio.addEventListener("change", () => {
         if (!radio.checked || radio.disabled) return;
@@ -1809,21 +1829,25 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     availabilityNote.className = "task-workspace-workspace-preview";
     availabilityNote.classList.toggle("worktree-active", workspace.value === "worktree");
     const previewTitle = document.createElement("strong");
-    previewTitle.textContent = workspace.value === "worktree" ? "WORKTREE · ISOLATED DEVELOPMENT" : "Execution preview";
+    previewTitle.textContent = workspace.value === "worktree"
+      ? tr("task.workspace_isolated_title", "WORKTREE · ISOLATED DEVELOPMENT")
+      : tr("task.workspace_execution_preview", "Execution preview");
     const previewCopy = document.createElement("span");
     if (loadingWorkspace) {
-      previewCopy.textContent = "Checking current Workspace availability…";
+      previewCopy.textContent = tr("task.workspace_checking_copy", "Checking current Workspace availability…");
     } else if (state.workspaceOptionsError) {
-      previewCopy.textContent = state.workspaceOptionsError + " · Auto/Main disabled until Backend availability is known.";
+      previewCopy.textContent = state.workspaceOptionsError + " · " + tr("task.workspace_backend_unknown", "Auto/Main disabled until Backend availability is known.");
     } else if (selectedAvailability?.enabled === false) {
-      previewCopy.textContent = String(selectedAvailability.error || "This Workspace choice is currently unavailable.");
+      previewCopy.textContent = String(selectedAvailability.error || tr("task.workspace_choice_unavailable", "This Workspace choice is currently unavailable."));
     } else if (selectedAvailability?.effective_mode) {
-      const effective = selectedAvailability.effective_mode === "main" ? "Main" : "Isolated Worktree";
+      const effective = selectedAvailability.effective_mode === "main"
+        ? tr("task.workspace_main", "Main")
+        : tr("task.workspace_worktree", "Isolated Worktree");
       previewCopy.textContent = workspace.value === "auto"
-        ? "Auto currently resolves to " + effective + "."
-        : "Current effective Workspace: " + effective + ".";
+        ? trf("task.workspace_auto_resolves", { mode: effective }, "Auto currently resolves to " + effective + ".")
+        : trf("task.workspace_current", { mode: effective }, "Current effective Workspace: " + effective + ".");
     } else {
-      previewCopy.textContent = "Isolated Worktree is always safe to select.";
+      previewCopy.textContent = tr("task.workspace_safe", "Isolated Worktree is always safe to select.");
     }
     availabilityNote.append(previewTitle, previewCopy);
     workspaceSection.append(workspaceHead, workspace, workspaceOptions, availabilityNote);
@@ -1831,7 +1855,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const source = sourceState(item);
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
-      "Choose how this task gets its prompt",
+      tr("task.prompt_source_help", "Write instructions, use a file, or reference an existing Prompt asset."),
       "prompt",
       [["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
       source.promptMode,
@@ -1847,7 +1871,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (source.promptMode === "write") {
       const prompt = document.createElement("textarea");
       prompt.id = "taskWorkspacePrompt";
-      prompt.placeholder = "Describe what this task should do…";
+      prompt.placeholder = tr("task.prompt_placeholder", "Describe what this task should do…");
       prompt.value = String(item.prompt || source.promptText || "");
       prompt.addEventListener("input", () => {
         source.promptText = prompt.value;
@@ -1862,7 +1886,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.id = "taskWorkspaceGoalFile";
       input.value = String(item.goal_file || source.promptFile || "");
       input.maxLength = 4096;
-      input.placeholder = "Or type an existing prompt file path";
+      input.placeholder = tr("task.goal_file_alt", "Or type an existing prompt file path");
       input.addEventListener("input", () => {
         const previous = String(item.goal_file || "");
         if (previous !== input.value) queueUploadCancel(previous);
@@ -1941,13 +1965,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       validatorCard.tabs.remove();
       const required = document.createElement("span");
       required.className = "task-workspace-cap-chip task-workspace-required-chip";
-      required.textContent = "Required";
+      required.textContent = tr("task.required", "Required");
       validatorCard.card.querySelector(".task-workspace-source-head")?.appendChild(required);
       const control = pathControl("taskWorkspaceValidator", "validator", item.validator, "Or type an existing validator path");
       validatorCard.body.appendChild(control.row);
       const validatorNote = document.createElement("p");
       validatorNote.className = "task-workspace-source-note";
-      validatorNote.textContent = "Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.";
+      validatorNote.textContent = tr("task.validator_upload_note", "Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.");
       validatorCard.body.appendChild(validatorNote);
       appendFieldError(validatorCard.card, control.input, "validator");
       validationGrid.appendChild(validatorCard.card);
@@ -1956,7 +1980,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (capability?.has_ai_validator) {
       const aiCard = sourceCard(
         tr("task.ai_validation_title", "AI Validation"),
-        source.aiMode === "default" ? "Workflow default" : "Custom prompt source",
+        source.aiMode === "default"
+          ? tr("task.ai_source_default", "Workflow default")
+          : tr("task.ai_source_custom", "Custom prompt source"),
         "ai",
         [["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
         source.aiMode,
@@ -1974,9 +2000,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const note = document.createElement("div");
         note.className = "task-workspace-compact-default-value";
         const strong = document.createElement("strong");
-        strong.textContent = "Workflow default";
+        strong.textContent = tr("task.ai_workflow_default", "Workflow default");
         const span = document.createElement("span");
-        span.textContent = "No override prompt";
+        span.textContent = tr("task.ai_no_override", "No override prompt");
         note.append(strong, span);
         const panel = sourceModePanel("default");
         panel.appendChild(note);
@@ -1984,7 +2010,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       } else if (source.aiMode === "write") {
         const textarea = document.createElement("textarea");
         textarea.id = "taskWorkspaceAiValidatorPromptText";
-        textarea.placeholder = "Only add instructions that differ from the workflow default";
+        textarea.placeholder = tr("task.ai_custom_placeholder", "Only add instructions that differ from the workflow default");
         textarea.value = String(item.ai_validator_prompt || source.aiText || "");
         textarea.addEventListener("input", () => {
           source.aiText = textarea.value;
@@ -1999,7 +2025,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           "taskWorkspaceAiValidatorPrompt",
           "ai_validator_prompt_file",
           item.ai_validator_prompt_file || source.aiFile,
-          "Or type an existing AI prompt file path",
+          tr("task.ai_file_alt", "Or type an existing AI prompt file path"),
         );
         control.input.addEventListener("input", () => { source.aiFile = control.input.value; });
         const panel = sourceModePanel("file");
@@ -2027,7 +2053,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } else {
       const empty = document.createElement("div");
       empty.className = "task-workspace-validation-empty";
-      empty.textContent = "This Workflow needs no extra validator input.";
+      empty.textContent = tr("task.validation_none", "This Workflow needs no extra Validator input.");
       inputSupporting.appendChild(empty);
       inputGrid.classList.add("has-no-validation");
     }
@@ -2160,7 +2186,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const resultHead = document.createElement("div");
       resultHead.className = "task-workspace-result-head";
       const resultTitle = document.createElement("strong");
-      resultTitle.textContent = "Workspace Result";
+      resultTitle.textContent = tr("task.workspace_result", "Workspace Result");
       const badge = document.createElement("span");
       badge.id = "taskWorkspaceWorktreeBadge";
       badge.className = "task-workspace-worktree-badge";
@@ -2226,7 +2252,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const conflicts = document.createElement("p");
         conflicts.id = "taskWorkspaceConflicts";
         conflicts.className = "task-workspace-result-detail";
-        conflicts.textContent = "Conflicts: " + mergeResult.conflict_files.join(", ");
+        conflicts.textContent = tr("task.conflicts", "Conflicts") + ": " + mergeResult.conflict_files.join(", ");
         resultCard.appendChild(conflicts);
       } else if (mergeResult?.detail) {
         const detail = document.createElement("p");
@@ -2240,7 +2266,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const merge = document.createElement("button");
       merge.id = "taskWorkspaceMerge";
       merge.type = "button";
-      merge.textContent = "Merge";
+      merge.textContent = tr("task.merge", "Merge");
       const mergeStatus = String(mergeResult?.status || "");
       const cleanupComplete = String(task?.workspace_cleanup?.status || "") === "cleaned";
       const mergeBlocked = new Set(["conflict", "source_fail", "technical_error", "validation_required", "waiting_target_history"]);
@@ -2258,8 +2284,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const publish = document.createElement("button");
         publish.id = "taskWorkspacePublish";
         publish.type = "button";
-        publish.textContent = "Publish";
-        publish.title = "Push this completed durable result to origin without force";
+        publish.textContent = tr("task.publish", "Publish");
+        publish.title = tr("task.publish_help", "Push this completed durable result to origin without force");
         publish.onclick = () => void publishTaskResult();
         resultActions.appendChild(publish);
       }
@@ -2268,7 +2294,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const mergeChat = document.createElement("button");
         mergeChat.id = "taskWorkspaceMergeChat";
         mergeChat.type = "button";
-        mergeChat.textContent = "Merge Chat";
+        mergeChat.textContent = tr("task.merge_chat", "Merge Chat");
         mergeChat.onclick = () => void openTaskMergeChat();
         resultActions.appendChild(mergeChat);
       }
@@ -2287,8 +2313,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const cleanup = document.createElement("button");
       cleanup.id = "taskWorkspaceCleanupWorktrees";
       cleanup.type = "button";
-      cleanup.textContent = "Cleanup Worktrees";
-      cleanup.title = "Explicitly remove retained Task/Recovery worktrees and local branches";
+      cleanup.textContent = tr("task.cleanup_worktrees", "Cleanup Worktrees");
+      cleanup.title = tr("task.cleanup_worktrees_help", "Explicitly remove retained Task/Recovery worktrees and local branches");
       cleanup.onclick = () => void cleanupTaskWorkspaces();
       actions.appendChild(cleanup);
     }
@@ -2297,7 +2323,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     remove.id = "taskWorkspaceDeleteTask";
     remove.type = "button";
     remove.className = "danger";
-    remove.textContent = "Delete Task";
+    remove.textContent = tr("task.delete_task", "Delete Task");
     if (policy.can_delete) {
       remove.onclick = () => void deleteTask();
     } else {
@@ -2338,7 +2364,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const reset = document.createElement("button");
       reset.id = "taskWorkspaceResetTask";
       reset.type = "button";
-      reset.textContent = "Reset";
+      reset.textContent = tr("task.reset", "Reset");
       reset.onclick = () => void runTaskLifecycleAction("reset");
       actions.appendChild(reset);
     }
@@ -2346,7 +2372,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const rerun = document.createElement("button");
       rerun.id = "taskWorkspaceRerunTask";
       rerun.type = "button";
-      rerun.textContent = "Rerun";
+      rerun.textContent = tr("task.rerun", "Rerun");
       rerun.onclick = () => void runTaskLifecycleAction("rerun");
       actions.appendChild(rerun);
     }
@@ -2444,12 +2470,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (policy.restart_required) {
       const note = document.createElement("p");
       note.className = "task-workspace-action-note";
-      note.textContent = "Current paused Task changed · restart required before continuing.";
+      note.textContent = tr("task.paused_restart_note", "Current paused Task changed · restart required before continuing.");
       body.appendChild(note);
     } else if (!editable) {
       const note = document.createElement("p");
       note.className = "task-workspace-action-note";
-      note.textContent = "Task List is view-only. " + blockedReason + ".";
+      note.textContent = trf("task.list_view_only", { reason: blockedReason }, "Task List is view-only. " + blockedReason + ".");
       body.appendChild(note);
     }
     if (state.error) {
@@ -3266,6 +3292,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   window.addEventListener("app-language-changed", () => {
+    syncCreateMenuCopy();
     if (state && overlay && !overlay.hidden) render();
   });
 
