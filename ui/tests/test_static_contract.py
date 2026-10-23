@@ -58,6 +58,30 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("project-combobox", feature_template)
         self.assertIn("project-dropdown", feature_template)
 
+    def test_task_list_workspace_tracks_feature_prototype(self):
+        feature_css = (self.root.parent / "feature" / "ui-prototype" / "styles.css").read_text(encoding="utf-8")
+        feature_template = (self.root.parent / "feature" / "ui-prototype" / "task-ui-templates.js").read_text(encoding="utf-8")
+        production_css = (self.root / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
+
+        for token in (
+            "grid-template-columns:minmax(0,1fr) 260px",
+            "gap:14px",
+            "padding:14px",
+            "min-height:42px",
+            "border:1px dashed var(--line-strong)",
+        ):
+            self.assertIn(token, feature_css, token)
+            self.assertIn(token, production_css, token)
+
+        self.assertIn("plan-side-card", feature_template)
+        self.assertIn("plan-add-task-footer", feature_template)
+        self.assertIn("emptyTaskList", feature_template)
+        self.assertIn("task-workspace-list-side-card", self.task_workspace_js)
+        self.assertIn("task-workspace-add-task-footer", self.task_workspace_js)
+        self.assertIn("task-workspace-empty-list-cta", self.task_workspace_js)
+        self.assertIn("items: list ? [] : [blankItem(projectPath, defaultWorkflow)]", self.task_workspace_js)
+        self.assertIn('if (state?.kind === "task" && items.length <= 1) return;', self.task_workspace_js)
+
     def test_ui_does_not_import_runner_core(self):
         for path in self.root.rglob("*.py"):
             if "tests" in path.parts:

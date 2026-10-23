@@ -2113,7 +2113,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
-            assert page.locator(".task-workspace-list-row").count() == 1
+            assert page.locator("#taskWorkspaceSave").is_disabled()
+            assert page.locator(".task-workspace-list-row").count() == 0
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
+            assert page.locator(".task-workspace-list-side-card").count() == 2
+            list_columns = page.locator(".task-workspace-list-page").evaluate("(node) => getComputedStyle(node).gridTemplateColumns")
+            assert list_columns.endswith("260px")
+            assert page.locator(".task-workspace-list-main").evaluate("(node) => getComputedStyle(node).padding") == "14px"
 
             # Standalone Task List Draft footer Cancel shares the canonical
             # dirty-discard guard. Keep editing preserves the Draft; Discard
@@ -2133,8 +2139,29 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator(".task-workspace-list-row").count() == 1
+            assert page.locator(".task-workspace-list-row").count() == 0
             page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "First list child")
+            page.fill("#taskWorkspacePrompt", "First list prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 1
+            assert page.locator("#taskWorkspaceSave").is_enabled()
+
+            # Transient Task List Draft may return to zero items; canonical Tasks may not.
+            page.locator(".task-workspace-list-row").first.get_by_role("button", name="Remove").click()
+            assert page.locator(".task-workspace-list-row").count() == 0
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
+            assert page.locator("#taskWorkspaceSave").is_disabled()
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "First list child")
+            page.fill("#taskWorkspacePrompt", "First list prompt")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 1
+            page.click("#taskWorkspaceAddTask"
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "Second list child")
             page.fill("#taskWorkspacePrompt", "Second list prompt")
@@ -3151,7 +3178,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-list-row").count() == 3
             page.locator(".task-workspace-list-row").nth(2).focus()
             page.keyboard.press("Alt+ArrowUp")
-            page.locator(".task-workspace-list-row").nth(2).get_by_text("Remove", exact=True).click()
+            page.locator(".task-workspace-list-row").nth(2).get_by_role("button", name="Remove").click()
             assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
@@ -3987,15 +4014,16 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ Add task"
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
+            assert page.locator("#taskWorkspaceSave").is_disabled()
             page.evaluate("window.I18n.setLanguage('zh-TW')")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === '任務清單'")
-            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ 新增任務"
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "尚無任務\n+ 新增第一個任務"
             assert page.locator("#taskWorkspaceSave").inner_text() == "建立任務清單"
             page.evaluate("window.I18n.setLanguage('en')")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceAddTask").inner_text() == "+ Add task"
+            assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 

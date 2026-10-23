@@ -651,7 +651,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function removeItem(index) {
     const draft = editorDraft();
     const items = draft?.items;
-    if (!Array.isArray(items) || items.length <= 1) return;
+    if (!Array.isArray(items) || !items.length) return;
+    if (state?.kind === "task" && items.length <= 1) return;
     if (state?.kind === "task" && !taskItemEditPolicy(index, items[index]).restructure) return;
     items.splice(index, 1);
     state.index = Math.min(state.index, items.length - 1);
@@ -800,7 +801,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         remove.className = "danger-item";
         remove.textContent = "×";
         remove.setAttribute("aria-label", tr("task.remove", "Remove"));
-        remove.disabled = values.length <= 1 || policy.restructure === false;
+        remove.disabled = (state?.kind === "task" && values.length <= 1) || policy.restructure === false;
         remove.title = remove.disabled && policy.reason ? String(policy.reason) : tr("task.remove", "Remove");
         remove.onclick = () => removeItem(index);
 
