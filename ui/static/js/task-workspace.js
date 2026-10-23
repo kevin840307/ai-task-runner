@@ -14,7 +14,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let createMenu = null;
   let createContext = null;
   let createMenuOpenedAt = -Infinity;
-  let workspaceCloseTimer = 0;
   let workspaceOptionsToken = 0;
   let taskProjectionToken = 0;
   const byId = (id) => document.getElementById(id);
@@ -436,16 +435,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function showNow() {
     setWorkspaceExpanded(false);
-    if (workspaceCloseTimer) {
-      window.clearTimeout(workspaceCloseTimer);
-      workspaceCloseTimer = 0;
-    }
     if (overlay) {
       overlay.hidden = false;
-      overlay.classList.remove("open");
-      requestAnimationFrame(() => {
-        if (overlay && !overlay.hidden) overlay.classList.add("open");
-      });
+      overlay.classList.add("open");
     }
     document.body.classList.add("task-workspace-open");
   }
@@ -454,12 +446,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     setWorkspaceExpanded(false);
     if (overlay) {
       overlay.classList.remove("open");
-      if (workspaceCloseTimer) window.clearTimeout(workspaceCloseTimer);
-      const closingOverlay = overlay;
-      workspaceCloseTimer = window.setTimeout(() => {
-        if (!closingOverlay.classList.contains("open")) closingOverlay.hidden = true;
-        workspaceCloseTimer = 0;
-      }, 180);
+      overlay.hidden = true;
     }
     document.body.classList.remove("task-workspace-open");
     const focus = restore ? restoreFocus : null;

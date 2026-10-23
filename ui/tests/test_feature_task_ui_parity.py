@@ -383,6 +383,8 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     assert 'textarea.rows = 6' not in PRODUCTION_JS
     assert 'overlay.classList.add("open")' in PRODUCTION_JS
     assert 'overlay.classList.remove("open")' in PRODUCTION_JS
+    assert 'workspaceCloseTimer' not in PRODUCTION_JS
+    assert 'overlay.hidden = true' in PRODUCTION_JS
     assert 'if (now - createMenuOpenedAt < 80) return' in PRODUCTION_JS
     assert 'body.appendChild(inputGrid)' in PRODUCTION_JS
     assert 'body.appendChild(workspaceSection)' in PRODUCTION_JS
