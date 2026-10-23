@@ -4899,15 +4899,73 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
 
             if viewport["width"] == 820 and color_scheme == "light":
+                page.evaluate("window.I18n.setLanguage('en')")
+                page.wait_for_function(
+                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
+                )
+                language_geometry_before = page.evaluate(
+                    """() => Object.fromEntries([
+                        ['shell', '#taskWorkspaceShell'],
+                        ['basics', '.task-workspace-basics'],
+                        ['inputGrid', '#taskWorkspaceInputGrid'],
+                        ['prompt', '[data-task-source-card="prompt"]'],
+                        ['validator', '[data-task-source-card="validator"]'],
+                        ['ai', '[data-task-source-card="ai"]'],
+                        ['workspace', '.task-workspace-workspace-selector'],
+                    ].map(([key, selector]) => {
+                        const rect = document.querySelector(selector).getBoundingClientRect();
+                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
+                    }))"""
+                )
+
                 page.evaluate("window.I18n.setLanguage('zh-TW')")
                 page.wait_for_function(
                     "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === '撰寫'"
                 )
                 assert page.locator("[data-task-source-card='ai']").get_by_text("AI 驗證", exact=True).is_visible()
+                assert page.locator(".task-workspace-workspace-recommended").inner_text() == "建議 Auto"
+                assert page.locator("#taskWorkspaceProject").get_attribute("placeholder") == "選擇 Project 或輸入路徑"
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                language_geometry_zh = page.evaluate(
+                    """() => Object.fromEntries([
+                        ['shell', '#taskWorkspaceShell'],
+                        ['basics', '.task-workspace-basics'],
+                        ['inputGrid', '#taskWorkspaceInputGrid'],
+                        ['prompt', '[data-task-source-card="prompt"]'],
+                        ['validator', '[data-task-source-card="validator"]'],
+                        ['ai', '[data-task-source-card="ai"]'],
+                        ['workspace', '.task-workspace-workspace-selector'],
+                    ].map(([key, selector]) => {
+                        const rect = document.querySelector(selector).getBoundingClientRect();
+                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
+                    }))"""
+                )
+                for key in language_geometry_before:
+                    assert abs(language_geometry_before[key]["x"] - language_geometry_zh[key]["x"]) <= 1
+                    assert abs(language_geometry_before[key]["width"] - language_geometry_zh[key]["width"]) <= 1
+
                 page.evaluate("window.I18n.setLanguage('en')")
                 page.wait_for_function(
                     "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
                 )
+                assert page.locator(".task-workspace-workspace-recommended").inner_text() == "Auto recommended"
+                language_geometry_after = page.evaluate(
+                    """() => Object.fromEntries([
+                        ['shell', '#taskWorkspaceShell'],
+                        ['basics', '.task-workspace-basics'],
+                        ['inputGrid', '#taskWorkspaceInputGrid'],
+                        ['prompt', '[data-task-source-card="prompt"]'],
+                        ['validator', '[data-task-source-card="validator"]'],
+                        ['ai', '[data-task-source-card="ai"]'],
+                        ['workspace', '.task-workspace-workspace-selector'],
+                    ].map(([key, selector]) => {
+                        const rect = document.querySelector(selector).getBoundingClientRect();
+                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
+                    }))"""
+                )
+                for key in language_geometry_before:
+                    assert abs(language_geometry_before[key]["x"] - language_geometry_after[key]["x"]) <= 1
+                    assert abs(language_geometry_before[key]["width"] - language_geometry_after[key]["width"]) <= 1
 
             page.fill("#taskWorkspaceItemTitle", "Canonical source modes")
             page.click("#taskWorkspaceSave")

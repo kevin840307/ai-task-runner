@@ -492,6 +492,16 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("width", "min-height", "gap", "margin-top", "border-radius", "font-size"),
     )
     _same(
+        ".plan-row-compact[draggable=\"true\"]",
+        ".task-workspace-list-row[draggable=\"true\"]",
+        ("cursor",),
+    )
+    _same(
+        ".draft-plan-row",
+        ".task-workspace-list-row[draggable=\"true\"]",
+        ("transition",),
+    )
+    _same(
         ".plan-row-compact.dragging",
         ".task-workspace-list-row.dragging",
         ("opacity",),
