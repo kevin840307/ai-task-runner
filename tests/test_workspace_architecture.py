@@ -29,3 +29,35 @@ def test_runner_and_workspace_remain_independent_packages() -> None:
         if "workspace" in _import_roots(path):
             runner_importers.append(path.relative_to(ROOT).as_posix())
     assert runner_importers == []
+
+def test_ui_never_executes_git_and_remote_push_is_confined_to_publish_adapter() -> None:
+    ui_git_callers: set[str] = set()
+    push_callers: set[str] = set()
+
+    for path in ROOT.rglob("*.py"):
+        relative = path.relative_to(ROOT)
+        if "tests" in relative.parts or "feature" in relative.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = ""
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            if name != "git":
+                continue
+            if relative.parts and relative.parts[0] == "ui":
+                ui_git_callers.add(relative.as_posix())
+            if (
+                len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value == "push"
+            ):
+                push_callers.add(relative.as_posix())
+
+    assert ui_git_callers == set()
+    assert push_callers == {"workspace/publish.py"}
+
