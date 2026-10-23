@@ -1958,6 +1958,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - The quick Mode selector still uses the same adapter-projected mode catalog and now carries the selected mode safety description/YOLO warning in its title.
     - Browser regression proves there is no second Mode selector and the unsafe-mode warning remains discoverable.
 
+[x] Make Global Default Workflow a real catalog-backed select like the feature Settings UX.
+    - Reuses the canonical /api/studio/files projection with no Project argument, so only Global Workflow assets are candidates.
+    - Hidden Global Workflows and Project-only Workflows are not offered; no workflow names are hardcoded in production UI.
+    - A saved Workflow missing from the current catalog is preserved as an unavailable option instead of being silently replaced.
+    - Browser regression verifies a real Global Workflow is selectable and a Project-only Workflow never leaks into Global Defaults.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

@@ -101,7 +101,7 @@ function rememberAiValidatorPrompt(workflow, value) {
 }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, globalSettingsWrite: Promise.resolve(), globalDefaultCatalog: { agent: "", models: [], modes: [], reasoning: [] }, globalDefaultCatalogLoading: false, globalDefaultCatalogToken: 0, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, globalSettings: null, globalSettingsWrite: Promise.resolve(), globalDefaultCatalog: { agent: "", models: [], modes: [], reasoning: [] }, globalDefaultCatalogLoading: false, globalDefaultCatalogToken: 0, globalDefaultWorkflows: [], globalDefaultWorkflowsLoading: false, globalDefaultWorkflowsToken: 0, projectPreferences: null, projectPreferencesWrite: Promise.resolve(), validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "project-chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -235,6 +235,29 @@ async function refreshGlobalDefaultCatalog({ refresh = false, agent = "", model 
     }
   }
 }
+async function refreshGlobalDefaultWorkflows() {
+  const token = ++state.globalDefaultWorkflowsToken;
+  state.globalDefaultWorkflowsLoading = true;
+  renderGlobalSettingsForm();
+  try {
+    const data = await api("/api/studio/files?x=1", { timeoutMs: 15000 });
+    if (token !== state.globalDefaultWorkflowsToken) return state.globalDefaultWorkflows;
+    state.globalDefaultWorkflows = (Array.isArray(data?.workflows) ? data.workflows : [])
+      .filter((row) => row && row.scope === "global" && !row.hidden);
+    return state.globalDefaultWorkflows;
+  } catch (error) {
+    if (token === state.globalDefaultWorkflowsToken) {
+      state.globalDefaultWorkflows = [];
+      showActionError(error.message, "Global Workflow catalog unavailable");
+    }
+    return state.globalDefaultWorkflows;
+  } finally {
+    if (token === state.globalDefaultWorkflowsToken) {
+      state.globalDefaultWorkflowsLoading = false;
+      renderGlobalSettingsForm();
+    }
+  }
+}
 function renderGlobalSettingsForm() {
   const value = state.globalSettings; if (!value) return;
   const execution = value.execution || {}, defaults = value.defaults || {};
@@ -266,7 +289,14 @@ function renderGlobalSettingsForm() {
     "Model default",
     (row) => [row.id, String(row.label || row.id || ""), false],
   );
-  if ($("globalDefaultWorkflow")) $("globalDefaultWorkflow").value = String(defaults.workflow || "");
+  fillGlobalDefaultSelect(
+    $("globalDefaultWorkflow"),
+    state.globalDefaultWorkflows,
+    String(defaults.workflow || ""),
+    "No default workflow",
+    (row) => [row.path, String(row.display_name || row.name || row.path || ""), false],
+  );
+  if ($("globalDefaultWorkflow")) $("globalDefaultWorkflow").disabled = state.globalDefaultWorkflowsLoading;
 }
 function renderThemeControls() {
   const theme = document.documentElement.dataset.theme || "teal", appearance = document.documentElement.dataset.appearancePreference || "system";
@@ -303,6 +333,7 @@ function toggleThemePanel(event) {
   selectGlobalSettingsTab(panel.dataset.activeTab || "execution");
   renderThemeControls(); renderGlobalSettingsForm();
   void refreshGlobalDefaultCatalog().catch((error) => showActionError(error.message, "Global defaults catalog unavailable"));
+  void refreshGlobalDefaultWorkflows().catch((error) => showActionError(error.message, "Global Workflow catalog unavailable"));
   requestAnimationFrame(() => document.querySelector("[data-settings-tab].active")?.focus({ preventScroll: true }));
 }
 
@@ -2402,7 +2433,7 @@ $("globalDefaultModel")?.addEventListener("change", (event) => {
 });
 $("globalDefaultMode")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { mode: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalDefaultReasoning")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { reasoning: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
-$("globalDefaultWorkflow")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { workflow: event.currentTarget.value.trim() } }).catch((error) => showActionError(error.message, "Settings update failed")));
+$("globalDefaultWorkflow")?.addEventListener("change", (event) => void updateGlobalSettings({ defaults: { workflow: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => void updateGlobalSettings({ interface: { theme: button.dataset.themeOption } }).catch((error) => showActionError(error.message, "Settings update failed")); });
 document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => void updateGlobalSettings({ interface: { appearance: button.dataset.appearanceOption } }).catch((error) => showActionError(error.message, "Settings update failed")); });
 document.querySelectorAll("[data-motion-option]").forEach((button) => { button.onclick = () => applyMotionPreference(button.dataset.motionOption, { persist: true }); });

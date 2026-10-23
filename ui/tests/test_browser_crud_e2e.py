@@ -3672,6 +3672,9 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
         workflow_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_path.write_text("stages: {}\nflow: []\n", encoding="utf-8")
         workflow = str(workflow_path)
+        project_only_workflow = root / ".ai-task-runner" / "assets" / "workflows" / "project-only.yaml"
+        project_only_workflow.parent.mkdir(parents=True, exist_ok=True)
+        project_only_workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
         old_project_preferences = {
             "agent": "qwen",
             "model": "qwen/model-a",
@@ -3717,6 +3720,15 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
 
             page.click("#themeButton")
             page.click("[data-settings-tab='defaults']")
+            page.wait_for_function(
+                "(value) => Array.from(document.querySelectorAll('#globalDefaultWorkflow option')).some((node) => node.value === value)",
+                arg=workflow,
+            )
+            workflow_options = page.locator("#globalDefaultWorkflow option").evaluate_all(
+                "(nodes) => nodes.map((node) => node.value)"
+            )
+            assert workflow in workflow_options
+            assert str(project_only_workflow) not in workflow_options
             page.select_option("#globalDefaultAgent", "opencode")
             page.wait_for_function(
                 "() => document.querySelector('#globalDefaultModel')?.querySelector('option[value=\"openai/gpt-5.2\"]') !== null"
@@ -3727,8 +3739,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             )
             page.select_option("#globalDefaultMode", "read")
             page.select_option("#globalDefaultReasoning", "deep")
-            page.fill("#globalDefaultWorkflow", workflow)
-            page.locator("#globalDefaultWorkflow").press("Tab")
+            page.select_option("#globalDefaultWorkflow", workflow)
             page.wait_for_function(
                 """() => document.querySelector('#globalDefaultAgent')?.value === 'opencode'
                     && document.querySelector('#globalDefaultModel')?.value === 'openai/gpt-5.2'
