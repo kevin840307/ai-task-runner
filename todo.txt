@@ -1964,6 +1964,13 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - A saved Workflow missing from the current catalog is preserved as an unavailable option instead of being silently replaced.
     - Browser regression verifies a real Global Workflow is selectable and a Project-only Workflow never leaks into Global Defaults.
 
+[x] Match Project Chat settings placement to the latest feature Composer UX.
+    - Workflow / Agent / Model / Reasoning remain inside the existing Project Chat settings popover.
+    - Mode stays as the compact Composer quick selector and New Task keeps the shared Task create flow.
+    - Removed the fixed preference-chip bar above Chat instead of keeping two visible settings surfaces.
+    - The same Project preference API/catalog owner is reused; no duplicate state or provider-specific list was added.
+    - Browser regression locks the Settings trigger inside Composer and forbids the removed preference bar.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
