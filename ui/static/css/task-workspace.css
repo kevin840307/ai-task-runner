@@ -376,7 +376,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-source-tabs{width:100%;min-width:0;height:30px;min-height:30px;box-sizing:border-box}
 .task-workspace-task-primary-source .task-workspace-source-tabs,
 .task-workspace-task-ai-source .task-workspace-source-tabs{
-  display:grid;gap:3px
+  display:grid;width:100%;min-width:0;height:30px;gap:3px;box-sizing:border-box
 }
 .task-workspace-task-primary-source .task-workspace-source-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
 .task-workspace-task-ai-source .task-workspace-source-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
