@@ -258,6 +258,14 @@ class ChatAgentService:
             except Exception as exc:
                 self._close_execution(session_key, execution_key)
                 failure = str(exc) or exc.__class__.__name__
+                ask_cleanup_error = self._cancel_failed_turn_native_ask(
+                    project,
+                    chat,
+                    session_id=session_id,
+                    turn_id=str(item["turn_id"]),
+                )
+                if ask_cleanup_error:
+                    failure += f"\nNative Ask cleanup: {ask_cleanup_error}"
                 chat.append_message(
                     project,
                     session_id,
@@ -586,6 +594,61 @@ class ChatAgentService:
                 )
             return result.get("ask")
         return pending
+
+    def _cancel_failed_turn_native_ask(
+        self,
+        project: Path,
+        chat: ChatService,
+        *,
+        session_id: str,
+        turn_id: str,
+    ) -> str:
+        """Cancel only the stale Native Ask owned by a failed Agent turn."""
+        pending = chat.ask(project, session_id).get("ask")
+        if (
+            not isinstance(pending, dict)
+            or pending.get("status") != "waiting"
+            or str(pending.get("turn_id") or "") != str(turn_id or "")
+            or str(pending.get("source") or "") != "native"
+        ):
+            return ""
+
+        ask_id = str(pending.get("ask_id") or "")
+        request_id = f"failed-turn-{ask_id}"
+        try:
+            self._complete_ask(
+                project,
+                chat,
+                session_id=session_id,
+                ask_id=ask_id,
+                request_id=request_id,
+                cancelled=True,
+            )
+            return ""
+        except Exception as native_error:
+            # The owning Agent turn has already failed. If its native bridge died
+            # first, do not leave the durable UI Ask blocking this Chat for hours.
+            current = chat.ask(project, session_id).get("ask")
+            if (
+                not isinstance(current, dict)
+                or str(current.get("ask_id") or "") != ask_id
+                or current.get("status") in {"answered", "cancelled"}
+            ):
+                return ""
+            if current.get("status") != "waiting":
+                return str(native_error)
+            try:
+                chat.cancel_ask(
+                    project,
+                    session_id,
+                    ask_id,
+                    request_id=request_id + "-durable",
+                )
+                return ""
+            except Exception as durable_error:
+                return (
+                    f"{native_error}; durable cancel failed: {durable_error}"
+                )
 
     def complete_ask(
         self,
