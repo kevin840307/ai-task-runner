@@ -476,3 +476,102 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-editor-secondary .task-workspace-workspace-preview{
   margin-top:6px;padding:6px 8px;font-size:7.4px;line-height:1.4
 }
+
+
+/* Feature Task List Workspace: main list + List info / Quick use side rail. */
+.task-workspace-shell.task-list-route .task-workspace-body{padding:0;background:var(--bg)}
+.task-workspace-list-page{
+  min-height:100%;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;
+  padding:14px;background:var(--bg);overflow:auto
+}
+.task-workspace-list-main{
+  min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)
+}
+.task-workspace-list-intro{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line)
+}
+.task-workspace-list-intro strong{display:block;font-size:11px}
+.task-workspace-list-intro span:not(.task-workspace-list-state-pill){
+  display:block;margin-top:3px;color:var(--muted);font-size:8px
+}
+.task-workspace-list-state-pill{
+  flex:0 0 auto;padding:3px 7px;border-radius:999px;background:var(--panel-3);
+  color:var(--muted);font-size:8px;font-weight:900
+}
+.task-workspace-plan-list,.task-workspace-list{display:grid;gap:7px}
+.task-workspace-list-row{
+  min-height:54px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--panel)
+}
+.task-workspace-list-row:not(.task-workspace-info-row){
+  grid-template-columns:18px 28px minmax(0,1fr) auto
+}
+.task-workspace-list-number{
+  width:28px;height:28px;border-radius:50%;background:var(--panel-3);color:var(--muted);font-size:8px
+}
+.task-workspace-list-copy strong{font-size:10px}
+.task-workspace-list-copy small{margin-top:2px;font-size:8px}
+.task-workspace-list-actions{display:flex;align-items:center;gap:4px}
+.task-workspace-list-actions button{
+  height:27px;min-height:27px;min-width:27px;padding:0 7px;border:1px solid var(--line);
+  border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px
+}
+.task-workspace-list-actions button:hover:not(:disabled){border-color:var(--line-strong);color:var(--text)}
+.task-workspace-list-chip,.task-workspace-list-state{
+  padding:3px 6px;border-radius:999px;background:var(--panel-3);color:var(--muted);font-size:7px;font-weight:850
+}
+.task-workspace-list-chip.worktree{background:var(--warning-soft);color:var(--warn)}
+.task-workspace-list-state.current{background:var(--accent-soft);color:var(--accent-dark)}
+.task-workspace-list-state.completed{background:var(--success-soft);color:var(--pass)}
+
+.task-workspace-list-side{display:grid;align-content:start;gap:10px}
+.task-workspace-list-side-card{
+  padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel)
+}
+.task-workspace-list-side-card h3{
+  margin:0 0 8px;color:var(--text);font-size:9px;text-transform:uppercase;letter-spacing:.05em
+}
+.task-workspace-list-side-card p{margin:0 0 7px;color:var(--muted);font-size:8px;line-height:1.5}
+.task-workspace-list-kv{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 8px;font-size:8px}
+.task-workspace-list-kv>span{color:var(--muted)}
+.task-workspace-list-kv>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-workspace-list-draft-control{display:block;min-width:0}
+.task-workspace-list-draft-control input,
+#taskWorkspaceListProject{
+  width:100%;min-width:0;padding:7px 8px;border:1px solid var(--line);border-radius:7px;
+  background:var(--input-bg);color:var(--text);font-size:8.5px
+}
+.task-workspace-list-tools{display:flex;gap:5px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.task-workspace-list-tools button{
+  min-height:28px;padding:0 8px;border:1px solid var(--line);border-radius:7px;
+  background:var(--panel-2);color:var(--text);font-size:8px;font-weight:800
+}
+
+.task-workspace-add-task-footer{
+  width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;gap:6px;
+  margin-top:2px;border:1px dashed var(--line-strong);border-radius:9px;background:var(--panel-2);
+  color:var(--accent);font-size:9px;font-weight:850;cursor:pointer
+}
+.task-workspace-add-task-footer:hover:not(:disabled),
+.task-workspace-empty-list-cta:hover:not(:disabled){
+  border-color:var(--accent);background:var(--accent-softer)
+}
+.task-workspace-add-task-footer:disabled,.task-workspace-empty-list-cta:disabled{cursor:not-allowed;opacity:.5}
+.task-workspace-add-task-plus{font-size:13px;line-height:1}
+.task-workspace-empty-list-cta{
+  width:100%;min-height:150px;display:grid;place-items:center;align-content:center;gap:5px;
+  padding:26px;border:1px dashed var(--line-strong);border-radius:10px;background:var(--panel);
+  color:var(--muted);text-align:center;cursor:pointer
+}
+.task-workspace-empty-list-cta strong{color:var(--text);font-size:11px}
+.task-workspace-empty-list-cta span{color:var(--accent);font-size:9px;font-weight:850}
+
+@media(max-width:960px){
+  .task-workspace-list-page{grid-template-columns:1fr}
+  .task-workspace-list-side{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .task-workspace-list-side{grid-template-columns:1fr}
+  .task-workspace-list-row:not(.task-workspace-info-row){grid-template-columns:18px 28px minmax(0,1fr)}
+  .task-workspace-list-actions{grid-column:3;justify-content:flex-end;flex-wrap:wrap}
+}

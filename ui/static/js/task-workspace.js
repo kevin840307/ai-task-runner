@@ -684,6 +684,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       dragIndex = null;
       list.querySelectorAll(".task-workspace-list-row").forEach((node) => node.classList.remove("dragging", "drag-over"));
     };
+
     values.forEach((item, index) => {
       const row = document.createElement("article");
       row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
@@ -693,6 +694,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           : itemPolicies[index])
         : null;
       const policy = rowPolicy || { editable: true, restructure: true, reason: "" };
+      const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
+        ? String(rowPolicy.state).toUpperCase()
+        : "";
 
       if (editable) {
         const grip = document.createElement("span");
@@ -708,22 +712,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const number = document.createElement("span");
       number.className = "task-workspace-list-number";
       number.textContent = String(index + 1);
+
       const copy = document.createElement("div");
       copy.className = "task-workspace-list-copy";
       const title = document.createElement("strong");
       title.textContent = String(item.title || "Task " + (index + 1));
       const meta = document.createElement("small");
-      const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
-        ? String(rowPolicy.state).toUpperCase()
-        : "";
-      meta.textContent = [
-        String(item.workflow || "Workflow"),
-        String(item.workspace || "auto").toUpperCase(),
-        stateLabel,
-      ].filter(Boolean).join(" · ");
-      const prompt = document.createElement("p");
-      prompt.textContent = String(item.prompt || item.goal_file || "");
-      copy.append(title, meta, prompt);
+      const projectName = String(item.project || "").replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || String(item.project || "");
+      meta.textContent = [projectName, String(item.workflow || "Workflow")].filter(Boolean).join(" · ");
+      copy.append(title, meta);
       row.append(number, copy);
 
       if (editable) {
@@ -779,6 +776,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
+        const workspaceChip = document.createElement("span");
+        workspaceChip.className = "task-workspace-list-chip" + (String(item.workspace || "").toLowerCase() === "worktree" ? " worktree" : "");
+        workspaceChip.textContent = String(item.workspace || "auto").toUpperCase();
+        actions.appendChild(workspaceChip);
+        if (stateLabel) {
+          const stateChip = document.createElement("span");
+          stateChip.className = "task-workspace-list-state " + String(rowPolicy?.state || "");
+          stateChip.textContent = stateLabel;
+          actions.appendChild(stateChip);
+        }
+
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-row-edit";
@@ -786,18 +794,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         edit.disabled = policy.editable === false;
         edit.title = edit.disabled ? String(policy.reason || disabledEditReason || "") : "";
         edit.onclick = () => editItem(index);
+
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "danger-item";
-        remove.textContent = tr("task.remove", "Remove");
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", tr("task.remove", "Remove"));
         remove.disabled = values.length <= 1 || policy.restructure === false;
-        remove.title = remove.disabled && policy.reason ? String(policy.reason) : "";
+        remove.title = remove.disabled && policy.reason ? String(policy.reason) : tr("task.remove", "Remove");
         remove.onclick = () => removeItem(index);
+
         actions.append(edit, remove);
         row.appendChild(actions);
       } else if (typeof onEdit === "function" || disabledEditReason) {
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
+        const workspaceChip = document.createElement("span");
+        workspaceChip.className = "task-workspace-list-chip" + (String(item.workspace || "").toLowerCase() === "worktree" ? " worktree" : "");
+        workspaceChip.textContent = String(item.workspace || "auto").toUpperCase();
+        actions.appendChild(workspaceChip);
+        if (stateLabel) {
+          const stateChip = document.createElement("span");
+          stateChip.className = "task-workspace-list-state " + String(rowPolicy?.state || "");
+          stateChip.textContent = stateLabel;
+          actions.appendChild(stateChip);
+        }
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-durable-edit";
@@ -815,35 +836,203 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     });
     return list;
   }
-  function appendDraftListActions(body) {
-    const actions = document.createElement("div");
-    actions.className = "task-workspace-info-actions";
-    const add = document.createElement("button");
-    add.id = "taskWorkspaceAddTask";
-    add.type = "button";
-    add.textContent = tr("task.add", "+ Add task");
-    add.onclick = addDraftListItem;
+  function listInfoRow(grid, labelText, value) {
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    grid.appendChild(label);
+    if (value instanceof Node) grid.appendChild(value);
+    else {
+      const strong = document.createElement("strong");
+      strong.textContent = String(value ?? "");
+      grid.appendChild(strong);
+    }
+  }
+
+  function listTitleControl() {
+    const draft = editorDraft();
+    const wrap = document.createElement("label");
+    wrap.className = "task-workspace-list-draft-control";
+    const input = document.createElement("input");
+    input.id = "taskWorkspaceDraftTitle";
+    input.autocomplete = "off";
+    input.value = String(draft?.title || "");
+    input.maxLength = 240;
+    input.addEventListener("input", () => {
+      clearFieldError("draftTitle");
+      draft.title = input.value;
+      touchEditor();
+      const shellTitle = byId("taskWorkspaceTitle");
+      if (shellTitle) shellTitle.textContent = input.value.trim() || tr("task.new_list", "New Task List");
+    });
+    wrap.appendChild(input);
+    appendFieldError(wrap, input, "draftTitle");
+    return wrap;
+  }
+
+  function listDraftProjectControl() {
+    const select = document.createElement("select");
+    select.id = "taskWorkspaceListProject";
+    const current = String(state.draft?.project || state.project || "");
+    const rows = Array.isArray(state.projectOptions) ? state.projectOptions : [];
+    const seen = new Set();
+    const add = (value, label) => {
+      const path = String(value || "").trim();
+      if (!path || seen.has(path)) return;
+      seen.add(path);
+      const option = document.createElement("option");
+      option.value = path;
+      option.textContent = String(label || path);
+      select.appendChild(option);
+    };
+    add(current, current);
+    for (const row of rows) add(row?.path, [row?.name, row?.path].filter(Boolean).join(" · "));
+    select.value = current;
+    select.addEventListener("change", () => {
+      state.project = select.value;
+      state.draft.project = select.value;
+      touchEditor();
+    });
+    return select;
+  }
+
+  function createTaskListTools({ editable, canYaml, reason = "" } = {}) {
+    const tools = document.createElement("div");
+    tools.className = "task-workspace-list-tools";
     const yaml = document.createElement("button");
     yaml.id = "taskWorkspaceYamlButton";
     yaml.type = "button";
     yaml.textContent = tr("task.edit_yaml", "Edit YAML");
-    yaml.onclick = () => void openYaml();
-    actions.append(add, yaml);
-    const prompts = promptsButton();
-    if (prompts) actions.appendChild(prompts);
-    body.appendChild(actions);
+    yaml.disabled = !canYaml;
+    yaml.title = yaml.disabled ? reason : "";
+    if (!yaml.disabled) yaml.onclick = () => void openYaml();
+    tools.appendChild(yaml);
+    if (editable) {
+      const prompts = promptsButton();
+      if (prompts) tools.appendChild(prompts);
+    }
+    return tools;
+  }
+
+  function createTaskListAddButton({ enabled = true, first = false, onClick, reason = "" } = {}) {
+    const add = document.createElement("button");
+    add.id = "taskWorkspaceAddTask";
+    add.type = "button";
+    add.className = first ? "task-workspace-empty-list-cta" : "task-workspace-add-task-footer";
+    if (first) {
+      const strong = document.createElement("strong");
+      strong.textContent = tr("task.empty_list", "No tasks yet");
+      const span = document.createElement("span");
+      span.textContent = tr("task.add_first", "+ Add first task");
+      add.append(strong, span);
+    } else {
+      const plus = document.createElement("span");
+      plus.className = "task-workspace-add-task-plus";
+      plus.textContent = "＋";
+      const strong = document.createElement("strong");
+      strong.textContent = tr("task.add_label", "Add task");
+      add.append(plus, strong);
+    }
+    add.disabled = !enabled;
+    add.title = !enabled ? reason : "";
+    if (enabled) add.onclick = onClick;
+    return add;
+  }
+
+  function buildTaskListPage({ items, editable, canAdd, canYaml, reason = "", durableTask = null } = {}) {
+    const page = document.createElement("div");
+    page.className = "task-workspace-list-page";
+
+    const main = document.createElement("main");
+    main.className = "task-workspace-list-main";
+    const intro = document.createElement("div");
+    intro.className = "task-workspace-list-intro";
+    const introCopy = document.createElement("div");
+    const introTitle = document.createElement("strong");
+    introTitle.textContent = tr("task.order", "Task order");
+    const introText = document.createElement("span");
+    introText.textContent = durableTask && String(durableTask.status || "") === "paused"
+      ? "Paused · completed items are locked; current changes require restart."
+      : tr("task.order_desc", "Tasks run top-to-bottom inside this Task List.");
+    introCopy.append(introTitle, introText);
+    const statePill = document.createElement("span");
+    statePill.className = "task-workspace-list-state-pill";
+    statePill.textContent = editable ? "Editable" : "Read-only";
+    intro.append(introCopy, statePill);
+    main.appendChild(intro);
+
+    const listHost = document.createElement("div");
+    listHost.className = "task-workspace-plan-list";
+    if (!items.length) {
+      listHost.appendChild(createTaskListAddButton({
+        first: true,
+        enabled: canAdd,
+        onClick: state.kind === "task" ? addTaskListItem : addDraftListItem,
+        reason,
+      }));
+    } else {
+      const policy = durableTask ? taskEditPolicy(durableTask) : null;
+      listHost.appendChild(renderTaskRows(items, {
+        editable,
+        itemPolicies: policy?.items || null,
+        disabledEditReason: editable ? "" : reason,
+      }));
+      listHost.appendChild(createTaskListAddButton({
+        enabled: canAdd,
+        onClick: state.kind === "task" ? addTaskListItem : addDraftListItem,
+        reason,
+      }));
+    }
+    main.appendChild(listHost);
+
+    const aside = document.createElement("aside");
+    aside.className = "task-workspace-list-side";
+    const info = document.createElement("section");
+    info.className = "task-workspace-list-side-card";
+    const infoTitle = document.createElement("h3");
+    infoTitle.textContent = "List info";
+    const kv = document.createElement("div");
+    kv.className = "task-workspace-list-kv";
+    if (state.kind === "draft") {
+      listInfoRow(kv, "Title", listTitleControl());
+      listInfoRow(kv, "Project", listDraftProjectControl());
+      listInfoRow(kv, "Tasks", String(items.length));
+      listInfoRow(kv, "State", "Not created");
+    } else {
+      const task = durableTask || {};
+      const policy = taskEditPolicy(task);
+      if (editable && policy.can_rename) listInfoRow(kv, "List", listTitleControl());
+      else listInfoRow(kv, "List", String(task.title || ""));
+      listInfoRow(kv, "Status", String(task.status || "new").toUpperCase());
+      listInfoRow(kv, "Runtime", String(task.run?.phase || (task.status === "closed" ? "Completed" : "Idle")).replaceAll("_", " "));
+      listInfoRow(kv, "Progress", String(task.completed_item_count || 0) + " / " + String(items.length));
+    }
+    info.append(infoTitle, kv, createTaskListTools({ editable, canYaml, reason }));
+
+    const help = document.createElement("section");
+    help.className = "task-workspace-list-side-card task-workspace-list-help";
+    const helpTitle = document.createElement("h3");
+    helpTitle.textContent = "Quick use";
+    const firstHelp = document.createElement("p");
+    firstHelp.innerHTML = "<strong>Double-click</strong> edits a task.";
+    const secondHelp = document.createElement("p");
+    secondHelp.innerHTML = "Drag the grip to reorder · <strong>Alt+↑/↓</strong> is the keyboard alternative.";
+    help.append(helpTitle, firstHelp, secondHelp);
+    aside.append(info, help);
+
+    page.append(main, aside);
+    return page;
   }
 
   function renderList() {
     const body = byId("taskWorkspaceBody");
     body.innerHTML = "";
-    body.appendChild(renderDraftTitleField());
-    const intro = document.createElement("div");
-    intro.className = "task-workspace-intro";
-    intro.innerHTML = "<strong>" + tr("task.order", "Task order") + "</strong><span>" + tr("task.order_desc", "Tasks run top-to-bottom inside this Task List.") + "</span>";
-    body.appendChild(intro);
-    body.appendChild(renderTaskRows(state.draft.items, { editable: true }));
-    appendDraftListActions(body);
+    const items = Array.isArray(state.draft?.items) ? state.draft.items : [];
+    body.appendChild(buildTaskListPage({
+      items,
+      editable: true,
+      canAdd: true,
+      canYaml: items.length > 0,
+    }));
   }
 
   function currentProjectPath() {
@@ -1892,58 +2081,28 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     body.innerHTML = "";
     const policy = taskEditPolicy(task);
     const editable = policy.editable && ensureTaskEditDraft();
-    if (editable && policy.can_rename) body.appendChild(renderDraftTitleField());
-    const intro = document.createElement("div");
-    intro.className = "task-workspace-intro";
-    intro.innerHTML = editable
-      ? (String(task.status || "") === "paused"
-        ? "<strong>Task order</strong><span>Paused · completed items are locked; current changes require restart.</span>"
-        : "<strong>Task order</strong><span>Add, edit, remove or reorder before Save.</span>")
-      : "<strong>Task order</strong><span>Canonical ordered items</span>";
-    body.appendChild(intro);
+    const items = editable ? state.editDraft.items : (Array.isArray(task.items) ? task.items : []);
     const blockedReason = editable ? "" : taskMutationBlockedReason(task);
-    body.appendChild(renderTaskRows(
-      editable ? state.editDraft.items : task.items,
-      { editable, itemPolicies: policy.items, disabledEditReason: blockedReason },
-    ));
+    body.appendChild(buildTaskListPage({
+      items,
+      editable,
+      canAdd: editable && policy.can_add_item,
+      canYaml: editable && policy.can_edit_yaml,
+      reason: blockedReason || policy.reason || "",
+      durableTask: task,
+    }));
 
-    const actions = document.createElement("div");
-    actions.className = "task-workspace-info-actions";
-    const add = document.createElement("button");
-    add.id = "taskWorkspaceAddTask";
-    add.type = "button";
-    add.textContent = tr("task.add", "+ Add task");
-    const yaml = document.createElement("button");
-    yaml.id = "taskWorkspaceYamlButton";
-    yaml.type = "button";
-    yaml.textContent = tr("task.edit_yaml", "Edit YAML");
-    add.disabled = !editable || !policy.can_add_item;
-    add.title = add.disabled ? String(blockedReason || policy.reason || "") : "";
-    if (!add.disabled) add.onclick = addTaskListItem;
-    yaml.disabled = !editable || !policy.can_edit_yaml;
-    yaml.title = yaml.disabled
-      ? (String(task.status || "") === "paused" && Number(policy.completed_item_count || 0) > 0
-        ? "Completed Task items are frozen; edit current or future items individually"
-        : String(blockedReason || policy.reason || ""))
-      : "";
-    if (!yaml.disabled) yaml.onclick = () => void openYaml();
-    actions.append(add, yaml);
-    if (editable) {
-      const prompts = promptsButton();
-      if (prompts) actions.appendChild(prompts);
-      if (policy.restart_required) {
-        const note = document.createElement("p");
-        note.className = "task-workspace-action-note";
-        note.textContent = "Current paused Task changed · restart required before continuing.";
-        body.appendChild(note);
-      }
-    } else {
+    if (policy.restart_required) {
+      const note = document.createElement("p");
+      note.className = "task-workspace-action-note";
+      note.textContent = "Current paused Task changed · restart required before continuing.";
+      body.appendChild(note);
+    } else if (!editable) {
       const note = document.createElement("p");
       note.className = "task-workspace-action-note";
       note.textContent = "Task List is view-only. " + blockedReason + ".";
       body.appendChild(note);
     }
-    body.appendChild(actions);
     if (state.error) {
       const error = document.createElement("div");
       error.id = "taskWorkspaceError";
@@ -2384,6 +2543,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       : creating
         ? (listRoute ? tr("task.create_list", "Create Task List") : tr("task.create", "Create Task"))
         : tr("task.save_draft", "Save draft");
+    byId("taskWorkspaceSave").disabled = Boolean(listRoute && creating && count === 0);
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
     if (!yamlRoute) (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus();
   }
@@ -2544,6 +2704,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   async function saveDraft() {
     if (!isDraftState()) return;
+    if (state.route === "list" && !state.draft.items.length) {
+      state.error = "Task List must contain at least one Task";
+      render();
+      return;
+    }
     if (!validateSelectedSourceModes()) return;
     const button = byId("taskWorkspaceSave");
     button.disabled = true;
@@ -2618,7 +2783,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       schema_version: 1,
       title: list ? "New Task List" : "New Task",
       project: projectPath,
-      items: [blankItem(projectPath, defaultWorkflow)],
+      items: list ? [] : [blankItem(projectPath, defaultWorkflow)],
     };
     restoreFocus = returnFocus || document.activeElement;
     state = {
