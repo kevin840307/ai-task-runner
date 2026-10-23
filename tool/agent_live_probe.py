@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -59,6 +60,21 @@ _ASK_PROMPT = (
     "'Continue'. Do not use any other tools and do not modify files. After the user "
     f"answers Continue, reply with exactly {ASK_MARKER} and nothing else."
 )
+
+
+def _isolated_chat_service(storage_root: Path) -> ChatService:
+    """Reuse canonical Chat logic while keeping live-probe state out of the Project."""
+    base = ChatService
+    storage = Path(storage_root).resolve()
+
+    class IsolatedChatService(base):
+        def _state_path(self, _project: Path) -> Path:
+            return base._state_path(storage)
+
+        def _messages_path(self, _project: Path, session_id: str) -> Path:
+            return base._messages_path(storage, session_id)
+
+    return IsolatedChatService()
 
 
 def _source_head() -> str:
@@ -452,7 +468,10 @@ def _run_native_ask_roundtrip(
     model: str,
     timeout: int,
 ) -> dict[str, Any]:
-    chat = ChatService()
+    chat_storage = tempfile.TemporaryDirectory(
+        prefix="ai-task-runner-agent-live-chat-"
+    )
+    chat = _isolated_chat_service(Path(chat_storage.name))
     before = chat.sessions(project)
     original_active = str(before.get("active_session_id") or "")
     created = chat.create_session(
@@ -578,6 +597,10 @@ def _run_native_ask_roundtrip(
                     cleanup_errors.append("original active Chat session was not restored")
             except Exception as exc:
                 cleanup_errors.append(f"active Chat restoration failed: {exc}")
+        try:
+            chat_storage.cleanup()
+        except Exception as exc:
+            cleanup_errors.append(f"isolated Chat storage cleanup failed: {exc}")
         if cleanup_errors and not primary_error:
             raise RuntimeError(
                 f"{backend}: live Native Ask cleanup failed: "

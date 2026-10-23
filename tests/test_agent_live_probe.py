@@ -352,6 +352,30 @@ def test_native_ask_roundtrip_uses_chat_service_and_restores_active_session(
     assert [item["session_id"] for item in after["sessions"]] == [original_session]
 
 
+def test_native_ask_roundtrip_does_not_create_project_chat_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = tmp_path / ".ai-task-runner" / "ui" / "chat" / "state.json"
+    assert not state.exists()
+
+    monkeypatch.setattr(
+        probe,
+        "ChatAgentService",
+        _FakeNativeAskAgentService,
+    )
+
+    value = probe._run_native_ask_roundtrip(
+        tmp_path,
+        "sample",
+        model="native/model",
+        timeout=3,
+    )
+
+    assert value["ok"] is True
+    assert not state.exists()
+
+
 def test_native_ask_roundtrip_fails_when_probe_chat_cleanup_leaks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

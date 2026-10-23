@@ -1936,6 +1936,11 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Correlate turn_complete / turn_error through event.data.promptId (with legacy top-level fallback).
     - Regression injects a stale terminal event before the current turn and requires it to be ignored.
 
+[x] Keep formal Agent live probing non-destructive to Project Chat persistence.
+    - Native Ask roundtrip reuses the canonical ChatService against isolated temporary storage.
+    - The Agent still receives the real project_root, so Model/Skill/Slash/provider behavior is unchanged.
+    - A pristine Project stays without Chat state after the probe; existing Project Chat sessions are never selected/deleted by test plumbing.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
