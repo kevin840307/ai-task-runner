@@ -1914,6 +1914,16 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - tests/test_agent_live_probe.py locks redaction, formal-gate qualification, Ask orchestration,
       active-Chat restoration and atomic evidence replacement.
 
+[x] Fail closed Native Ask lifecycle when the owning Agent turn dies.
+    - A failed native-Agent turn immediately cancels only its own waiting Ask by matching turn_id + source=native.
+    - Provider cancellation is attempted first; if the native bridge already disappeared, durable Chat Ask state
+      is cancelled locally so later Queue items are not blocked until the normal two-hour Ask timeout.
+    - Explicit answer transport failure still rolls back to waiting while the owning Agent turn is alive;
+      another turn/session's Ask is never touched.
+    - Exact runtime head 6e392015b97373b96b722e5a6983c72cabd50be1 passed CI run 39895945912:
+      Ubuntu 1392 passed / 44 skipped / 3 subtests, Windows 1392 passed / 44 skipped / 3 subtests,
+      Browser E2E 44 passed, Studio build PASS.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
