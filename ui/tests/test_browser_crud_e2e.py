@@ -768,6 +768,9 @@ def _bridge_for(state: UIState):
                         request_id=str(body.get("request_id", "")),
                     )
                 elif path == "/api/chat/session/select":
+                    if bool(getattr(state, "_browser_chat_select_fail", False)):
+                        state._browser_chat_select_fail = False
+                        raise ValueError("Injected Chat select failure")
                     data = state.chat_service.select_session(Path(body["project"]), str(body.get("session_id", "")))
                 elif path == "/api/chat/session/rename":
                     data = state.chat_service.rename_session(
@@ -1785,6 +1788,26 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             for _ in range(2):
                 page.click("#newProjectChatButton")
             page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 3")
+
+            # A failed header selection must restore the canonical active Chat
+            # instead of leaving the native select on a stale optimistic value.
+            sessions_before_failed_select = state.chat_service.sessions(root)
+            active_before_failed_select = sessions_before_failed_select["active_session_id"]
+            failed_target = next(
+                row["session_id"]
+                for row in sessions_before_failed_select["sessions"]
+                if row["session_id"] != active_before_failed_select
+            )
+            state._browser_chat_select_fail = True
+            page.select_option("#projectChatSessionSelect", failed_target)
+            page.wait_for_function(
+                "(value) => document.querySelector('#projectChatSessionSelect')?.value === value",
+                arg=active_before_failed_select,
+            )
+            assert state.chat_service.sessions(root)["active_session_id"] == active_before_failed_select
+            page.wait_for_function(
+                "() => Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('Injected Chat select failure'))"
+            )
 
             # Select and delete a middle Chat; the other Project must not change.
             middle_id = state.chat_service.sessions(root)["sessions"][1]["session_id"]

@@ -1505,6 +1505,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       renderSessions();
       await Promise.all([refreshMessages(), refreshQueue(), refreshAsk()]);
     } catch (error) {
+      renderSessions();
       showError?.(error.message, "Open Chat failed");
     }
   }
