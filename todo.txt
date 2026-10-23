@@ -1998,6 +1998,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Chat settings labels/help plus Ask capability states use the shared zh-TW/en i18n owner; provider-supplied capability detail remains adapter-owned.
     - Browser localization regression verifies the settings order, Mode label and Ask capability state in both zh-TW and English.
 
+[x] Make Global Settings the actual fixed bottom owner in the latest feature sidebar hierarchy.
+    - Removed the obsolete sidebar history footer that sat below Settings and contradicted the fixed-bottom Global Settings contract.
+    - Sidebar grid now gives the Project list the only flexible/scrollable row and an explicit final row to Global Settings.
+    - Added the prototype-style Global runner preferences subtitle through the shared zh-TW/en i18n owner; collapsed sidebar keeps the same single Settings action without overflow.
+    - Browser regression verifies Settings is the sidebar's last child, remains pinned to the bottom, Project list owns scrolling, and the subtitle rerenders on language changes.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

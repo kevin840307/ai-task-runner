@@ -600,7 +600,7 @@ body.projects-collapsed .project-item::before {
 /* Sidebar consistency + scroll polish */
 .projects {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
   overflow: hidden;
   scrollbar-gutter: stable;
@@ -740,6 +740,28 @@ body.projects-collapsed .project-list {
   stroke-linejoin: round;
 }
 .project-nav-link strong { font-size: 12.5px; }
+.global-settings-button .global-settings-copy {
+  display: grid;
+  place-items: initial;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  gap: 1px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  line-height: 1.15;
+  text-align: left;
+}
+.global-settings-button .global-settings-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.projects-collapsed .global-settings-button .global-settings-copy { display: none; }
 .project-nav-link.active .nav-icon { background: var(--accent); color: var(--on-accent, #fff); }
 
 /* Keep the Project section label static; New Project is a fixed action above the scrollable list. */

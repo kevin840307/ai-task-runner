@@ -2671,12 +2671,27 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                     const label = document.querySelector('.project-section-label').getBoundingClientRect();
                     const list = document.querySelector('#projectList').getBoundingClientRect();
                     const overflow = getComputedStyle(document.querySelector('#projectList')).overflowY;
-                    return {createBottom: create.bottom, labelTop: label.top, labelBottom: label.bottom, listTop: list.top, overflow};
+                    const sidebar = document.querySelector('.projects').getBoundingClientRect();
+                    const settings = document.querySelector('.sidebar-global-settings').getBoundingClientRect();
+                    const settingsNode = document.querySelector('.sidebar-global-settings');
+                    return {
+                        createBottom: create.bottom,
+                        labelTop: label.top,
+                        labelBottom: label.bottom,
+                        listTop: list.top,
+                        overflow,
+                        settingsGap: sidebar.bottom - settings.bottom,
+                        settingsIsLast: settingsNode === settingsNode.parentElement.lastElementChild
+                    };
                 }"""
             )
             assert sidebar_project_geometry["createBottom"] <= sidebar_project_geometry["labelTop"] + 1
             assert sidebar_project_geometry["labelBottom"] <= sidebar_project_geometry["listTop"] + 1
             assert sidebar_project_geometry["overflow"] in {"auto", "scroll"}
+            assert sidebar_project_geometry["settingsIsLast"] is True
+            assert 0 <= sidebar_project_geometry["settingsGap"] <= 12
+            assert page.locator(".sidebar-foot").count() == 0
+            assert page.locator("#themeButton .global-settings-copy small").inner_text() == "Global runner preferences"
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
@@ -3570,6 +3585,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.click("[data-settings-tab='language']")
             page.locator("[data-language-option='zh-TW']").click()
             page.wait_for_function("document.documentElement.lang === 'zh-Hant'")
+            assert page.locator("#themeButton .global-settings-copy strong").inner_text() == "設定"
+            assert page.locator("#themeButton .global-settings-copy small").inner_text() == "全域 Runner 偏好設定"
             page.click("#themeCloseButton")
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "輸入訊息給此專案…"
             assert page.locator(".project-chat-mode-quick > span").inner_text() == "模式"
@@ -3590,6 +3607,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.click("#themeButton")
             page.locator("[data-language-option='en']").click()
             page.wait_for_function("document.documentElement.lang === 'en'")
+            assert page.locator("#themeButton .global-settings-copy strong").inner_text() == "Settings"
+            assert page.locator("#themeButton .global-settings-copy small").inner_text() == "Global runner preferences"
             page.click("#themeCloseButton")
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "Message this Project…"
             assert page.locator(".project-chat-mode-quick > span").inner_text() == "Mode"
