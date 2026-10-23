@@ -162,6 +162,14 @@ TASK_EDITOR = PanelSpec(
         Pair("#newTaskModal .task-ai-source .task-source-mode-panel>textarea", ".task-workspace-task-ai-source .task-workspace-source-mode-panel>textarea", ("min-height",)),
         Pair(".workspace-option", ".task-workspace-workspace-option", ("min-height", "padding", "border-radius", "background")),
         Pair(".drawer", ".task-workspace-shell", ("transform", "transition")),
+        Pair(".drawer.workspace-route", ".task-workspace-shell.workspace-route", ("width", "max-width")),
+        Pair(".drawerhead", ".task-workspace-head", ("padding", "border-bottom")),
+        Pair(".drawerheadtop", ".task-workspace-head", ("gap", "align-items")),
+        Pair(".drawerhead h2", ".task-workspace-heading strong", ("font-size", "line-height", "white-space", "overflow", "text-overflow")),
+        Pair(".drawer-back", ".task-workspace-back", ("width", "height", "padding", "border", "border-radius", "background", "font-size", "font-weight")),
+        Pair(".drawerfoot", ".task-workspace-foot", ("display", "align-items", "justify-content", "flex-wrap", "gap", "height", "min-height", "max-height", "overflow", "padding", "border-top", "background")),
+        Pair(".drawerfoot .btn", ".task-workspace-foot button", ("height", "min-height", "max-height", "padding-block", "line-height", "white-space")),
+        Pair("#newTaskModal>.modal-foot", ".task-workspace-shell.task-editor-route .task-workspace-foot", ("padding",)),
         Pair(".overlay.open .drawer", ".task-workspace-overlay.open .task-workspace-shell", ("transform",)),
     ),
 )
@@ -189,6 +197,7 @@ TASK_LIST = PanelSpec(
         Pair(".empty-plan-cta span", ".task-workspace-empty-list-cta span", ("font-size", "font-weight")),
         Pair(".plan-page-body", ".task-workspace-list-page", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
         Pair(".plan-side", ".task-workspace-list-side", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
+        Pair("#planModal .plan-page-foot", ".task-workspace-foot", ("display", "justify-content", "gap", "padding", "border-top", "background")),
     ),
 )
 
