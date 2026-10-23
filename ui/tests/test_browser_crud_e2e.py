@@ -3411,6 +3411,13 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("[data-settings-tab='execution']").get_attribute("aria-selected") == "true"
             assert page.locator("[data-settings-panel='execution']").is_visible()
             assert page.locator("[data-settings-panel='defaults']").is_hidden()
+            tab_colors = page.evaluate(
+                """() => ({
+                    active: getComputedStyle(document.querySelector("[data-settings-tab='execution']")).backgroundColor,
+                    inactive: getComputedStyle(document.querySelector("[data-settings-tab='defaults']")).backgroundColor
+                })"""
+            )
+            assert tab_colors["active"] != tab_colors["inactive"]
             settings_geometry = page.locator(".global-settings-card").evaluate(
                 """node => {
                     const rect = node.getBoundingClientRect();

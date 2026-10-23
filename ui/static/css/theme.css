@@ -297,6 +297,20 @@ html[data-appearance="dark"] .backend-dropdown-menu button:hover { background: v
   background: var(--panel-2);
 }
 .theme-toggle-button.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+html[data-appearance] .global-settings-card .settings-sections button {
+  background: transparent;
+  color: var(--muted);
+}
+html[data-appearance] .global-settings-card .settings-sections button:hover,
+html[data-appearance] .global-settings-card .settings-sections button.active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+html[data-appearance] .global-settings-card .appearance-options button.active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  border-color: var(--accent);
+}
 .appearance-options { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
 .appearance-options button { min-height:34px; padding:6px 8px; }
 .appearance-options button.active { color:var(--accent-dark); background:var(--accent-soft); border-color:var(--accent); }
