@@ -34,4 +34,12 @@
 .tasks-list-row:hover{border-color:color-mix(in srgb,var(--accent) 30%,var(--line));background:var(--panel-2)}
 .tasks-list-status{min-width:74px;color:var(--accent);font-size:8px;font-weight:900;letter-spacing:.04em}.tasks-list-copy{min-width:0;display:grid;gap:2px}.tasks-list-copy strong,.tasks-list-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tasks-list-copy strong{font-size:10px}.tasks-list-copy small{color:var(--muted);font-size:8px}
 .tasks-board-empty{padding:28px;border:1px dashed var(--line);border-radius:var(--radius-lg);color:var(--muted);text-align:center;font-size:10px}
-@media(max-width:760px){.tasks-board-toolbar{align-items:stretch;flex-direction:column}.tasks-board-toolbar-left,.tasks-board-toolbar-right{width:100%}.tasks-board-search{flex:1;width:auto}.tasks-board-content{padding:10px}.tasks-board-columns{grid-template-columns:repeat(4,minmax(200px,1fr));min-width:850px}}
+@media(max-width:760px){
+#tasksBoardView>.header{height:auto;min-height:var(--page-header-height);grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;align-items:start}
+.tasks-board-header-actions{justify-content:flex-start}
+.tasks-board-toolbar{align-items:stretch;flex-direction:column}
+.tasks-board-toolbar-left,.tasks-board-toolbar-right{width:100%}
+.tasks-board-search{flex:1;width:auto}
+.tasks-board-content{padding:10px}
+.tasks-board-columns{grid-template-columns:repeat(4,minmax(200px,1fr));min-width:850px}
+}

@@ -1990,6 +1990,7 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Reused the same #tasksProjectFilterButton/menu/options and TasksBoard controller; no duplicate filter state or Project switching side effect was added.
     - Search remains in the second-row board toolbar, so filtering and search keep separate visual responsibilities.
     - Browser regression locks the single filter DOM owner and title-row alignment while existing reload/multi-Project filter tests keep covering persistence.
+    - At <=760px the Tasks header becomes two rows so the title-level Project filter cannot intercept + New / Current Runtime; the existing 620px real-browser Task Editor geometry regression covers this responsive path.
 
 [x] Match Project Chat control hierarchy and shared i18n to the latest feature Composer UX.
     - Project settings now follow the prototype order: Workflow → Agent → Model → Reasoning → Ask; the same selects/catalog owners are reused.
