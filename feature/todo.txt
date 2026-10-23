@@ -666,6 +666,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - `test_browser_workflow_settings_manager_and_prompt_crud` 的 deterministic Browser bridge 實際排入 3 筆 Queue，驗證 FIFO、Edit Save、Edit Cancel、空白 Save error、Delete、Stop 保留 queued item，以及切換新/舊 Chat session 後 Queue scope；2026-10-21 Browser lane PASS。
 [x] 正式 live probe 支援 --output 保存可審核 evidence；記錄 source HEAD / diagnostic flags / formal_gate，
     並移除 native session id，只保留 session_id_present。Diagnostic mode 永遠不能被標成 formal PASS。
+[x] 正式 live probe 不只檢查 Ask capability flag：會經 ChatAgentService + ChatService 等待真 Native Ask、
+    以 canonical Ask schema 回答並要求同 turn continuation；Qwen/OpenCode 都需 native_ask.ok 才可能 formal PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [x] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
     - HEAD 63c28bb 的 CI run 39884715632 已實跑 Windows/Linux full pytest、Browser E2E 與 Studio build，全數 PASS；後續 merge-safety tests 仍需以 final HEAD CI 再 gate。
