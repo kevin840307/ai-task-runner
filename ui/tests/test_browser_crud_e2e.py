@@ -1006,14 +1006,32 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.wait_for_function("document.querySelector('#taskCreateMenu')?.hidden === true")
 
             closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
-            closed_card.drag_to(page.locator("#tasksBoardNew"))
+            closed_card.evaluate(
+                """node => {
+                    const zone = document.querySelector('#tasksBoardNew');
+                    const transfer = new DataTransfer();
+                    node.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer:transfer}));
+                    zone.dispatchEvent(new DragEvent('dragover', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                    zone.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                    node.dispatchEvent(new DragEvent('dragend', {bubbles:true, dataTransfer:transfer}));
+                }"""
+            )
             page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text("Move completed Task back to New?", exact=True).is_visible()
             page.locator("[data-dialog-cancel]").click()
             assert state.tasks.get(root, closed_move["task_id"])["status"] == "closed"
 
             closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
-            closed_card.drag_to(page.locator("#tasksBoardNew"))
+            closed_card.evaluate(
+                """node => {
+                    const zone = document.querySelector('#tasksBoardNew');
+                    const transfer = new DataTransfer();
+                    node.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer:transfer}));
+                    zone.dispatchEvent(new DragEvent('dragover', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                    zone.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                    node.dispatchEvent(new DragEvent('dragend', {bubbles:true, dataTransfer:transfer}));
+                }"""
+            )
             page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function(
@@ -1599,6 +1617,7 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
                 assert page.locator("#tasksProjectFilterSummary").inner_text() == expected_summary
                 assert page.locator("html").get_attribute("data-theme") == "violet"
                 assert page.locator("html").get_attribute("data-appearance") == "dark"
+                page.wait_for_timeout(220)
                 current = page.locator("#tasksBoardView").bounding_box()
                 assert current is not None
                 for key in ("x", "y", "width", "height"):
@@ -2232,6 +2251,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("[data-task-source-card='ai']").is_visible()
             assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
             assert page.locator("#taskWorkspaceAiValidatorPrompt").count() == 0
+            page.fill("#taskWorkspaceItemTitle", "First list child dirty")
 
             # A dirty child Editor and a dirty parent Task List Draft are two
             # separate discard decisions. Cancelling the parent decision must
@@ -2249,10 +2269,11 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 )
                 page.locator("[data-dialog-cancel]").click()
                 page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
-                assert page.locator("#taskWorkspaceItemTitle").input_value() == "First list child"
+                assert page.locator("#taskWorkspaceItemTitle").input_value() == "First list child dirty"
                 assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
                 assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
 
+            page.fill("#taskWorkspaceItemTitle", "First list child")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
@@ -2500,6 +2521,10 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             expand_button = page.locator("#taskWorkspaceExpand")
             assert expand_button.get_attribute("aria-pressed") == "false"
             expand_button.click()
+            page.wait_for_function(
+                "(width) => document.querySelector('#taskWorkspaceShell').getBoundingClientRect().width > width + 8",
+                arg=normal_shell["width"],
+            )
             expanded_shell = page.locator("#taskWorkspaceShell").bounding_box()
             assert expanded_shell
             assert expanded_shell["width"] > normal_shell["width"]
@@ -2816,7 +2841,7 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
             assert future.get_attribute("draggable") == "true"
             assert page.locator("#taskWorkspaceAddTask").is_enabled()
             assert page.locator("#taskWorkspaceHeaderYaml").is_disabled()
-            assert "Completed Task items are frozen" in (
+            assert "Completed Task items are locked" in (
                 page.locator("#taskWorkspaceHeaderYaml").get_attribute("title") or ""
             )
 
@@ -2845,7 +2870,8 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
-        state = _write_fixture_repo(Path(td))
+        root = Path(td)
+        state = _write_fixture_repo(root)
         (state.repo_root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
             "stages: {}\nflow: []\n",
             encoding="utf-8",
