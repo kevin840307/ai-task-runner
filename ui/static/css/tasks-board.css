@@ -42,7 +42,7 @@
 #tasksBoardView .title-block>p{display:none}
 .tasks-title-line{gap:12px}
 .tasks-title-line .tasks-project-trigger,.tasks-project-trigger{display:flex;align-items:center;gap:7px;height:34px;min-height:34px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--muted);font-size:8px;font-weight:850;letter-spacing:.04em;text-transform:uppercase;transition:background .14s,border-color .14s,color .14s}
-.tasks-project-trigger .stateful-content{display:inline-block;width:145px;max-width:145px;overflow:hidden;color:var(--text);font-size:10px;letter-spacing:0;text-overflow:ellipsis;text-transform:none;white-space:nowrap}
+.tasks-project-trigger .stateful-content{display:inline-block;width:190px;max-width:190px;overflow:hidden;color:var(--text);font-size:10px;letter-spacing:0;text-overflow:ellipsis;text-transform:none;white-space:nowrap}
 .tasks-project-chevron{width:7px;height:7px;margin:0 2px 3px 3px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .14s ease,margin .14s ease}
 .tasks-project-trigger[aria-expanded="true"] .tasks-project-chevron{margin-top:5px;margin-bottom:0;transform:rotate(225deg)}
 .tasks-project-trigger:hover,.tasks-project-trigger[aria-expanded="true"]{border-color:color-mix(in srgb,var(--accent) 44%,var(--line));background:var(--accent-soft);color:var(--accent-dark)}
