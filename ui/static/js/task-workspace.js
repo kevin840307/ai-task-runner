@@ -94,7 +94,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } finally {
       if (state === owner) {
         owner.projectOptionsLoading = false;
-        if (state.route === "editor") render();
+        if (["editor", "list"].includes(state.route)) render();
       }
     }
   }
