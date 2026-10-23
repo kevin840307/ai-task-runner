@@ -232,6 +232,16 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
         ("display", "grid-template-columns"),
     )
     _same(
+        "#newTaskModal .task-primary-source .source-tabs",
+        ".task-workspace-source-tabs",
+        ("display", "width", "min-width", "box-sizing"),
+    )
+    _same(
+        ".source-head small",
+        ".task-workspace-source-head small",
+        ("margin-left", "font-size"),
+    )
+    _same(
         ".field input",
         ".task-workspace-basics .task-workspace-field input",
         ("font-size",),
@@ -245,6 +255,26 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
         "#newTaskModal .task-primary-source>.source-body",
         ".task-workspace-task-primary-source>.task-workspace-source-body",
         ("display", "min-width"),
+    )
+    _same(
+        "#newTaskModal .source-note",
+        ".task-workspace-shell.task-editor-route .task-workspace-source-note",
+        ("min-height", "padding", "font-size", "line-height"),
+    )
+    _same(
+        ".workspace-recommended",
+        ".task-workspace-workspace-recommended",
+        ("padding", "font-size", "font-weight"),
+    )
+    _same(
+        ".workspace-preview",
+        ".task-workspace-workspace-preview",
+        ("background",),
+    )
+    _same(
+        ".workspace-preview strong",
+        ".task-workspace-workspace-preview strong",
+        ("color",),
     )
     _same(
         ".drawer",
@@ -322,7 +352,7 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     assert '[["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
     assert 'required.textContent = "Required"' in PRODUCTION_JS
     assert 'grid.append(projectField, workflowField, titleField)' in PRODUCTION_JS
-    assert 'grid.append(workflowField);\\n    body.appendChild(grid);' not in PRODUCTION_JS
+    assert 'grid.append(workflowField);\n    body.appendChild(grid);' not in PRODUCTION_JS
     assert 'className = "task-workspace-source-mode-panel"' in PRODUCTION_JS
     assert 'prompt.rows = 10' not in PRODUCTION_JS
     assert 'textarea.rows = 6' not in PRODUCTION_JS
