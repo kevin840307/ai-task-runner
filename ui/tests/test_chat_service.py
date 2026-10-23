@@ -1455,6 +1455,165 @@ def test_native_ask_cancel_rejects_and_unblocks_same_turn(tmp_path: Path, monkey
     assert native_cancel == [True]
 
 
+def test_failed_native_ask_turn_is_cancelled_immediately_and_queue_unblocks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    started = threading.Event()
+    release_failure = threading.Event()
+    native_cancelled = threading.Event()
+    payload = {
+        "id": "native-question-failed-turn",
+        "sessionID": "ses-native",
+        "questions": [{
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+        }],
+    }
+
+    monkeypatch.setattr(
+        "ui.chat_agent_service.chat_features",
+        lambda *args, **kwargs: ChatFeatureSpec(
+            ask=True,
+            ask_transport="daemon_permission_request",
+        ),
+    )
+    monkeypatch.setattr(
+        "ui.chat_agent_service.ensure_native_session",
+        lambda *args, **kwargs: "ses-native",
+    )
+    monkeypatch.setattr(
+        "ui.chat_agent_service.pending_native_ask",
+        lambda *args, **kwargs: (
+            None
+            if native_cancelled.is_set()
+            else (payload if started.is_set() else None)
+        ),
+    )
+    monkeypatch.setattr(
+        "ui.chat_agent_service.normalize_ask_request",
+        lambda *args, **kwargs: [{
+            "id": "q1",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["Yes", "No"],
+        }],
+    )
+    native_cancel_calls: list[bool] = []
+
+    def resolve(*args, **kwargs):
+        native_cancel_calls.append(bool(kwargs.get("cancelled")))
+        native_cancelled.set()
+
+    monkeypatch.setattr("ui.chat_agent_service.resolve_native_ask", resolve)
+
+    def fake_runner(**kwargs):
+        if kwargs["prompt"] == "later":
+            return {"text": "later reply", "session_id": "ses-native"}
+        started.set()
+        assert release_failure.wait(timeout=4)
+        raise RuntimeError("backend died after asking")
+
+    service = ChatAgentService(repo, runner=fake_runner)
+    turn_result: list[dict] = []
+    worker = threading.Thread(
+        target=lambda: turn_result.append(service.turn(
+            project,
+            chat,
+            session_id=session_id,
+            message="ask then fail",
+            backend="qwen",
+            request_id="native-failed-turn",
+        )),
+        daemon=True,
+    )
+    worker.start()
+    assert started.wait(timeout=2)
+
+    deadline = time.monotonic() + 4
+    ask = None
+    while time.monotonic() < deadline:
+        ask = chat.ask(project, session_id)["ask"]
+        if ask and ask["status"] == "waiting":
+            break
+        time.sleep(0.05)
+    assert ask is not None
+    assert ask["source"] == "native"
+
+    chat.enqueue_turn(
+        project,
+        session_id,
+        "later",
+        request_id="after-failed-native-ask",
+        backend="qwen",
+    )
+    release_failure.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+
+    assert turn_result[0]["status"] == "error"
+    assert "backend died after asking" in turn_result[0]["error"]
+    assert chat.ask(project, session_id)["ask"]["status"] == "cancelled"
+    assert native_cancel_calls == [True]
+    assert [row["content"] for row in chat.queue(project, session_id)["items"]] == ["later"]
+
+    drained = service.drain(project, chat, session_id=session_id)
+    assert drained["status"] == "idle"
+    assert chat.queue(project, session_id)["items"] == []
+    assert [row["content"] for row in chat.messages(project, session_id)["messages"]][-2:] == [
+        "later",
+        "later reply",
+    ]
+
+
+def test_failed_turn_cleanup_does_not_cancel_another_turns_native_ask(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="other-turn-native-ask",
+        turn_id="turn-other",
+        questions=[{
+            "id": "q1",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["Yes", "No"],
+        }],
+        source="native",
+        backend="qwen",
+        agent_session_id="ses-native",
+        native_request_id="native-other",
+    )
+    monkeypatch.setattr(
+        "ui.chat_agent_service.resolve_native_ask",
+        lambda *args, **kwargs: pytest.fail("another turn Ask must not be resolved"),
+    )
+    service = ChatAgentService(repo, runner=lambda **kwargs: {})
+
+    assert service._cancel_failed_turn_native_ask(
+        project,
+        chat,
+        session_id=session_id,
+        turn_id="turn-failed",
+    ) == ""
+    current = chat.ask(project, session_id)["ask"]
+    assert current["ask_id"] == created["ask"]["ask_id"]
+    assert current["status"] == "waiting"
+
+
 def test_native_ask_transport_failure_rolls_back_to_waiting(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     project = repo / "project"
