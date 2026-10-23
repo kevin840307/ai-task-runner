@@ -93,3 +93,30 @@
   .tasks-title-line{gap:8px}
   .tasks-project-trigger .stateful-content{width:110px;max-width:110px}
 }
+
+
+/* Feature Task-page controls backed by real production Task state. */
+.tasks-board-header-actions{gap:8px;flex-wrap:nowrap}
+#tasksBoardView .tasks-board-header-actions .action-button{
+  height:34px;min-height:34px;padding:0 11px;border-radius:8px;font-size:11px;font-weight:800;box-shadow:none
+}
+.tasks-running-pill{
+  display:inline-flex;align-items:center;min-height:28px;padding:0 9px;
+  border:1px solid color-mix(in srgb,var(--run) 42%,var(--line));border-radius:999px;
+  background:var(--info-soft);color:var(--run);font-size:10px;font-weight:850;white-space:nowrap
+}
+#tasksRunningFilterButton.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-dark)}
+.tasks-move-rule{color:var(--muted);font-size:8px;white-space:nowrap}
+.tasks-column-add{
+  display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;
+  border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:15px;box-shadow:none
+}
+.tasks-column-add:hover{background:var(--accent-soft);color:var(--accent-dark)}
+.tasks-board-column-head:has(.tasks-column-add){grid-template-columns:minmax(0,1fr) auto auto}
+@media(max-width:900px){
+  .tasks-move-rule{display:none}
+  .tasks-board-header-actions{gap:5px}
+}
+@media(max-width:760px){
+  .tasks-board-header-actions{flex-wrap:wrap}
+}

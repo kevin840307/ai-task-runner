@@ -12,6 +12,7 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
   let tasks = [];
   let mode = "board";
   let search = "";
+  let runningOnly = false;
   let refreshToken = 0;
   const byId = (id) => document.getElementById(id);
 
@@ -79,8 +80,25 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
     return text.includes(query);
   }
 
+  function taskIsRunning(task) {
+    return String(task?.status || "") === "ongoing";
+  }
+
   function visibleTasks() {
-    return tasks.filter((task) => taskMatchesProjects(task) && taskMatchesSearch(task));
+    return tasks.filter((task) => taskMatchesProjects(task) && taskMatchesSearch(task) && (!runningOnly || taskIsRunning(task)));
+  }
+
+  function renderRunningState() {
+    const scoped = tasks.filter((task) => taskMatchesProjects(task) && taskMatchesSearch(task));
+    const count = scoped.filter(taskIsRunning).length;
+    const badge = byId("tasksRunningCount");
+    const filter = byId("tasksRunningFilterButton");
+    if (badge) badge.textContent = count + " Running";
+    if (filter) {
+      filter.textContent = runningOnly ? "顯示全部" : "只看執行中";
+      filter.classList.toggle("active", runningOnly);
+      filter.setAttribute("aria-pressed", String(runningOnly));
+    }
   }
 
   function renderFilter() {
@@ -184,6 +202,7 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
 
   function render() {
     renderFilter();
+    renderRunningState();
     const board = byId("tasksBoardColumns");
     const list = byId("tasksListView");
     if (board) board.hidden = mode !== "board";
@@ -225,6 +244,11 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
   function mount() {
     const searchInput = byId("tasksBoardSearch");
     if (searchInput) searchInput.addEventListener("input", () => { search = searchInput.value; render(); });
+    byId("tasksRunningFilterButton")?.addEventListener("click", () => {
+      runningOnly = !runningOnly;
+      render();
+    });
+    byId("tasksNewColumnButton")?.addEventListener("click", () => byId("tasksNewButton")?.click());
     document.querySelectorAll("[data-tasks-view-mode]").forEach((button) => button.addEventListener("click", () => {
       mode = button.dataset.tasksViewMode === "list" ? "list" : "board";
       render();

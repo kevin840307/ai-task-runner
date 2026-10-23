@@ -489,6 +489,12 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "width:310px" in tasks
     assert 'input[type="checkbox"]' in tasks
     assert "grid-template-columns:repeat(4,minmax(245px,1fr))" in tasks
+    assert 'id="tasksRunningCount"' in index
+    assert 'id="tasksRunningFilterButton"' in index
+    assert 'id="tasksNewColumnButton"' in index
+    assert 'class="tasks-move-rule"' in index
+    assert ".tasks-running-pill" in tasks
+    assert ".tasks-column-add" in tasks
     assert "width:30px" in chat
     assert "height:30px" in chat
     assert "width: min(330px, calc(100vw - 20px))" in chat

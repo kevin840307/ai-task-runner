@@ -116,6 +116,8 @@
           <p>Durable Task Board · lifecycle is separate from Runner runtime.</p>
         </div>
         <div class="tasks-board-header-actions">
+          <span id="tasksRunningCount" class="tasks-running-pill">0 Running</span>
+          <button id="tasksRunningFilterButton" class="action-button" type="button" aria-pressed="false">只看執行中</button>
           <button id="tasksNewButton" class="primary action-button" type="button">+ New</button>
           <button id="tasksCurrentRuntimeButton" class="action-button" type="button">Current Runtime</button>
         </div>
@@ -125,6 +127,7 @@
           <input id="tasksBoardSearch" class="tasks-board-search" type="search" placeholder="Search Task, Workflow, Prompt…" />
         </div>
         <div class="tasks-board-toolbar-right">
+          <span class="tasks-move-rule">Ongoing ↔ Paused 會同步 Stop / Resume；Paused / Closed → New 都會先確認</span>
           <div class="tasks-view-toggle" aria-label="Task view">
             <button type="button" class="active" data-tasks-view-mode="board" aria-pressed="true">Board</button>
             <button type="button" data-tasks-view-mode="list" aria-pressed="false">List</button>
@@ -133,7 +136,7 @@
       </div>
       <div class="tasks-board-content">
         <div id="tasksBoardColumns" class="tasks-board-columns">
-          <section class="tasks-board-column" data-status="new"><div class="tasks-board-column-head"><strong>New</strong><span id="tasksBoardNewCount">0</span></div><div id="tasksBoardNew" class="tasks-board-dropzone"></div></section>
+          <section class="tasks-board-column" data-status="new"><div class="tasks-board-column-head"><strong>New</strong><span id="tasksBoardNewCount">0</span><button id="tasksNewColumnButton" class="tasks-column-add" type="button" aria-label="New Task">+</button></div><div id="tasksBoardNew" class="tasks-board-dropzone"></div></section>
           <section class="tasks-board-column" data-status="ongoing"><div class="tasks-board-column-head"><strong>Ongoing</strong><span id="tasksBoardOngoingCount">0</span></div><div id="tasksBoardOngoing" class="tasks-board-dropzone"></div></section>
           <section class="tasks-board-column" data-status="paused"><div class="tasks-board-column-head"><strong>Paused</strong><span id="tasksBoardPausedCount">0</span></div><div id="tasksBoardPaused" class="tasks-board-dropzone"></div></section>
           <section class="tasks-board-column" data-status="closed"><div class="tasks-board-column-head"><strong>Closed</strong><span id="tasksBoardClosedCount">0</span></div><div id="tasksBoardClosed" class="tasks-board-dropzone"></div></section>
