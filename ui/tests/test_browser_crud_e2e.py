@@ -933,6 +933,8 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
         paused = lifecycle_task("Paused Reset", "browser-paused-reset", status="paused", phase="stopped")
         failed = lifecycle_task("Failed Rerun", "browser-failed-rerun", status="paused", phase="launch_failed")
         completed = lifecycle_task("Completed Rerun", "browser-completed-rerun", status="closed", phase="worktree_ready")
+        ongoing = lifecycle_task("Ongoing Filter", "browser-ongoing-filter", status="ongoing", phase="running")
+        closed_move = lifecycle_task("Completed Move", "browser-closed-move", status="closed", phase="worktree_ready")
         state._browser_task_lifecycle_actions = []
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
@@ -964,6 +966,36 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
 
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+
+            assert page.locator("#tasksRunningCount").inner_text() == "1 Running"
+            page.click("#tasksRunningFilterButton")
+            assert page.locator("#tasksRunningFilterButton").get_attribute("aria-pressed") == "true"
+            assert page.locator("#tasksBoardOngoing .tasks-board-card").filter(has_text=ongoing["task_id"]).is_visible()
+            assert page.locator("#tasksBoardPaused .tasks-board-card").filter(has_text=paused["task_id"]).is_hidden()
+            page.click("#tasksRunningFilterButton")
+            assert page.locator("#tasksRunningFilterButton").get_attribute("aria-pressed") == "false"
+
+            page.click("#tasksNewColumnButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('#taskCreateMenu')?.hidden === true")
+
+            closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
+            closed_card.drag_to(page.locator("#tasksBoardNew"))
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            assert page.locator(".ui-dialog-card").get_by_text("Move completed Task back to New?", exact=True).is_visible()
+            page.locator("[data-dialog-cancel]").click()
+            assert state.tasks.get(root, closed_move["task_id"])["status"] == "closed"
+
+            closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
+            closed_card.drag_to(page.locator("#tasksBoardNew"))
+            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "(taskId) => [...document.querySelectorAll('#tasksBoardNew .tasks-board-card')].some(node => node.dataset.taskId === taskId)",
+                arg=closed_move["task_id"],
+            )
+            assert state.tasks.get(root, closed_move["task_id"])["status"] == "new"
 
             page.locator("#tasksBoardPaused .tasks-board-card").filter(
                 has_text=paused["task_id"]
@@ -3669,6 +3701,52 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("html").get_attribute("data-appearance-preference") == "system"
             assert page.locator("html").get_attribute("data-appearance") == "dark"
 
+            brand_geometry = page.evaluate(
+                """() => {
+                    const brand = document.querySelector('.projects .brand');
+                    const mark = brand.querySelectorAll('.brandmark');
+                    const pseudo = getComputedStyle(brand, '::before');
+                    return {
+                        markCount: mark.length,
+                        markWidth: mark[0]?.getBoundingClientRect().width || 0,
+                        pseudoDisplay: pseudo.display,
+                        pseudoContent: pseudo.content,
+                    };
+                }"""
+            )
+            assert brand_geometry["markCount"] == 1
+            assert abs(brand_geometry["markWidth"] - 30) <= 1
+            assert brand_geometry["pseudoDisplay"] == "none"
+            assert brand_geometry["pseudoContent"] in {"none", '""'}
+
+            chat_geometry = page.evaluate(
+                """() => {
+                    const session = document.querySelector('#projectChatSessionSelect');
+                    const compose = document.querySelector('#projectChatComposePanel');
+                    const composer = compose.querySelector('.composer-box');
+                    const input = document.querySelector('#projectChatInput');
+                    const mode = document.querySelector('#projectChatModeQuick');
+                    return {
+                        sessionHeight: session.getBoundingClientRect().height,
+                        sessionRadius: getComputedStyle(session).borderRadius,
+                        sessionFont: getComputedStyle(session).fontSize,
+                        composeBackgroundColor: getComputedStyle(compose).backgroundColor,
+                        composeBackgroundImage: getComputedStyle(compose).backgroundImage,
+                        composerBackground: getComputedStyle(composer).backgroundColor,
+                        inputHeight: input.getBoundingClientRect().height,
+                        modeHeight: mode.getBoundingClientRect().height,
+                    };
+                }"""
+            )
+            assert abs(chat_geometry["sessionHeight"] - 34) <= 1
+            assert chat_geometry["sessionRadius"] == "8px"
+            assert chat_geometry["sessionFont"] == "10px"
+            assert chat_geometry["composeBackgroundColor"] == "rgba(0, 0, 0, 0)"
+            assert "linear-gradient" in chat_geometry["composeBackgroundImage"]
+            assert chat_geometry["composerBackground"] != "rgba(0, 0, 0, 0)"
+            assert abs(chat_geometry["inputHeight"] - 44) <= 1
+            assert abs(chat_geometry["modeHeight"] - 30) <= 1
+
             # Build the dynamic Chat surfaces before cycling themes so every
             # palette exercises the real composer / TaskDraft / Ask / Queue.
             page.fill("#projectChatInput", "@task-single theme surface")
@@ -3730,6 +3808,29 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert settings_geometry["top"] > 0
             assert settings_geometry["right"] < 1366
             assert settings_geometry["bottom"] < 820
+            settings_visual_geometry = page.evaluate(
+                """() => {
+                    const card = document.querySelector('.global-settings-card').getBoundingClientRect();
+                    const nav = document.querySelector('.settings-sections').getBoundingClientRect();
+                    const tab = document.querySelector('[data-settings-tab="execution"]').getBoundingClientRect();
+                    const panel = document.querySelector('[data-settings-panel="execution"]');
+                    const select = document.querySelector('#globalAutoWorkspacePolicy');
+                    return {
+                        cardWidth: card.width,
+                        cardHeight: card.height,
+                        navWidth: nav.width,
+                        tabHeight: tab.height,
+                        panelPadding: getComputedStyle(panel).paddingTop,
+                        selectHeight: select.getBoundingClientRect().height,
+                    };
+                }"""
+            )
+            assert abs(settings_visual_geometry["cardWidth"] - 760) <= 2
+            assert abs(settings_visual_geometry["cardHeight"] - 700) <= 2
+            assert abs(settings_visual_geometry["navWidth"] - 170) <= 2
+            assert abs(settings_visual_geometry["tabHeight"] - 38) <= 1
+            assert settings_visual_geometry["panelPadding"] == "18px"
+            assert abs(settings_visual_geometry["selectHeight"] - 34) <= 1
             page.click("[data-settings-tab='defaults']")
             assert page.locator("[data-settings-panel='defaults']").is_visible()
             page.click("[data-settings-tab='interface']")
@@ -3890,7 +3991,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             input_box = page.locator("#projectChatInput")
             input_box.fill("short")
             compact_height = input_box.evaluate("(node) => node.getBoundingClientRect().height")
-            assert 45 <= compact_height <= 48
+            assert 43 <= compact_height <= 45
             input_box.fill("\n".join(f"line {index}" for index in range(40)))
             long_metrics = input_box.evaluate(
                 """node => ({
@@ -3914,6 +4015,18 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert messages_box and compose_box and last_message
             assert messages_box["y"] + messages_box["height"] <= compose_box["y"] + 1
             assert last_message["y"] + last_message["height"] <= messages_box["y"] + messages_box["height"] + 1
+            message_visual = page.locator("#projectChatMessages .project-chat-message.user").first.evaluate(
+                """node => ({
+                    maxWidth: getComputedStyle(node).maxWidth,
+                    radius: getComputedStyle(node).borderRadius,
+                    fontSize: getComputedStyle(node).fontSize,
+                    metaCount: node.querySelectorAll('.project-chat-message-meta').length
+                })"""
+            )
+            assert message_visual["maxWidth"] == "82%"
+            assert message_visual["radius"] == "14px"
+            assert message_visual["fontSize"] == "13px"
+            assert message_visual["metaCount"] == 1
 
             # Qwen-style queued-next-turn UX reuses the canonical Chat Queue.
             input_box.fill("queue browser message")

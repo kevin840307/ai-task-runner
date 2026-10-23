@@ -461,6 +461,8 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     projects = (static / "css" / "projects.css").read_text(encoding="utf-8")
     tasks = (static / "css" / "tasks-board.css").read_text(encoding="utf-8")
     chat = (static / "css" / "project-chat.css").read_text(encoding="utf-8")
+    modal = (static / "css" / "modal.css").read_text(encoding="utf-8")
+    theme = (static / "css" / "theme.css").read_text(encoding="utf-8")
 
     assert index.index('id="openProject"') < index.index('id="chatNav"')
     assert 'class="projects-head brandrow"' in index
@@ -499,6 +501,15 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "height:30px" in chat
     assert "width: min(330px, calc(100vw - 20px))" in chat
     assert "max-width: 900px" in chat
+    assert ".projects .brand::before{display:none!important;content:none!important}" in projects
+    assert "background:linear-gradient(to bottom,transparent,var(--bg) 25px,var(--bg) 100%)!important" in theme
+    assert "width:min(760px,94vw)" in modal
+    assert "grid-template-columns:170px minmax(0,1fr)" in modal
+    assert "min-height:38px" in modal
+    assert "height:34px" in modal
+    assert ".tasks-board-card-handle" in tasks
+    assert ".tasks-board-dropzone.allowed" in tasks
+    assert ".tasks-board-dropzone.blocked" in tasks
 
 
 def test_global_settings_sidebar_uses_one_icon_and_plain_copy():
