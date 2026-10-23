@@ -467,13 +467,23 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert 'class="brandmark"' in index
     assert 'class="navgroup-label" data-i18n="nav.work"' in index
     assert 'class="navgroup-label" data-i18n="nav.assets"' in index
+    assert 'class="sidebar-scroll"' in index
+    assert 'class="project-area"' in index
+    assert 'id="projectSwitcherPath" class="project-current-path"' in index
+    assert '<span class="nav-icon" aria-hidden="true">▦</span>' in index
+    assert '<span class="nav-icon" aria-hidden="true">◇</span>' in index
+    assert '<span class="nav-icon" aria-hidden="true">¶</span>' in index
     assert 'class="tasks-project-chevron"' in index
     assert 'class="stateful-content" id="tasksProjectFilterSummary"' in index
 
     assert "height:38px" in projects
     assert "min-height:36px" in projects
     assert "min-height:42px" in projects
+    assert ".projects .sidebar-scroll" in projects
     assert "overflow-y:auto" in projects
+    assert ".projects .project-area" in projects
+    assert ".project-current-path" in projects
+    assert "overflow:visible" in projects
     assert "height:34px" in tasks
     assert "width:145px" in tasks
     assert "width:310px" in tasks
@@ -481,6 +491,8 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "grid-template-columns:repeat(4,minmax(245px,1fr))" in tasks
     assert "width:30px" in chat
     assert "height:30px" in chat
+    assert "width: min(330px, calc(100vw - 20px))" in chat
+    assert "max-width: 900px" in chat
 
 
 def test_global_settings_sidebar_uses_one_icon_and_plain_copy():

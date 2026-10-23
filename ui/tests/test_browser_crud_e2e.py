@@ -2851,27 +2851,39 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             sidebar_project_geometry = page.evaluate(
                 """() => {
                     const create = document.querySelector('#openProject').getBoundingClientRect();
+                    const scroll = document.querySelector('.sidebar-scroll').getBoundingClientRect();
                     const label = document.querySelector('.project-section-label').getBoundingClientRect();
                     const list = document.querySelector('#projectList').getBoundingClientRect();
-                    const overflow = getComputedStyle(document.querySelector('#projectList')).overflowY;
+                    const currentPath = document.querySelector('#projectSwitcherPath').getBoundingClientRect();
+                    const overflow = getComputedStyle(document.querySelector('.sidebar-scroll')).overflowY;
+                    const listOverflow = getComputedStyle(document.querySelector('#projectList')).overflowY;
                     const sidebar = document.querySelector('.projects').getBoundingClientRect();
                     const settings = document.querySelector('.sidebar-global-settings').getBoundingClientRect();
                     const settingsNode = document.querySelector('.sidebar-global-settings');
                     return {
                         createBottom: create.bottom,
+                        scrollTop: scroll.top,
+                        scrollBottom: scroll.bottom,
                         labelTop: label.top,
                         labelBottom: label.bottom,
                         listTop: list.top,
+                        currentPathBottom: currentPath.bottom,
                         overflow,
+                        listOverflow,
+                        settingsTop: settings.top,
                         settingsGap: sidebar.bottom - settings.bottom,
                         settingsIsLast: settingsNode === settingsNode.parentElement.lastElementChild
                     };
                 }"""
             )
-            assert sidebar_project_geometry["createBottom"] <= sidebar_project_geometry["labelTop"] + 1
+            assert sidebar_project_geometry["createBottom"] <= sidebar_project_geometry["scrollTop"] + 1
             assert sidebar_project_geometry["labelBottom"] <= sidebar_project_geometry["listTop"] + 1
             assert sidebar_project_geometry["overflow"] in {"auto", "scroll"}
+            assert sidebar_project_geometry["listOverflow"] == "visible"
+            assert sidebar_project_geometry["currentPathBottom"] <= sidebar_project_geometry["scrollBottom"] + 1
+            assert sidebar_project_geometry["scrollBottom"] <= sidebar_project_geometry["settingsTop"] + 1
             assert sidebar_project_geometry["settingsIsLast"] is True
+            assert page.locator("#projectSwitcherPath").inner_text() == str(root)
             assert 0 <= sidebar_project_geometry["settingsGap"] <= 12
             assert page.locator(".sidebar-foot").count() == 0
             assert page.locator("#themeButton .global-settings-copy small").inner_text() == "Global runner preferences"
@@ -3822,7 +3834,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("#themeButton .global-settings-copy small").inner_text() == "Global runner preferences"
             page.click("#themeCloseButton")
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "Message this Project…"
-            assert page.locator(".project-chat-mode-quick > span").inner_text() == "Mode"
+            assert page.locator(".project-chat-mode-quick > span").inner_text() == "MODE"
             page.click("#projectChatSettingsButton")
             assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["Workflow", "Agent", "Model", "Reasoning", "Ask"]
             assert page.locator("#projectChatAskCapability").inner_text() in {"Native", "Unavailable"}
@@ -4413,6 +4425,22 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("html").get_attribute("data-appearance") == color_scheme
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            tasks_header_geometry = page.evaluate(
+                """() => {
+                    const filter = document.querySelector('#tasksProjectFilterButton').getBoundingClientRect();
+                    const create = document.querySelector('#tasksNewButton').getBoundingClientRect();
+                    return {
+                        filterRight: filter.right,
+                        filterBottom: filter.bottom,
+                        createLeft: create.left,
+                        createTop: create.top,
+                    };
+                }"""
+            )
+            assert (
+                tasks_header_geometry["filterRight"] <= tasks_header_geometry["createLeft"] + 1
+                or tasks_header_geometry["filterBottom"] <= tasks_header_geometry["createTop"] + 1
+            )
             page.click("#tasksNewButton")
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
