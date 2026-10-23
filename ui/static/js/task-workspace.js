@@ -394,11 +394,20 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return true;
   }
 
+  function syncSingleEditorTitle(draft, item) {
+    if (!draft || !item || !Array.isArray(draft.items) || draft.items.length !== 1) return;
+    const explicit = String(item.title || "").trim();
+    const prompt = String(item.prompt || "").trim().split(/\r?\n/)[0].trim();
+    draft.title = explicit || prompt.slice(0, 72) || "New Task";
+  }
+
   function updateItem(index, key, value) {
-    const item = editorDraft()?.items?.[index];
+    const draft = editorDraft();
+    const item = draft?.items?.[index];
     if (item) {
       clearFieldError(key, index);
       item[key] = value;
+      if (key === "title" || key === "prompt") syncSingleEditorTitle(draft, item);
       touchEditor();
     }
   }
@@ -959,38 +968,27 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     body.innerHTML = "";
     const draft = editorDraft();
     if (!draft || !Array.isArray(draft.items) || !draft.items.length) return;
-    if (draft.items.length === 1) body.appendChild(renderDraftTitleField());
     const item = draft.items[state.index];
+
     const grid = document.createElement("div");
     grid.className = "task-workspace-grid task-workspace-basics";
 
-    const fields = [
-      ["Item title", "taskWorkspaceItemTitle", "input", "title", String(item.title || "")],
-      ["Project", "taskWorkspaceProject", "input", "project", String(item.project || state.project || "")],
-    ];
-    for (const [labelText, id, kind, key, value] of fields) {
-      const field = document.createElement("label");
-      field.className = "task-workspace-field";
-      const label = document.createElement("span");
-      label.textContent = labelText;
-      const control = document.createElement(kind);
-      control.id = id;
-      control.value = value;
-      if (id === "taskWorkspaceProject") {
-        control.readOnly = true;
-        control.title = "Task stays scoped to the selected Project";
-      } else {
-        control.maxLength = 240;
-        control.addEventListener("input", () => updateItem(state.index, key, control.value));
-      }
-      field.append(label, control);
-      appendFieldError(field, control, key);
-      grid.appendChild(field);
-    }
+    const projectField = document.createElement("label");
+    projectField.className = "task-workspace-field task-workspace-project-field";
+    const projectLabel = document.createElement("span");
+    projectLabel.textContent = "Project";
+    const project = document.createElement("input");
+    project.id = "taskWorkspaceProject";
+    project.value = String(item.project || state.project || "");
+    project.readOnly = true;
+    project.title = "Task stays scoped to the selected Project";
+    projectField.append(projectLabel, project);
+    appendFieldError(projectField, project, "project");
 
     const workflowField = document.createElement("label");
-    workflowField.className = "task-workspace-field";
-    workflowField.innerHTML = "<span>Workflow</span>";
+    workflowField.className = "task-workspace-field task-workspace-workflow-field";
+    const workflowLabel = document.createElement("span");
+    workflowLabel.textContent = "Workflow";
     const workflow = document.createElement("select");
     workflow.id = "taskWorkspaceWorkflow";
     const options = workflowOptions(String(item.workflow || ""));
@@ -1013,8 +1011,44 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       render();
     });
-    workflowField.appendChild(workflow);
+    workflowField.append(workflowLabel, workflow);
     appendFieldError(workflowField, workflow, "workflow");
+
+    const titleField = document.createElement("label");
+    titleField.className = "task-workspace-field task-workspace-title-field";
+    const titleLabel = document.createElement("span");
+    titleLabel.className = "task-workspace-field-label";
+    titleLabel.append(document.createTextNode("Title "));
+    const optional = document.createElement("em");
+    optional.className = "task-workspace-field-optional";
+    optional.textContent = "optional";
+    titleLabel.appendChild(optional);
+    const title = document.createElement("input");
+    title.id = "taskWorkspaceItemTitle";
+    title.placeholder = "Auto from prompt";
+    title.value = String(item.title || "");
+    title.maxLength = 240;
+    title.addEventListener("input", () => updateItem(state.index, "title", title.value));
+    titleField.append(titleLabel, title);
+    appendFieldError(titleField, title, "title");
+
+    grid.append(projectField, workflowField, titleField);
+    body.appendChild(grid);
+
+    const capability = workflowMeta(item.workflow);
+    const workflowCaps = document.createElement("div");
+    workflowCaps.id = "taskWorkspaceWorkflowCaps";
+    workflowCaps.className = "task-workspace-workflow-caps";
+    const addCap = (text, neutral = false) => {
+      const chip = document.createElement("span");
+      chip.className = "task-workspace-cap-chip" + (neutral ? " neutral" : "");
+      chip.textContent = text;
+      workflowCaps.appendChild(chip);
+    };
+    if (capability?.requires_python_validator) addCap("File Validator");
+    if (capability?.has_ai_validator) addCap("AI Validator");
+    if (!workflowCaps.children.length) addCap("No extra validation input", true);
+    body.appendChild(workflowCaps);
 
     const workspaceSection = document.createElement("section");
     workspaceSection.className = "task-workspace-workspace-selector task-workspace-editor-secondary";
@@ -1133,7 +1167,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const source = sourceState(item);
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
-      tr("task.prompt_source_help", "Write instructions, use a file, or reference an existing Prompt asset."),
+      tr("task.prompt_source_help", "What should this task do?"),
       "prompt",
       [["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
       source.promptMode,
@@ -1190,12 +1224,20 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (prompts) promptCard.body.appendChild(prompts);
       appendFieldError(promptCard.card, select, "goal_file");
     }
-    promptCard.card.classList.add("task-workspace-prompt-source");
-    body.appendChild(promptCard.card);
+    promptCard.card.classList.add("task-workspace-prompt-source", "task-workspace-task-primary-source");
 
-    const capability = workflowMeta(item.workflow);
+    const inputGrid = document.createElement("div");
+    inputGrid.id = "taskWorkspaceInputGrid";
+    inputGrid.className = "task-workspace-input-grid";
+    const inputPrimary = document.createElement("div");
+    inputPrimary.className = "task-workspace-input-primary";
+    inputPrimary.appendChild(promptCard.card);
+    const inputSupporting = document.createElement("div");
+    inputSupporting.className = "task-workspace-input-supporting";
+    inputGrid.append(inputPrimary, inputSupporting);
+
     const validationGrid = document.createElement("div");
-    validationGrid.className = "task-workspace-validation-grid";
+    validationGrid.className = "task-workspace-validation-grid task-workspace-validation-stack";
 
     function pathControl(id, key, value, placeholder = "Enter file path") {
       const input = document.createElement("input");
@@ -1223,12 +1265,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (capability?.requires_python_validator) {
       const validatorCard = sourceCard(
         tr("task.file_validator", "File Validator"),
-        tr("task.file_validator_help", "Required by the selected Workflow."),
+        tr("task.file_validator_help", "Required by this workflow"),
         "validator",
         [],
         "",
       );
+      validatorCard.card.classList.add("task-workspace-task-file-source");
       validatorCard.tabs.remove();
+      const required = document.createElement("span");
+      required.className = "task-workspace-cap-chip task-workspace-required-chip";
+      required.textContent = "Required";
+      validatorCard.card.querySelector(".task-workspace-source-head")?.appendChild(required);
       const control = pathControl("taskWorkspaceValidator", "validator", item.validator, tr("task.validator_placeholder", "Enter validator path"));
       validatorCard.body.appendChild(control.row);
       appendFieldError(validatorCard.card, control.input, "validator");
@@ -1238,11 +1285,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (capability?.has_ai_validator) {
       const aiCard = sourceCard(
         tr("task.ai_validation_title", "AI Validation"),
-        tr("task.ai_validation_help", "Use the Workflow default or provide custom validation instructions."),
+        tr("task.ai_validation_help", "Use workflow default unless you really need an override"),
         "ai",
         [["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
         source.aiMode,
       );
+      aiCard.card.classList.add("task-workspace-task-ai-source");
       aiCard.tabs.querySelectorAll("button").forEach((button) => {
         button.addEventListener("click", async () => {
           const mode = button.dataset.taskSourceMode;
@@ -1252,9 +1300,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         });
       });
       if (source.aiMode === "default") {
-        const note = document.createElement("p");
-        note.className = "task-workspace-source-note";
-        note.textContent = tr("task.ai_default_help", "Uses the AI Validator Stage default prompt.");
+        const note = document.createElement("div");
+        note.className = "task-workspace-compact-default-value";
+        const strong = document.createElement("strong");
+        strong.textContent = "Workflow default";
+        const span = document.createElement("span");
+        span.textContent = "No override prompt";
+        note.append(strong, span);
         aiCard.body.appendChild(note);
       } else if (source.aiMode === "write") {
         const textarea = document.createElement("textarea");
@@ -1293,7 +1345,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       validationGrid.appendChild(aiCard.card);
     }
-    if (validationGrid.children.length) body.appendChild(validationGrid);
+    if (validationGrid.children.length) {
+      inputSupporting.appendChild(validationGrid);
+      if (validationGrid.children.length > 1) inputGrid.classList.add("has-mixed-validation");
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "task-workspace-validation-empty";
+      empty.textContent = "This Workflow needs no extra validator input.";
+      inputSupporting.appendChild(empty);
+      inputGrid.classList.add("has-no-validation");
+    }
+    body.appendChild(inputGrid);
     body.appendChild(workspaceSection);
 
     const error = document.createElement("div");
@@ -2099,6 +2161,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function render() {
     if (!state || !overlay) return;
+    const shell = byId("taskWorkspaceShell");
+    const workspaceRoute = ["editor", "list", "yaml"].includes(String(state.route || ""));
+    shell?.classList.toggle("workspace-route", workspaceRoute);
+    shell?.classList.toggle("task-editor-route", state.route === "editor");
+    shell?.classList.toggle("task-list-route", state.route === "list");
+    shell?.classList.toggle("task-yaml-route", state.route === "yaml");
     renderShellChrome();
     const footer = byId("taskWorkspaceFooterBack")?.closest("footer");
     const save = byId("taskWorkspaceSave");

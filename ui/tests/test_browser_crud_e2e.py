@@ -2007,8 +2007,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
-            page.fill("#taskWorkspaceDraftTitle", "Standalone browser task")
-            page.fill("#taskWorkspaceItemTitle", "Standalone child")
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+            page.fill("#taskWorkspaceItemTitle", "Standalone browser task")
             page.fill("#taskWorkspacePrompt", "Standalone task prompt")
 
             # X, Escape, backdrop and footer Cancel share the same dirty guard
@@ -2048,7 +2048,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
             assert page.locator("#taskWorkspaceProject").is_editable() is False
 
-            page.fill("#taskWorkspaceDraftTitle", "Dirty standalone title")
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+            page.fill("#taskWorkspaceItemTitle", "Dirty standalone title")
             page.fill("#taskWorkspacePrompt", "Dirty standalone prompt")
             page.locator("[data-workspace-option='main']").click()
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
@@ -2076,7 +2077,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 assert page.locator(".ui-dialog-card").get_by_text("unsaved Task edits", exact=False).is_visible()
                 page.locator("[data-dialog-cancel]").click()
                 page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
-                assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Dirty standalone title"
+                assert page.locator("#taskWorkspaceItemTitle").input_value() == "Dirty standalone title"
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Dirty standalone prompt"
                 assert page.locator("#taskWorkspaceWorkspace").input_value() == "main"
                 assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
@@ -4610,6 +4611,35 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert shell_before["x"] + shell_before["width"] <= viewport["width"] + 1
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
+            body_padding = page.locator("#taskWorkspaceBody").evaluate(
+                "(node) => { const s=getComputedStyle(node); return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft]; }"
+            )
+            assert body_padding == ["12px", "14px", "14px", "14px"]
+            footer_padding = page.locator(".task-workspace-foot").evaluate(
+                "(node) => { const s=getComputedStyle(node); return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft]; }"
+            )
+            assert footer_padding == ["9px", "14px", "9px", "14px"]
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+
+            project_box = page.locator("#taskWorkspaceProject").bounding_box()
+            workflow_box = page.locator("#taskWorkspaceWorkflow").bounding_box()
+            title_box = page.locator("#taskWorkspaceItemTitle").bounding_box()
+            assert project_box and workflow_box and title_box
+            if viewport["width"] == 820:
+                assert abs(project_box["y"] - workflow_box["y"]) <= 1
+                assert title_box["y"] > project_box["y"] + project_box["height"] - 1
+            else:
+                assert project_box["y"] < workflow_box["y"] < title_box["y"]
+
+            input_grid = page.locator("#taskWorkspaceInputGrid")
+            assert input_grid.count() == 1
+            assert page.locator("#taskWorkspaceWorkflowCaps .task-workspace-cap-chip").count() == 2
+            workspace_cards = page.locator(".task-workspace-workspace-options [data-workspace-option]")
+            assert workspace_cards.count() == 3
+            if viewport["width"] == 820:
+                workspace_boxes = [card.bounding_box() for card in workspace_cards.all()]
+                assert max(box["y"] for box in workspace_boxes) - min(box["y"] for box in workspace_boxes) <= 1
+
             initial_prompt_box = assert_inside_drawer("[data-task-source-card='prompt']")
             initial_validator_box = assert_inside_drawer("[data-task-source-card='validator']")
             assert_inside_drawer("[data-task-source-card='ai']")
@@ -4665,6 +4695,17 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             ai_card = page.locator("[data-task-source-card='ai']")
             assert validator_card.is_visible()
             assert ai_card.is_visible()
+            assert page.locator("#taskWorkspaceInputGrid").get_attribute("class").find("has-mixed-validation") >= 0
+            prompt_box = page.locator("[data-task-source-card='prompt']").bounding_box()
+            validator_box = validator_card.bounding_box()
+            ai_box = ai_card.bounding_box()
+            assert prompt_box and validator_box and ai_box
+            assert validator_box["y"] > prompt_box["y"] + prompt_box["height"] - 1
+            if viewport["width"] == 820:
+                assert abs(validator_box["y"] - ai_box["y"]) <= 1
+                assert abs(validator_box["width"] - ai_box["width"]) <= 2
+            else:
+                assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
 
             ai_card_widths = []
             for mode, control in (
@@ -4697,12 +4738,14 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     assert_inside_drawer("#taskWorkspaceAiAssetOpenPrompts")
                     assert page.locator("[id='taskWorkspaceOpenPrompts']").count() == 1
 
-                if viewport["width"] > 760:
-                    validator_box = validator_card.bounding_box()
-                    ai_box = ai_card.bounding_box()
-                    assert validator_box and ai_box
+                validator_box = validator_card.bounding_box()
+                ai_box = ai_card.bounding_box()
+                assert validator_box and ai_box
+                if viewport["width"] > 620:
                     assert abs(validator_box["y"] - ai_box["y"]) <= 1
                     assert abs(validator_box["height"] - ai_box["height"]) <= 1
+                else:
+                    assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
             assert max(ai_card_widths) - min(ai_card_widths) <= 1
 
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
@@ -4722,7 +4765,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
                 )
 
-            page.fill("#taskWorkspaceDraftTitle", "Canonical source modes")
+            page.fill("#taskWorkspaceItemTitle", "Canonical source modes")
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             created = state.tasks.list(root)["tasks"]

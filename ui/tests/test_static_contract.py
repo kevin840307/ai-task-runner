@@ -536,7 +536,16 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".task-workspace-workspace-options" in workspace
     assert ".task-workspace-workspace-option" in workspace
     assert 'card.dataset.workspaceOption = value' in task_workspace_js
+    assert 'body.appendChild(inputGrid)' in task_workspace_js
     assert 'body.appendChild(workspaceSection)' in task_workspace_js
+    assert 'inputGrid.append(inputPrimary, inputSupporting)' in task_workspace_js
+    assert 'inputGrid.classList.add("has-mixed-validation")' in task_workspace_js
+    assert 'grid.append(projectField, workflowField, titleField)' in task_workspace_js
+    assert 'if (draft.items.length === 1) body.appendChild(renderDraftTitleField())' not in task_workspace_js
+    assert ".task-workspace-input-grid" in workspace
+    assert "grid-template-columns:minmax(0,1.34fr) minmax(245px,.86fr)" in workspace
+    assert ".task-workspace-shell.workspace-route{width:min(920px,94vw);max-width:94vw}" in workspace
+    assert ".task-workspace-task-primary-source textarea{min-height:118px!important}" in workspace
     assert '[["↑"' not in task_workspace_js
 
 
