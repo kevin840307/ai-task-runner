@@ -735,10 +735,20 @@ function createProjectRow(project) {
   row.append(button, menuButton, menu);
   return row;
 }
+function syncProjectSwitcherPath() {
+  const node = $("projectSwitcherPath");
+  if (!node) return;
+  const path = String(state.project?.path || "").trim();
+  node.textContent = path || "No Project";
+  node.title = path || "No Project";
+}
 function renderProjects() {
   const root = $("projectList");
-  const previousScrollTop = root.scrollTop;
-  closeProjectMenus(); root.onscroll = () => closeProjectMenus(); syncProjectListLoadingState(root);
+  const scrollOwner = document.querySelector(".sidebar-scroll");
+  const previousScrollTop = scrollOwner?.scrollTop || 0;
+  closeProjectMenus();
+  if (scrollOwner) scrollOwner.onscroll = () => closeProjectMenus();
+  syncProjectListLoadingState(root);
   const existing = new Map(), staleRows = [];
   for (const row of root.querySelectorAll(".project-row[data-project-path]")) {
     const key = row.dataset.projectKey || projectPathKey(row.dataset.projectPath);
@@ -764,13 +774,14 @@ function renderProjects() {
   for (const row of staleRows) row.remove();
   for (const [key, row] of existing) if (!seen.has(key)) row.remove();
   root.appendChild(fragment);
-  if (root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;
+  syncProjectSwitcherPath();
+  if (scrollOwner && scrollOwner.scrollTop !== previousScrollTop) scrollOwner.scrollTop = previousScrollTop;
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
   state.view = "project-chat"; $("projectChatView").hidden = false; $("tasksBoardView").hidden = true; $("chatView").hidden = true; $("workflowView").hidden = true; projectChat.clearProject();
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
-  $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
+  $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false; syncProjectSwitcherPath();
 }
 async function selectProject(project) {
   if (!project || state.projectSwitching) return;
