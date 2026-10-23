@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -211,3 +212,67 @@ def test_probe_backend_reuses_canonical_catalogs_and_chat_ping(
     assert value["status"] == "pass"
     assert value["model_count"] == 1
     assert calls == [(tmp_path, "sample", "native/model", 7)]
+
+def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(probe, "_source_head", lambda: "source-head")
+    results = [
+        {
+            "backend": backend,
+            "status": "pass",
+            "chat_ping": {
+                "ok": True,
+                "session_id": f"{backend}-native-session",
+                "model_override": "",
+            },
+        }
+        for backend in probe.DEFAULT_BACKENDS
+    ]
+
+    value = probe._evidence_payload(
+        tmp_path,
+        list(probe.DEFAULT_BACKENDS),
+        results,
+        ok=True,
+        discovery_only=False,
+        allow_missing=False,
+        allow_no_ask=False,
+    )
+
+    assert value["schema_version"] == 1
+    assert value["source_head"] == "source-head"
+    assert value["formal_gate"] is True
+    assert value["ok"] is True
+    assert value["requested_backends"] == list(probe.DEFAULT_BACKENDS)
+    assert value["recorded_at_utc"]
+    for item in value["results"]:
+        assert "session_id" not in item["chat_ping"]
+        assert item["chat_ping"]["session_id_present"] is True
+
+    diagnostic = probe._evidence_payload(
+        tmp_path,
+        list(probe.DEFAULT_BACKENDS),
+        results,
+        ok=True,
+        discovery_only=True,
+        allow_missing=False,
+        allow_no_ask=False,
+    )
+    assert diagnostic["formal_gate"] is False
+    assert diagnostic["diagnostic"]["discovery_only"] is True
+
+
+def test_write_evidence_atomically_replaces_requested_json_path(tmp_path: Path) -> None:
+    target = tmp_path / "evidence" / "agent-live.json"
+    target.parent.mkdir()
+    target.write_text('{"stale": true}\n', encoding="utf-8")
+    payload = {"schema_version": 1, "formal_gate": True, "results": []}
+
+    saved = probe._write_evidence(str(target), payload)
+
+    assert saved == target.resolve()
+    assert json.loads(target.read_text(encoding="utf-8")) == payload
+    assert not target.with_name(target.name + ".tmp").exists()
+
