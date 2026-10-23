@@ -154,6 +154,52 @@ TASK_EDITOR = PanelSpec(
             ("display", "grid-template-columns", "width", "min-width", "gap", "box-sizing", "height"),
         ),
         Pair(
+            "#newTaskModal .task-primary-source .source-head strong",
+            ".task-workspace-task-primary-source .task-workspace-source-head strong",
+            ("font-size",),
+        ),
+        Pair(
+            "#newTaskModal .task-primary-source .source-head small",
+            ".task-workspace-task-primary-source .task-workspace-source-head small",
+            ("font-size",),
+        ),
+        Pair(
+            "#newTaskModal .task-file-source .cap-chip",
+            ".task-workspace-task-file-source .task-workspace-required-chip",
+            ("font-size",),
+        ),
+        Pair("#newTaskModal .task-ai-source", ".task-workspace-task-ai-source", ("opacity",)),
+        Pair(
+            "#newTaskModal .task-editor-secondary",
+            ".task-workspace-editor-secondary",
+            ("margin-top", "padding"),
+        ),
+        Pair(
+            "#newTaskModal .task-editor-secondary .workspace-selector-title",
+            ".task-workspace-editor-secondary .task-workspace-workspace-head",
+            ("margin-bottom",),
+        ),
+        Pair(
+            "#newTaskModal .task-editor-secondary .workspace-options",
+            ".task-workspace-editor-secondary .task-workspace-workspace-options",
+            ("gap",),
+        ),
+        Pair(
+            "#newTaskModal .task-editor-secondary .workspace-option small",
+            ".task-workspace-editor-secondary .task-workspace-workspace-option small",
+            ("margin-top", "font-size", "line-height"),
+        ),
+        Pair(
+            "#newTaskModal .task-editor-secondary .workspace-option .workspace-status",
+            ".task-workspace-editor-secondary .task-workspace-workspace-status",
+            ("margin-top", "font-size"),
+        ),
+        Pair(
+            "#newTaskModal .task-editor-secondary .workspace-preview",
+            ".task-workspace-editor-secondary .task-workspace-workspace-preview",
+            ("margin-top", "padding", "font-size", "line-height"),
+        ),
+        Pair(
             "#newTaskModal .task-primary-source .source-tabs button",
             ".task-workspace-task-primary-source .task-workspace-source-tabs button",
             ("width", "min-width", "height", "padding", "white-space", "overflow", "text-overflow"),
