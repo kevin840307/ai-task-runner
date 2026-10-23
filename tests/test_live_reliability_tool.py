@@ -2962,8 +2962,64 @@ def test_delivery_preflights_are_ordered_before_real_qwen_resume_probe():
         assert live.PROBE_ORDER.index(name) < live.PROBE_ORDER.index("resume")
 
 
+
+def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_mock_agent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[tuple[str, Path]] = []
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1]).resolve()
+        calls.append((project.parent.name, project))
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            json.dumps({"completed": True, "stage": "completed"}),
+            encoding="utf-8",
+        )
+        (work / "log.txt").write_text(
+            json.dumps({"type": "runner.stage", "action": "finish", "stage": "done"})
+            + "\n",
+            encoding="utf-8",
+        )
+        (work / "debug" / "last-prompt.txt").write_text(
+            "mock prompt", encoding="utf-8"
+        )
+        (work / "debug" / "last-result.txt").write_text(
+            "mock result", encoding="utf-8"
+        )
+        (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    result = live.runner_workspace_delivery_probe(
+        settings(tmp_path),
+        tmp_path,
+    )
+
+    assert len(calls) == 2
+    assert result["main"]["effective_mode"] == "main"
+    assert result["main"]["delivery"] == "merged"
+    assert result["worktree"]["effective_mode"] == "worktree"
+    assert result["worktree"]["delivery"] == "worktree_ready"
+    main_repo = tmp_path / "runner-workspace-main-probe"
+    worktree_repo = tmp_path / "runner-workspace-worktree-probe"
+    assert (main_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert not (worktree_repo / "health.txt").exists()
+
+
+def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():
+    index = live.PROBE_ORDER.index("runner-workspace-delivery")
+    assert live.PROBE_ORDER[index - 1] == "file-protection"
+    assert live.PROBE_ORDER[index + 1] == "api-502"
+
+
 def test_live_probe_order_runs_long_soak_last():
-    assert len(live.PROBE_ORDER) == 49
+    assert len(live.PROBE_ORDER) == 50
     assert live.PROBE_ORDER[-1] == "soak"
     assert live.PROBE_ORDER[-7:] == (
         "example-smoke",
@@ -2977,12 +3033,12 @@ def test_live_probe_order_runs_long_soak_last():
 
 
 def test_dynamic_handoff_extended_live_probes_run_before_soak():
-    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 44
-    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 45
-    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 46
-    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 47
-    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 48
-    assert live.PROBE_ORDER.index("soak") + 1 == 49
+    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 45
+    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 46
+    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 47
+    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 48
+    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 49
+    assert live.PROBE_ORDER.index("soak") + 1 == 50
 
 
 def test_main_executes_long_soak_after_dynamic_handoff_probes():
