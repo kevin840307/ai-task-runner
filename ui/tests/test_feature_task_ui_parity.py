@@ -237,6 +237,26 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
         ("display", "grid-template-columns"),
     )
     _same(
+        "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .source-card",
+        ".task-workspace-input-grid.has-mixed-validation .task-workspace-validation-stack>.task-workspace-source-card",
+        ("height",),
+    )
+    _same(
+        "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-file-source>.source-head",
+        ".task-workspace-input-grid.has-mixed-validation .task-workspace-task-file-source>.task-workspace-source-head",
+        ("grid-template-rows",),
+    )
+    _same(
+        "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-file-source>.source-head>div:first-child",
+        ".task-workspace-input-grid.has-mixed-validation .task-workspace-task-file-source>.task-workspace-source-head>div:first-child",
+        ("min-height",),
+    )
+    _same(
+        "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) .task-primary-source",
+        ".task-workspace-input-grid.has-mixed-validation .task-workspace-task-primary-source",
+        ("width",),
+    )
+    _same(
         "#newTaskModal .task-primary-source .source-tabs",
         ".task-workspace-source-tabs",
         ("display", "width", "min-width", "box-sizing"),

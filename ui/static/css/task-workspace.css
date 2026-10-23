@@ -353,9 +353,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   background:color-mix(in srgb,var(--accent-soft) 55%,var(--panel-2))
 }
 .task-workspace-task-file-source .task-workspace-required-chip{font-size:7px}
+.task-workspace-input-grid.has-mixed-validation .task-workspace-validation-stack>.task-workspace-source-card{height:100%}
+.task-workspace-input-grid.has-mixed-validation .task-workspace-task-file-source>.task-workspace-source-head,
+.task-workspace-input-grid.has-mixed-validation .task-workspace-task-ai-source>.task-workspace-source-head{
+  grid-template-rows:minmax(30px,auto) 30px
+}
+.task-workspace-input-grid.has-mixed-validation .task-workspace-task-file-source>.task-workspace-source-head>div:first-child,
+.task-workspace-input-grid.has-mixed-validation .task-workspace-task-ai-source>.task-workspace-source-head>div:first-child{
+  min-height:30px
+}
 .task-workspace-input-grid.has-mixed-validation .task-workspace-task-file-source>.task-workspace-source-head>.task-workspace-required-chip{
   justify-self:start;align-self:center
 }
+.task-workspace-input-grid.has-mixed-validation .task-workspace-task-primary-source{width:100%}
 .task-workspace-task-ai-source{opacity:.94}
 .task-workspace-source-head{
   display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:6px;
