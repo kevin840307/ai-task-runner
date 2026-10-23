@@ -2232,6 +2232,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "Second list child")
             page.fill("#taskWorkspacePrompt", "Second list prompt")
+            page.select_option("#taskWorkspaceWorkflow", str(workflow_path))
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
@@ -2239,6 +2240,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "Third list child")
             page.fill("#taskWorkspacePrompt", "Third list prompt")
+            page.select_option("#taskWorkspaceWorkflow", str(workflow_path))
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
@@ -2532,6 +2534,10 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             assert expand_button.get_attribute("aria-pressed") == "true"
             assert page.evaluate("window.__taskShell === document.querySelector('#taskWorkspaceShell')")
             expand_button.click()
+            page.wait_for_function(
+                "(width) => Math.abs(document.querySelector('#taskWorkspaceShell').getBoundingClientRect().width - width) <= 2",
+                arg=normal_shell["width"],
+            )
             collapsed_shell = page.locator("#taskWorkspaceShell").bounding_box()
             assert collapsed_shell
             assert abs(collapsed_shell["width"] - normal_shell["width"]) <= 2
@@ -3208,7 +3214,12 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.fill("#taskWorkspacePrompt", "Edited browser item one")
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 2")
-            assert page.locator(".task-workspace-list-row").first.locator("p").inner_text() == "Edited browser item one"
+            assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-list-copy strong").is_visible()
+            page.locator(".task-workspace-row-edit").first.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Edited browser item one"
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             chat_after = page.locator("#projectChatView").bounding_box()
