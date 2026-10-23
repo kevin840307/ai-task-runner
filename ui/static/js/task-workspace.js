@@ -31,7 +31,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             <strong id="taskWorkspaceTitle">Edit Task</strong>
             <span id="taskWorkspaceMeta"></span>
           </div>
-          <button id="taskWorkspaceClose" class="task-workspace-close" type="button" aria-label="Close Task Editor">×</button>
+          <button id="taskWorkspaceExpand" class="task-workspace-expand" type="button" aria-label="Expand task workspace" aria-pressed="false" title="Expand task workspace">⤢</button>
+          <button id="taskWorkspaceClose" class="task-workspace-close" type="button" aria-label="Close task workspace">×</button>
         </header>
         <main id="taskWorkspaceBody" class="task-workspace-body"></main>
         <footer class="task-workspace-foot">
@@ -44,6 +45,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (event.target === overlay) void requestClose();
     });
     byId("taskWorkspaceClose").addEventListener("click", () => void requestClose());
+    byId("taskWorkspaceExpand").addEventListener("click", () => setWorkspaceExpanded(!byId("taskWorkspaceShell").classList.contains("expanded")));
     byId("taskWorkspaceHeaderBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceFooterBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
@@ -257,12 +259,38 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     closeNow();
   }
 
+  function renderShellChrome() {
+    const shell = byId("taskWorkspaceShell");
+    const expand = byId("taskWorkspaceExpand");
+    const back = byId("taskWorkspaceHeaderBack");
+    const close = byId("taskWorkspaceClose");
+    const expanded = !!shell?.classList.contains("expanded");
+    const expandLabel = expanded
+      ? tr("task.collapse_workspace", "Collapse task workspace")
+      : tr("task.expand_workspace", "Expand task workspace");
+    if (expand) {
+      expand.textContent = expanded ? "⤡" : "⤢";
+      expand.title = expandLabel;
+      expand.setAttribute("aria-label", expandLabel);
+      expand.setAttribute("aria-pressed", String(expanded));
+    }
+    if (back) back.setAttribute("aria-label", tr("task.back", "Back"));
+    if (close) close.setAttribute("aria-label", tr("task.close_workspace", "Close task workspace"));
+  }
+
+  function setWorkspaceExpanded(expanded) {
+    byId("taskWorkspaceShell")?.classList.toggle("expanded", !!expanded);
+    renderShellChrome();
+  }
+
   function showNow() {
+    setWorkspaceExpanded(false);
     if (overlay) overlay.hidden = false;
     document.body.classList.add("task-workspace-open");
   }
 
   function closeNow({ restore = true } = {}) {
+    setWorkspaceExpanded(false);
     if (overlay) overlay.hidden = true;
     document.body.classList.remove("task-workspace-open");
     const focus = restore ? restoreFocus : null;
@@ -1902,6 +1930,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function render() {
     if (!state || !overlay) return;
+    renderShellChrome();
     const footer = byId("taskWorkspaceFooterBack")?.closest("footer");
     const save = byId("taskWorkspaceSave");
     const back = byId("taskWorkspaceHeaderBack");

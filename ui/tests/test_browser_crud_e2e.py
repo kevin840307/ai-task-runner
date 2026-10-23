@@ -2338,11 +2338,29 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
             assert page.locator(".task-workspace-tab").all_inner_texts() == ["Overview", "Runtime", "Output", "History"]
             assert page.locator(".task-workspace-meta-grid dt").all_inner_texts() == ["Project", "Type", "Items"]
+            page.evaluate("window.__taskShell = document.querySelector('#taskWorkspaceShell')")
+            normal_shell = page.locator("#taskWorkspaceShell").bounding_box()
+            assert normal_shell
+            expand_button = page.locator("#taskWorkspaceExpand")
+            assert expand_button.get_attribute("aria-pressed") == "false"
+            expand_button.click()
+            expanded_shell = page.locator("#taskWorkspaceShell").bounding_box()
+            assert expanded_shell
+            assert expanded_shell["width"] > normal_shell["width"]
+            assert expanded_shell["x"] + expanded_shell["width"] <= 1441
+            assert expand_button.get_attribute("aria-pressed") == "true"
+            assert page.evaluate("window.__taskShell === document.querySelector('#taskWorkspaceShell')")
+            expand_button.click()
+            collapsed_shell = page.locator("#taskWorkspaceShell").bounding_box()
+            assert collapsed_shell
+            assert abs(collapsed_shell["width"] - normal_shell["width"]) <= 2
 
             page.evaluate("window.I18n.setLanguage('zh-TW')")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === '任務資訊'")
             assert page.locator(".task-workspace-tab").all_inner_texts() == ["總覽", "執行狀態", "輸出", "歷史"]
             assert page.locator(".task-workspace-meta-grid dt").all_inner_texts() == ["專案", "類型", "項目"]
+            assert page.locator("#taskWorkspaceExpand").get_attribute("title") == "展開任務工作區"
+            assert page.locator("#taskWorkspaceClose").get_attribute("aria-label") == "關閉任務工作區"
             page.get_by_role("button", name="執行狀態", exact=True).click()
             assert page.locator(".task-workspace-empty-panel strong").inner_text() == "尚無 Runner 執行狀態"
             page.evaluate("window.I18n.setLanguage('en')")

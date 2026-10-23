@@ -2010,6 +2010,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Replaced the Task Info ordered-items innerHTML label with explicit DOM nodes so translated copy stays data-only.
     - Real Browser regression switches an open durable Task Info between English and zh-TW, verifies tabs/metadata/empty Runtime text, then switches back without closing the shared Drawer.
 
+[x] Complete the single Task DrawerHeader contract with an in-shell Expand action.
+    - Added Expand/Collapse beside Close in the existing TaskWorkspaceController header; it only toggles the same #taskWorkspaceShell and never creates another overlay, route or Task state owner.
+    - Expanded width persists while navigating inside the open shell and resets when a new/closed workspace is opened, keeping List/Editor/YAML geometry ownership in one shell.
+    - Back / Expand / Close accessibility text uses the same zh-TW/en i18n owner.
+    - Real Browser regression verifies the same shell DOM expands/collapses within the viewport and localized header controls remain correct.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
