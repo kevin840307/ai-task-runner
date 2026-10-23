@@ -635,3 +635,14 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   .task-workspace-header-actions{gap:4px}
   .task-workspace-header-actions button{padding:0 6px;font-size:8px}
 }
+
+
+/* Final prototype ownership: Task List actions live in the drawer header, not List info. */
+.task-workspace-list-tools-wrap[hidden]{display:none!important}
+.task-workspace-shell.workspace-route #taskWorkspaceEyebrow{display:none}
+.task-workspace-shell.workspace-route .task-workspace-heading{gap:5px}
+.task-workspace-basics .task-workspace-field>span{
+  text-transform:uppercase;letter-spacing:.04em
+}
+.task-workspace-field-optional{text-transform:none;letter-spacing:0}
+.task-workspace-drag-grip{height:28px}

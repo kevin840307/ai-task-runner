@@ -2128,10 +2128,16 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceHeaderCreateList").is_visible()
             assert page.locator("#taskWorkspaceHeaderCreateList").inner_text() == "Create Task List"
             assert page.locator("#taskWorkspaceHeaderCreateList").is_disabled()
+            create_header_box = page.locator("#taskWorkspaceHeaderCreateList").bounding_box()
+            cancel_header_box = page.locator("#taskWorkspaceHeaderCancel").bounding_box()
+            assert create_header_box and cancel_header_box
+            assert abs(create_header_box["height"] - 30) <= 1
+            assert abs(cancel_header_box["height"] - 30) <= 1
             assert page.locator("#taskWorkspaceSave").is_hidden()
             assert page.locator(".task-workspace-list-row").count() == 0
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
             assert page.locator(".task-workspace-list-side-card").count() == 2
+            assert page.locator(".task-workspace-list-tools button").count() == 0
             list_columns = page.locator(".task-workspace-list-page").evaluate("(node) => getComputedStyle(node).gridTemplateColumns")
             assert list_columns.endswith("260px")
             assert page.locator(".task-workspace-list-main").evaluate("(node) => getComputedStyle(node).padding") == "14px"
@@ -2348,7 +2354,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
-            page.click("#taskWorkspaceYamlButton")
+            page.click("#taskWorkspaceHeaderYaml")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
             yaml_geometry = task_workspace_geometry()
             page.click("#taskWorkspaceHeaderBack")
@@ -2356,8 +2362,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             # Feature parity: Move existing is a secondary chooser. Moving the
             # standalone New Task appends its item and retires its Board identity.
-            assert page.locator("#taskWorkspaceMoveExisting").is_enabled()
-            page.click("#taskWorkspaceMoveExisting")
+            assert page.locator("#taskWorkspaceHeaderMoveExisting").is_enabled()
+            page.click("#taskWorkspaceHeaderMoveExisting")
             page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
             move_option = page.locator(".task-workspace-move-option").first
             assert "Standalone browser task" in move_option.inner_text()
@@ -2506,7 +2512,7 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             assert page.locator(".task-workspace-durable-edit").count() == 2
             assert all(button.is_disabled() for button in page.locator(".task-workspace-durable-edit").all())
             add_button = page.locator("#taskWorkspaceAddTask")
-            yaml_button = page.locator("#taskWorkspaceYamlButton")
+            yaml_button = page.locator("#taskWorkspaceHeaderYaml")
             assert add_button.is_disabled()
             assert yaml_button.is_disabled()
             assert "Pause this Task before editing" in (add_button.get_attribute("title") or "")
@@ -2782,9 +2788,9 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
             assert future.get_by_role("button", name="Remove").is_enabled()
             assert future.get_attribute("draggable") == "true"
             assert page.locator("#taskWorkspaceAddTask").is_enabled()
-            assert page.locator("#taskWorkspaceYamlButton").is_disabled()
+            assert page.locator("#taskWorkspaceHeaderYaml").is_disabled()
             assert "Completed Task items are frozen" in (
-                page.locator("#taskWorkspaceYamlButton").get_attribute("title") or ""
+                page.locator("#taskWorkspaceHeaderYaml").get_attribute("title") or ""
             )
 
             current.locator(".task-workspace-row-edit").click()
@@ -3219,7 +3225,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert [item["title"] for item in durable_items] == ["Draft item 1", "Added browser child"]
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
 
-            page.click("#taskWorkspaceYamlButton")
+            page.click("#taskWorkspaceHeaderYaml")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
             yaml_text = page.locator("#taskWorkspaceYamlText").input_value()
             dirty_yaml = yaml_text.replace("title: Browser generated draft", "title: YAML renamed list", 1)

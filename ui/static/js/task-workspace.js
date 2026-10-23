@@ -1146,38 +1146,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return chooser;
   }
 
-  function createTaskListTools({ editable, canYaml, reason = "" } = {}) {
+  function createTaskListTools() {
     const wrap = document.createElement("div");
     wrap.className = "task-workspace-list-tools-wrap";
-    const tools = document.createElement("div");
-    tools.className = "task-workspace-list-tools";
-
-    if (state?.kind === "task") {
-      const move = document.createElement("button");
-      move.id = "taskWorkspaceMoveExisting";
-      move.type = "button";
-      move.textContent = "Move existing";
-      const dirty = isDirty();
-      move.disabled = !editable || !taskEditPolicy(state.task).can_add_item || dirty;
-      move.title = dirty ? "Save Task List changes before moving an existing Task" : (move.disabled ? reason : "");
-      move.onclick = toggleMoveExisting;
-      tools.appendChild(move);
+    if (state?.kind === "task" && state.moveExistingOpen) {
+      wrap.appendChild(createMoveExistingChooser());
+    } else {
+      wrap.hidden = true;
     }
-
-    const yaml = document.createElement("button");
-    yaml.id = "taskWorkspaceYamlButton";
-    yaml.type = "button";
-    yaml.textContent = tr("task.edit_yaml", "Edit YAML");
-    yaml.disabled = !canYaml;
-    yaml.title = yaml.disabled ? reason : "";
-    if (!yaml.disabled) yaml.onclick = () => void openYaml();
-    tools.appendChild(yaml);
-    if (editable) {
-      const prompts = promptsButton();
-      if (prompts) tools.appendChild(prompts);
-    }
-    wrap.appendChild(tools);
-    if (state?.kind === "task" && state.moveExistingOpen) wrap.appendChild(createMoveExistingChooser());
     return wrap;
   }
 
