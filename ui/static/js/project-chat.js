@@ -697,27 +697,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
 
   function renderPreferences(next = preferences) {
     preferences = next || {};
-    const root = byId("projectChatPreferences");
-    if (!root) return;
-    root.innerHTML = "";
-    const items = [
-      ["Agent", preferences.backend || preferences.agent || "Default"],
-      ["Model", preferences.model || "Default"],
-      ["Mode", preferences.mode || "auto"],
-      ["Reasoning", preferences.reasoning || "medium"],
-      ["Workflow", preferences.workflow ? String(preferences.workflow).split(/[\\/]/).pop() : "Default"],
-    ];
-    for (const [label, value] of items) {
-      const item = document.createElement("span");
-      item.className = "project-chat-pref";
-      const key = document.createElement("small");
-      key.textContent = label;
-      const text = document.createElement("strong");
-      text.textContent = String(value || "Default");
-      text.title = String(value || "Default");
-      item.append(key, text);
-      root.appendChild(item);
-    }
     renderSettingsControls();
   }
 
