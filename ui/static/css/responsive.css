@@ -113,6 +113,18 @@ body.details-collapsed .panel { display: none !important; }
   body.details-collapsed .details { display: none; }
 }
 
+@media (min-width: 761px) and (max-width: 900px) {
+  body,
+  body.details-collapsed {
+    grid-template-columns: 205px minmax(0, 1fr);
+  }
+
+  body.projects-collapsed,
+  body.projects-collapsed.details-collapsed {
+    grid-template-columns: var(--rail-collapsed) minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 760px) {
   body,
   body.projects-collapsed,

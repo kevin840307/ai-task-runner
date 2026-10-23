@@ -83,3 +83,13 @@
 .tasks-board-content{padding:10px}
 .tasks-board-columns{grid-template-columns:repeat(4,minmax(200px,1fr));min-width:850px}
 }
+
+
+/* Prevent compact desktop header controls from overlapping. */
+#tasksBoardView>.header .title-block{min-width:0}
+.tasks-board-header-actions{flex:0 0 auto}
+@media (min-width:761px) and (max-width:900px){
+  #tasksBoardView>.header{gap:8px}
+  .tasks-title-line{gap:8px}
+  .tasks-project-trigger .stateful-content{width:110px;max-width:110px}
+}

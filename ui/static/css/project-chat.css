@@ -59,7 +59,7 @@
 #projectChatMessages {
   min-height: 0;
   overflow-y: auto;
-  padding: 18px max(14px, calc((100% - 980px) / 2));
+  padding: 24px max(24px, calc((100% - 880px) / 2));
 }
 .project-chat-empty {
   margin: auto;
@@ -78,7 +78,7 @@
   border-top: 0;
   background: linear-gradient(to bottom, transparent, var(--bg) 18px);
 }
-.project-chat-compose .composer-box { max-width: 980px; }
+.project-chat-compose .composer-box { max-width: 900px; }
 .project-chat-compose textarea {
   min-height: 46px !important;
   max-height: 180px !important;
@@ -261,7 +261,7 @@
 .project-chat-settings-popover {
   position: fixed;
   z-index: 460;
-  width: min(430px, calc(100vw - 24px));
+  width: min(330px, calc(100vw - 20px));
   max-height: min(620px, calc(100vh - 24px));
   overflow-y: auto;
   border: 1px solid var(--line);
