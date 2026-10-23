@@ -391,8 +391,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (yaml) {
         yaml.hidden = false;
         yaml.textContent = tr("task.edit_yaml", "Edit YAML");
-        yaml.disabled = !policy.editable || items.length === 0;
-        yaml.title = yaml.disabled ? String(policy.reason || "") : "";
+        yaml.disabled = !policy.can_edit_yaml || items.length === 0;
+        yaml.title = yaml.disabled ? String(policy.reason || "Task List YAML is not editable in the current lifecycle state") : "";
       }
     }
   }

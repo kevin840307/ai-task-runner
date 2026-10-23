@@ -2144,6 +2144,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-list-tools button").count() == 0
             list_columns = page.locator(".task-workspace-list-page").evaluate("(node) => getComputedStyle(node).gridTemplateColumns")
             assert list_columns.endswith("260px")
+            list_shell_box = page.locator("#taskWorkspaceShell").bounding_box()
+            assert list_shell_box and abs(list_shell_box["width"] - 920) <= 1
             assert page.locator(".task-workspace-list-main").evaluate("(node) => getComputedStyle(node).padding") == "14px"
 
             # Standalone Task List Draft footer Cancel shares the canonical
@@ -4704,6 +4706,10 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert shell_before
             assert shell_before["x"] >= -1
             assert shell_before["x"] + shell_before["width"] <= viewport["width"] + 1
+            if viewport["width"] > 900:
+                assert abs(shell_before["width"] - 920) <= 1
+            else:
+                assert abs(shell_before["width"] - viewport["width"]) <= 1
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
             body_padding = page.locator("#taskWorkspaceBody").evaluate(
