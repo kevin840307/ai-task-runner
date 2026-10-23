@@ -1244,6 +1244,138 @@ def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(
     assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
+def test_merge_failure_limit_three_recovers_first_three_and_falls_back_on_fourth(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-failure-limit-boundary",
+    )
+    runtimes: dict[Path, dict] = {}
+    launches = []
+
+    def launch(project: Path, goal: str | None, **kwargs):
+        root = Path(project).resolve()
+        launches.append((root, goal, dict(kwargs)))
+        runtimes[root] = {
+            "running": True,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }
+
+    def read_runtime(project: Path):
+        return dict(runtimes.get(Path(project).resolve(), {
+            "running": False,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }))
+
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {
+            "auto_workspace_policy": "always-main",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": False,
+        },
+        preferences=lambda _project: {
+            "agent": "qwen",
+            "model": "",
+            "mode": "auto",
+            "reasoning": "medium",
+            "workflow": str(repo / "workflow.yaml"),
+        },
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=launch,
+        read_runtime=read_runtime,
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        validate_merge=lambda _project, _goal, **_kwargs: "PASS",
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        auto_watch=False,
+    )
+
+    started = service.start(
+        repo,
+        created["task_id"],
+        request_id="failure-limit-boundary-run",
+    )
+    source_root = Path(started["run"]["workspace"]["project_root"])
+    (source_root / "app.txt").write_text("task side 1\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side 1\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "target conflict 1")
+    runtimes[source_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+
+    current = service.reconcile(repo, created["task_id"])
+    assert current["status"] == "ongoing"
+    assert current["run"]["phase"] == "conflict_recovery"
+    assert current["merge_failure_count"] == 1
+    assert current["run"]["workspace_result"]["recovery"]["failure_number"] == 1
+
+    latest_recovery_root = None
+    latest_recovery_branch = ""
+    for failure_number in range(2, 5):
+        recovery = current["run"]["workspace_result"]["recovery"]
+        latest_recovery_root = Path(recovery["workspace"]["project_root"])
+        latest_recovery_branch = recovery["workspace"]["task_branch"]
+        (latest_recovery_root / "app.txt").write_text(
+            f"recovery side {failure_number}\n",
+            encoding="utf-8",
+        )
+        (repo / "app.txt").write_text(
+            f"target side {failure_number}\n",
+            encoding="utf-8",
+        )
+        _git(repo, "add", "app.txt")
+        _git(repo, "commit", "-m", f"target conflict {failure_number}")
+        runtimes[latest_recovery_root] = {
+            "running": False,
+            "launching": False,
+            "completed": True,
+            "resumable": False,
+            "actions": {},
+        }
+
+        current = service.reconcile(repo, created["task_id"])
+        assert current["merge_failure_count"] == failure_number
+        if failure_number <= 3:
+            assert current["status"] == "ongoing"
+            assert current["run"]["phase"] == "conflict_recovery"
+            next_recovery = current["run"]["workspace_result"]["recovery"]
+            assert next_recovery["failure_number"] == failure_number
+            assert Path(next_recovery["workspace"]["project_root"]) != latest_recovery_root
+        else:
+            assert current["status"] == "closed"
+            assert current["run"]["phase"] == "worktree_ready"
+
+    assert latest_recovery_root is not None
+    result = current["run"]["workspace_result"]
+    assert result["delivery_fallback"] == {
+        "mode": "isolated_worktree",
+        "reason": "merge_failure_limit_exceeded",
+    }
+    assert result["merge"]["status"] == "worktree_ready"
+    assert result["merge_source"]["workspace"]["task_branch"] == latest_recovery_branch
+    assert Path(result["merge_source"]["workspace"]["project_root"]) == latest_recovery_root
+    assert "merge_failure_limit" not in current
+    assert len(launches) == 4
+
+
 def test_reset_abandons_conflict_recovery_and_releases_main_merge_queue(tmp_path: Path):
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})

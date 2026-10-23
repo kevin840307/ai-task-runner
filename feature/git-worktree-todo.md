@@ -1261,9 +1261,12 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Merge failure limit
 
-- [ ] Global limit=3: failures 1/2/3 recover, failure 4 falls back.
-- [ ] Fallback retains the latest current merge source branch/worktree and closes as worktree_ready.
-- [ ] Task stores only actual merge_failure_count; merge_failure_limit stays Global.
+- [x] Global limit=3: failures 1/2/3 recover, failure 4 falls back.
+  - Deterministic TaskRunService regression drives four real Git conflicts across successive recovery worktrees; failures 1/2/3 launch incremental recovery and failure 4 closes as fallback.
+- [x] Fallback retains the latest current merge source branch/worktree and closes as worktree_ready.
+  - The failure-limit boundary regression asserts merge_source still points at the fourth/latest recovery branch and worktree when fallback closes.
+- [x] Task stores only actual merge_failure_count; merge_failure_limit stays Global.
+  - Boundary regression asserts the durable Task contains merge_failure_count=4 and no merge_failure_limit field; the limit is read from execution settings.
 
 ### Target safety
 

@@ -225,10 +225,14 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] @goal 使用目前 Project 保存的 Workflow；沒有設定時 fallback ralphy_ai_validate.yaml。
 [x] @goal 的 Workspace=Auto 使用全域 Auto workspace policy 與共用 resolveTaskWorkspace，不另外寫一套 busy/worktree 判斷。
 [x] 若選定 Workflow 需要額外 File Validator，而 Quick Goal 缺少必要輸入，Prototype fail closed 並提示改用 @task / Task Editor。
-[ ] 正式版 @goal 必須是 Backend 的 atomic/idempotent「create then run」命令或等價 transaction；不得讓 UI 先直接寫 Task store 再自己改 runtime。
-[ ] @goal 建立成功但 Run 啟動失敗時，要有明確 durable 狀態與 Retry/Resume 語義，不得留下 UI 假 Running。
-[ ] 測試 @goal 空 spec、重複送出、雙擊、Workflow 不存在、File Validator 必填、Main busy + 三種 Global Auto policy。
-[ ] @goal 與 @task 的責任保持分離：@goal = 快速交付目標並執行；@task = 先產生 Draft / Review / Edit / Create。
+[x] 正式版 @goal 必須是 Backend 的 atomic/idempotent「create then run」命令或等價 transaction；不得讓 UI 先直接寫 Task store 再自己改 runtime。
+    - Production owner 是 TaskRunService.start_goal()；Task create/run 使用同一 request_id 派生的 durable idempotency keys，UI 只呼叫 /api/tasks/goal。
+[x] @goal 建立成功但 Run 啟動失敗時，要有明確 durable 狀態與 Retry/Resume 語義，不得留下 UI 假 Running。
+    - Git preflight 失敗保持 New；Runner launch 失敗進 durable Paused/launch_failed，同 request retry 不重複建 Task，也不顯示假 Running。
+[x] 測試 @goal 空 spec、重複送出、雙擊、Workflow 不存在、File Validator 必填、Main busy + 三種 Global Auto policy。
+    - Service/HTTP/Browser regression 已覆蓋；Browser 雙擊 Send 仍只建立一筆 Task。最新基線 HEAD c95b6d3 的 CI run 39882949624 Windows/Linux/Browser/Studio 全綠。
+[x] @goal 與 @task 的責任保持分離：@goal = 快速交付目標並執行；@task = 先產生 Draft / Review / Edit / Create。
+    - /api/tasks/goal 走 TaskRunService；@task* 仍走 transient TaskDraftService → explicit Create，普通 Chat 不會建立 Runner Task。
 
 
 [x] Chat Ask choice UI 每題最多 5 個可見項目（含固定 Other/custom text）；UI defensive clamp，正式 prompt 也要限制選項數量。
@@ -266,7 +270,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - deterministic Browser bridge 以真 TaskDraftService owner 注入 mock:error / mock:invalid，驗證 backend failure 與 invalid structured data 皆走 production error UI。
 [x] 長 spec、含多行、含 bullet list、含特殊字元、Project 不存在都要有 deterministic 測試。
     - TaskDraft boundary unit test 保留 multiline/bullet/特殊字元並驗證 24001 chars fail closed；missing Project 現在由 canonical task_models 檢查，TaskDraftService 在呼叫 Agent 前直接拒絕，TaskService validate 也使用同一規則。
-[ ] Worktree 不可建立的 Task/@goal 測試留在最後 Workspace phase，以正式 workspace resolver / Git preflight 驗證，不用 Mock 冒充。
+[x] Worktree 不可建立的 Task/@goal 測試留在最後 Workspace phase，以正式 workspace resolver / Git preflight 驗證，不用 Mock 冒充。
+    - test_task_and_quick_goal_fail_closed_when_git_preflight_cannot_prepare_worktree 使用 detached HEAD + 真 WorkspaceManager，驗證 Runner 未啟動、無 local/task branch、Task 狀態不被假推進。
 [x] Mock request / response 必須與正式 API 共用同一份 TaskDraft schema，不可另造 mock-only model。
     - Browser fixture 直接實例化 production TaskDraftService，response 經 validate_generated_draft / validate_task_draft_for_create；沒有 mock-only TaskDraft class/schema。
 
@@ -637,7 +642,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     - Production Browser E2E 明確建立兩組不同 Project-level 五項設定，切換 Project 與同 Project Chat session 後逐項驗證 Agent / Model / Mode / Reasoning / Workflow，reload 後仍保持同一 canonical preference projection。
 [x] Browser 測試：Global Settings 的 Execution / Interface / Language；Auto workspace policy 三種模式、Merge failure limit persistence/0~99 validation、Allow concurrent Main tasks persistence、Appearance / Theme palette / Language persistence。
     - production contract 修正 merge_failure_limit 為 0~99（Backend + HTML max）；unit 覆蓋 0/99 接受、-1/100 fail closed、三種 Auto policy persistence。真 Browser 逐一選三種 policy、limit=99、Concurrent Main On，reload 後與 Dark/Violet/Language 一起保留。
-[ ] Browser 測試（Workspace phase）：Task merge_failure_count 與 Global limit 分離；Auto policy × Allow concurrent Main Off/On 對 Main disabled / resolver 結果一致。
+[x] Browser 測試（Workspace phase）：Task merge_failure_count 與 Global limit 分離；Auto policy × Allow concurrent Main Off/On 對 Main disabled / resolver 結果一致。
+    - test_workspace_options_follow_backend_resolver_and_merge_failure_count_is_task_local 覆蓋 3 種 Auto policy × Concurrent Main Off/On，並驗證修改 Global limit 不會改 Task merge_failure_count；基線 Browser CI 已通過。
 [x] Prototype Theme token 已對齊 ui/static/css/theme.css；Task/Card/Worktree/active border 改讀 palette-aware token，避免 Dark 或非 Teal palette 殘留白底與固定 teal 邊框。
 [x] Task 詳細右側 Drawer / Overview / Steps / Runtime / Output / History / Workspace results / Task List / Task Editor 的 surface、border、nested source tabs 已補齊 Dark / palette token；移除視覺上的亮白殘留。
 [x] 再次掃描 Task / Plan / Source 基礎樣式：plan-add-task-footer、source-head、simple-source-head/select、taskPromptInline textarea、workspace selector、sequence、Task List table/header、dropdown/context menu 等均直接 token 化；Task/Plan 相關硬編碼亮色掃描結果為 0。
