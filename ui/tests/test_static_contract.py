@@ -330,8 +330,13 @@ class StaticContractTests(unittest.TestCase):
     def test_task_info_drawer_has_fixed_four_tab_contract(self):
         self.assertIn('for (const id of ["overview", "runtime", "output", "history"])', self.task_workspace_js)
         self.assertIn('state.kind === "task"', self.task_workspace_js)
-        self.assertIn('"No Runner runtime yet"', self.task_workspace_js)
-        self.assertIn('"This Task is New. Runtime data appears only after an explicit Run action."', self.task_workspace_js)
+        self.assertIn('tr("task.no_runtime", "No Runner runtime yet")', self.task_workspace_js)
+        self.assertIn(
+            'tr("task.no_runtime_copy", "Runtime data appears only after an explicit Run action.")',
+            self.task_workspace_js,
+        )
+        self.assertIn('id="taskWorkspaceExpand"', self.task_workspace_js)
+        self.assertIn('classList.toggle("expanded"', self.task_workspace_js)
         self.assertNotIn('["overview", "steps",', self.task_workspace_js)
         self.assertNotIn('textContent = "Steps"', self.task_workspace_js)
 
