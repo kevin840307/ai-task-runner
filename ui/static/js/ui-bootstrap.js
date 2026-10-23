@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = "ai-task-runner.ui.bootstrap.v1";
+  const LANGUAGE_KEY = "ai-task-runner.ui.language.v1";
   const THEMES = new Set(["teal", "blue", "violet", "amber", "rose"]);
   const APPEARANCES = new Set(["system", "light", "dark"]);
   const MOTIONS = new Set(["full", "system", "reduced"]);
@@ -45,6 +46,11 @@
   }
 
   const root = document.documentElement;
+  let bootstrapLanguage = "zh-TW";
+  try {
+    bootstrapLanguage = localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "zh-TW";
+  } catch (_) {}
+  root.lang = bootstrapLanguage === "en" ? "en" : "zh-Hant";
   const startedAt = performance.now();
   let finished = false;
 

@@ -1,5 +1,6 @@
 (() => {
   const DEFAULT_LANGUAGE = "zh-TW";
+  const LANGUAGE_KEY = "ai-task-runner.ui.language.v1";
   const messages = {
     "zh-TW": {
       "theme.open": "Theme & Appearance", "theme.settings": "Settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
@@ -152,6 +153,9 @@
   };
   function normalize(value) { return value === "en" ? "en" : "zh-TW"; }
   let language = DEFAULT_LANGUAGE;
+  try {
+    language = normalize(localStorage.getItem(LANGUAGE_KEY) || DEFAULT_LANGUAGE);
+  } catch (_) {}
   function t(key, fallback = "") { return messages[language]?.[key] ?? messages[DEFAULT_LANGUAGE]?.[key] ?? fallback ?? key; }
   function format(key, values = {}, fallback = "") {
     return String(t(key, fallback)).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? `{${name}}`);
@@ -166,6 +170,7 @@
   }
   function setLanguage(next) {
     language = normalize(next);
+    try { localStorage.setItem(LANGUAGE_KEY, language); } catch (_) {}
     apply(document);
     return language;
   }

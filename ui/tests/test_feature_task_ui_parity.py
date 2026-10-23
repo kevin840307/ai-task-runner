@@ -164,6 +164,16 @@ def test_first_paint_loader_matches_feature_prototype_contract() -> None:
     assert 'window.UiBootstrap?.finish?.()' in PRODUCTION_APP
 
 
+
+
+def test_first_paint_language_is_persisted_before_loader_reveal() -> None:
+    assert 'const LANGUAGE_KEY = "ai-task-runner.ui.language.v1"' in PRODUCTION_BOOTSTRAP
+    assert 'root.lang = bootstrapLanguage === "en" ? "en" : "zh-Hant"' in PRODUCTION_BOOTSTRAP
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+    assert 'localStorage.setItem(LANGUAGE_KEY, language)' in i18n
+    assert 'data-bootstrap-language="zh-TW"' in PRODUCTION_HTML
+    assert 'data-bootstrap-language="en"' in PRODUCTION_HTML
+
 def test_new_task_editor_base_geometry_matches_final_feature_cascade() -> None:
     _same(
         "#newTaskModal>.modal-body",

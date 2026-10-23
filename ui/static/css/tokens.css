@@ -192,3 +192,7 @@ html[data-motion="reduced"] body>.workspace,
 html[data-motion="reduced"] .app-bootstrap-loader,
 html[data-motion="reduced"] .app-bootstrap-card{transition:none!important;transform:none!important}
 html[data-motion="reduced"] .app-bootstrap-spinner{animation:none;border-color:var(--line);border-top-color:var(--accent)}
+
+.app-bootstrap-copy [data-bootstrap-language]{display:none}
+html[lang="zh-Hant"] .app-bootstrap-copy [data-bootstrap-language="zh-TW"]{display:inline}
+html[lang="en"] .app-bootstrap-copy [data-bootstrap-language="en"]{display:inline}
