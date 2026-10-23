@@ -985,7 +985,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
 
             page.locator("[data-tasks-view-mode='list']").click()
             assert page.locator("#tasksListRows .tasks-list-head").all_inner_texts() == [
-                "Status\nName\nTasks\nRuntime\nProject\nProgress"
+                "STATUS\nNAME\nTASKS\nRUNTIME\nPROJECT\nPROGRESS"
             ]
             first_list_row = page.locator("#tasksListRows .tasks-list-data").first
             assert first_list_row.locator(".tasks-list-count").count() == 1
@@ -3925,18 +3925,18 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert settings_geometry["bottom"] < 820
             settings_visual_geometry = page.evaluate(
                 """() => {
-                    const card = document.querySelector('.global-settings-card').getBoundingClientRect();
-                    const nav = document.querySelector('.settings-sections').getBoundingClientRect();
-                    const tab = document.querySelector('[data-settings-tab="execution"]').getBoundingClientRect();
+                    const card = document.querySelector('.global-settings-card');
+                    const nav = document.querySelector('.settings-sections');
+                    const tab = document.querySelector('[data-settings-tab="execution"]');
                     const panel = document.querySelector('[data-settings-panel="execution"]');
                     const select = document.querySelector('#globalAutoWorkspacePolicy');
                     return {
-                        cardWidth: card.width,
-                        cardHeight: card.height,
-                        navWidth: nav.width,
-                        tabHeight: tab.height,
+                        cardWidth: parseFloat(getComputedStyle(card).width),
+                        cardHeight: parseFloat(getComputedStyle(card).height),
+                        navWidth: parseFloat(getComputedStyle(nav).width),
+                        tabHeight: parseFloat(getComputedStyle(tab).height),
                         panelPadding: getComputedStyle(panel).paddingTop,
-                        selectHeight: select.getBoundingClientRect().height,
+                        selectHeight: parseFloat(getComputedStyle(select).height),
                     };
                 }"""
             )
@@ -4747,7 +4747,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             workspace_cards = page.locator(".task-workspace-workspace-options [data-workspace-option]")
             assert workspace_cards.count() == 3
             workspace_boxes = [card.bounding_box() for card in workspace_cards.all()]
-            if viewport["width"] > 620:
+            if viewport["width"] > 900:
                 assert max(box["y"] for box in workspace_boxes) - min(box["y"] for box in workspace_boxes) <= 1
             else:
                 assert workspace_boxes[0]["y"] < workspace_boxes[1]["y"] < workspace_boxes[2]["y"]
@@ -4763,6 +4763,17 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             prompt_widths = [button.bounding_box()["width"] for button in prompt_tabs.all()]
             assert len(prompt_widths) == 3
             assert max(prompt_widths) - min(prompt_widths) <= 2
+            prompt_tab_geometry = page.locator("[data-task-source-group='prompt']").evaluate(
+                """node => ({
+                    gap: getComputedStyle(node).gap,
+                    height: getComputedStyle(node).height,
+                    firstHeight: getComputedStyle(node.querySelector('button')).height
+                })"""
+            )
+            assert prompt_tab_geometry == {"gap": "2px", "height": "30px", "firstHeight": "30px"}
+            assert page.locator("#taskWorkspacePrompt").evaluate(
+                "node => getComputedStyle(node).minHeight"
+            ) == "112px"
 
             ai_tabs = page.locator("[data-task-source-group='ai'] button")
             ai_widths = [button.bounding_box()["width"] for button in ai_tabs.all()]
@@ -4844,7 +4855,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                 ("write", "#taskWorkspaceAiValidatorPromptText"),
                 ("file", "#taskWorkspaceAiValidatorPrompt"),
                 ("asset", "#taskWorkspaceAiValidatorAsset"),
-                ("default", ".task-workspace-source-note"),
+                ("default", ".task-workspace-compact-default-value"),
             ):
                 page.locator(f"[data-task-source-group='ai'] [data-task-source-mode='{mode}']").click()
                 page.wait_for_function(
@@ -4859,6 +4870,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                 ai_card_widths.append(assert_inside_drawer("[data-task-source-card='ai']")["width"])
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 if mode == "write":
+                    assert page.locator(control).evaluate("node => getComputedStyle(node).minHeight") == "78px"
                     page.fill(control, "Use custom AI validation evidence.")
                 elif mode == "file":
                     page.fill(control, str(root / "ai-review.md"))
@@ -4884,7 +4896,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "ai-review.md")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-source-note') !== null")
+            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
 
             if viewport["width"] == 820 and color_scheme == "light":
                 page.evaluate("window.I18n.setLanguage('zh-TW')")

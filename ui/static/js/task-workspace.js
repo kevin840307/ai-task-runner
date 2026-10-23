@@ -91,7 +91,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         projectDropdown.hidden = true;
         const toggle = overlay.querySelector(".task-workspace-project-toggle");
         toggle?.setAttribute("aria-expanded", "false");
-        overlay.querySelector("#taskWorkspaceProject")?.focus({ preventScroll: true });
+        const projectInput = overlay.querySelector("#taskWorkspaceProject");
+        if (projectInput) projectInput.dataset.suppressOpenOnFocus = "true";
+        projectInput?.focus({ preventScroll: true });
         return;
       }
       event.preventDefault();
@@ -267,7 +269,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     menu.style.left = left + "px";
     menu.style.top = top + "px";
     menu.style.visibility = "";
-    menu.querySelector("button")?.focus();
   }
 
   function isDraftState() { return state?.kind === "draft"; }
@@ -409,7 +410,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         yaml.hidden = false;
         yaml.textContent = tr("task.edit_yaml", "Edit YAML");
         yaml.disabled = !policy.can_edit_yaml || items.length === 0;
-        yaml.title = yaml.disabled ? String(policy.reason || "Task List YAML is not editable in the current lifecycle state") : "";
+        const blockedItem = Array.isArray(policy.items)
+          ? policy.items.find((row) => row?.editable === false || row?.restructure === false)
+          : null;
+        yaml.title = yaml.disabled
+          ? String(policy.reason || blockedItem?.reason || "Task List YAML is not editable in the current lifecycle state")
+          : "";
       }
     }
   }
@@ -1573,7 +1579,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       setProjectDropdownOpen(projectDropdown.hidden, true);
     });
     if (projectEditable) {
-      project.addEventListener("focus", () => setProjectDropdownOpen(true, true));
+      project.addEventListener("focus", () => {
+        if (project.dataset.suppressOpenOnFocus === "true") {
+          delete project.dataset.suppressOpenOnFocus;
+          return;
+        }
+        setProjectDropdownOpen(true, true);
+      });
       project.addEventListener("input", () => {
         updateItem(state.index, "project", project.value);
         renderProjectDropdown(project.value);
