@@ -192,3 +192,102 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-drag-grip{display:grid;place-items:center;width:18px;height:25px;color:var(--muted);font-size:11px;font-weight:900;line-height:1;cursor:grab}
 .task-workspace-list-actions .danger-item{color:var(--fail)}
 .task-workspace-info-row{grid-template-columns:25px minmax(0,1fr) auto}
+
+
+/* Feature Task Editor hierarchy: compact basics -> primary Prompt -> validation -> Workspace. */
+.task-workspace-basics{
+  display:grid;
+  grid-template-columns:minmax(250px,1.45fr) minmax(175px,.92fr) minmax(140px,.72fr);
+  gap:8px;
+  align-items:start;
+  margin-top:8px
+}
+.task-workspace-basics .task-workspace-field:has(#taskWorkspaceProject){order:1}
+.task-workspace-basics .task-workspace-field:has(#taskWorkspaceWorkflow){order:2}
+.task-workspace-basics .task-workspace-field:has(#taskWorkspaceItemTitle){order:3}
+.task-workspace-basics .task-workspace-field>span{font-size:9px}
+.task-workspace-basics .task-workspace-field input,
+.task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;padding:0 9px;border-radius:8px}
+
+.task-workspace-source-card{border-radius:10px;background:var(--panel)}
+.task-workspace-prompt-source{margin-top:10px}
+.task-workspace-source-head{
+  min-height:0;padding:7px 9px;gap:6px;
+  border-bottom:1px solid var(--line);background:var(--panel-2)
+}
+.task-workspace-source-head strong{font-size:10px}
+.task-workspace-source-head small{font-size:8px;line-height:1.35}
+.task-workspace-source-tabs{
+  display:grid;height:30px;min-height:30px;gap:3px;padding:2px;
+  border:1px solid var(--line);border-radius:8px;background:var(--panel-3)
+}
+[data-task-source-group="prompt"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+[data-task-source-group="ai"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+.task-workspace-source-tabs button{
+  width:100%;height:24px;min-height:24px;padding:0 5px;border:0;border-radius:6px;
+  background:transparent;color:var(--muted);font-size:8px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.task-workspace-source-tabs button.active{background:var(--panel);color:var(--accent-dark);box-shadow:var(--shadow-sm)}
+.task-workspace-source-body{padding:9px;gap:6px}
+[data-task-source-card="prompt"]>.task-workspace-source-head{background:color-mix(in srgb,var(--accent-softer) 78%,var(--panel-2))}
+[data-task-source-card="prompt"] .task-workspace-source-head strong{font-size:11px}
+[data-task-source-card="prompt"] textarea{min-height:112px}
+[data-task-source-card="ai"] textarea{min-height:78px}
+.task-workspace-source-body>input,.task-workspace-source-body>select{height:32px;min-height:32px;padding:0 8px;border-radius:7px;font-size:9px}
+.task-workspace-path-row{gap:6px}
+.task-workspace-path-row input,.task-workspace-path-row select{height:32px;min-height:32px;padding:0 8px;border-radius:7px;font-size:9px}
+.task-workspace-upload{height:32px;min-height:32px;padding:0 9px;border-radius:7px}
+.task-workspace-validation-grid{gap:8px;margin-top:8px}
+.task-workspace-validation-grid:has(> [data-task-source-card="validator"] + [data-task-source-card="ai"]) .task-workspace-source-head{
+  grid-template-rows:minmax(30px,auto) 30px
+}
+.task-workspace-validation-grid:has(> [data-task-source-card="validator"] + [data-task-source-card="ai"]) [data-task-source-card="validator"] .task-workspace-source-head::after{
+  content:"";display:block;height:30px
+}
+
+.task-workspace-workspace-selector{
+  margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--panel-2)
+}
+.task-workspace-workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+.task-workspace-workspace-head strong{display:block;font-size:10px}
+.task-workspace-workspace-head small{display:block;margin-top:2px;color:var(--muted);font-size:8px}
+.task-workspace-workspace-recommended{
+  flex:0 0 auto;padding:3px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dark);font-size:7.5px;font-weight:850
+}
+.task-workspace-workspace-native{
+  position:absolute!important;width:1px!important;height:1px!important;min-height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;
+  clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important
+}
+.task-workspace-workspace-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.task-workspace-workspace-option{
+  position:relative;display:block;min-height:72px;padding:9px;border:1px solid var(--line);
+  border-radius:9px;background:var(--panel);cursor:pointer
+}
+.task-workspace-workspace-option:hover:not(.disabled){border-color:color-mix(in srgb,var(--accent) 36%,var(--line))}
+.task-workspace-workspace-option.selected{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 8%,transparent)}
+.task-workspace-workspace-option.disabled{opacity:.5;cursor:not-allowed;background:var(--panel-2)}
+.task-workspace-workspace-option input{position:absolute;opacity:0;pointer-events:none}
+.task-workspace-workspace-option strong{display:block;font-size:10px}
+.task-workspace-workspace-option small{display:block;margin-top:4px;color:var(--muted);font-size:8px;line-height:1.4}
+.task-workspace-workspace-status{display:block;margin-top:6px;color:var(--accent-dark);font-size:8px;font-weight:850}
+.task-workspace-workspace-option.disabled .task-workspace-workspace-status{color:var(--fail)}
+.task-workspace-workspace-option.worktree-option.selected{
+  border-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--panel));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 12%,transparent)
+}
+.task-workspace-workspace-option.worktree-option.selected .task-workspace-workspace-status{color:var(--warn)}
+.task-workspace-workspace-preview{
+  display:block;margin-top:6px;padding:6px 8px;border-radius:8px;background:var(--panel);
+  color:var(--muted);font-size:7.5px;line-height:1.4
+}
+@media(max-width:760px){
+  .task-workspace-basics{grid-template-columns:minmax(0,1fr) minmax(180px,.72fr)}
+  .task-workspace-basics .task-workspace-field:has(#taskWorkspaceItemTitle){grid-column:1/-1}
+}
+@media(max-width:620px){
+  .task-workspace-basics{grid-template-columns:1fr}
+  .task-workspace-basics .task-workspace-field{grid-column:1!important}
+  .task-workspace-workspace-options{grid-template-columns:1fr}
+  .task-workspace-workspace-option{min-height:58px}
+}

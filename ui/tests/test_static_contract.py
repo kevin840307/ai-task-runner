@@ -532,6 +532,11 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".task-workspace-drag-grip" in workspace
     assert 'row.draggable = policy.restructure !== false' in task_workspace_js
     assert 'event.altKey && event.key === "ArrowUp"' in task_workspace_js
+    assert ".task-workspace-basics" in workspace
+    assert ".task-workspace-workspace-options" in workspace
+    assert ".task-workspace-workspace-option" in workspace
+    assert 'data.workspaceOption = value' in task_workspace_js
+    assert 'body.appendChild(workspaceSection)' in task_workspace_js
     assert '[["↑"' not in task_workspace_js
 
 

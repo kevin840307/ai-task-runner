@@ -962,7 +962,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (draft.items.length === 1) body.appendChild(renderDraftTitleField());
     const item = draft.items[state.index];
     const grid = document.createElement("div");
-    grid.className = "task-workspace-grid";
+    grid.className = "task-workspace-grid task-workspace-basics";
 
     const fields = [
       ["Item title", "taskWorkspaceItemTitle", "input", "title", String(item.title || "")],
@@ -1016,14 +1016,33 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workflowField.appendChild(workflow);
     appendFieldError(workflowField, workflow, "workflow");
 
-    const workspaceField = document.createElement("label");
-    workspaceField.className = "task-workspace-field";
-    workspaceField.innerHTML = "<span>Workspace</span>";
+    const workspaceSection = document.createElement("section");
+    workspaceSection.className = "task-workspace-workspace-selector task-workspace-editor-secondary";
+    const workspaceHead = document.createElement("div");
+    workspaceHead.className = "task-workspace-workspace-head";
+    const workspaceCopy = document.createElement("div");
+    const workspaceTitle = document.createElement("strong");
+    workspaceTitle.textContent = "Workspace";
+    const workspaceHelp = document.createElement("small");
+    workspaceHelp.textContent = "Auto / Main / isolated Worktree";
+    workspaceCopy.append(workspaceTitle, workspaceHelp);
+    const workspaceRecommended = document.createElement("span");
+    workspaceRecommended.className = "task-workspace-workspace-recommended";
+    workspaceRecommended.textContent = "Auto recommended";
+    workspaceHead.append(workspaceCopy, workspaceRecommended);
+
     const workspace = document.createElement("select");
     workspace.id = "taskWorkspaceWorkspace";
+    workspace.className = "task-workspace-workspace-native";
+    workspace.setAttribute("aria-label", "Workspace");
     const loadingWorkspace = !!state.workspaceOptionsLoading;
     const workspaceProjectionMissing = !state.workspaceOptions && !loadingWorkspace;
-    for (const [value, label] of [["auto", "Auto"], ["main", "Main"], ["worktree", "Isolated Worktree"]]) {
+    const workspaceRows = [
+      ["auto", "Auto", "Use the global Auto workspace policy."],
+      ["main", "Main", "Run against the Project target workspace when available."],
+      ["worktree", "Isolated worktree", "Create an isolated branch/path for this task."],
+    ];
+    for (const [value, label] of workspaceRows) {
       const option = document.createElement("option");
       const availability = workspaceOption(value);
       option.value = value;
@@ -1040,15 +1059,58 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       workspace.appendChild(option);
     }
     workspace.value = String(item.workspace || "auto");
+
+    const workspaceOptions = document.createElement("div");
+    workspaceOptions.className = "task-workspace-workspace-options";
+    for (const [value, label, description] of workspaceRows) {
+      const availability = workspaceOption(value);
+      const option = workspace.querySelector(`option[value="${value}"]`);
+      const card = document.createElement("label");
+      card.className = "task-workspace-workspace-option" + (value === "worktree" ? " worktree-option" : "");
+      card.dataset.workspaceOption = value;
+      card.classList.toggle("selected", workspace.value === value);
+      card.classList.toggle("disabled", !!option?.disabled);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "taskWorkspaceMode";
+      radio.value = value;
+      radio.checked = workspace.value === value;
+      radio.disabled = !!option?.disabled;
+
+      const strong = document.createElement("strong");
+      strong.textContent = label;
+      const small = document.createElement("small");
+      small.textContent = description;
+      const status = document.createElement("span");
+      status.className = "task-workspace-workspace-status";
+      if (loadingWorkspace && value !== "worktree") status.textContent = "Checking…";
+      else if (option?.disabled) status.textContent = String(option?.title || "Unavailable");
+      else if (availability?.effective_mode) {
+        status.textContent = value === "auto"
+          ? "Resolves to " + (availability.effective_mode === "main" ? "Main" : "Isolated worktree")
+          : "Available";
+      } else status.textContent = value === "worktree" ? "Always available" : "Available";
+
+      radio.addEventListener("change", () => {
+        if (!radio.checked || radio.disabled) return;
+        workspace.value = value;
+        updateItem(state.index, "workspace", value);
+        render();
+      });
+      card.append(radio, strong, small, status);
+      workspaceOptions.appendChild(card);
+    }
+
     workspace.addEventListener("change", () => {
       updateItem(state.index, "workspace", workspace.value);
       render();
     });
-    workspaceField.appendChild(workspace);
+
     const selectedAvailability = workspaceOption(workspace.value);
     const availabilityNote = document.createElement("small");
     availabilityNote.id = "taskWorkspaceWorkspaceAvailability";
-    availabilityNote.className = "task-workspace-source-note";
+    availabilityNote.className = "task-workspace-workspace-preview";
     if (loadingWorkspace) {
       availabilityNote.textContent = "Checking current Workspace availability…";
     } else if (state.workspaceOptionsError) {
@@ -1063,9 +1125,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } else {
       availabilityNote.textContent = "Isolated Worktree is always safe to select.";
     }
-    workspaceField.appendChild(availabilityNote);
-    appendFieldError(workspaceField, workspace, "workspace");
-    grid.append(workflowField, workspaceField);
+    workspaceSection.append(workspaceHead, workspace, workspaceOptions, availabilityNote);
+
+    grid.append(workflowField);
     body.appendChild(grid);
 
     const source = sourceState(item);
@@ -1232,6 +1294,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       validationGrid.appendChild(aiCard.card);
     }
     if (validationGrid.children.length) body.appendChild(validationGrid);
+    body.appendChild(workspaceSection);
 
     const error = document.createElement("div");
     error.id = "taskWorkspaceError";

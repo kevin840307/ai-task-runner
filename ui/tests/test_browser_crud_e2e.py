@@ -2050,7 +2050,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             page.fill("#taskWorkspaceDraftTitle", "Dirty standalone title")
             page.fill("#taskWorkspacePrompt", "Dirty standalone prompt")
-            page.select_option("#taskWorkspaceWorkspace", "main")
+            page.locator("[data-workspace-option='main']").click()
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
@@ -4587,6 +4587,13 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             page.fill("#taskWorkspaceItemTitle", "Source mode geometry")
             page.fill("#taskWorkspaceValidator", str(root / "validate.py"))
+            assert page.locator(".task-workspace-workspace-options [data-workspace-option]").count() == 3
+            assert page.locator("[data-workspace-option='auto']").get_attribute("class").find("selected") >= 0
+            assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
+            page.locator("[data-workspace-option='worktree']").click()
+            assert page.locator("#taskWorkspaceWorkspace").input_value() == "worktree"
+            page.locator("[data-workspace-option='auto']").click()
+            assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
 
             def assert_inside_drawer(selector: str) -> dict:
                 shell = page.locator("#taskWorkspaceShell").bounding_box()
