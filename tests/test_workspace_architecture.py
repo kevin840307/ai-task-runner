@@ -61,3 +61,32 @@ def test_ui_never_executes_git_and_remote_push_is_confined_to_publish_adapter() 
     assert ui_git_callers == set()
     assert push_callers == {"workspace/publish.py"}
 
+def test_task_run_service_is_the_only_ui_workspace_lifecycle_owner() -> None:
+    lifecycle_tokens = ("WorkspaceManager", "MergeManager", "PublishManager")
+    owners = {
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "ui").glob("*.py")
+        if any(token in path.read_text(encoding="utf-8") for token in lifecycle_tokens)
+    }
+    assert owners == {"ui/task_run_service.py"}
+
+
+def test_runner_stays_git_delivery_metadata_agnostic() -> None:
+    forbidden = (
+        "PreparedWorkspace",
+        "WorkspaceManager",
+        "MergeManager",
+        "PublishManager",
+        "merge_queue_seq",
+        "target_head_sha_at_start",
+        "task_branch",
+        "worktree_path",
+    )
+    offenders: list[str] = []
+    for path in (ROOT / "runner").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for token in forbidden:
+            if token in source:
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}: {token}")
+    assert offenders == []
+
