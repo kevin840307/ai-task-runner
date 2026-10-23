@@ -2378,12 +2378,31 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             # Info/List/Editor/YAML are routes inside one physical Drawer.
             # Header height, shell width and Close position must not jump and
             # there must never be a second route-specific header.
-            def task_workspace_geometry():
+            def task_workspace_geometry(*, workspace_route: bool):
+                # Prototype intentionally animates between a narrow Task Info drawer
+                # and the wider List / Editor / YAML workspace. Wait for the width
+                # transition to settle before asserting physical geometry.
+                page.wait_for_function(
+                    """workspaceRoute => {
+                        const shell = document.querySelector('#taskWorkspaceShell');
+                        if (!shell) return false;
+                        const viewport = window.innerWidth;
+                        const target = workspaceRoute
+                            ? Math.min(920, viewport * 0.94)
+                            : Math.min(720, Math.max(620, viewport * 0.46));
+                        return Math.abs(shell.getBoundingClientRect().width - target) <= 1.5;
+                    }""",
+                    arg=workspace_route,
+                )
                 shell = page.locator("#taskWorkspaceShell").bounding_box()
                 head = page.locator("#taskWorkspaceShell .task-workspace-head").bounding_box()
                 close = page.locator("#taskWorkspaceClose").bounding_box()
                 assert shell and head and close
                 assert page.locator("#taskWorkspaceShell .task-workspace-head").count() == 1
+                transition = page.locator("#taskWorkspaceShell").evaluate(
+                    "(node) => getComputedStyle(node).transition"
+                )
+                assert "transform" in transition and "width" in transition
                 return {
                     "shell_width": shell["width"],
                     "head_height": head["height"],
@@ -2391,22 +2410,22 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                     "close_y": close["y"],
                 }
 
-            info_geometry = task_workspace_geometry()
+            info_geometry = task_workspace_geometry(workspace_route=False)
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            list_geometry = task_workspace_geometry()
+            list_geometry = task_workspace_geometry(workspace_route=True)
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
 
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
-            editor_geometry = task_workspace_geometry()
+            editor_geometry = task_workspace_geometry(workspace_route=True)
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
             page.click("#taskWorkspaceHeaderYaml")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK YAML'")
-            yaml_geometry = task_workspace_geometry()
+            yaml_geometry = task_workspace_geometry(workspace_route=True)
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
@@ -2427,15 +2446,19 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert [item["prompt"] for item in moved_records[0]["items"]][-1] == "Standalone task prompt"
             assert page.locator(".task-workspace-move-existing").count() == 0
 
+            # Accepted prototype contract: Task Info is the narrow drawer,
+            # while List / Editor / YAML share one wider workspace route.
+            assert list_geometry["shell_width"] > info_geometry["shell_width"]
+            for geometry in (editor_geometry, yaml_geometry):
+                assert abs(geometry["shell_width"] - list_geometry["shell_width"]) <= 1
             for geometry in (list_geometry, editor_geometry, yaml_geometry):
-                assert abs(geometry["shell_width"] - info_geometry["shell_width"]) <= 1
                 assert abs(geometry["head_height"] - info_geometry["head_height"]) <= 1
                 assert abs(geometry["close_x"] - info_geometry["close_x"]) <= 1
                 assert abs(geometry["close_y"] - info_geometry["close_y"]) <= 1
 
             page.click("#taskWorkspaceFooterBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            final_info_geometry = task_workspace_geometry()
+            final_info_geometry = task_workspace_geometry(workspace_route=False)
             assert abs(final_info_geometry["shell_width"] - info_geometry["shell_width"]) <= 1
             assert abs(final_info_geometry["head_height"] - info_geometry["head_height"]) <= 1
             assert abs(final_info_geometry["close_x"] - info_geometry["close_x"]) <= 1
@@ -3336,8 +3359,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#tasksBoardNewCount").inner_text() == "1"
             assert page.locator("#tasksProjectFilterSummary").inner_text() in {"All", "Fixture Project"}
             page.locator("[data-tasks-view-mode='list']").click()
-            assert page.locator("#tasksListRows .tasks-list-row").count() == 1
-            page.locator("#tasksListRows .tasks-list-row").click()
+            assert page.locator("#tasksListRows .tasks-list-data").count() == 1
+            page.locator("#tasksListRows .tasks-list-data").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             # Escape belongs to the focused top layer. The Task Workspace stays
