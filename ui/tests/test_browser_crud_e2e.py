@@ -2542,7 +2542,7 @@ def test_task_info_tabs_render_canonical_runtime_output_and_history() -> None:
             rows = page.locator("#taskWorkspaceHistoryPanel .task-history-row")
             assert rows.count() == 2
             assert "Run #2" in rows.nth(0).inner_text()
-            assert "Current" in rows.nth(0).inner_text()
+            assert "CURRENT" in rows.nth(0).inner_text()
             assert "Run #1" in rows.nth(1).inner_text()
             assert "worktree ready" in rows.nth(1).inner_text().lower()
             browser.close()
