@@ -384,7 +384,7 @@
 
 /* Global Settings: production shell aligned with the feature prototype.
    Data remains owned by the existing backend Global Settings contract. */
-.global-settings-backdrop { z-index: 260; }
+.global-settings-backdrop { z-index: 2100; }
 .global-settings-card {
   width: min(780px, 94vw);
   height: min(700px, 90vh);
