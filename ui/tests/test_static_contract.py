@@ -82,7 +82,7 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("task-workspace-list-side-card", self.task_workspace_js)
         self.assertIn("task-workspace-add-task-footer", self.task_workspace_js)
         self.assertIn("task-workspace-empty-list-cta", self.task_workspace_js)
-        self.assertIn("taskWorkspaceMoveExisting", self.task_workspace_js)
+        self.assertIn("taskWorkspaceHeaderMoveExisting", self.task_workspace_js)\n        self.assertIn("taskWorkspaceHeaderYaml", self.task_workspace_js)\n        self.assertIn("taskWorkspaceHeaderCreateList", self.task_workspace_js)
         self.assertIn("/api/tasks/move-existing", self.task_workspace_js)
         self.assertIn("Only standalone New Tasks can be moved", self.task_workspace_js)
         self.assertIn("items: list ? [] : [blankItem(projectPath, defaultWorkflow)]", self.task_workspace_js)
