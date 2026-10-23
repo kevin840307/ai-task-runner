@@ -9,7 +9,7 @@ import pytest
 
 from ui.task_run_service import TaskRunService
 from ui.task_service import TaskService
-from workspace import PublishResult, WorkspaceManager
+from workspace import PublishResult, WorkspaceError, WorkspaceManager
 
 
 def _git(path: Path, *args: str) -> str:
@@ -360,6 +360,54 @@ def test_restart_relaunches_durable_launching_workspace_without_new_identity(tmp
     assert len(launches) == 1
     assert launches[0][0] == prepared.project_root
     assert launches[0][1] == "Implement one"
+
+
+def test_task_and_quick_goal_fail_closed_when_git_preflight_cannot_prepare_worktree(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _git(repo, "checkout", "--detach")
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    launches = []
+    service = _service(
+        tasks,
+        repo,
+        runtime={"running": False, "launching": False, "completed": False, "resumable": False, "actions": {}},
+        launches=launches,
+        stops=[],
+        resumes=[],
+        settings={
+            "auto_workspace_policy": "always-worktree",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": False,
+        },
+    )
+
+    created = _task(tasks, repo, workspace="worktree", request_id="preflight-task-create")
+    with pytest.raises(WorkspaceError, match="detached HEAD"):
+        service.start(repo, created["task_id"], request_id="preflight-task-run")
+
+    unchanged = tasks.get(repo, created["task_id"])
+    assert unchanged["status"] == "new"
+    assert unchanged["run_count"] == 0
+    assert "run" not in unchanged
+    assert launches == []
+
+    goal = service.start_goal(
+        repo,
+        "Quick Goal must fail closed before Runner launch",
+        request_id="preflight-goal",
+        project_id="project-fixture",
+    )
+    assert goal["goal_run_started"] is False
+    assert "detached HEAD" in goal["goal_run_error"]
+    assert goal["status"] == "new"
+    assert goal["run_count"] == 0
+    assert "run" not in goal
+    assert launches == []
+
+    stored = tasks.list(repo)["tasks"]
+    assert len(stored) == 2
+    assert {row["status"] for row in stored} == {"new"}
+    assert not [name for name in _git(repo, "branch", "--format=%(refname:short)").splitlines() if name.startswith("local/task/")]
 
 
 def test_quick_goal_create_and_run_is_idempotent(tmp_path: Path):
