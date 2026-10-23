@@ -3572,6 +3572,11 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_function("document.documentElement.lang === 'zh-Hant'")
             page.click("#themeCloseButton")
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "輸入訊息給此專案…"
+            assert page.locator(".project-chat-mode-quick > span").inner_text() == "模式"
+            page.click("#projectChatSettingsButton")
+            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["工作流程", "Agent", "Model", "推理", "Ask"]
+            assert page.locator("#projectChatAskCapability").inner_text() in {"原生支援", "不支援"}
+            page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatNewTaskButton").inner_text() == "新增任務"
             assert page.locator("#projectChatSendButton").inner_text() == "加入佇列"
             assert page.locator(".project-chat-task-draft-actions").get_by_role("button", name="編輯草稿").is_visible()
@@ -3587,6 +3592,11 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_function("document.documentElement.lang === 'en'")
             page.click("#themeCloseButton")
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "Message this Project…"
+            assert page.locator(".project-chat-mode-quick > span").inner_text() == "Mode"
+            page.click("#projectChatSettingsButton")
+            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["Workflow", "Agent", "Model", "Reasoning", "Ask"]
+            assert page.locator("#projectChatAskCapability").inner_text() in {"Native", "Unavailable"}
+            page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatNewTaskButton").inner_text() == "New Task"
             assert page.locator("#projectChatSendButton").inner_text() == "Queue"
             assert page.locator(".project-chat-task-draft-actions").get_by_role("button", name="Edit Draft").is_visible()

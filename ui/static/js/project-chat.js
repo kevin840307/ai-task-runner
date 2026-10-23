@@ -220,13 +220,19 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       quick.title = selectedMode
         ? selectedMode.description + (selectedMode.unsafe ? " · Automatically approves tools." : "")
         : "Permission / approval mode";
+      const wrapper = quick.closest(".project-chat-mode-quick");
+      if (wrapper) wrapper.title = quick.title;
     }
     const askCapability = byId("projectChatAskCapability");
     const askDescription = byId("projectChatAskDescription");
     const askSupported = settingsCatalog.features?.ask === true;
-    if (askCapability) askCapability.textContent = settingsLoading ? "Checking…" : (askSupported ? "Native" : "Unavailable");
+    if (askCapability) {
+      askCapability.textContent = settingsLoading
+        ? tr("chat.capability_checking", "Checking…")
+        : (askSupported ? tr("chat.capability_native", "Native") : tr("chat.capability_unavailable", "Unavailable"));
+    }
     if (askDescription) {
-      askDescription.textContent = settingsCatalog.features?.detail || "Native Agent clarification transport";
+      askDescription.textContent = settingsCatalog.features?.detail || tr("chat.ask_help", "Native Agent clarification transport");
       askDescription.title = askDescription.textContent;
     }
     const settingsButton = byId("projectChatSettingsButton");

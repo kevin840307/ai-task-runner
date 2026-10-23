@@ -45,11 +45,11 @@
           <div id="projectChatSettingsPopover" class="project-chat-settings-popover" role="dialog" aria-label="Project Chat settings" hidden>
             <div class="project-chat-settings-head"><div><strong data-i18n="chat.settings_title">Project settings</strong><small data-i18n="chat.settings_shared">Shared by every Chat in this Project</small></div><button id="projectChatSettingsClose" type="button" aria-label="Close">×</button></div>
             <div class="project-chat-settings-body">
-              <label><span><strong>Agent</strong><small>Backend adapter</small></span><select id="projectChatAgentSelect"></select></label>
-              <label><span><strong>Model</strong><small>Native Agent registry</small></span><select id="projectChatModelSelect"></select></label>
-              <label><span><strong>Reasoning</strong><small>Native effort / model variant</small></span><select id="projectChatReasoningSelect"></select></label>
-              <label><span><strong>Workflow</strong><small>Used by explicit Task flows</small></span><select id="projectChatWorkflowSelect"></select></label>
-              <label><span><strong>Ask</strong><small id="projectChatAskDescription">Native Agent clarification transport</small></span><output id="projectChatAskCapability">Checking…</output></label>
+              <label><span><strong data-i18n="chat.workflow">Workflow</strong><small data-i18n="chat.workflow_help">Used by explicit Task flows</small></span><select id="projectChatWorkflowSelect"></select></label>
+              <label><span><strong data-i18n="chat.agent">Agent</strong><small data-i18n="chat.agent_help">Backend adapter</small></span><select id="projectChatAgentSelect"></select></label>
+              <label><span><strong data-i18n="chat.model">Model</strong><small data-i18n="chat.model_help">Native Agent registry</small></span><select id="projectChatModelSelect"></select></label>
+              <label><span><strong data-i18n="chat.reasoning">Reasoning</strong><small data-i18n="chat.reasoning_help">Native effort / model variant</small></span><select id="projectChatReasoningSelect"></select></label>
+              <label><span><strong data-i18n="chat.ask">Ask</strong><small id="projectChatAskDescription" data-i18n="chat.ask_help">Native Agent clarification transport</small></span><output id="projectChatAskCapability">Checking…</output></label>
             </div>
           </div>
           <div id="projectChatMessages" class="history">
@@ -76,7 +76,7 @@
               <div class="composer-footer">
                 <div class="composer-left">
                   <button id="projectChatSettingsButton" class="project-chat-settings-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Project settings" title="Project settings" data-i18n-aria="chat.settings_title" data-i18n-title="chat.settings_title">⚙</button>
-                  <select id="projectChatModeQuick" class="project-chat-mode-hint" aria-label="Chat mode"></select>
+                  <label class="project-chat-mode-quick" title="Permission / approval mode"><span data-i18n="chat.mode">Mode</span><select id="projectChatModeQuick" class="project-chat-mode-hint" aria-label="Chat mode"></select></label>
                   <button id="projectChatNewTaskButton" class="project-chat-new-task" type="button" data-i18n="chat.new_task">New Task</button>
                 </div>
                 <div class="composer-right">

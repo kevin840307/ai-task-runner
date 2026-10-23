@@ -1991,6 +1991,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Search remains in the second-row board toolbar, so filtering and search keep separate visual responsibilities.
     - Browser regression locks the single filter DOM owner and title-row alignment while existing reload/multi-Project filter tests keep covering persistence.
 
+[x] Match Project Chat control hierarchy and shared i18n to the latest feature Composer UX.
+    - Project settings now follow the prototype order: Workflow → Agent → Model → Reasoning → Ask; the same selects/catalog owners are reused.
+    - Mode remains the compact Composer quick control but restores the visible Mode label instead of a bare select.
+    - Chat settings labels/help plus Ask capability states use the shared zh-TW/en i18n owner; provider-supplied capability detail remains adapter-owned.
+    - Browser localization regression verifies the settings order, Mode label and Ask capability state in both zh-TW and English.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
