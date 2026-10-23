@@ -55,6 +55,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     document.addEventListener("keydown", (event) => {
       if (!overlay || overlay.hidden || event.key !== "Escape") return;
       if (!overlay.contains(event.target)) return;
+      const projectDropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
+      if (projectDropdown) {
+        event.preventDefault();
+        event.stopPropagation();
+        projectDropdown.hidden = true;
+        const toggle = overlay.querySelector(".task-workspace-project-toggle");
+        toggle?.setAttribute("aria-expanded", "false");
+        overlay.querySelector("#taskWorkspaceProject")?.focus({ preventScroll: true });
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       void requestClose();

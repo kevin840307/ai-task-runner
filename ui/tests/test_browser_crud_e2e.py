@@ -2014,6 +2014,9 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-project-dropdown").is_visible()
             assert page.locator(".task-workspace-project-dropdown-option").count() >= 1
             page.keyboard.press("Escape")
+            assert page.locator(".task-workspace-project-dropdown").is_hidden()
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator("#taskWorkspaceProject").evaluate("(node) => document.activeElement === node")
             page.fill("#taskWorkspaceItemTitle", "Standalone browser task")
             page.fill("#taskWorkspacePrompt", "Standalone task prompt")
 
