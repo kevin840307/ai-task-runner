@@ -1930,6 +1930,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
       so uncommitted adapter edits or a branch move during the probe cannot be credited to another commit.
     - Diagnostic runs still work, but cannot satisfy the formal gate.
 
+[x] Align Qwen Project Chat SSE replay/correlation with the upstream daemon contract before live evidence.
+    - Start each short-lived turn stream from the current session/status lastEventId instead of replaying from 0.
+    - Pair the cursor with X-Qwen-Event-Epoch when the daemon supplies one.
+    - Correlate turn_complete / turn_error through event.data.promptId (with legacy top-level fallback).
+    - Regression injects a stale terminal event before the current turn and requires it to be ignored.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

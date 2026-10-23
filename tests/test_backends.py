@@ -1412,6 +1412,43 @@ def test_qwen_native_ask_bridge_reads_and_resolves_same_live_session(
         qwen_module._qwen_chat_bridge_delete(tmp_path, session_id)
 
 
+def test_qwen_sse_stream_pairs_cursor_with_event_epoch(monkeypatch):
+    from runner.agent import qwen as qwen_module
+
+    captured = {}
+
+    class Response:
+        def close(self):
+            captured["closed"] = True
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = {
+            key.lower(): value for key, value in request.header_items()
+        }
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(qwen_module.urllib.request, "urlopen", fake_urlopen)
+
+    with qwen_module._qwen_sse_stream(
+        "http://127.0.0.1:4170",
+        "session-1",
+        client_id="client-1",
+        last_event_id=23,
+        event_epoch="epoch-23",
+        read_timeout=9,
+    ):
+        pass
+
+    assert captured["headers"]["last-event-id"] == "23"
+    assert captured["headers"]["x-qwen-event-epoch"] == "epoch-23"
+    assert captured["headers"]["x-qwen-client-id"] == "client-1"
+    assert captured["headers"]["accept-encoding"] == "identity"
+    assert captured["headers"]["cache-control"] == "no-cache"
+    assert captured["timeout"] == 9
+    assert captured["closed"] is True
+
+
 def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
     tmp_path: Path,
     monkeypatch,
@@ -1442,26 +1479,34 @@ def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
     def fake_http(base_url, path, **kwargs):
         calls.append(("http", base_url, path, kwargs))
         if path == "/session":
-            return {"sessionId": session_id, "clientId": "client-1"}
+            return {
+                "sessionId": session_id,
+                "clientId": "client-1",
+                "eventEpoch": "epoch-1",
+            }
+        if path.endswith("/status"):
+            return {"lastEventId": 17}
         if path.endswith("/prompt"):
-            return {"promptId": "prompt-1", "lastEventId": 0}
+            return {
+                "promptId": "prompt-1",
+                "lastEventId": 17,
+                "eventEpoch": "epoch-1",
+            }
         return {}
 
     def fake_events(stream, *, deadline=0):
         assert deadline > 0
+        # Official Qwen terminal correlation lives in event.data.promptId.
+        # A replayed terminal from an older prompt must not finish this turn.
         yield {
-            "type": "session_update",
-            "promptId": "old-prompt",
+            "type": "turn_complete",
             "data": {
-                "update": {
-                    "sessionUpdate": "agent_message_chunk",
-                    "content": {"type": "text", "text": "stale"},
-                },
+                "promptId": "old-prompt",
+                "stopReason": "end_turn",
             },
         }
         yield {
             "type": "session_update",
-            "promptId": "prompt-1",
             "data": {
                 "update": {
                     "sessionUpdate": "agent_message_chunk",
@@ -1471,7 +1516,6 @@ def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
         }
         yield {
             "type": "session_update",
-            "promptId": "prompt-1",
             "data": {
                 "update": {
                     "sessionUpdate": "agent_message_chunk",
@@ -1481,8 +1525,10 @@ def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
         }
         yield {
             "type": "turn_complete",
-            "promptId": "prompt-1",
-            "data": {"stopReason": "end_turn"},
+            "data": {
+                "promptId": "prompt-1",
+                "stopReason": "end_turn",
+            },
         }
 
     monkeypatch.setattr(qwen_module, "_qwen_daemon_process", fake_daemon)
@@ -1513,6 +1559,9 @@ def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
         if row[0] == "http" and row[2].endswith("/model")
     )
     assert model[3]["body"] == {"modelId": "native-model"}
+    stream = next(row for row in calls if row[0] == "stream")
+    assert stream[3]["last_event_id"] == 17
+    assert stream[3]["event_epoch"] == "epoch-1"
     assert not qwen_module._qwen_chat_bridge_path(
         tmp_path,
         session_id,

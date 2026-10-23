@@ -694,13 +694,19 @@ def _qwen_sse_stream(
     session_id: str,
     *,
     client_id: str = "",
-    last_event_id: int = 0,
+    last_event_id: int | None = None,
+    event_epoch: str = "",
     read_timeout: float = 30,
 ) -> Iterator[Any]:
     headers = {
         "Accept": "text/event-stream",
-        "Last-Event-ID": str(last_event_id),
+        "Accept-Encoding": "identity",
+        "Cache-Control": "no-cache",
     }
+    if last_event_id is not None:
+        headers["Last-Event-ID"] = str(last_event_id)
+        if event_epoch:
+            headers["X-Qwen-Event-Epoch"] = event_epoch
     if client_id:
         headers["X-Qwen-Client-Id"] = client_id
     path = f"/session/{urllib.parse.quote(session_id, safe='')}/events"
@@ -1120,6 +1126,19 @@ class QwenBackend(BaseBackend):
                     timeout=30,
                 )
 
+            status_snapshot = _qwen_http_json(
+                base_url,
+                f"/session/{encoded_session}/status",
+                client_id=client_id,
+                timeout=8,
+            )
+            cursor = status_snapshot.get("lastEventId")
+            if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor < 0:
+                raise BackendError(
+                    "Qwen Project Chat daemon did not return a valid event cursor"
+                )
+            event_epoch = str(live.get("eventEpoch") or "").strip()
+
             bridge: dict[str, Any] = {
                 "sessionId": session_id,
                 "baseUrl": base_url,
@@ -1133,7 +1152,8 @@ class QwenBackend(BaseBackend):
                     base_url,
                     session_id,
                     client_id=client_id,
-                    last_event_id=0,
+                    last_event_id=cursor,
+                    event_epoch=event_epoch,
                     read_timeout=max(30, self.timeout + 30),
                 ) as stream:
                     admitted = _qwen_http_json(
@@ -1162,7 +1182,11 @@ class QwenBackend(BaseBackend):
                         data = event.get("data")
                         if not isinstance(data, dict):
                             data = {}
-                        event_prompt = str(event.get("promptId") or "")
+                        event_prompt = str(
+                            data.get("promptId")
+                            or event.get("promptId")
+                            or ""
+                        )
                         if event_prompt and event_prompt != prompt_id:
                             continue
 
