@@ -481,3 +481,28 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "grid-template-columns:repeat(4,minmax(245px,1fr))" in tasks
     assert "width:30px" in chat
     assert "height:30px" in chat
+
+
+def test_global_settings_sidebar_uses_one_icon_and_plain_copy():
+    root = Path(__file__).resolve().parents[1]
+    static = root / "static"
+    index = (static / "index.html").read_text(encoding="utf-8")
+    projects = (static / "css" / "projects.css").read_text(encoding="utf-8")
+    theme = (static / "css" / "theme.css").read_text(encoding="utf-8")
+
+    settings = index.split('id="themeButton"', 1)[1].split("</button>", 1)[0]
+    assert settings.count('class="nav-icon"') == 1
+    assert 'class="global-settings-copy"' in settings
+
+    assert ".project-nav-link span {" not in projects
+    assert "body.projects-collapsed .project-nav-link span {" not in projects
+    assert ".project-nav-link.active span {" not in projects
+    assert "html[data-appearance] .project-nav-link span" not in theme
+
+    assert ".global-settings-button .nav-icon" in projects
+    assert "width: 24px" in projects
+    assert "height: 24px" in projects
+    assert ".global-settings-button .global-settings-copy strong" in projects
+    assert "font-size: 11px" in projects
+    assert "font-size: 7.5px" in projects
+    assert "background:transparent" in theme

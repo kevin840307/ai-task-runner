@@ -211,7 +211,7 @@ body.projects-collapsed .project-nav-link strong {
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
-.project-nav-link span {
+.project-nav-link .nav-icon {
   display: inline-grid;
   place-items: center;
   width: 24px;
@@ -550,7 +550,7 @@ body.projects-collapsed .project-children {
   display: none;
 }
 
-body.projects-collapsed .project-nav-link span {
+body.projects-collapsed .project-nav-link .nav-icon {
   background: transparent;
 }
 
@@ -568,7 +568,7 @@ body.projects-collapsed .project-item::before {
   background: transparent;
 }
 
-.project-nav-link.active span {
+.project-nav-link.active .nav-icon {
   background: var(--accent);
   color: #ffffff;
 }
@@ -637,7 +637,7 @@ body.projects-collapsed .project-item::before {
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
-.project-nav-link span,
+.project-nav-link .nav-icon,
 .designer-nav-link span {
   display: inline-grid;
   place-items: center;
@@ -673,13 +673,13 @@ body.projects-collapsed .project-item::before {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
-.project-nav-link.active span,
+.project-nav-link.active .nav-icon,
 .designer-nav-link.active span {
   background: var(--accent);
   color: #ffffff;
 }
 
-body.projects-collapsed .project-nav-link span {
+body.projects-collapsed .project-nav-link .nav-icon {
   display: inline-grid !important;
   width: 24px;
   height: 24px;
@@ -687,7 +687,7 @@ body.projects-collapsed .project-nav-link span {
   color: var(--accent);
 }
 
-body.projects-collapsed .project-nav-link.active span {
+body.projects-collapsed .project-nav-link.active .nav-icon {
   background: var(--accent);
   color: #ffffff;
 }
@@ -740,6 +740,12 @@ body.projects-collapsed .project-list {
   stroke-linejoin: round;
 }
 .project-nav-link strong { font-size: 12.5px; }
+.global-settings-button .nav-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+}
 .global-settings-button .global-settings-copy {
   display: grid;
   place-items: initial;
@@ -753,11 +759,14 @@ body.projects-collapsed .project-list {
   line-height: 1.15;
   text-align: left;
 }
+.global-settings-button .global-settings-copy strong {
+  font-size: 11px;
+}
 .global-settings-button .global-settings-copy small {
   overflow: hidden;
   color: var(--muted);
-  font-size: 9px;
-  font-weight: 650;
+  font-size: 7.5px;
+  font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

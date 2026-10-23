@@ -209,9 +209,9 @@ html[data-appearance] .options-button.active {
   color: var(--accent-dark);
   border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
 }
-html[data-appearance] .project-nav-link span,
+html[data-appearance] .project-nav-link .nav-icon,
 html[data-appearance] .designer-nav-link span { background: var(--accent-soft); color: var(--accent); }
-html[data-appearance] .project-nav-link.active span,
+html[data-appearance] .project-nav-link.active .nav-icon,
 html[data-appearance] .designer-nav-link.active span { background: var(--accent); color: #fff; }
 html[data-appearance] .side-toggle,
 html[data-appearance] .header-icon { background: linear-gradient(180deg, var(--panel), var(--panel-2)); }
@@ -630,3 +630,10 @@ body.projects-collapsed .global-settings-button { width: 42px; height: 42px; pad
 html[data-appearance] .new-project-button{background:var(--panel-2);color:var(--text);border-color:var(--line);box-shadow:none}
 html[data-appearance] .new-project-button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-dark);border-color:color-mix(in srgb,var(--accent) 42%,var(--line));box-shadow:none}
 html[data-appearance] .projects .project-root:hover,html[data-appearance] .projects .project-tree.active .project-root{background:var(--accent-soft);color:var(--accent-dark);border-color:color-mix(in srgb,var(--accent) 16%,var(--line))}
+
+
+/* Global Settings matches the feature sidebar: one icon plus a plain text copy. */
+html[data-appearance] .global-settings-button .global-settings-copy{
+  background:transparent;
+  color:inherit;
+}
