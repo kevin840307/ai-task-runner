@@ -1053,7 +1053,7 @@ def test_task_service_delete_is_idempotent_and_blocks_non_new(tmp_path: Path) ->
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw["tasks"][0]["status"] = "ongoing"
     path.write_text(json.dumps(raw), encoding="utf-8")
-    with pytest.raises(ValueError, match="Only New Tasks"):
+    with pytest.raises(ValueError, match="explicitly cleaned up before deletion"):
         service.delete(project, blocked["task_id"], request_id="delete-blocked")
     assert service.get(project, blocked["task_id"])["status"] == "ongoing"
 
