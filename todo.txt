@@ -1902,9 +1902,16 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - ChatAgentService now gates native Ask by the generic advertised transport instead of
       hardcoding OpenCode's question_api transport.
 
+[x] Persist live adapter evidence as an explicit, reviewable artifact.
+    - tool/agent_live_probe.py --output <path> writes JSON with source HEAD, requested backends,
+      diagnostic flags and formal_gate status.
+    - Native session identity is redacted from the saved artifact; only session_id_present is retained.
+    - Diagnostic --discovery-only / --allow-missing / --allow-no-ask runs can never set formal_gate=true.
+    - tests/test_agent_live_probe.py locks redaction, formal-gate qualification and atomic replacement.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
-      python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode
+      python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output agent-live-evidence.json
     - Use --model qwen=<id> / --model opencode=<id> when explicit model-selection evidence is required.
     - --allow-no-ask and --discovery-only are diagnostic modes only and do not satisfy this checkbox.
     - Do not mark the feature/todo formal adapter-live item complete until both installed CLIs pass.
