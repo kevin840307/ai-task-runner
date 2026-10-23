@@ -1946,6 +1946,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Only an authoritative 404 session-not-found clears the bridge; other temporary HTTP failures retry on the next poll.
     - Regression proves transient failure preserves the pending Ask while a later 404 removes stale IPC.
 
+[x] Align production Global Settings UX with the latest feature prototype without duplicating state.
+    - Sidebar Settings now opens one viewport modal with Execution / Defaults / Interface / Language sections.
+    - Existing backend-owned settings schema, updateGlobalSettings(), native Agent catalog refresh, theme and language handlers are reused unchanged.
+    - Removed the old floating themePanel positioning/outside-popover path instead of keeping two Settings shells.
+    - Browser regression verifies the tabbed modal geometry/visibility and continues to exercise persistence/theme/language/workspace behavior.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

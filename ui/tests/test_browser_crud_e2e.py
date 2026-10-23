@@ -3406,6 +3406,28 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
 
             page.click("#themeButton")
             assert page.locator("#themePanel").is_visible()
+            assert page.locator(".global-settings-card").is_visible()
+            assert page.locator("[data-settings-tab]").count() == 4
+            assert page.locator("[data-settings-tab='execution']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-settings-panel='execution']").is_visible()
+            assert page.locator("[data-settings-panel='defaults']").is_hidden()
+            settings_geometry = page.locator(".global-settings-card").evaluate(
+                """node => {
+                    const rect = node.getBoundingClientRect();
+                    return {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom};
+                }"""
+            )
+            assert settings_geometry["left"] > 0
+            assert settings_geometry["top"] > 0
+            assert settings_geometry["right"] < 1366
+            assert settings_geometry["bottom"] < 820
+            page.click("[data-settings-tab='defaults']")
+            assert page.locator("[data-settings-panel='defaults']").is_visible()
+            page.click("[data-settings-tab='interface']")
+            assert page.locator("[data-settings-panel='interface']").is_visible()
+            page.click("[data-settings-tab='language']")
+            assert page.locator("[data-settings-panel='language']").is_visible()
+            page.click("[data-settings-tab='execution']")
 
             # Execution settings share the same backend-owned Global Settings store.
             # Exercise every Auto policy now; actual Main/worktree resolution stays
@@ -3430,6 +3452,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_timeout(30)
             assert state.global_settings.get()["execution"]["allow_concurrent_main_tasks"] is True
 
+            page.click("[data-settings-tab='interface']")
             for appearance in ("light", "dark"):
                 page.locator(f"[data-appearance-option='{appearance}']").click()
                 page.wait_for_function(
@@ -3473,6 +3496,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
 
             # Static Composer copy and dynamic Queue / Ask / command suggestions
             # / Chat TaskDraft must all rerender from the same language owner.
+            page.click("[data-settings-tab='language']")
             page.locator("[data-language-option='zh-TW']").click()
             page.wait_for_function("document.documentElement.lang === 'zh-Hant'")
             page.click("#themeCloseButton")
@@ -3516,8 +3540,10 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
             page.click("#themeButton")
+            page.click("[data-settings-tab='interface']")
             page.locator("[data-appearance-option='dark']").click()
             page.locator("[data-theme-option='violet']").click()
+            page.click("[data-settings-tab='language']")
             page.locator("[data-language-option='en']").click()
             page.wait_for_function("document.documentElement.dataset.appearancePreference === 'dark'")
             page.wait_for_function("document.documentElement.dataset.theme === 'violet'")
@@ -3682,6 +3708,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             install(page)
 
             page.click("#themeButton")
+            page.click("[data-settings-tab='defaults']")
             page.select_option("#globalDefaultAgent", "opencode")
             page.wait_for_function(
                 "() => document.querySelector('#globalDefaultModel')?.querySelector('option[value=\"openai/gpt-5.2\"]') !== null"

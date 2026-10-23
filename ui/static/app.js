@@ -232,7 +232,6 @@ async function refreshGlobalDefaultCatalog({ refresh = false, agent = "", model 
     if (token === state.globalDefaultCatalogToken) {
       state.globalDefaultCatalogLoading = false;
       renderGlobalSettingsForm();
-      if (!$("themePanel")?.hidden) requestAnimationFrame(positionThemePanel);
     }
   }
 }
@@ -276,13 +275,36 @@ function renderThemeControls() {
   const language = window.I18n?.getLanguage?.() || "zh-TW";
   document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
-function positionThemePanel() {
-  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
-  const width = panel.getBoundingClientRect().width || Math.min(320, window.innerWidth - pad * 2); let left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad)); let top = rect.bottom + gap;
-  const height = panel.getBoundingClientRect().height || 320; if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap); panel.style.left = `${Math.round(left)}px`; panel.style.top = `${Math.round(top)}px`;
+const GLOBAL_SETTINGS_TABS = new Set(["execution", "defaults", "interface", "language"]);
+function selectGlobalSettingsTab(value = "execution") {
+  const panel = $("themePanel"); if (!panel) return;
+  const tab = GLOBAL_SETTINGS_TABS.has(value) ? value : "execution";
+  panel.dataset.activeTab = tab;
+  document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+    const active = button.dataset.settingsTab === tab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+  document.querySelectorAll("[data-settings-panel]").forEach((section) => {
+    section.hidden = section.dataset.settingsPanel !== tab;
+  });
 }
-function closeThemePanel() { const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false"); }
-function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); void refreshGlobalDefaultCatalog().catch((error) => showActionError(error.message, "Global defaults catalog unavailable")); requestAnimationFrame(positionThemePanel); }
+function closeThemePanel({ restoreFocus = true } = {}) {
+  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return;
+  panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false");
+  if (restoreFocus) requestAnimationFrame(() => button.focus({ preventScroll: true }));
+}
+function toggleThemePanel(event) {
+  event?.stopPropagation();
+  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return;
+  if (!panel.hidden) return closeThemePanel();
+  panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true");
+  selectGlobalSettingsTab(panel.dataset.activeTab || "execution");
+  renderThemeControls(); renderGlobalSettingsForm();
+  void refreshGlobalDefaultCatalog().catch((error) => showActionError(error.message, "Global defaults catalog unavailable"));
+  requestAnimationFrame(() => document.querySelector("[data-settings-tab].active")?.focus({ preventScroll: true }));
+}
 
 async function api(path, options = {}) {
   const { timeoutMs = 0, ...fetchOptions } = options;
@@ -2337,7 +2359,6 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest?.(".studio-asset-menu-wrap")) closeStudioAssetMenu();
   if (!event.target.closest?.("#workflowContextMenu")) closeWorkflowContextMenu();
   if (!$("optionsPanel").hidden && !$("optionsPanel").contains(event.target) && !$("optionsButton").contains(event.target) && !backendMenu?.contains(event.target)) closeOptionsPanel();
-  if (!$("themePanel").hidden && !$("themePanel").contains(event.target) && !$("themeButton").contains(event.target)) closeThemePanel();
 });
 function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }
 function toggleOptionsPanel() { const panel = $("optionsPanel"); const open = panel.hidden; if (!open) return closeOptionsPanel(); panel.hidden = false; panel.scrollLeft = 0; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
@@ -2345,7 +2366,24 @@ $("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptions
 $("optionsCloseButton").onclick = closeOptionsPanel;
 $("environmentCheckButton").onclick = checkEnvironment;
 $("themeButton").onclick = toggleThemePanel;
-$("themeCloseButton").onclick = closeThemePanel;
+$("themeCloseButton").onclick = () => closeThemePanel();
+$("themeDoneButton")?.addEventListener("click", () => closeThemePanel());
+$("themePanel")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) closeThemePanel(); });
+document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+  button.addEventListener("click", () => selectGlobalSettingsTab(button.dataset.settingsTab));
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = [...document.querySelectorAll("[data-settings-tab]")];
+    const current = Math.max(0, tabs.indexOf(button));
+    let next = current;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else next = (current + (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    selectGlobalSettingsTab(tabs[next]?.dataset.settingsTab);
+    tabs[next]?.focus();
+  });
+});
 $("globalAutoWorkspacePolicy")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { auto_workspace_policy: event.currentTarget.value } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalMergeFailureLimit")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { merge_failure_limit: Number(event.currentTarget.value) } }).catch((error) => showActionError(error.message, "Settings update failed")));
 $("globalAllowConcurrentMain")?.addEventListener("change", (event) => void updateGlobalSettings({ execution: { allow_concurrent_main_tasks: !!event.currentTarget.checked } }).catch((error) => showActionError(error.message, "Settings update failed")));
@@ -2439,7 +2477,7 @@ state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); ren
   composerObserver.observe(document.querySelector(".workspace"));
 }
 window.addEventListener("resize", () => {
-  syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
+  syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70);
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
 }); Promise.allSettled([loadGlobalSettings(), refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {

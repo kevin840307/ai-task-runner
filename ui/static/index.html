@@ -21,49 +21,6 @@
     <div id="projectList" class="project-list"></div>
     <div class="sidebar-global-settings">
       <button id="themeButton" class="project-nav-link global-settings-button" type="button" title="Global Settings" aria-haspopup="dialog" aria-expanded="false"><span aria-hidden="true">⚙</span><strong>Settings</strong></button>
-      <section id="themePanel" class="theme-panel" role="dialog" aria-label="主題與外觀" data-i18n-aria="theme.open" hidden>
-        <div class="theme-panel-head"><strong>Global Settings</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close" data-i18n-aria="common.close">×</button></div>
-        <div class="theme-setting-group">
-          <span class="theme-setting-label" data-i18n="theme.appearance">外觀</span>
-          <div class="appearance-options" role="group" aria-label="Appearance">
-            <button type="button" data-appearance-option="system" data-i18n="theme.system">跟隨系統</button>
-            <button type="button" data-appearance-option="light" data-i18n="theme.light">淺色</button>
-            <button type="button" data-appearance-option="dark" data-i18n="theme.dark">深色</button>
-          </div>
-        </div>
-        <div class="theme-setting-group">
-          <span class="theme-setting-label" data-i18n="theme.palette">主題</span>
-          <div class="theme-options">
-            <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small data-i18n="theme.recommended">推薦</small></button>
-            <button class="theme-option" type="button" data-theme-option="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><strong>Deep Blue</strong><small data-i18n="theme.enterprise">企業</small></button>
-            <button class="theme-option" type="button" data-theme-option="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><strong>Violet</strong><small data-i18n="theme.creative">AI / 創意</small></button>
-            <button class="theme-option" type="button" data-theme-option="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><strong>Amber</strong><small data-i18n="theme.focus">暖色 / 專注</small></button>
-            <button class="theme-option" type="button" data-theme-option="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><strong>Rose</strong><small data-i18n="theme.modern">鮮明 / 現代</small></button>
-          </div>
-        </div>
-        <div class="theme-setting-group language-setting-group">
-          <span class="theme-setting-label" data-i18n="language.label">語言</span>
-          <div class="appearance-options language-options" role="group" aria-label="語言" data-i18n-aria="language.label">
-            <button type="button" data-language-option="zh-TW">繁體中文</button>
-            <button type="button" data-language-option="en">English</button>
-          </div>
-        </div>
-      
-        <div class="theme-setting-group">
-          <span class="theme-setting-label">Execution</span>
-          <label class="global-setting-row"><span>Auto workspace policy</span><select id="globalAutoWorkspacePolicy"><option value="busy-worktree">Busy project → Worktree</option><option value="always-main">Always Main</option><option value="always-worktree">Always Worktree</option></select></label>
-          <label class="global-setting-row"><span>Merge failure limit</span><input id="globalMergeFailureLimit" type="number" min="0" max="99" step="1" /></label>
-          <label class="global-setting-row global-setting-check"><span>Allow concurrent Main tasks</span><input id="globalAllowConcurrentMain" type="checkbox" /></label>
-        </div>
-        <div class="theme-setting-group">
-          <span class="theme-setting-label">Defaults</span>
-          <label class="global-setting-row"><span>Agent</span><select id="globalDefaultAgent"></select></label>
-          <label class="global-setting-row"><span>Model</span><select id="globalDefaultModel"></select></label>
-          <label class="global-setting-row"><span>Mode</span><select id="globalDefaultMode"></select></label>
-          <label class="global-setting-row"><span>Reasoning</span><select id="globalDefaultReasoning"></select></label>
-          <label class="global-setting-row"><span>Workflow</span><input id="globalDefaultWorkflow" type="text" placeholder="Project default" /></label>
-        </div>
-      </section>
     </div>
     <div class="sidebar-foot" data-i18n="sidebar.history">每個專案保留一份任務紀錄</div>
   </aside>
@@ -443,6 +400,73 @@
     </section>
   </main>
 
+
+  <div id="themePanel" class="modal-backdrop global-settings-backdrop" hidden>
+    <div class="modal-card global-settings-card" role="dialog" aria-modal="true" aria-labelledby="globalSettingsTitle">
+      <div class="modal-head global-settings-head">
+        <div><h2 id="globalSettingsTitle">Settings</h2><p>Global preferences shared by Chat, Tasks and Runner entry points.</p></div>
+        <button id="themeCloseButton" class="modal-close" type="button" aria-label="Close Global Settings" title="Close">×</button>
+      </div>
+      <div class="global-settings-body">
+        <aside class="settings-sections" role="tablist" aria-label="Settings sections">
+          <button type="button" class="active" data-settings-tab="execution" role="tab" aria-selected="true" aria-controls="settingsPanelExecution"><span aria-hidden="true">↯</span><strong>Execution</strong></button>
+          <button type="button" data-settings-tab="defaults" role="tab" aria-selected="false" aria-controls="settingsPanelDefaults"><span aria-hidden="true">◉</span><strong>Defaults</strong></button>
+          <button type="button" data-settings-tab="interface" role="tab" aria-selected="false" aria-controls="settingsPanelInterface"><span aria-hidden="true">◫</span><strong>Interface</strong></button>
+          <button type="button" data-settings-tab="language" role="tab" aria-selected="false" aria-controls="settingsPanelLanguage"><span aria-hidden="true">文</span><strong>Language</strong></button>
+        </aside>
+
+        <section id="settingsPanelExecution" class="settings-panel" data-settings-panel="execution" role="tabpanel">
+          <div class="settings-panel-head"><span>EXECUTION</span><h3>Workspace behavior</h3><p>Controls how Task-level Auto resolves. Explicit Main / Worktree overrides are unchanged.</p></div>
+          <label class="settings-field"><span><strong>Auto workspace policy</strong><small>Choose how Auto resolves when a Project is idle or busy.</small></span><select id="globalAutoWorkspacePolicy"><option value="busy-worktree">Busy project → Worktree</option><option value="always-main">Always Main</option><option value="always-worktree">Always Worktree</option></select></label>
+          <label class="settings-field"><span><strong>Merge failure limit</strong><small>Automatic merge/recovery budget before falling back to an isolated Worktree.</small></span><input id="globalMergeFailureLimit" type="number" min="0" max="99" step="1" /></label>
+          <label class="settings-field"><span><strong>Allow concurrent Main tasks</strong><small>Allow multiple Main Tasks to execute in isolated worktrees and merge later.</small></span><span class="settings-check-control"><input id="globalAllowConcurrentMain" type="checkbox" /><span>Allow</span></span></label>
+        </section>
+
+        <section id="settingsPanelDefaults" class="settings-panel" data-settings-panel="defaults" role="tabpanel" hidden>
+          <div class="settings-panel-head"><span>DEFAULTS</span><h3>New Project defaults</h3><p>Copied once when a new Project is created. Existing Projects keep their own Chat settings.</p></div>
+          <label class="settings-field"><span><strong>Default Agent</strong><small>Backend adapter assigned to new Projects.</small></span><select id="globalDefaultAgent"></select></label>
+          <label class="settings-field"><span><strong>Default Model</strong><small>Native model for the selected Agent.</small></span><select id="globalDefaultModel"></select></label>
+          <label class="settings-field"><span><strong>Default Mode</strong><small>Permission / approval mode.</small></span><select id="globalDefaultMode"></select></label>
+          <label class="settings-field"><span><strong>Default Reasoning</strong><small>Native reasoning effort / model variant.</small></span><select id="globalDefaultReasoning"></select></label>
+          <label class="settings-field"><span><strong>Default Workflow</strong><small>Workflow preference copied into new Projects.</small></span><input id="globalDefaultWorkflow" type="text" placeholder="Project default" /></label>
+        </section>
+
+        <section id="settingsPanelInterface" class="settings-panel" data-settings-panel="interface" role="tabpanel" hidden>
+          <div class="settings-panel-head"><span>INTERFACE</span><h3>Appearance & theme</h3><p>Global visual preferences. These settings are not tied to a Project or Chat.</p></div>
+          <div class="settings-field settings-field-stack">
+            <span><strong data-i18n="theme.appearance">外觀</strong><small>Follow the system appearance or force Light / Dark.</small></span>
+            <div class="appearance-options" role="group" aria-label="Appearance">
+              <button type="button" data-appearance-option="system" data-i18n="theme.system">跟隨系統</button>
+              <button type="button" data-appearance-option="light" data-i18n="theme.light">淺色</button>
+              <button type="button" data-appearance-option="dark" data-i18n="theme.dark">深色</button>
+            </div>
+          </div>
+          <div class="settings-field settings-field-stack">
+            <span><strong data-i18n="theme.palette">主題</strong><small>Use the same palette tokens across Chat, Tasks, Drawer and Studio.</small></span>
+            <div class="theme-options">
+              <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small data-i18n="theme.recommended">推薦</small></button>
+              <button class="theme-option" type="button" data-theme-option="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><strong>Deep Blue</strong><small data-i18n="theme.enterprise">企業</small></button>
+              <button class="theme-option" type="button" data-theme-option="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><strong>Violet</strong><small data-i18n="theme.creative">AI / 創意</small></button>
+              <button class="theme-option" type="button" data-theme-option="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><strong>Amber</strong><small data-i18n="theme.focus">暖色 / 專注</small></button>
+              <button class="theme-option" type="button" data-theme-option="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><strong>Rose</strong><small data-i18n="theme.modern">鮮明 / 現代</small></button>
+            </div>
+          </div>
+        </section>
+
+        <section id="settingsPanelLanguage" class="settings-panel" data-settings-panel="language" role="tabpanel" hidden>
+          <div class="settings-panel-head"><span>LANGUAGE</span><h3>Language</h3><p>Global UI language preference, independent from appearance and Project settings.</p></div>
+          <div class="settings-field settings-field-stack">
+            <span><strong data-i18n="language.label">語言</strong><small>Applies globally across Projects and Chat sessions.</small></span>
+            <div class="appearance-options language-options" role="group" aria-label="語言" data-i18n-aria="language.label">
+              <button type="button" data-language-option="zh-TW">繁體中文</button>
+              <button type="button" data-language-option="en">English</button>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="modal-actions global-settings-actions"><button id="themeDoneButton" class="modal-secondary" type="button">Close</button></div>
+    </div>
+  </div>
 
   <div id="validationDetailsBackdrop" class="modal-backdrop validation-details-backdrop" hidden>
     <div class="modal-card validation-details-card" role="dialog" aria-modal="true" aria-labelledby="validationDetailsTitle">

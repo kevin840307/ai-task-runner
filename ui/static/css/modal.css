@@ -380,3 +380,139 @@
 .ui-dialog-body:not(:empty) { padding: 16px 0 4px; }
 .ui-dialog-actions { flex-wrap: wrap; }
 .ui-dialog-actions .designer-danger-button { order: 2; }
+
+
+/* Global Settings: production shell aligned with the feature prototype.
+   Data remains owned by the existing backend Global Settings contract. */
+.global-settings-backdrop { z-index: 260; }
+.global-settings-card {
+  width: min(780px, 94vw);
+  height: min(700px, 90vh);
+  max-height: 90vh;
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-color: var(--line);
+  background: var(--panel);
+}
+.global-settings-head {
+  margin: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.global-settings-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+.settings-sections {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.settings-sections button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.settings-sections button:hover,
+.settings-sections button.active {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+}
+.settings-sections button strong { font-size: 12px; }
+.settings-sections button > span { font-size: 14px; text-align: center; }
+.settings-panel {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 20px;
+}
+.settings-panel[hidden] { display: none; }
+.settings-panel-head > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.settings-panel-head h3 { margin: 5px 0 6px; font-size: 18px; }
+.settings-panel-head p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.settings-field {
+  margin-top: 16px;
+  padding: 13px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 220px);
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.settings-field > span { min-width: 0; }
+.settings-field strong { display: block; color: var(--text); font-size: 13px; }
+.settings-field small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.settings-field select,
+.settings-field input[type="text"],
+.settings-field input[type="number"] {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--input-bg);
+  color: var(--text);
+  outline: 0;
+}
+.settings-field select:focus,
+.settings-field input[type="text"]:focus,
+.settings-field input[type="number"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.settings-field-stack { grid-template-columns: 1fr; align-items: stretch; }
+.settings-check-control {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+.settings-check-control input { width: 18px; height: 18px; accent-color: var(--accent); }
+.settings-field .appearance-options { width: 100%; }
+.settings-field .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.global-settings-actions {
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+@media (max-width: 720px) {
+  .global-settings-card { width: min(96vw, 780px); height: min(94vh, 760px); }
+  .global-settings-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .settings-sections {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-sections button { width: auto; flex: 0 0 auto; grid-template-columns: 20px auto; }
+  .settings-field { grid-template-columns: 1fr; }
+  .settings-field .theme-options { grid-template-columns: 1fr; }
+}
