@@ -869,7 +869,7 @@ def test_task_lifecycle_guards_reject_invalid_status_before_git_side_effects(tmp
     runtime = {"running": True, "launching": False, "completed": False, "resumable": False, "actions": {}}
     service = _service(tasks, repo, runtime=runtime, launches=[], stops=[], resumes=[])
 
-    with pytest.raises(ValueError, match="Paused before Reset"):
+    with pytest.raises(ValueError, match="Paused or Closed before Reset"):
         service.reset(repo, created["task_id"], request_id="invalid-reset-new")
     with pytest.raises(ValueError, match="Paused or Closed before Rerun"):
         service.rerun(repo, created["task_id"], request_id="invalid-rerun-new")
@@ -880,11 +880,11 @@ def test_task_lifecycle_guards_reject_invalid_status_before_git_side_effects(tmp
     assert closed["status"] == "closed"
     retained = Path(started["run"]["workspace"]["worktree_path"])
 
-    with pytest.raises(ValueError, match="Paused before Reset"):
-        service.reset(repo, created["task_id"], request_id="invalid-reset-closed")
-    unchanged = tasks.get(repo, created["task_id"])
-    assert unchanged["status"] == "closed"
-    assert unchanged["run"]["run_number"] == 1
+    reset_closed = service.reset(repo, created["task_id"], request_id="reset-closed")
+    assert reset_closed["status"] == "new"
+    assert "run" not in reset_closed
+    assert reset_closed["history"][-1]["run_number"] == 1
+    assert reset_closed["history"][-1]["lifecycle_end"] == "reset"
     assert retained.is_dir()
 
 

@@ -124,3 +124,52 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-history-row{display:grid;gap:9px;padding:11px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}
 .task-history-row .task-runtime-meta{padding:0;border:0;background:transparent}
 @media(max-width:560px){.task-runtime-head,.task-history-head{align-items:flex-start;flex-direction:column}.task-runtime-meta{grid-template-columns:1fr}.task-runtime-console{max-height:320px}}
+
+
+/* Feature Task Drawer shell parity; narrow-view full-width behavior remains responsive. */
+.task-workspace-overlay{
+  background:rgba(14,23,38,.28);
+  backdrop-filter:blur(2px)
+}
+.task-workspace-shell{
+  width:clamp(620px,46vw,720px);
+  max-width:92vw;
+  box-shadow:-18px 0 50px rgba(15,23,42,.16)
+}
+.task-workspace-shell.expanded{
+  width:min(920px,96vw);
+  max-width:96vw
+}
+.task-workspace-head{
+  min-height:66px;
+  gap:8px;
+  padding:15px 16px 12px
+}
+.task-workspace-back,.task-workspace-expand,.task-workspace-close{
+  width:30px;height:30px;min-width:30px;padding:0;
+  border:0;border-radius:7px;background:transparent;color:var(--muted);box-shadow:none
+}
+.task-workspace-back{font-size:18px;font-weight:800}
+.task-workspace-expand{font-size:16px;line-height:1}
+.task-workspace-close{font-size:22px;line-height:1}
+.task-workspace-back:hover,.task-workspace-expand:hover,.task-workspace-close:hover,
+.task-workspace-expand[aria-pressed="true"]{
+  border-color:transparent;background:var(--accent-soft);color:var(--accent-dark)
+}
+.task-workspace-heading strong{font-size:15px;line-height:1.35}
+.task-workspace-heading span{font-size:10px}
+.task-workspace-body{
+  padding:14px 16px;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+.task-workspace-foot{
+  height:55px;min-height:55px;max-height:55px;
+  align-items:center;flex-wrap:nowrap;gap:7px;
+  padding:10px 14px;background:var(--panel-2);overflow:hidden
+}
+.task-workspace-foot button{
+  height:34px;min-height:34px;max-height:34px;padding-block:0;line-height:1;white-space:nowrap
+}
+@media(max-width:760px){
+  .task-workspace-shell,.task-workspace-shell.expanded{width:min(100%,620px);max-width:100%}
+}
