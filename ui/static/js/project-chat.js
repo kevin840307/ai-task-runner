@@ -440,7 +440,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (!input) return;
     input.value = String(item.token || "") + " ";
     panelHideSuggestions();
-    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    autosizeTextarea?.(input, { minHeight: 44, maxHeight: 180 });
     input.focus();
   }
 
@@ -1150,10 +1150,20 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       const item = document.createElement("article");
       const role = ["user", "assistant", "system"].includes(message.role) ? message.role : "assistant";
       item.className = "message project-chat-message " + role;
+      const meta = document.createElement("div");
+      meta.className = "project-chat-message-meta";
+      if (role === "assistant") {
+        const avatar = document.createElement("span");
+        avatar.className = "project-chat-message-avatar";
+        avatar.textContent = "AI";
+        meta.append(avatar, document.createTextNode("Assistant"));
+      } else {
+        meta.textContent = role === "user" ? "You" : "System";
+      }
       const body = document.createElement("div");
       body.className = "message-body";
       body.textContent = String(message.content || "");
-      item.appendChild(body);
+      item.append(meta, body);
       root.appendChild(item);
     }
     for (const draft of drafts) renderTaskDraftCard(draft, root);
@@ -1195,10 +1205,13 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (empty) empty.hidden = true;
     const item = document.createElement("article");
     item.className = "message project-chat-message project-chat-pending user";
+    const meta = document.createElement("div");
+    meta.className = "project-chat-message-meta";
+    meta.textContent = "You";
     const body = document.createElement("div");
     body.className = "message-body";
     body.textContent = text;
-    item.appendChild(body);
+    item.append(meta, body);
     root.appendChild(item);
     requestAnimationFrame(() => { root.scrollTop = root.scrollHeight; });
   }
@@ -1363,7 +1376,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       return;
     }
     input.value = "";
-    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    autosizeTextarea?.(input, { minHeight: 44, maxHeight: 180 });
     panelHideSuggestions();
     if (goal) {
       try {
@@ -1490,7 +1503,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const input = byId("projectChatInput");
     if (!input) return sessionId;
     input.value = String(prompt || "");
-    autosizeTextarea?.(input, { minHeight: 46, maxHeight: 180 });
+    autosizeTextarea?.(input, { minHeight: 44, maxHeight: 180 });
     suggestionIndex = 0;
     renderSuggestions();
     input.focus();
@@ -1655,7 +1668,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
   byId("projectChatStopButton")?.addEventListener("click", () => void cancelTurn());
   byId("projectChatInput")?.addEventListener("input", (event) => {
-    autosizeTextarea?.(event.currentTarget, { minHeight: 46, maxHeight: 180 });
+    autosizeTextarea?.(event.currentTarget, { minHeight: 44, maxHeight: 180 });
     suggestionIndex = 0;
     renderSuggestions();
   });
