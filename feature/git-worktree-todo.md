@@ -1206,6 +1206,7 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
   - [x] New target commit during repair + nonconflicting integration: service-level regression advances the captured target after recovery starts, then requires PASS validation on the latest integrated tree before merge commit.
   - [x] Failure-limit fallback boundary: four successive real conflicts verify recoveries 1/2/3 and fallback on 4 while retaining the latest recovery merge source.
+  - [x] Restart mid-repair: a new TaskService/TaskRunService instance resumes the same durable recovery branch/worktree, preserves partial repair files, and finishes without launching a replacement recovery.
 
 ### Phase F — UI
 

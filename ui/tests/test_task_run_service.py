@@ -1244,6 +1244,150 @@ def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(
     assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
+def test_service_restart_resumes_same_merge_recovery_workspace_without_losing_progress(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    requirements = lambda _p, _w: {"exists": True}
+    tasks = TaskService(workflow_requirements=requirements)
+    created = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-recovery-restart",
+    )
+    runtimes: dict[Path, dict] = {}
+    launches = []
+    resumes = []
+
+    def launch(project: Path, goal: str | None, **kwargs):
+        root = Path(project).resolve()
+        launches.append((root, goal, dict(kwargs)))
+        runtimes[root] = {
+            "running": True,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }
+
+    def read_runtime(project: Path):
+        return dict(runtimes.get(Path(project).resolve(), {
+            "running": False,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }))
+
+    def resume_runtime(project: Path):
+        root = Path(project).resolve()
+        resumes.append(root)
+        runtimes[root] = {
+            "running": True,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }
+
+    def make_service(task_service: TaskService) -> TaskRunService:
+        return TaskRunService(
+            task_service,
+            execution_settings=lambda: {
+                "auto_workspace_policy": "always-main",
+                "merge_failure_limit": 3,
+                "allow_concurrent_main_tasks": False,
+            },
+            preferences=lambda _project: {
+                "agent": "qwen",
+                "model": "",
+                "mode": "auto",
+                "reasoning": "medium",
+                "workflow": str(repo / "workflow.yaml"),
+            },
+            backend_default=lambda _project: "qwen",
+            resolve_workflow=lambda _project, selected: Path(selected),
+            launch=launch,
+            read_runtime=read_runtime,
+            stop_runtime=lambda _project: None,
+            resume_runtime=resume_runtime,
+            validate_merge=lambda _project, _goal, **_kwargs: "PASS",
+            workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+            auto_watch=False,
+        )
+
+    service = make_service(tasks)
+    started = service.start(
+        repo,
+        created["task_id"],
+        request_id="recovery-restart-run",
+    )
+    source_root = Path(started["run"]["workspace"]["project_root"])
+    (source_root / "app.txt").write_text("task side\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "create restart recovery conflict")
+    runtimes[source_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+
+    recovering = service.reconcile(repo, created["task_id"])
+    recovery = recovering["run"]["workspace_result"]["recovery"]
+    recovery_root = Path(recovery["workspace"]["project_root"])
+    recovery_branch = recovery["workspace"]["task_branch"]
+    progress = recovery_root / "repair-progress.txt"
+    progress.write_text("preserve this repair progress\n", encoding="utf-8")
+
+    runtimes[recovery_root] = {
+        "running": False,
+        "launching": False,
+        "completed": False,
+        "resumable": True,
+        "actions": {"resume": True},
+    }
+    stopped = service.reconcile(repo, created["task_id"])
+    assert stopped["status"] == "paused"
+    assert stopped["run"]["phase"] == "recovery_stopped"
+    assert stopped["run"]["workspace_result"]["recovery"]["status"] == "stopped"
+
+    restarted_tasks = TaskService(workflow_requirements=requirements)
+    restarted = make_service(restarted_tasks)
+    resumed = restarted.resume(repo, created["task_id"])
+
+    assert resumed["status"] == "ongoing"
+    assert resumed["run"]["phase"] == "conflict_recovery"
+    resumed_recovery = resumed["run"]["workspace_result"]["recovery"]
+    assert resumed_recovery["workspace"]["task_branch"] == recovery_branch
+    assert Path(resumed_recovery["workspace"]["project_root"]) == recovery_root
+    assert progress.read_text(encoding="utf-8") == "preserve this repair progress\n"
+    assert resumes == [recovery_root]
+    assert len(launches) == 2
+
+    (recovery_root / "app.txt").write_text("integrated after restart\n", encoding="utf-8")
+    runtimes[recovery_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+    closed = restarted.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    assert closed["merge_failure_count"] == 1
+    assert closed["run"]["workspace_result"]["merge_source"]["workspace"]["task_branch"] == recovery_branch
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "integrated after restart\n"
+    assert (recovery_root / "repair-progress.txt").read_text(
+        encoding="utf-8"
+    ) == "preserve this repair progress\n"
+
+
 def test_target_advance_during_merge_recovery_revalidates_latest_integrated_tree(
     tmp_path: Path,
 ):
