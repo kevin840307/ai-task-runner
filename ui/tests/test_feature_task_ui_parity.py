@@ -12,6 +12,10 @@ FEATURE_TEMPLATES = (ROOT / "feature" / "ui-prototype" / "task-ui-templates.js")
 PROTOTYPE_HTML = (ROOT / "feature" / "ai-task-runner-ui-prototype.html").read_text(encoding="utf-8")
 PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
 PRODUCTION_JS = (ROOT / "ui" / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
+PRODUCTION_TOKENS = (ROOT / "ui" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+PRODUCTION_BOOTSTRAP = (ROOT / "ui" / "static" / "js" / "ui-bootstrap.js").read_text(encoding="utf-8")
+PRODUCTION_APP = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+PRODUCTION_HTML = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
 
 
 def _normalize(value: str) -> str:
@@ -134,6 +138,30 @@ def _same(
             f"{production_selector}={production[prop]!r}, "
             f"{feature_selector}={feature[prop]!r}"
         )
+
+
+def test_first_paint_loader_matches_feature_prototype_contract() -> None:
+    feature_loader = _declarations(FEATURE_CSS, ".app-bootstrap-loader")
+    production_loader = _declarations(PRODUCTION_TOKENS, ".app-bootstrap-loader")
+    for prop in ("position", "inset", "z-index", "display", "place-items", "opacity", "visibility"):
+        assert production_loader.get(prop) == feature_loader.get(prop), (prop, feature_loader, production_loader)
+
+    feature_card = _declarations(FEATURE_CSS, ".app-bootstrap-card")
+    production_card = _declarations(PRODUCTION_TOKENS, ".app-bootstrap-card")
+    for prop in ("display", "grid-template-columns", "gap", "align-items", "min-width", "padding", "border-radius"):
+        assert production_card.get(prop) == feature_card.get(prop), (prop, feature_card, production_card)
+
+    feature_spinner = _declarations(FEATURE_CSS, ".app-bootstrap-spinner")
+    production_spinner = _declarations(PRODUCTION_TOKENS, ".app-bootstrap-spinner")
+    for prop in ("width", "height", "border-radius", "animation"):
+        assert production_spinner.get(prop) == feature_spinner.get(prop), (prop, feature_spinner, production_spinner)
+
+    assert 'id="appBootstrapLoader"' in PRODUCTION_HTML
+    assert 'class="app-bootstrap-spinner"' in PRODUCTION_HTML
+    assert 'root.classList.add("ui-booting")' in PRODUCTION_BOOTSTRAP
+    assert 'root.classList.add("ui-ready")' in PRODUCTION_BOOTSTRAP
+    assert 'window.setTimeout(finish, 1800)' in PRODUCTION_BOOTSTRAP
+    assert 'window.UiBootstrap?.finish?.()' in PRODUCTION_APP
 
 
 def test_new_task_editor_base_geometry_matches_final_feature_cascade() -> None:

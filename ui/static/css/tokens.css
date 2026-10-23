@@ -141,3 +141,54 @@ select:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+
+/* Stable first paint: mirror the feature prototype loading/reveal transition. */
+html.ui-booting body > .projects,
+html.ui-booting body > .workspace { opacity:0;transform:translateY(3px);pointer-events:none }
+html.ui-ready body > .projects,
+html.ui-ready body > .workspace {
+  opacity:1;transform:none;
+  transition:opacity .24s cubic-bezier(.22,1,.36,1),transform .28s cubic-bezier(.22,1,.36,1)
+}
+html:not(.ui-booting):not(.ui-ready) .app-bootstrap-loader{display:none}
+.app-bootstrap-loader{
+  position:fixed;inset:0;z-index:5000;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 26%),var(--bg);
+  color:var(--text);opacity:1;visibility:visible;
+  transition:opacity .22s cubic-bezier(.4,0,.2,1),visibility 0s linear 0s
+}
+html.ui-ready .app-bootstrap-loader{
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .22s cubic-bezier(.4,0,.2,1),visibility 0s linear .22s
+}
+.app-bootstrap-card{
+  display:grid;grid-template-columns:38px minmax(0,1fr) 20px;gap:11px;align-items:center;
+  min-width:250px;padding:13px 15px;border:1px solid var(--line);border-radius:12px;
+  background:var(--panel);box-shadow:var(--shadow-popover);
+  opacity:1;transform:translateY(0);
+  transition:opacity .14s ease-out,transform .18s cubic-bezier(.4,0,.2,1)
+}
+html.ui-ready .app-bootstrap-card{opacity:0;transform:translateY(-4px)}
+.app-bootstrap-mark{
+  display:grid;place-items:center;width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-size:14px;font-weight:950;
+  box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 22%,transparent)
+}
+.app-bootstrap-copy{display:grid;gap:2px;min-width:0}
+.app-bootstrap-copy strong{font-size:10px}
+.app-bootstrap-copy small{color:var(--muted);font-size:8px}
+.app-bootstrap-spinner{
+  width:17px;height:17px;border:2px solid color-mix(in srgb,var(--accent) 24%,var(--line));
+  border-top-color:var(--accent);border-radius:50%;animation:app-bootstrap-spin .7s linear infinite
+}
+@keyframes app-bootstrap-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){
+  body>.projects,body>.workspace,.app-bootstrap-loader,.app-bootstrap-card{transition:none!important;transform:none!important}
+  .app-bootstrap-spinner{animation:none;border-color:var(--line);border-top-color:var(--accent)}
+}
+html[data-motion="reduced"] body>.projects,
+html[data-motion="reduced"] body>.workspace,
+html[data-motion="reduced"] .app-bootstrap-loader,
+html[data-motion="reduced"] .app-bootstrap-card{transition:none!important;transform:none!important}
+html[data-motion="reduced"] .app-bootstrap-spinner{animation:none;border-color:var(--line);border-top-color:var(--accent)}

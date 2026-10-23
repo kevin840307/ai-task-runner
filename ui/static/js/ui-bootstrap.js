@@ -44,6 +44,28 @@
     return settings;
   }
 
-  window.UiBootstrap = { apply, read, storeGlobalSettings };
+  const root = document.documentElement;
+  const startedAt = performance.now();
+  let finished = false;
+
+  root.classList.add("ui-booting");
+
+  function finish() {
+    if (finished) return;
+    finished = true;
+    const reveal = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+      root.classList.add("ui-ready");
+      root.classList.remove("ui-booting");
+      document.getElementById("appBootstrapLoader")?.setAttribute("aria-hidden", "true");
+    }));
+    const remaining = Math.max(0, 120 - (performance.now() - startedAt));
+    if (remaining) window.setTimeout(reveal, remaining);
+    else reveal();
+  }
+
+  window.UiBootstrap = { apply, read, storeGlobalSettings, finish };
   apply(read());
+
+  // Fail open if later module/bootstrap work fails before the normal finish call.
+  window.setTimeout(finish, 1800);
 })();

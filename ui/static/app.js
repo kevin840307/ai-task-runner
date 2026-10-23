@@ -2547,7 +2547,7 @@ window.addEventListener("resize", () => {
 }); Promise.allSettled([loadGlobalSettings(), refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
   await restoreWorkflowStudioNavigation();
   await restoreActiveWorkflowGenerator();
-}); refreshPromptTags(); startNonOverlappingPoll(() => state.view === "tasks-runtime" ? refreshRuntime() : Promise.resolve(), 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
+}).finally(() => window.UiBootstrap?.finish?.()); refreshPromptTags(); startNonOverlappingPoll(() => state.view === "tasks-runtime" ? refreshRuntime() : Promise.resolve(), 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   const work = [refreshProjectStatuses()];
