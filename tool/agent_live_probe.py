@@ -121,7 +121,11 @@ def _evidence_payload(
         "schema_version": 1,
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_head": _source_head(),
-        "project_root": str(Path(project).resolve()),
+        "project_root": (
+            "."
+            if Path(project).resolve() == ROOT
+            else str(Path(project).resolve())
+        ),
         "requested_backends": list(requested),
         "diagnostic": {
             "discovery_only": bool(discovery_only),
@@ -522,21 +526,32 @@ def _run_native_ask_roundtrip(
             "continued": True,
         }
     finally:
+        primary_error = sys.exc_info()[0] is not None
+        cleanup_errors: list[str] = []
         if thread.is_alive():
             try:
                 service.cancel_turn(project, chat, session_id=session_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                cleanup_errors.append(f"cancel failed: {exc}")
             thread.join(timeout=5)
+            if thread.is_alive():
+                cleanup_errors.append("Agent turn remained alive after cancel")
         try:
             chat.delete_session(project, session_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            cleanup_errors.append(f"Chat session cleanup failed: {exc}")
         if original_active:
             try:
-                chat.select_session(project, original_active)
-            except Exception:
-                pass
+                restored = chat.select_session(project, original_active)
+                if str(restored.get("active_session_id") or "") != original_active:
+                    cleanup_errors.append("original active Chat session was not restored")
+            except Exception as exc:
+                cleanup_errors.append(f"active Chat restoration failed: {exc}")
+        if cleanup_errors and not primary_error:
+            raise RuntimeError(
+                f"{backend}: live Native Ask cleanup failed: "
+                + "; ".join(cleanup_errors)
+            )
 
 
 def probe_backend(
@@ -622,7 +637,10 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument(
         "--discovery-only",
         action="store_true",
-        help="Skip the real model Chat ping; catalog discovery still uses the installed CLI.",
+        help=(
+            "Skip the real model Chat ping and Native Ask roundtrip; catalog "
+            "discovery still uses the installed CLI."
+        ),
     )
     value.add_argument(
         "--allow-missing",
