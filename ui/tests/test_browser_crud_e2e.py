@@ -3405,7 +3405,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#taskWorkspaceClose")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
-            page.locator("#tasksListRows .tasks-list-row").click()
+            page.locator("#tasksListRows .tasks-list-data").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             page.click("#taskWorkspaceDeleteTask")
