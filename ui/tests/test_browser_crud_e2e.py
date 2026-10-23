@@ -3475,7 +3475,12 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             for leave_kind in ("back", "x", "prompts"):
                 page.get_by_role("button", name="Edit Draft").click()
                 page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-                assert page.locator(".task-workspace-list-row").first.get_by_text("Edited multi draft").is_visible()
+                first_row = page.locator(".task-workspace-list-row").first
+                first_row.locator(".task-workspace-row-edit").click()
+                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+                assert page.locator("#taskWorkspacePrompt").input_value() == "Edited multi draft"
+                page.click("#taskWorkspaceHeaderBack")
+                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
                 if leave_kind == "back":
                     page.click("#taskWorkspaceFooterBack")
                 elif leave_kind == "x":
