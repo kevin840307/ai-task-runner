@@ -1306,7 +1306,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const projectHelp = document.createElement("small");
     projectHelp.className = "task-workspace-field-help";
     projectHelp.textContent = projectEditable
-      ? "Current Project is used by default · choose another Project or type a local path."
+      ? "Current Project is used by default · type a local path to override."
       : "Project is fixed for an existing durable Task.";
     projectField.append(projectLabel, projectCombo, projectHelp);
     appendFieldError(projectField, project, "project");
@@ -1498,7 +1498,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const source = sourceState(item);
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
-      tr("task.prompt_source_help", "What should this task do?"),
+      "Choose how this task gets its prompt",
       "prompt",
       [["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
       source.promptMode,
@@ -1515,6 +1515,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const prompt = document.createElement("textarea");
       prompt.id = "taskWorkspacePrompt";
       prompt.rows = 10;
+      prompt.placeholder = "Describe what this task should do…";
       prompt.value = String(item.prompt || source.promptText || "");
       prompt.addEventListener("input", () => {
         source.promptText = prompt.value;
@@ -1527,7 +1528,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.id = "taskWorkspaceGoalFile";
       input.value = String(item.goal_file || source.promptFile || "");
       input.maxLength = 4096;
-      input.placeholder = tr("task.goal_file_placeholder", "Enter Task Prompt file path");
+      input.placeholder = "Or type an existing prompt file path";
       input.addEventListener("input", () => {
         const previous = String(item.goal_file || "");
         if (previous !== input.value) queueUploadCancel(previous);
@@ -1607,8 +1608,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       required.className = "task-workspace-cap-chip task-workspace-required-chip";
       required.textContent = "Required";
       validatorCard.card.querySelector(".task-workspace-source-head")?.appendChild(required);
-      const control = pathControl("taskWorkspaceValidator", "validator", item.validator, tr("task.validator_placeholder", "Enter validator path"));
+      const control = pathControl("taskWorkspaceValidator", "validator", item.validator, "Or type an existing validator path");
       validatorCard.body.appendChild(control.row);
+      const validatorNote = document.createElement("p");
+      validatorNote.className = "task-workspace-source-note";
+      validatorNote.textContent = "Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.";
+      validatorCard.body.appendChild(validatorNote);
       appendFieldError(validatorCard.card, control.input, "validator");
       validationGrid.appendChild(validatorCard.card);
     }
@@ -1616,7 +1621,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (capability?.has_ai_validator) {
       const aiCard = sourceCard(
         tr("task.ai_validation_title", "AI Validation"),
-        tr("task.ai_validation_help", "Use workflow default unless you really need an override"),
+        source.aiMode === "default" ? "Workflow default" : "Custom prompt source",
         "ai",
         [["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
         source.aiMode,
@@ -1643,6 +1648,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const textarea = document.createElement("textarea");
         textarea.id = "taskWorkspaceAiValidatorPromptText";
         textarea.rows = 6;
+        textarea.placeholder = "Only add instructions that differ from the workflow default";
         textarea.value = String(item.ai_validator_prompt || source.aiText || "");
         textarea.addEventListener("input", () => {
           source.aiText = textarea.value;
@@ -1655,7 +1661,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           "taskWorkspaceAiValidatorPrompt",
           "ai_validator_prompt_file",
           item.ai_validator_prompt_file || source.aiFile,
-          tr("task.ai_file_placeholder", "Enter AI Validator Prompt file path"),
+          "Or type an existing AI prompt file path",
         );
         control.input.addEventListener("input", () => { source.aiFile = control.input.value; });
         aiCard.body.appendChild(control.row);

@@ -57,6 +57,9 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("projectEditable = state.kind === \"draft\"", production)
         self.assertIn("project-combobox", feature_template)
         self.assertIn("project-dropdown", feature_template)
+        self.assertIn("Choose how this task gets its prompt", production)
+        self.assertIn('source.aiMode === "default" ? "Workflow default" : "Custom prompt source"', production)
+        self.assertIn("Manual path is used as-is. Upload fills this field with the managed target path immediately", production)
 
     def test_task_list_workspace_tracks_feature_prototype(self):
         feature_css = (self.root.parent / "feature" / "ui-prototype" / "styles.css").read_text(encoding="utf-8")
