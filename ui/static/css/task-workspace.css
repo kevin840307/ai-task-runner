@@ -131,6 +131,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 /* Feature Task Drawer shell parity; narrow-view full-width behavior remains responsive. */
 .task-workspace-overlay{
+  overflow:hidden;
   background:rgba(14,23,38,.28);
   backdrop-filter:blur(2px)
 }
