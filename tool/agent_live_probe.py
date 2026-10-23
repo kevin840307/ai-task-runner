@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -43,6 +44,89 @@ _PING_PROMPT = (
     f"Reply with exactly {PING_MARKER} and nothing else. "
     "Do not use tools, do not inspect files, and do not modify the project."
 )
+
+
+def _source_head() -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return completed.stdout.strip() if completed.returncode == 0 else ""
+
+
+def _evidence_payload(
+    project: Path,
+    requested: list[str],
+    results: list[dict[str, Any]],
+    *,
+    ok: bool,
+    discovery_only: bool,
+    allow_missing: bool,
+    allow_no_ask: bool,
+) -> dict[str, Any]:
+    sanitized = json.loads(json.dumps(results, ensure_ascii=False))
+    for result in sanitized:
+        if not isinstance(result, dict):
+            continue
+        chat = result.get("chat_ping")
+        if not isinstance(chat, dict):
+            continue
+        session_id = str(chat.pop("session_id", "") or "").strip()
+        chat["session_id_present"] = bool(session_id)
+
+    diagnostic = bool(discovery_only or allow_missing or allow_no_ask)
+    by_backend = {
+        str(item.get("backend") or ""): item
+        for item in sanitized
+        if isinstance(item, dict)
+    }
+    required = set(DEFAULT_BACKENDS)
+    formal_gate = bool(
+        ok
+        and not diagnostic
+        and required.issubset(set(requested))
+        and all(
+            isinstance(by_backend.get(backend), dict)
+            and by_backend[backend].get("status") == "pass"
+            and isinstance(by_backend[backend].get("chat_ping"), dict)
+            and by_backend[backend]["chat_ping"].get("ok") is True
+            for backend in required
+        )
+    )
+    return {
+        "schema_version": 1,
+        "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source_head": _source_head(),
+        "project_root": str(Path(project).resolve()),
+        "requested_backends": list(requested),
+        "diagnostic": {
+            "discovery_only": bool(discovery_only),
+            "allow_missing": bool(allow_missing),
+            "allow_no_ask": bool(allow_no_ask),
+        },
+        "ok": bool(ok),
+        "formal_gate": formal_gate,
+        "results": sanitized,
+    }
+
+
+def _write_evidence(path: str, payload: dict[str, Any]) -> Path:
+    target = Path(path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(target)
+    return target
 
 
 def _parse_model_overrides(values: list[str]) -> dict[str, str]:
@@ -357,6 +441,14 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Diagnostic mode only: do not fail when native Ask is unavailable.",
     )
+    value.add_argument(
+        "--output",
+        default="",
+        help=(
+            "Optional JSON evidence path. The saved payload records source HEAD and "
+            "formal-gate status while redacting native session identity."
+        ),
+    )
     return value
 
 
@@ -424,15 +516,37 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         return 1
 
-    print(json.dumps(
-        {
-            "ok": not failed,
-            "project_root": str(project),
-            "results": results,
-        },
-        ensure_ascii=False,
-        indent=2,
-    ))
+    output = {
+        "ok": not failed,
+        "project_root": str(project),
+        "results": results,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    if args.output:
+        try:
+            evidence = _evidence_payload(
+                project,
+                requested,
+                results,
+                ok=not failed,
+                discovery_only=args.discovery_only,
+                allow_missing=args.allow_missing,
+                allow_no_ask=args.allow_no_ask,
+            )
+            saved = _write_evidence(args.output, evidence)
+            print(json.dumps(
+                {
+                    "evidence": str(saved),
+                    "formal_gate": evidence["formal_gate"],
+                },
+                ensure_ascii=False,
+            ))
+        except OSError as exc:
+            print(json.dumps(
+                {"ok": False, "error": f"failed to save live evidence: {exc}"},
+                ensure_ascii=False,
+            ))
+            return 1
     return 1 if failed else 0
 
 
