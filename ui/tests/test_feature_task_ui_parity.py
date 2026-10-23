@@ -462,6 +462,18 @@ def test_task_workspace_dynamic_copy_is_language_owned() -> None:
     assert 'workspaceRecommended.textContent = "Auto recommended"' not in PRODUCTION_JS
     assert 'prompt.placeholder = "Describe what this task should do…"' not in PRODUCTION_JS
 
+
+
+def test_every_task_list_to_editor_path_preserves_list_return_route() -> None:
+    edit_item = PRODUCTION_JS[PRODUCTION_JS.find("function editItem"):PRODUCTION_JS.find("function taskMutationBlockedReason")]
+    assert 'state.editorReturn = "list";' in edit_item
+
+    mapping = PRODUCTION_JS[PRODUCTION_JS.find("function mapFieldError"):PRODUCTION_JS.find("function syncSingleEditorTitle")]
+    assert 'state.editorReturn = "list";' in mapping
+
+    validation = PRODUCTION_JS[PRODUCTION_JS.find("function validateSelectedSourceModes"):PRODUCTION_JS.find("async function saveWorkspace")]
+    assert 'state.editorReturn = "list";' in validation
+
 def test_task_workspace_shell_and_header_actions_match_feature_reference() -> None:
     _same(
         ".drawer-back",

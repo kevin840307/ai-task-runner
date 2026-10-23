@@ -541,7 +541,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (field !== "draftTitle") {
       state.index = index;
       if (state.route === "list") {
-        if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        if (isDraftState()) {
+          state.draftEditorOriginal = draftSignature(state.draft);
+          state.editorReturn = "list";
+        }
         state.editorMode = "edit";
         state.route = "editor";
       }
@@ -792,6 +795,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     state.draftEditorOriginal = draftSignature(state.draft);
+    state.editorReturn = "list";
     state.editorMode = "edit";
     state.route = "editor";
     state.index = index;
@@ -3026,7 +3030,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.error = message;
       state.fieldErrors = { [fieldErrorKey(field, index)]: message };
       if (state.route === "list") {
-        if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        if (isDraftState()) {
+          state.draftEditorOriginal = draftSignature(state.draft);
+          state.editorReturn = "list";
+        }
         state.editorMode = "edit";
         state.route = "editor";
       }
@@ -3235,6 +3242,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       onSave,
       route: value.items.length > 1 ? "list" : "editor",
       editorMode: value.items.length > 1 ? "" : "edit",
+      editorReturn: value.items.length > 1 ? "list" : "close",
       index: 0,
       error: "",
       fieldErrors: {},
