@@ -13,6 +13,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let restoreFocus = null;
   let createMenu = null;
   let createContext = null;
+  let createMenuOpenedAt = -Infinity;
   let workspaceCloseTimer = 0;
   let workspaceOptionsToken = 0;
   let taskProjectionToken = 0;
@@ -182,6 +183,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function closeCreateMenu() {
     if (createMenu) createMenu.hidden = true;
     createContext = null;
+    createMenuOpenedAt = -Infinity;
   }
 
   function ensureCreateMenu() {
@@ -235,7 +237,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
     }, true);
     window.addEventListener("resize", closeCreateMenu);
-    window.addEventListener("scroll", closeCreateMenu, true);
+    window.addEventListener("scroll", () => {
+      if (!createMenu || createMenu.hidden) return;
+      const now = globalThis.performance?.now?.() ?? Date.now();
+      if (now - createMenuOpenedAt < 80) return;
+      closeCreateMenu();
+    }, true);
     return createMenu;
   }
 
@@ -270,6 +277,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     menu.style.left = left + "px";
     menu.style.top = top + "px";
     menu.style.visibility = "";
+    createMenuOpenedAt = globalThis.performance?.now?.() ?? Date.now();
   }
 
   function isDraftState() { return state?.kind === "draft"; }
