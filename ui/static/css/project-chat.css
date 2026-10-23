@@ -84,44 +84,28 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
   overflow: hidden;
 }
-.project-chat-preference-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  min-width: 0;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-.project-chat-preferences {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 8px 8px 8px 14px;
-  overflow-x: auto;
-}
 .project-chat-settings-button {
-  margin-right: 12px;
-  min-height: 30px;
-  padding: 4px 9px;
-  font-size: 10px;
-}
-.project-chat-pref {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
   flex: 0 0 auto;
-  max-width: 260px;
-  padding: 5px 8px;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
 }
-.project-chat-pref small { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
-.project-chat-pref strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.project-chat-settings-button:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
 #projectChatMessages {
   min-height: 0;
   overflow-y: auto;
