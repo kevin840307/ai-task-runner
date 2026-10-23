@@ -157,17 +157,25 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     return option;
   }
 
-  function fillSelect(select, rows, saved, emptyLabel, mapper = (row) => [row, row]) {
+  function fillSelect(select, rows, saved, emptyLabel, mapper = (row) => [row, row], { includeEmpty = true, preserveSaved = false } = {}) {
     if (!select) return;
     select.innerHTML = "";
-    addOption(select, "", emptyLabel);
+    if (includeEmpty) addOption(select, "", emptyLabel);
     for (const row of rows) {
       const [value, label, disabled] = mapper(row);
       addOption(select, value, label, { disabled });
     }
-    const values = [...select.options].map((option) => option.value);
-    if (saved && !values.includes(saved)) addOption(select, saved, saved + " · unavailable", { disabled: true });
-    select.value = values.includes(saved) || !saved ? saved : saved;
+    let values = [...select.options].map((option) => option.value);
+    if (saved && !values.includes(saved)) {
+      addOption(
+        select,
+        saved,
+        preserveSaved ? String(saved).toUpperCase() : saved + " · unavailable",
+        { disabled: !preserveSaved },
+      );
+      values = [...select.options].map((option) => option.value);
+    }
+    select.value = values.includes(saved) ? saved : (includeEmpty ? "" : (values[0] || ""));
     select.disabled = settingsLoading || !project;
   }
 
@@ -198,8 +206,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       quick,
       modeRows(),
       savedMode,
-      "Mode",
+      "",
       (row) => [row.id, String(row.id || "").toUpperCase(), false],
+      { includeEmpty: false, preserveSaved: true },
     );
     fillSelect(
       reasoning,

@@ -2404,6 +2404,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.error = "";
     state.fieldErrors = {};
     state.draftEditorOriginal = draftSignature(state.draft);
+    state.editorReturn = "list";
     state.editorMode = "create";
     state.route = "editor";
     render();
@@ -2958,9 +2959,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       closeNow();
       return;
     }
-    if (state.route === "editor" && state.draft.items.length > 1) {
+    if (state.route === "editor" && state.editorReturn === "list") {
       state.draftEditorOriginal = "";
       state.route = "list";
+      state.error = "";
       render();
       return;
     }
@@ -3166,6 +3168,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       createOnSave: true,
       creationKind: list ? "list" : "task",
       editorMode: list ? "" : "create",
+      editorReturn: list ? "list" : "close",
       createRequestId: newRequestId("task-create"),
       route: list ? "list" : "editor",
       index: 0,

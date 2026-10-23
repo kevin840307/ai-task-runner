@@ -419,6 +419,19 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     assert 'body.appendChild(workspaceSection)' in PRODUCTION_JS
 
 
+
+
+def test_chat_quick_mode_matches_prototype_single_mode_control() -> None:
+    project_chat = (ROOT / "ui" / "static" / "js" / "project-chat.js").read_text(encoding="utf-8")
+    assert '{ includeEmpty: false, preserveSaved: true }' in project_chat
+    assert 'savedMode,\n      "Mode",' not in project_chat
+
+
+def test_new_task_list_child_back_is_owned_by_parent_route() -> None:
+    assert 'state.editorReturn = "list";' in PRODUCTION_JS
+    assert 'state.route === "editor" && state.editorReturn === "list"' in PRODUCTION_JS
+    assert 'state.draft.items.length > 1' not in PRODUCTION_JS[PRODUCTION_JS.find("async function handleBack"):PRODUCTION_JS.find("function validateSelectedSourceModes")]
+
 def test_task_workspace_shell_and_header_actions_match_feature_reference() -> None:
     _same(
         ".drawer-back",
