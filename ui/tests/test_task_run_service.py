@@ -493,12 +493,6 @@ def test_workspace_options_reuse_canonical_resolver_for_main_busy_matrix(
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
     running = _task(tasks, repo, workspace="main", request_id=f"workspace-options-running-{policy}-{allow_concurrent}")
-    tasks.begin_run(
-        repo,
-        running["task_id"],
-        request_id=f"workspace-options-run-{policy}-{allow_concurrent}",
-        workspace={"effective_mode": "main"},
-    )
     service = _service(
         tasks,
         repo,
@@ -512,6 +506,12 @@ def test_workspace_options_reuse_canonical_resolver_for_main_busy_matrix(
             "allow_concurrent_main_tasks": allow_concurrent,
         },
     )
+    started = service.start(
+        repo,
+        running["task_id"],
+        request_id=f"workspace-options-run-{policy}-{allow_concurrent}",
+    )
+    assert started["run"]["workspace"]["effective_mode"] == "main"
 
     value = service.workspace_options(repo)
     rows = {row["value"]: row for row in value["options"]}
@@ -871,7 +871,7 @@ def test_paused_reset_returns_task_to_new_and_retains_archived_workspace(tmp_pat
     duplicate = service.reset(repo, created["task_id"], request_id="reset-lifecycle-1")
     assert duplicate["status"] == "new"
     assert len(duplicate["history"]) == 1
-    with pytest.raises(ValueError, match="Only New Tasks"):
+    with pytest.raises(ValueError, match="explicitly cleaned up before deletion"):
         tasks.delete(repo, created["task_id"], request_id="delete-retained-reset")
 
 
