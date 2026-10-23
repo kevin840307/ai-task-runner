@@ -1786,7 +1786,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
                 page.click("#newProjectChatButton")
             page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 3")
 
-            # Delete a non-active middle Chat; the other Project must not change.
+            # Select and delete a middle Chat; the other Project must not change.
             middle_id = state.chat_service.sessions(root)["sessions"][1]["session_id"]
             page.select_option("#projectChatSessionSelect", middle_id)
             page.wait_for_function(
@@ -2640,6 +2640,15 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatSessionSelect").is_visible()
             assert page.locator("#renameProjectChatButton").is_visible()
             assert page.locator("#deleteProjectChatButton").is_visible()
+            chat_geometry = page.evaluate(
+                """() => {
+                    const body = document.querySelector('.project-chat-body').getBoundingClientRect();
+                    const conversation = document.querySelector('.project-chat-conversation').getBoundingClientRect();
+                    return {bodyWidth: body.width, conversationWidth: conversation.width, bodyHeight: body.height, conversationHeight: conversation.height};
+                }"""
+            )
+            assert abs(chat_geometry["bodyWidth"] - chat_geometry["conversationWidth"]) <= 1
+            assert abs(chat_geometry["bodyHeight"] - chat_geometry["conversationHeight"]) <= 1
             page.click("#projectChatSettingsButton")
             page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             assert page.locator("#projectChatSettingsPopover").is_visible()
