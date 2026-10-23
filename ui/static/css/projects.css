@@ -600,7 +600,7 @@ body.projects-collapsed .project-item::before {
 /* Sidebar consistency + scroll polish */
 .projects {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
   scrollbar-gutter: stable;
@@ -742,37 +742,18 @@ body.projects-collapsed .project-list {
 .project-nav-link strong { font-size: 12.5px; }
 .project-nav-link.active .nav-icon { background: var(--accent); color: var(--on-accent, #fff); }
 
-/* Project add belongs to the Projects section header, not a standalone CTA. */
+/* Keep the Project section label static; New Project is a fixed action above the scrollable list. */
 .project-section-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   min-height: 30px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
 }
-.project-add-button {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--accent);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-}
-.project-add-button:hover,
-.project-add-button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-}
-body.projects-collapsed .project-section-label > span { display: none; }
-body.projects-collapsed .project-section-label { justify-content: center; margin-inline: 0; }
-body.projects-collapsed .project-add-button { width: 34px; height: 34px; border-radius: 10px; }
+body.projects-collapsed .project-section-label { display: none; }
+body.projects-collapsed .new-project-button strong { display: none; }
 
 /* Async project actions: keep the sidebar responsive without a full-page blocker. */
 .project-tree.project-busy .project-root {

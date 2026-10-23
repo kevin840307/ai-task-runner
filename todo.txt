@@ -1978,6 +1978,13 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Added shared zh-TW/en labels for the header controls.
     - Browser regressions use the header selector/actions for multi-session switching, rename/delete, Queue/Ask isolation and Project preference persistence.
 
+[x] Match New Project placement to the latest feature sidebar UX.
+    - Reused the existing #openProject action as one fixed New Project button above the Projects label/list.
+    - Project list remains the only scrollable Project region; Global Settings stays fixed at the sidebar bottom.
+    - Removed the superseded project-add-button mini-plus styling instead of keeping two add affordances.
+    - Reused the existing new-project-button styling/handler and added shared zh-TW/en button text.
+    - Browser regression locks DOM order and scroll ownership.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

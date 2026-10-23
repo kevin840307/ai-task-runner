@@ -2653,6 +2653,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatView").is_visible()
             assert page.locator("#chatView").is_hidden()
             assert page.locator("#workflowView").is_hidden()
+            assert page.locator("#openProject.new-project-button").count() == 1
+            assert page.locator(".project-add-button").count() == 0
+            sidebar_project_geometry = page.evaluate(
+                """() => {
+                    const create = document.querySelector('#openProject').getBoundingClientRect();
+                    const label = document.querySelector('.project-section-label').getBoundingClientRect();
+                    const list = document.querySelector('#projectList').getBoundingClientRect();
+                    const overflow = getComputedStyle(document.querySelector('#projectList')).overflowY;
+                    return {createBottom: create.bottom, labelTop: label.top, labelBottom: label.bottom, listTop: list.top, overflow};
+                }"""
+            )
+            assert sidebar_project_geometry["createBottom"] <= sidebar_project_geometry["labelTop"] + 1
+            assert sidebar_project_geometry["labelBottom"] <= sidebar_project_geometry["listTop"] + 1
+            assert sidebar_project_geometry["overflow"] in {"auto", "scroll"}
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
