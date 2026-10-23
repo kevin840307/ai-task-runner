@@ -1440,7 +1440,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
       const itemCount = Array.isArray(task.items) ? task.items.length : 0;
       appendTaskRuntimeMeta(row, [
-        [tr("task.history_phase", "Phase"), String(run.phase || "—")],
+        [tr("task.history_phase", "Phase"), String(run.phase || "—").replaceAll("_", " ")],
         [tr("task.history_item", "Item"), run.item_index != null ? String(Number(run.item_index) + 1) + " / " + String(itemCount) : "—"],
         [tr("task.history_started", "Started"), formatTaskRuntimeTime(run.started_at)],
         [tr("task.history_updated", "Updated"), formatTaskRuntimeTime(run.updated_at || run.archived_at)],
