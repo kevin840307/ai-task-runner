@@ -1575,13 +1575,21 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     }
   }
 
+  function renderProjectHeader() {
+    const name = byId("projectChatName");
+    const path = byId("projectChatPath");
+    if (name) name.textContent = project?.name || tr("chat.select_project", "Select a project");
+    if (path) {
+      path.textContent = project?.path
+        ? project.path + " · " + tr("chat.project_context", "Project Chat · does not create Runner Task")
+        : tr("chat.open_project_hint", "Open a local project folder to begin.");
+    }
+  }
+
   async function openProject(nextProject, nextPreferences = {}) {
     project = nextProject || null;
     preferences = nextPreferences || {};
-    const name = byId("projectChatName");
-    const path = byId("projectChatPath");
-    if (name) name.textContent = project?.name || "Select a project";
-    if (path) path.textContent = project?.path || "Open a local project folder to begin.";
+    renderProjectHeader();
     clearQueuePoll();
     eventCursor = 0;
     queueItems = [];
@@ -1718,6 +1726,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   });
   byId("projectChatSuggestRetry")?.addEventListener("click", () => void refreshAgentCapabilities({ refresh: true }));
   window.addEventListener("app-language-changed", () => {
+    renderProjectHeader();
     renderPreferences();
     renderSessions();
     renderSuggestions();

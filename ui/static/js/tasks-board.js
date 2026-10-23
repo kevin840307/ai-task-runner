@@ -296,17 +296,32 @@ export function createTasksBoardController({ api, openTask, getProjects, getCurr
       const button = document.createElement("button");
       button.type = "button";
       button.className = "tasks-list-row";
+
       const lifecycle = document.createElement("span");
       lifecycle.className = "tasks-list-status";
       lifecycle.textContent = String(task.status || "new").toUpperCase();
+
       const copy = document.createElement("span");
       copy.className = "tasks-list-copy";
       const title = document.createElement("strong");
       title.textContent = String(task.title || task.task_id || "Task");
       const meta = document.createElement("small");
-      meta.textContent = [String(task._project_name || ""), String(task.task_id || ""), String(task.items?.length || 0) + " item(s)"].filter(Boolean).join(" · ");
+      meta.textContent = [String(task._project_name || ""), String(task.task_id || "")].filter(Boolean).join(" · ");
       copy.append(title, meta);
-      button.append(lifecycle, copy);
+
+      const runtime = document.createElement("span");
+      runtime.className = "tasks-list-runtime " + String(task.status || "new");
+      runtime.textContent = runtimeLabel(task);
+
+      const workflow = document.createElement("span");
+      workflow.className = "tasks-list-workflow";
+      workflow.textContent = String(task.items?.[0]?.workflow || "—");
+
+      const progress = document.createElement("span");
+      progress.className = "tasks-list-progress";
+      progress.textContent = String(task.completed_item_count || 0) + " / " + String(task.items?.length || 0);
+
+      button.append(lifecycle, copy, runtime, workflow, progress);
       button.addEventListener("click", () => openTask?.(task, { returnFocus: button }));
       root.appendChild(button);
     }

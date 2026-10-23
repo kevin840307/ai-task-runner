@@ -510,6 +510,9 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".tasks-board-card-handle" in tasks
     assert ".tasks-board-dropzone.allowed" in tasks
     assert ".tasks-board-dropzone.blocked" in tasks
+    assert "grid-template-columns:auto minmax(0,1fr) minmax(86px,auto) minmax(110px,180px) 54px" in tasks
+    assert "tasks-list-runtime" in (static / "js" / "tasks-board.js").read_text(encoding="utf-8")
+    assert "chat.project_context" in (static / "js" / "i18n.js").read_text(encoding="utf-8")
 
 
 def test_global_settings_sidebar_uses_one_icon_and_plain_copy():

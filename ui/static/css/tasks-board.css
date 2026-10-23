@@ -149,3 +149,22 @@
 .tasks-board-dropzone.over{background:color-mix(in srgb,var(--accent) 6%,transparent);outline:2px dashed color-mix(in srgb,var(--accent) 25%,transparent);outline-offset:-5px;border-radius:10px}
 .tasks-board-dropzone.allowed{background:color-mix(in srgb,var(--accent) 5%,transparent);outline:2px dashed color-mix(in srgb,var(--accent) 24%,transparent);outline-offset:-5px;border-radius:10px}
 .tasks-board-dropzone.blocked{background:color-mix(in srgb,var(--fail) 3%,transparent);outline:2px dashed color-mix(in srgb,var(--fail) 16%,transparent);outline-offset:-5px;border-radius:10px}
+
+
+/* Feature List mode columns: status / title / runtime / workflow / progress. */
+.tasks-list-row{
+  grid-template-columns:auto minmax(0,1fr) minmax(86px,auto) minmax(110px,180px) 54px;
+  min-height:44px;padding:8px 10px
+}
+.tasks-list-runtime,.tasks-list-workflow,.tasks-list-progress{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:9px
+}
+.tasks-list-runtime{font-weight:850;text-transform:capitalize}
+.tasks-list-runtime.ongoing{color:var(--run)}
+.tasks-list-runtime.paused{color:var(--warn)}
+.tasks-list-runtime.closed{color:var(--pass)}
+.tasks-list-progress{text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:760px){
+  .tasks-list-row{grid-template-columns:auto minmax(0,1fr) auto}
+  .tasks-list-workflow,.tasks-list-progress{display:none}
+}
