@@ -2631,6 +2631,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            assert page.locator(".project-chat-preference-bar").count() == 0
+            assert page.locator("#projectChatPreferences").count() == 0
+            assert page.locator(".composer-left > #projectChatSettingsButton").count() == 1
             page.click("#projectChatSettingsButton")
             page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             assert page.locator("#projectChatSettingsPopover").is_visible()
