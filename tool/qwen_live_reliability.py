@@ -75,6 +75,7 @@ PROBE_ORDER = (
     "complete-closed-loop",
     "validator-failure-routing",
     "file-protection",
+    "runner-workspace-delivery",
     "api-502",
     "api-429",
     "api-503",
@@ -5832,6 +5833,122 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
     }
 
 
+
+def runner_workspace_delivery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Cross-run the real Runner inside owned worktrees, then retain/merge delivery."""
+    from workspace import MergeManager, WorkspaceManager
+
+    results: dict[str, object] = {}
+    for requested_mode in ("main", "worktree"):
+        case_name = f"runner-workspace-{requested_mode}-probe"
+        repo = _create_delivery_probe_repo(root, case_name)
+        (repo / "prompt.md").write_text(
+            case_prompt(PROMPT, case_name),
+            encoding="utf-8",
+        )
+        (repo / "validation.py").write_text(VALIDATOR, encoding="utf-8")
+        (repo / ".ai-task-runner.yaml").write_text(POLICY, encoding="utf-8")
+        _delivery_git(
+            repo,
+            "add",
+            "prompt.md",
+            "validation.py",
+            ".ai-task-runner.yaml",
+        )
+        _delivery_git(repo, "commit", "-m", "add Runner reliability fixture")
+
+        manager = WorkspaceManager(
+            worktree_root=root / f"{case_name}-worktrees"
+        )
+        prepared = manager.prepare(
+            repo,
+            task_id=f"live-runner-{requested_mode}",
+            run_number=1,
+            requested_mode=requested_mode,
+            execution_settings={
+                "auto_workspace_policy": "busy-worktree",
+                "allow_concurrent_main_tasks": False,
+            },
+            main_running=False,
+        )
+        if prepared.effective_mode != requested_mode:
+            raise RuntimeError(
+                "Runner/workspace delivery mode mismatch: "
+                f"requested={requested_mode}, effective={prepared.effective_mode}"
+            )
+        if prepared.project_root.resolve() == repo.resolve():
+            raise RuntimeError("Runner/workspace delivery reused the target Project root")
+
+        code = run_command(
+            runner_command(settings, prepared.project_root),
+            console_log(prepared.project_root, "console.jsonl"),
+            settings.run_timeout,
+        )
+        assert_completed(prepared.project_root, code)
+        if (repo / "health.txt").exists():
+            raise RuntimeError(
+                "Runner mutated the target Project before workspace delivery"
+            )
+
+        runtime_dir = prepared.project_root / ".ai-task-runner"
+        snapshot = manager.snapshot_result(
+            prepared,
+            excluded_paths=(runtime_dir,),
+        )
+        if snapshot.no_changes or not snapshot.task_snapshot_sha:
+            raise RuntimeError(
+                "Runner/workspace delivery produced no durable Task snapshot"
+            )
+
+        result: dict[str, object] = {
+            "effective_mode": prepared.effective_mode,
+            "snapshot_sha": snapshot.task_snapshot_sha,
+        }
+        if requested_mode == "main":
+            merged = MergeManager().merge(prepared, snapshot)
+            if merged.status != "merged":
+                raise RuntimeError(
+                    "Runner/workspace Main delivery failed: "
+                    f"{merged.status} {merged.detail}"
+                )
+            target = repo / "health.txt"
+            if (
+                not target.is_file()
+                or target.read_text(encoding="utf-8") != EXPECTED
+            ):
+                raise RuntimeError(
+                    "Runner/workspace Main delivery did not publish the validated result"
+                )
+            result["delivery"] = merged.status
+        else:
+            if (repo / "health.txt").exists():
+                raise RuntimeError(
+                    "Worktree-only Runner delivery leaked into the target Project"
+                )
+            retained = prepared.project_root / "health.txt"
+            if (
+                not retained.is_file()
+                or retained.read_text(encoding="utf-8") != EXPECTED
+            ):
+                raise RuntimeError(
+                    "Worktree-only Runner delivery lost the validated result"
+                )
+            result["delivery"] = "worktree_ready"
+
+        cleanup = manager.cleanup(prepared)
+        if cleanup.status not in {"cleaned", "already_cleaned"}:
+            raise RuntimeError(
+                f"Runner/workspace delivery cleanup failed: {cleanup.status}"
+            )
+        result["cleanup"] = cleanup.status
+        results[requested_mode] = result
+
+    return results
+
+
 def main() -> int:
     args = arguments()
     if args.list_probes:
@@ -5918,6 +6035,7 @@ def main() -> int:
     workspace_policy_matrix: dict[str, int] = {}
     worktree_isolation: dict[str, object] = {}
     merge_cross_matrix: dict[str, object] = {}
+    runner_workspace_delivery: dict[str, object] = {}
     transient_observed = False
     soak_result = SoakResult()
     example_results: list[tuple[ExampleSmokeCase, Path]] = []
@@ -6054,6 +6172,15 @@ def main() -> int:
         if probe_enabled("file-protection", start_probe):
             file_protection_probe(settings, run_root)
             print_probe_pass("file-protection", "protected-file policy probe")
+        if probe_enabled("runner-workspace-delivery", start_probe):
+            runner_workspace_delivery = runner_workspace_delivery_probe(
+                settings,
+                run_root,
+            )
+            print_probe_pass(
+                "runner-workspace-delivery",
+                "real Runner × owned Worktree × retain/Main merge cross probe",
+            )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
             print_probe_pass("api-502", "HTTP 502 transient API/bounded-session recovery probe")
@@ -6217,6 +6344,7 @@ def main() -> int:
         "custom_dynamic_producer_probe": probe_enabled("custom-dynamic-producer", start_probe),
         "review_failure_routing_probe": probe_enabled("review-failure-routing", start_probe),
         "validator_failure_routing_probe": probe_enabled("validator-failure-routing", start_probe),
+        "runner_workspace_delivery_probe": runner_workspace_delivery,
         "yaml_list_resume_probe": probe_enabled("yaml-list-resume", start_probe),
         "yaml_list_item_runtime_options_probe": probe_enabled("yaml-list-resume", start_probe),
         "yaml_list_final_ai_quorum_probe": probe_enabled("yaml-list-resume", start_probe),
