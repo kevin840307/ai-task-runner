@@ -1,6 +1,6 @@
 .task-workspace-overlay{position:fixed;inset:0;z-index:520;display:flex;justify-content:flex-end;background:rgba(15,23,42,.34);backdrop-filter:blur(3px)}
 .task-workspace-overlay[hidden]{display:none!important}
-.task-workspace-shell{width:clamp(520px,48vw,760px);height:100%;min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border-left:1px solid var(--line);background:var(--panel);color:var(--text);box-shadow:-18px 0 50px rgba(15,23,42,.16);transition:width 160ms ease}
+.task-workspace-shell{width:clamp(520px,48vw,760px);height:100%;min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border-left:1px solid var(--line);background:var(--panel);color:var(--text);box-shadow:-18px 0 50px rgba(15,23,42,.16)}
 .task-workspace-shell.expanded{width:min(92vw,1180px)}
 .task-workspace-head{min-height:66px;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
 .task-workspace-back,.task-workspace-expand,.task-workspace-close{width:34px;height:34px;padding:0;display:inline-grid;place-items:center;border-radius:999px;background:var(--panel-2);color:var(--text)}
