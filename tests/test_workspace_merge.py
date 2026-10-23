@@ -170,6 +170,42 @@ def test_validation_exception_is_technical_error_and_does_not_count_merge_failur
     assert _git(repo, "status", "--porcelain") == ""
 
 
+def test_validation_index_mutation_fails_closed_and_aborts_owned_merge(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    _, prepared, snapshot = _snapshot_with_file(repo)
+    (repo / "target.txt").write_text("advanced target\n", encoding="utf-8")
+    _git(repo, "add", "target.txt")
+    _git(repo, "commit", "-m", "advance target before validation")
+    before = _git(repo, "rev-parse", "HEAD")
+
+    def mutate_index(project: Path) -> str:
+        task_file = Path(project) / "task.txt"
+        task_file.write_text("tampered during validation\n", encoding="utf-8")
+        _git(Path(project), "add", "task.txt")
+        return "PASS"
+
+    result = MergeManager().merge(prepared, snapshot, validate=mutate_index)
+
+    assert result.status == "technical_error"
+    assert result.verdict == "TECHNICAL_ERROR"
+    assert result.real_merge_failure is False
+    assert result.validation_required is True
+    assert "transaction ownership changed" in result.detail
+    assert _git(repo, "rev-parse", "HEAD") == before
+    assert (repo / "target.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert not (repo / "task.txt").exists()
+    assert _git(repo, "status", "--porcelain") == ""
+    merge_head = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
+    assert merge_head.returncode != 0
+
+
 def test_real_git_conflict_aborts_and_reports_conflicting_files(tmp_path: Path):
     repo = _repo(tmp_path)
     manager, prepared = _task(repo)
@@ -187,6 +223,39 @@ def test_real_git_conflict_aborts_and_reports_conflicting_files(tmp_path: Path):
     assert result.conflict_files == ("app.txt",)
     assert _git(repo, "rev-parse", "HEAD") == before
     assert (repo / "app.txt").read_text(encoding="utf-8") == "target side\n"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_same_base_tasks_first_merge_makes_second_conflict_against_latest_target(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    manager_a, prepared_a = _task(repo, "a")
+    manager_b, prepared_b = _task(repo, "b")
+    assert prepared_a.task_base_sha == prepared_b.task_base_sha
+
+    (prepared_a.worktree_path / "app.txt").write_text("task a\n", encoding="utf-8")
+    snapshot_a = manager_a.snapshot_result(prepared_a)
+    (prepared_b.worktree_path / "app.txt").write_text("task b\n", encoding="utf-8")
+    snapshot_b = manager_b.snapshot_result(prepared_b)
+
+    merged_a = MergeManager().merge(prepared_a, snapshot_a)
+    assert merged_a.status == "merged"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "task a\n"
+    merged_a_head = _git(repo, "rev-parse", "HEAD")
+    assert merged_a.merged_target_head_sha == merged_a_head
+
+    conflicted_b = MergeManager().merge(
+        prepared_b,
+        snapshot_b,
+        validate=lambda _project: "PASS",
+    )
+
+    assert conflicted_b.status == "conflict"
+    assert conflicted_b.real_merge_failure is True
+    assert conflicted_b.target_head_sha == merged_a_head
+    assert conflicted_b.conflict_files == ("app.txt",)
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "task a\n"
     assert _git(repo, "status", "--porcelain") == ""
 
 

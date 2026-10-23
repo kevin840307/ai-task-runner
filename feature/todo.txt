@@ -665,7 +665,8 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 [x] Mock 測試：Queue 多筆、新增、Edit Save / Cancel、Delete、空白輸入、切換 Chat session。
     - `test_browser_workflow_settings_manager_and_prompt_crud` 的 deterministic Browser bridge 實際排入 3 筆 Queue，驗證 FIFO、Edit Save、Edit Cancel、空白 Save error、Delete、Stop 保留 queued item，以及切換新/舊 Chat session 後 Queue scope；2026-10-21 Browser lane PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
-[ ] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
+[x] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
+    - HEAD 63c28bb 的 CI run 39884715632 已實跑 Windows/Linux full pytest、Browser E2E 與 Studio build，全數 PASS；後續 merge-safety tests 仍需以 final HEAD CI 再 gate。
 [x] Deterministic reliability 測試：Backend 503、timeout、斷線、Agent process exit、重啟、取消、重送、session 過期。
     - `tests/test_backends.py` 覆蓋 HTTP 503 transient classifier、backend timeout/process cleanup、non-zero Agent exit diagnostics；`ui/tests/test_ui.py` 覆蓋 BrokenPipe/ConnectionReset；`ui/tests/test_chat_service.py` 覆蓋 Queue/Ask restart、turn/Ask cancel、request-id 重送冪等、expired Agent session compare-and-clear/fresh-session recovery。這只代表 deterministic regression，不代表真 CLI live 或 24H soak。
 [x] 測試 Draft Create 的 idempotency：雙擊 Create 或重試 API 不得建立兩筆 Task。
@@ -679,12 +680,12 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
 17. 建議實作順序
 -----------------
 
-[ ] 第 1 階段：穩定 Prototype UI，修正 Global Settings、Project-level Chat settings、@goal、overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
-[ ] 第 2 階段：確立共用 Chat API / schema / streaming events 與 AgentAdapter 介面。
-[ ] 第 3 階段：實作 Qwen Code / OpenCode 的 capability、Model、Mode、Slash、Ask 與 Queue adapter。
-[ ] 第 4 階段：實作固定 Prompt 的 generate-task service、TaskDraft schema、驗證與 idempotent Create。
-[ ] 第 5 階段：把 UI Mock 換成 API projection，但保留 deterministic Mock / fixture。
-[ ] 第 6 階段：完成 Worktree resolver、Workspace Results、Merge preflight、Merge 與 Merge Chat handoff。
+[x] 第 1 階段：穩定 Prototype UI，修正 Global Settings、Project-level Chat settings、@goal、overlay、Back、Queue、Ask、指令提示與 Draft 生命週期。
+[x] 第 2 階段：確立共用 Chat API / schema / streaming events 與 AgentAdapter 介面。
+[x] 第 3 階段：實作 Qwen Code / OpenCode 的 capability、Model、Mode、Slash、Ask 與 Queue adapter。
+[x] 第 4 階段：實作固定 Prompt 的 generate-task service、TaskDraft schema、驗證與 idempotent Create。
+[x] 第 5 階段：把 UI Mock 換成 API projection，但保留 deterministic Mock / fixture。
+[x] 第 6 階段：完成 Worktree resolver、Workspace Results、Merge preflight、Merge 與 Merge Chat handoff。
 [ ] 第 7 階段：補齊 unit / API / Browser / Agent live regression 與故障恢復測試。
 [ ] 第 8 階段：完成長時間 soak；修復所有發現的 race、orphan process、重複建立與恢復問題。
 [ ] Prototype 打樣期間只改 feature/；每階段完成後更新 feature/todo.txt 與 feature/future.txt。進入正式實作時再同步根目錄 future.txt、AGENTS / DevFollow、正式文件與測試。

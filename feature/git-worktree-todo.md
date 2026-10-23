@@ -1150,59 +1150,59 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ## 22. Implementation TODO
 
-### Phase A — settings / contracts
+> Verified against production ownership and deterministic regressions on 2026-10-23. Workspace mechanics remain in top-level `workspace/`; Runner stays workspace-independent. The regression matrix includes snapshot/no_changes, target safety, FIFO/restart/concurrency, real conflicts, recovery/fallback, transaction ownership, explicit cleanup/publish, and service-level Task lifecycle. Agent live capability and 24H soak remain tracked separately in `feature/todo.txt` and are not implied by these checks.\n\n### Phase A — settings / contracts
 
-- [ ] Create independent top-level `workspace/` backend package; do not place worktree/merge implementation under Runner or UI.
-- [ ] Enforce dependency direction: UI → Task Backend/Orchestrator → workspace + Runner; workspace and Runner do not import each other's internals.
-- [ ] Preserve Auto / Main / Isolated Worktree.
-- [ ] Global Settings owns `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
-- [ ] Task persists only actual `merge_failure_count`; Global Settings owns the merge failure limit.
-- [ ] Capture target branch + HEAD per Task run.
-- [ ] Keep Runner architecture unchanged.
+- [x] Create independent top-level `workspace/` backend package; do not place worktree/merge implementation under Runner or UI.
+- [x] Enforce dependency direction: UI → Task Backend/Orchestrator → workspace + Runner; workspace and Runner do not import each other's internals.
+- [x] Preserve Auto / Main / Isolated Worktree.
+- [x] Global Settings owns `merge_failure_limit` (default 3) and `allow_concurrent_main_tasks` (default false).
+- [x] Task persists only actual `merge_failure_count`; Global Settings owns the merge failure limit.
+- [x] Capture target branch + HEAD per Task run.
+- [x] Keep Runner architecture unchanged.
 
 ### Phase B — workspace/ Manager
 
-- [ ] Keep all Git worktree/branch creation/removal in top-level workspace package.
-- [ ] Create Task branch/worktree directly from captured target HEAD.
-- [ ] Pass Task worktree to Runner as project_root in the current UI/Task flow; standalone/CLI Runner remains caller-project_root driven and workspace-independent.
-- [ ] Support unique Task + Run identity.
-- [ ] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch, expected source-base ancestry and absence of active Git operation; fail closed on mismatch.
-- [ ] Create recovery worktree only after a merge failure that needs source integration repair.
+- [x] Keep all Git worktree/branch creation/removal in top-level workspace package.
+- [x] Create Task branch/worktree directly from captured target HEAD.
+- [x] Pass Task worktree to Runner as project_root in the current UI/Task flow; standalone/CLI Runner remains caller-project_root driven and workspace-independent.
+- [x] Support unique Task + Run identity.
+- [x] Before snapshot/destructive operations, verify worktree registration, repository identity, expected Task branch, expected source-base ancestry and absence of active Git operation; fail closed on mismatch.
+- [x] Create recovery worktree only after a merge failure that needs source integration repair.
 - [x] Ownership-safe cleanup.
 
 ### Phase C — Runner Complete snapshot
 
-- [ ] `git add -A` + commit remaining Task changes.
-- [ ] Preserve Agent-created commits.
-- [ ] Record task_snapshot_sha.
-- [ ] Handle no_changes without empty commits; Main no_changes is the only normal completion path that skips Project merge.
+- [x] `git add -A` + commit remaining Task changes.
+- [x] Preserve Agent-created commits.
+- [x] Record task_snapshot_sha.
+- [x] Handle no_changes without empty commits; Main no_changes is the only normal completion path that skips Project merge.
 
 ### Phase D — workspace/ direct merge
 
-- [ ] Keep direct merge implementation inside top-level workspace package, not Runner/UI.
-- [ ] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order; queue head retains its turn during Runner recovery while short Git locks are released.
-- [ ] Resolve safe worktree for captured target branch.
-- [ ] Before merge, require merge_source_base_sha to remain an ancestor of current target HEAD; otherwise waiting_target_history / Needs Attention without incrementing merge_failure_count.
-- [ ] If merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
-- [ ] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
-- [ ] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
-- [ ] Reuse an existing public validation entry point or add only a thin Git-unaware, source-non-mutating `validate(project_root, validation_config)` API; no worktree/branch/merge args.
-- [ ] Run required post-merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
-- [ ] Before merge commit, verify target HEAD is still the pre-merge HEAD, MERGE_HEAD matches merge_source_sha, and target worktree/index still belongs to this transaction; fail closed/abort on mismatch.
-- [ ] Commit merge only after acceptance and transaction ownership check, then record merged_target_head_sha.
-- [ ] Merge success is the effective Main completion boundary.
+- [x] Keep direct merge implementation inside top-level workspace package, not Runner/UI.
+- [x] Serialize merge per repository + target branch with durable FIFO `merge_queue_seq`; restart preserves order; queue head retains its turn during Runner recovery while short Git locks are released.
+- [x] Resolve safe worktree for captured target branch.
+- [x] Before merge, require merge_source_base_sha to remain an ancestor of current target HEAD; otherwise waiting_target_history / Needs Attention without incrementing merge_failure_count.
+- [x] If merge_source_sha is already target-branch ancestry, finalize merged idempotently without another commit.
+- [x] Otherwise use `git merge --no-ff --no-commit <merge_source_branch>` directly in target worktree.
+- [x] Persist `merge_source_base_sha`; require post-merge validation only when current target HEAD differs from the base the current merge source was built/validated against.
+- [x] Reuse an existing public validation entry point or add only a thin Git-unaware, source-non-mutating `validate(project_root, validation_config)` API; no worktree/branch/merge args.
+- [x] Run required post-merge validation before commit with PASS / SOURCE_FAIL / TECHNICAL_ERROR semantics; only SOURCE_FAIL counts as a real merge failure.
+- [x] Before merge commit, verify target HEAD is still the pre-merge HEAD, MERGE_HEAD matches merge_source_sha, and target worktree/index still belongs to this transaction; fail closed/abort on mismatch.
+- [x] Commit merge only after acceptance and transaction ownership check, then record merged_target_head_sha.
+- [x] Merge success is the effective Main completion boundary.
 
 ### Phase E — fail merge / recovery
 
-- [ ] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
-- [ ] Read current Global `merge_failure_limit` after each real failure.
-- [ ] If count <= limit: prepare latest-target-based recovery worktree, hand the committed Task result + three-way conflict context to existing Runner for **incremental merge-repair, never full Task redo**, review/validate integrated result, commit recovery source, atomically replace merge_source_branch/SHA/base_SHA/worktree, then retry merge.
-- [ ] If count > limit: stop automatic Main merge, retain latest merge source, and close as Isolated Worktree / worktree_ready with reason merge_failure_limit_exceeded.
-- [ ] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
+- [x] On real merge fail: abort merge, increment `merge_failure_count` exactly once, record structured failure.
+- [x] Read current Global `merge_failure_limit` after each real failure.
+- [x] If count <= limit: prepare latest-target-based recovery worktree, hand the committed Task result + three-way conflict context to existing Runner for **incremental merge-repair, never full Task redo**, review/validate integrated result, commit recovery source, atomically replace merge_source_branch/SHA/base_SHA/worktree, then retry merge.
+- [x] If count > limit: stop automatic Main merge, retain latest merge source, and close as Isolated Worktree / worktree_ready with reason merge_failure_limit_exceeded.
+- [x] Do not count queue wait, target dirty/unavailable, lock contention, transient Git error, or Runner failure before merge.
 
-- [ ] Merge-repair handoff includes original base, committed Task snapshot/diff, latest target HEAD, current merge source, conflict details, and relevant development rules; original Task prompt is intent context only.
-- [ ] Repair incrementally within the latest-target-based recovery worktree: preserve completed Task changes and current Project changes, resolve only integration differences; no full clone/pull/redevelopment or overwrite of the target tree.
-- [ ] Existing Runner reviews/validates the integrated result; resume repairs without discarding prior recovery progress. Publish the replacement merge-source pointer only after a durable recovery commit.
+- [x] Merge-repair handoff includes original base, committed Task snapshot/diff, latest target HEAD, current merge source, conflict details, and relevant development rules; original Task prompt is intent context only.
+- [x] Repair incrementally within the latest-target-based recovery worktree: preserve completed Task changes and current Project changes, resolve only integration differences; no full clone/pull/redevelopment or overwrite of the target tree.
+- [x] Existing Runner reviews/validates the integrated result; resume repairs without discarding prior recovery progress. Publish the replacement merge-source pointer only after a durable recovery commit.
 - [x] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
   - [x] Both-side same-file conflict + incremental integration is covered by test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source.
   - [x] SOURCE_FAIL validation is covered by test_merge_validation_source_fail_counts_once_and_starts_recovery.
@@ -1229,41 +1229,41 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Isolation / concurrency
 
-- [ ] Verify current UI/Task flow prepares a worktree before triggering Runner, while direct CLI Runner still works from caller-supplied project_root with no workspace dependency.
-- [ ] Verify replacing/removing the workspace module would not require changes to Runner/CLI public contracts.
-- [ ] Verify UI has no direct Git/worktree execution path.
-- [ ] Start 2 / 5 / 10 Tasks from one target branch concurrently.
-- [ ] Confirm durable merge_queue_seq FIFO is preserved across process restart.
-- [ ] Confirm queue-head Task remains head during conflict Runner recovery while repository Git lock is released; later same-target Tasks cannot overtake it.
-- [ ] Every Runner uses a unique Task worktree.
-- [ ] Concurrent Main Off blocks a second Main; On allows it.
-- [ ] Busy→Worktree Auto remains Worktree while busy even when Concurrent Main is On.
+- [x] Verify current UI/Task flow prepares a worktree before triggering Runner, while direct CLI Runner still works from caller-supplied project_root with no workspace dependency.
+- [x] Verify replacing/removing the workspace module would not require changes to Runner/CLI public contracts.
+- [x] Verify UI has no direct Git/worktree execution path.
+- [x] Start 2 / 5 / 10 Tasks from one target branch concurrently.
+- [x] Confirm durable merge_queue_seq FIFO is preserved across process restart.
+- [x] Confirm queue-head Task remains head during conflict Runner recovery while repository Git lock is released; later same-target Tasks cannot overtake it.
+- [x] Every Runner uses a unique Task worktree.
+- [x] Concurrent Main Off blocks a second Main; On allows it.
+- [x] Busy→Worktree Auto remains Worktree while busy even when Concurrent Main is On.
 
 ### Merge success
 
-- [ ] Runner Complete does not close Main before merge.
-- [ ] Task source merges directly into target branch with --no-ff --no-commit.
-- [ ] target HEAD == merge_source_base_sha: conflict-free merge may commit without redundant post-merge validation.
-- [ ] target HEAD != merge_source_base_sha: conflict-free merge remains uncommitted until post-merge validation passes.
-- [ ] Validation-only API does not intentionally modify Project source; required edits return SOURCE_FAIL and happen only in recovery workspace.
-- [ ] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
-- [ ] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
-- [ ] Before commit, unexpected target HEAD / MERGE_HEAD / worktree transaction changes fail closed and never commit mixed state.
-- [ ] Merge success commits and closes Main.
-- [ ] Main no_changes closes without a Project merge.
+- [x] Runner Complete does not close Main before merge.
+- [x] Task source merges directly into target branch with --no-ff --no-commit.
+- [x] target HEAD == merge_source_base_sha: conflict-free merge may commit without redundant post-merge validation.
+- [x] target HEAD != merge_source_base_sha: conflict-free merge remains uncommitted until post-merge validation passes.
+- [x] Validation-only API does not intentionally modify Project source; required edits return SOURCE_FAIL and happen only in recovery workspace.
+- [x] SOURCE_FAIL validation aborts cleanly and counts exactly one real merge failure.
+- [x] TECHNICAL_ERROR validation aborts cleanly, does not change merge_failure_count, and uses existing technical retry/backoff / Needs Attention behavior.
+- [x] Before commit, unexpected target HEAD / MERGE_HEAD / worktree transaction changes fail closed and never commit mixed state.
+- [x] Merge success commits and closes Main.
+- [x] Main no_changes closes without a Project merge.
 - [x] Restart/external pre-delivery merge recognizes merge_source_sha ancestry and does not duplicate merge.
   - Durable queue transaction ownership also reconciles an AI Task Runner MERGE_HEAD left in the Project target worktree by a crash; mismatched Git operations remain untouched.
 
 ### Merge conflict
 
-- [ ] Start A/B from same target commit and edit incompatible same lines.
-- [ ] Merge A first.
-- [ ] Merge B into latest target and confirm real Git conflict.
-- [ ] Confirm merge abort + `merge_failure_count += 1` exactly once.
-- [ ] Confirm existing Runner incrementally integrates B's committed changes with latest target, without rerunning original development.
-- [ ] Confirm recovery updates merge_source_branch/SHA/worktree and stale original Task source is not merged again.
-- [ ] Confirm recovery branch merges successfully when fixed.
-- [ ] Confirm fallback retains latest recovery source after repeated failures.
+- [x] Start A/B from same target commit and edit incompatible same lines.
+- [x] Merge A first.
+- [x] Merge B into latest target and confirm real Git conflict.
+- [x] Confirm merge abort + `merge_failure_count += 1` exactly once.
+- [x] Confirm existing Runner incrementally integrates B's committed changes with latest target, without rerunning original development.
+- [x] Confirm recovery updates merge_source_branch/SHA/worktree and stale original Task source is not merged again.
+- [x] Confirm recovery branch merges successfully when fixed.
+- [x] Confirm fallback retains latest recovery source after repeated failures.
 
 ### Merge failure limit
 
@@ -1276,18 +1276,18 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 
 ### Target safety
 
-- [ ] Dirty target => waiting_target_clean; do not mutate user changes.
-- [ ] Target in unmanaged worktree => waiting_target_workspace.
-- [ ] Captured target branch deleted/renamed => waiting_target_branch; never guess/recreate/retarget.
-- [ ] merge_source_base_sha no longer ancestor of current target HEAD after history rewrite/divergence => waiting_target_history; do not merge/recover automatically and do not count merge failure.
-- [ ] Task/Recovery branch reset/rebase that breaks expected source-base ancestry fails closed before snapshot.
-- [ ] Target force-reset/divergence that removes merge_source_base_sha from target ancestry => waiting_target_history and never reintroduces removed history.
-- [ ] User branch switch after Task start never retargets old Task.
+- [x] Dirty target => waiting_target_clean; do not mutate user changes.
+- [x] Target in unmanaged worktree => waiting_target_workspace.
+- [x] Captured target branch deleted/renamed => waiting_target_branch; never guess/recreate/retarget.
+- [x] merge_source_base_sha no longer ancestor of current target HEAD after history rewrite/divergence => waiting_target_history; do not merge/recover automatically and do not count merge failure.
+- [x] Task/Recovery branch reset/rebase that breaks expected source-base ancestry fails closed before snapshot.
+- [x] Target force-reset/divergence that removes merge_source_base_sha from target ancestry => waiting_target_history and never reintroduces removed history.
+- [x] User branch switch after Task start never retargets old Task.
 
 ### Local-only
 
-- [ ] No remote credentials required.
-- [ ] No automatic `git push` occurs.
+- [x] No remote credentials required.
+- [x] No automatic `git push` occurs.
 
 ---
 
