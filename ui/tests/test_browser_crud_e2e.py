@@ -2140,6 +2140,27 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceSave").is_hidden()
             assert page.locator(".task-workspace-list-row").count() == 0
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
+            empty_cta_geometry = page.locator("#taskWorkspaceAddTask").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        display: style.display,
+                        minHeight: style.minHeight,
+                        gap: style.gap,
+                        padding: style.padding,
+                        strongSize: getComputedStyle(node.querySelector('strong')).fontSize,
+                        spanSize: getComputedStyle(node.querySelector('span')).fontSize
+                    };
+                }"""
+            )
+            assert empty_cta_geometry == {
+                "display": "flex",
+                "minHeight": "86px",
+                "gap": "10px",
+                "padding": "10px 11px",
+                "strongSize": "9px",
+                "spanSize": "8px",
+            }
             assert page.locator(".task-workspace-list-side-card").count() == 2
             assert page.locator(".task-workspace-list-tools button").count() == 0
             list_columns = page.locator(".task-workspace-list-page").evaluate("(node) => getComputedStyle(node).gridTemplateColumns")
