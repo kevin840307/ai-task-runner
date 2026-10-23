@@ -6,6 +6,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -1094,7 +1095,8 @@ def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path)
     (repo / "ui" / "static").mkdir(parents=True)
     project.mkdir()
     server = UIServer(repo, "127.0.0.1", 0)
-    calls: list[tuple[str, Path, str, str]] = []
+    registered = server.state.add_project(str(project))
+    calls: list[tuple] = []
 
     def reset(project_path: Path, task_id: str, *, request_id: str):
         calls.append(("reset", project_path, task_id, request_id))
@@ -1112,10 +1114,29 @@ def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path)
         calls.append(("cleanup", project_path, task_id, request_id))
         return {"task_id": task_id, "status": "closed", "cleanup": "cleaned"}
 
+    def goal(project_path: Path, spec: str, *, request_id: str, project_id: str = ""):
+        calls.append(("goal", project_path, spec, request_id, project_id))
+        return {"task_id": "task-" + "e" * 32, "status": "ongoing", "goal_run_started": True}
+
+    def workspace_options(project_path: Path, *, current_task_id: str = ""):
+        calls.append(("workspace-options", project_path, current_task_id))
+        return {
+            "main_running": True,
+            "auto_workspace_policy": "busy-worktree",
+            "allow_concurrent_main_tasks": False,
+            "options": [
+                {"value": "auto", "enabled": True, "effective_mode": "worktree", "reason": "auto_busy_worktree", "error": ""},
+                {"value": "main", "enabled": False, "effective_mode": "", "reason": "", "error": "Main workspace is busy"},
+                {"value": "worktree", "enabled": True, "effective_mode": "worktree", "reason": "explicit_worktree", "error": ""},
+            ],
+        }
+
     server.state.task_runs.reset = reset
     server.state.task_runs.rerun = rerun
     server.state.task_runs.publish = publish
     server.state.task_runs.cleanup = cleanup
+    server.state.task_runs.start_goal = goal
+    server.state.task_runs.workspace_options = workspace_options
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.port}"
@@ -1156,15 +1177,36 @@ def test_task_lifecycle_http_routes_delegate_to_task_run_service(tmp_path: Path)
                 "request_id": "http-task-cleanup",
             },
         )
+        goal_value = _json_request(
+            f"{base}/api/tasks/goal",
+            method="POST",
+            body={
+                "project": str(project),
+                "spec": "Run one explicit goal",
+                "request_id": "http-task-goal",
+            },
+        )
+        workspace_query = urllib.parse.urlencode({
+            "project": str(project),
+            "task_id": "task-" + "f" * 32,
+        })
+        workspace_value = _json_request(
+            f"{base}/api/tasks/workspace-options?{workspace_query}",
+        )
         assert reset_value["status"] == "new"
         assert rerun_value["status"] == "ongoing"
         assert publish_value["publish"] == "published"
         assert cleanup_value["cleanup"] == "cleaned"
+        assert goal_value["goal_run_started"] is True
+        assert workspace_value["main_running"] is True
+        assert workspace_value["options"][0]["effective_mode"] == "worktree"
         assert calls == [
             ("reset", project.resolve(), "task-" + "a" * 32, "http-task-reset"),
             ("rerun", project.resolve(), "task-" + "b" * 32, "http-task-rerun"),
             ("publish", project.resolve(), "task-" + "c" * 32, "http-task-publish"),
             ("cleanup", project.resolve(), "task-" + "d" * 32, "http-task-cleanup"),
+            ("goal", project.resolve(), "Run one explicit goal", "http-task-goal", registered["project_id"]),
+            ("workspace-options", project.resolve(), "task-" + "f" * 32),
         ]
     finally:
         server.shutdown()
