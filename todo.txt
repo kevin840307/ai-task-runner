@@ -2023,6 +2023,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Empty New Tasks still show truthful no-runtime/no-output/no-history states, and refresh failure keeps the last projection visible with an inline error.
     - Static contract plus real Chromium E2E cover Runtime stage/progress/backend/model, CLI activity/output, current+archived History and canonical refresh.
 
+[x] Keep Task runtime rendering as one read-only component boundary.
+    - Extracted Runtime / Output / History DOM rendering into ui/static/js/task-runtime-panel.js.
+    - TaskWorkspaceController remains the only owner of Drawer route state, canonical /api/tasks refresh, dirty guards, close/focus and Task actions.
+    - The renderer accepts Task projection + translation callbacks only; it has no API calls, polling, scheduler, Runner action or second history store.
+    - Browser module routing and static ownership regression cover the split, while the same real Chromium Task-runtime flow remains the behavioral gate.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

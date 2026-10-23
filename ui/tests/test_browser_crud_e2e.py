@@ -60,7 +60,7 @@ def _load_main_ui_document(page, html: str) -> None:
 def _install_main_ui_scripts(page, static_root: Path) -> None:
     # app.js is a real ES module. Route the module graph through the same HTTP
     # origin as the document instead of injecting app.js as a classic script.
-    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js", "js/task-workspace.js", "js/tasks-board.js"):
+    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js", "js/project-chat.js", "js/task-workspace.js", "js/task-runtime-panel.js", "js/tasks-board.js"):
         source = static_root / relative
         page.route(
             f"http://local.test/{relative}",

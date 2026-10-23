@@ -9,8 +9,9 @@ class StaticContractTests(unittest.TestCase):
         self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
         self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
         self.task_workspace_js = (self.root / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
+        self.task_runtime_js = (self.root / "static" / "js" / "task-runtime-panel.js").read_text(encoding="utf-8")
         self.tasks_board_js = (self.root / "static" / "js" / "tasks-board.js").read_text(encoding="utf-8")
-        self.js = self.app_js + "\n" + self.generator_js + "\n" + self.task_workspace_js + "\n" + self.tasks_board_js
+        self.js = self.app_js + "\n" + self.generator_js + "\n" + self.task_workspace_js + "\n" + self.task_runtime_js + "\n" + self.tasks_board_js
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
 
@@ -330,19 +331,19 @@ class StaticContractTests(unittest.TestCase):
     def test_task_info_drawer_has_fixed_four_tab_contract(self):
         self.assertIn('for (const id of ["overview", "runtime", "output", "history"])', self.task_workspace_js)
         self.assertIn('state.kind === "task"', self.task_workspace_js)
-        self.assertIn('renderTaskInfoEmpty("task.no_runtime", "No Runner runtime yet")', self.task_workspace_js)
+        self.assertIn('renderTaskRuntimePanel({', self.task_workspace_js)
+        self.assertIn('renderEmpty({ body, tr, titleKey: "task.no_runtime"', self.task_runtime_js)
         self.assertIn(
             'tr("task.no_runtime_copy", "Runtime data appears only after an explicit Run action.")',
-            self.task_workspace_js,
+            self.task_runtime_js,
         )
         self.assertIn('id="taskWorkspaceExpand"', self.task_workspace_js)
         self.assertIn('classList.toggle("expanded"', self.task_workspace_js)
-        self.assertIn("function renderTaskRuntimeTab(", self.task_workspace_js)
-        self.assertIn("function renderTaskOutputTab(", self.task_workspace_js)
-        self.assertIn("function renderTaskHistoryTab(", self.task_workspace_js)
-        self.assertIn("task?.runner_runtime", self.task_workspace_js)
-        self.assertIn("Array.isArray(runtime.cli_lines)", self.task_workspace_js)
-        self.assertIn("Array.isArray(task?.history)", self.task_workspace_js)
+        self.assertIn("export function renderTaskRuntimePanel(", self.task_runtime_js)
+        self.assertIn("task?.runner_runtime", self.task_runtime_js)
+        self.assertIn("Array.isArray(runtime.cli_lines)", self.task_runtime_js)
+        self.assertIn("Array.isArray(task?.history)", self.task_runtime_js)
+        self.assertNotIn("api(", self.task_runtime_js)
         self.assertIn('api("/api/tasks?project=" + encodeURIComponent(project)', self.task_workspace_js)
         self.assertNotIn('["overview", "steps",', self.task_workspace_js)
         self.assertNotIn('textContent = "Steps"', self.task_workspace_js)
