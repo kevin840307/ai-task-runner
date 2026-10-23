@@ -12,6 +12,9 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
+import time
+import uuid
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,10 +27,13 @@ if str(ROOT) not in sys.path:
 from runner.agent import backend_names, default_command, split_command
 from runner.plugins.registry import discover_plugins
 from tool.agent_catalog import capability_catalog, settings_catalog
+from ui.chat_agent_service import ChatAgentService
+from ui.chat_service import ChatService
 
 DEFAULT_BACKENDS = ("qwen", "opencode")
 SKILL_NAME = "ai-task-runner-live-probe"
 PING_MARKER = "AI_TASK_RUNNER_AGENT_LIVE_OK"
+ASK_MARKER = "AI_TASK_RUNNER_NATIVE_ASK_OK"
 MAX_REPORTED_VALUES = 40
 
 _SKILL = f"""---
@@ -43,6 +49,15 @@ When invoked, do not modify files. This Skill exists only to verify native capab
 _PING_PROMPT = (
     f"Reply with exactly {PING_MARKER} and nothing else. "
     "Do not use tools, do not inspect files, and do not modify the project."
+)
+
+_ASK_PROMPT = (
+    "This is a live adapter contract test. Before your final answer, you MUST use "
+    "your native user-question tool exactly once (ask_user_question / question, "
+    "whichever this Agent provides). Ask one single-choice question with header "
+    "'Live probe', question 'Continue live adapter probe?', and one option labelled "
+    "'Continue'. Do not use any other tools and do not modify files. After the user "
+    f"answers Continue, reply with exactly {ASK_MARKER} and nothing else."
 )
 
 
@@ -97,6 +112,8 @@ def _evidence_payload(
             and by_backend[backend].get("status") == "pass"
             and isinstance(by_backend[backend].get("chat_ping"), dict)
             and by_backend[backend]["chat_ping"].get("ok") is True
+            and isinstance(by_backend[backend].get("native_ask"), dict)
+            and by_backend[backend]["native_ask"].get("ok") is True
             for backend in required
         )
     )
@@ -361,6 +378,167 @@ def _run_chat_ping(
     }
 
 
+def _answers_for_ask(ask: dict[str, Any]) -> dict[str, Any]:
+    questions = ask.get("questions")
+    if not isinstance(questions, list) or not questions:
+        raise RuntimeError("native Ask did not expose any questions")
+    answers: dict[str, Any] = {}
+    for question in questions:
+        if not isinstance(question, dict):
+            raise RuntimeError("native Ask returned an invalid question")
+        question_id = str(
+            question.get("question_id") or question.get("id") or ""
+        ).strip()
+        if not question_id:
+            raise RuntimeError("native Ask question is missing id")
+        kind = str(question.get("kind") or "text").strip()
+        if kind == "text":
+            answers[question_id] = "Continue"
+            continue
+        options = [
+            item for item in question.get("options") or []
+            if isinstance(item, dict) and str(item.get("value") or "").strip()
+        ]
+        if not options:
+            raise RuntimeError("native Ask choice question has no options")
+        value = str(options[0]["value"]).strip()
+        answers[question_id] = (
+            {"values": [value]}
+            if kind == "multi_choice"
+            else {"value": value}
+        )
+    return answers
+
+
+def _run_native_ask_roundtrip(
+    project: Path,
+    backend: str,
+    *,
+    model: str,
+    timeout: int,
+) -> dict[str, Any]:
+    chat = ChatService()
+    before = chat.sessions(project)
+    original_active = str(before.get("active_session_id") or "")
+    created = chat.create_session(
+        project,
+        title="Agent live probe",
+        request_id=f"agent-live-probe-{uuid.uuid4().hex}",
+    )
+    session_id = str(created.get("session_id") or created.get("active_session_id") or "")
+    if not session_id:
+        raise RuntimeError(f"{backend}: live Ask probe could not create Chat session")
+
+    service = ChatAgentService(ROOT)
+    result_box: dict[str, Any] = {}
+    done = threading.Event()
+
+    def worker() -> None:
+        try:
+            result_box["value"] = service.turn(
+                project,
+                chat,
+                session_id=session_id,
+                message=_ASK_PROMPT,
+                backend=backend,
+                model=model,
+                mode="read",
+                request_id=f"agent-live-ask-turn-{uuid.uuid4().hex}",
+            )
+        except BaseException as exc:
+            result_box["error"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(
+        target=worker,
+        name=f"agent-live-ask-{backend}",
+        daemon=True,
+    )
+    thread.start()
+    ask: dict[str, Any] | None = None
+    deadline = time.monotonic() + max(1, timeout)
+    try:
+        while time.monotonic() < deadline:
+            snapshot = chat.ask(project, session_id).get("ask")
+            if isinstance(snapshot, dict) and snapshot.get("status") == "waiting":
+                ask = snapshot
+                break
+            if done.wait(0.2):
+                break
+
+        if ask is None:
+            if isinstance(result_box.get("error"), BaseException):
+                raise RuntimeError(
+                    f"{backend}: live Native Ask turn failed before asking: "
+                    f"{result_box['error']}"
+                ) from result_box["error"]
+            raise RuntimeError(
+                f"{backend}: live Native Ask was not surfaced before timeout"
+            )
+
+        answers = _answers_for_ask(ask)
+        service.complete_ask(
+            project,
+            chat,
+            session_id=session_id,
+            ask_id=str(ask.get("ask_id") or ""),
+            request_id=f"agent-live-ask-answer-{uuid.uuid4().hex}",
+            answers=answers,
+        )
+
+        remaining = max(1.0, deadline - time.monotonic())
+        thread.join(timeout=remaining)
+        if thread.is_alive():
+            raise RuntimeError(
+                f"{backend}: live Native Ask turn did not continue after answer"
+            )
+        if isinstance(result_box.get("error"), BaseException):
+            raise RuntimeError(
+                f"{backend}: live Native Ask turn failed after answer: "
+                f"{result_box['error']}"
+            ) from result_box["error"]
+
+        messages = chat.messages(project, session_id).get("messages") or []
+        assistant = [
+            str(item.get("content") or "").strip()
+            for item in messages
+            if isinstance(item, dict) and item.get("role") == "assistant"
+        ]
+        if not assistant or ASK_MARKER not in assistant[-1]:
+            detail = assistant[-1][:500] if assistant else "<no assistant message>"
+            raise RuntimeError(
+                f"{backend}: live Native Ask continuation returned unexpected text: {detail}"
+            )
+        final_ask = chat.ask(project, session_id).get("ask")
+        if not isinstance(final_ask, dict) or final_ask.get("status") != "answered":
+            raise RuntimeError(
+                f"{backend}: live Native Ask did not persist answered state"
+            )
+        return {
+            "ok": True,
+            "question_count": len(ask.get("questions") or []),
+            "answered": True,
+            "continued": True,
+        }
+    finally:
+        if thread.is_alive():
+            try:
+                service.cancel_turn(project, chat, session_id=session_id)
+            except Exception:
+                pass
+            thread.join(timeout=5)
+        try:
+            chat.delete_session(project, session_id)
+        except Exception:
+            pass
+        if original_active:
+            try:
+                chat.select_session(project, original_active)
+            except Exception:
+                pass
+
+
 def probe_backend(
     project: Path,
     backend: str,
@@ -393,6 +571,20 @@ def probe_backend(
         if run_chat
         else {"ok": None, "skipped": True, "model_override": model}
     )
+    native_ask = (
+        _run_native_ask_roundtrip(
+            project,
+            backend,
+            model=model,
+            timeout=timeout,
+        )
+        if run_chat and settings["features"]["ask"]
+        else {
+            "ok": None,
+            "skipped": True,
+            "reason": "discovery-only" if not run_chat else "native Ask unavailable",
+        }
+    )
     return {
         "backend": backend,
         "status": "pass",
@@ -403,6 +595,7 @@ def probe_backend(
         "features": settings["features"],
         "capabilities": capabilities,
         "chat_ping": chat,
+        "native_ask": native_ask,
     }
 
 
