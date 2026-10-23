@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from pathlib import Path
+
+from tool.compare_feature_ui import compare_panel, declarations as _declarations
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,107 +17,6 @@ PRODUCTION_BOOTSTRAP = (ROOT / "ui" / "static" / "js" / "ui-bootstrap.js").read_
 PRODUCTION_APP = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
 PRODUCTION_HTML = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
 
-
-def _normalize(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip()).replace(" !important", "!important")
-
-
-@dataclass(frozen=True)
-class _Rule:
-    media: str | None
-    selectors: tuple[str, ...]
-    declarations: dict[str, str]
-
-
-def _matching_brace(source: str, open_index: int) -> int:
-    depth = 1
-    quote: str | None = None
-    index = open_index + 1
-    while index < len(source):
-        char = source[index]
-        if quote:
-            if char == "\\":
-                index += 2
-                continue
-            if char == quote:
-                quote = None
-        elif char in {"'", '"'}:
-            quote = char
-        elif source.startswith("/*", index):
-            end = source.find("*/", index + 2)
-            index = len(source) if end < 0 else end + 2
-            continue
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return index
-        index += 1
-    raise AssertionError("unbalanced CSS braces")
-
-
-def _rules(source: str, *, media: str | None = None) -> list[_Rule]:
-    result: list[_Rule] = []
-    index = 0
-    while index < len(source):
-        if source.startswith("/*", index):
-            end = source.find("*/", index + 2)
-            index = len(source) if end < 0 else end + 2
-            continue
-        if source[index].isspace():
-            index += 1
-            continue
-
-        open_index = source.find("{", index)
-        if open_index < 0:
-            break
-        semicolon = source.find(";", index, open_index)
-        if semicolon >= 0:
-            index = semicolon + 1
-            continue
-
-        header = source[index:open_index].strip()
-        close_index = _matching_brace(source, open_index)
-        body = source[open_index + 1 : close_index]
-
-        if header.startswith("@media"):
-            query = _normalize(header[len("@media") :])
-            result.extend(_rules(body, media=query))
-        elif not header.startswith("@"):
-            declarations: dict[str, str] = {}
-            for raw in body.split(";"):
-                if ":" not in raw:
-                    continue
-                key, value = raw.split(":", 1)
-                declarations[key.strip()] = _normalize(value)
-            selectors = tuple(_normalize(part) for part in header.split(","))
-            result.append(_Rule(media=media, selectors=selectors, declarations=declarations))
-        index = close_index + 1
-    return result
-
-
-def _declarations(
-    css: str,
-    selector: str,
-    *,
-    media_contains: str | None = None,
-) -> dict[str, str]:
-    wanted = _normalize(selector)
-    result: dict[str, str] = {}
-    found = False
-    for rule in _rules(css):
-        if media_contains is None:
-            if rule.media is not None:
-                continue
-        elif rule.media is None or _normalize(media_contains) not in _normalize(rule.media):
-            continue
-        if wanted not in rule.selectors:
-            continue
-        found = True
-        result.update(rule.declarations)
-    assert found, f"selector not found ({media_contains or 'base'}): {selector}"
-    return result
 
 
 def _same(
@@ -139,6 +38,13 @@ def _same(
             f"{feature_selector}={feature[prop]!r}"
         )
 
+
+
+def test_task_panels_have_no_prototype_geometry_or_motion_drift() -> None:
+    drift = []
+    for panel in ("task-editor", "task-list", "board"):
+        drift.extend(compare_panel(panel, root=ROOT))
+    assert drift == [], "\n".join(drift)
 
 def test_first_paint_loader_matches_feature_prototype_contract() -> None:
     feature_loader = _declarations(FEATURE_CSS, ".app-bootstrap-loader")
