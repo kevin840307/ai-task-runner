@@ -13,6 +13,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let restoreFocus = null;
   let createMenu = null;
   let createContext = null;
+  let workspaceCloseTimer = 0;
   let workspaceOptionsToken = 0;
   let taskProjectionToken = 0;
   const byId = (id) => document.getElementById(id);
@@ -427,13 +428,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function showNow() {
     setWorkspaceExpanded(false);
-    if (overlay) overlay.hidden = false;
+    if (workspaceCloseTimer) {
+      window.clearTimeout(workspaceCloseTimer);
+      workspaceCloseTimer = 0;
+    }
+    if (overlay) {
+      overlay.hidden = false;
+      overlay.classList.remove("open");
+      requestAnimationFrame(() => {
+        if (overlay && !overlay.hidden) overlay.classList.add("open");
+      });
+    }
     document.body.classList.add("task-workspace-open");
   }
 
   function closeNow({ restore = true } = {}) {
     setWorkspaceExpanded(false);
-    if (overlay) overlay.hidden = true;
+    if (overlay) {
+      overlay.classList.remove("open");
+      if (workspaceCloseTimer) window.clearTimeout(workspaceCloseTimer);
+      const closingOverlay = overlay;
+      workspaceCloseTimer = window.setTimeout(() => {
+        if (!closingOverlay.classList.contains("open")) closingOverlay.hidden = true;
+        workspaceCloseTimer = 0;
+      }, 180);
+    }
     document.body.classList.remove("task-workspace-open");
     const focus = restore ? restoreFocus : null;
     workspaceOptionsToken += 1;
@@ -1452,6 +1471,27 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return { card, body, tabs };
   }
 
+  function sourceModePanel(mode) {
+    const panel = document.createElement("div");
+    panel.className = "task-workspace-source-mode-panel";
+    panel.dataset.sourceMode = mode;
+    return panel;
+  }
+
+  function sourceModePathPanel(mode, ...controls) {
+    const panel = sourceModePanel(mode);
+    const row = document.createElement("div");
+    row.className = "task-workspace-path-row";
+    row.append(...controls.filter(Boolean));
+    panel.appendChild(row);
+    return panel;
+  }
+
+  function sourceMiniAction(button) {
+    if (button) button.classList.add("task-workspace-mini-button");
+    return button;
+  }
+
   function promptAssetSelect(id, value, onChange) {
     const select = document.createElement("select");
     select.id = id;
@@ -1793,9 +1833,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     availabilityNote.append(previewTitle, previewCopy);
     workspaceSection.append(workspaceHead, workspace, workspaceOptions, availabilityNote);
 
-    grid.append(workflowField);
-    body.appendChild(grid);
-
     const source = sourceState(item);
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
@@ -1815,14 +1852,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (source.promptMode === "write") {
       const prompt = document.createElement("textarea");
       prompt.id = "taskWorkspacePrompt";
-      prompt.rows = 10;
       prompt.placeholder = "Describe what this task should do…";
       prompt.value = String(item.prompt || source.promptText || "");
       prompt.addEventListener("input", () => {
         source.promptText = prompt.value;
         updateItem(state.index, "prompt", prompt.value);
       });
-      promptCard.body.appendChild(prompt);
+      const panel = sourceModePanel("inline");
+      panel.appendChild(prompt);
+      promptCard.body.appendChild(panel);
       appendFieldError(promptCard.card, prompt, "prompt");
     } else if (source.promptMode === "file") {
       const input = document.createElement("input");
@@ -1845,16 +1883,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       upload.textContent = tr("task.upload_file", "Upload file");
       upload.addEventListener("click", () => chooseUpload("goal_file", upload));
       row.append(input, upload);
-      promptCard.body.appendChild(row);
+      const panel = sourceModePanel("file");
+      panel.appendChild(row);
+      promptCard.body.appendChild(panel);
       appendFieldError(promptCard.card, input, "goal_file");
     } else {
       const select = promptAssetSelect("taskWorkspaceGoalAsset", item.goal_file || source.promptAsset, (value) => {
         source.promptAsset = value;
         updateItem(state.index, "goal_file", value);
       });
-      promptCard.body.appendChild(select);
-      const prompts = promptsButton("taskWorkspaceGoalAssetOpenPrompts");
-      if (prompts) promptCard.body.appendChild(prompts);
+      const prompts = sourceMiniAction(promptsButton("taskWorkspaceGoalAssetOpenPrompts"));
+      promptCard.body.appendChild(sourceModePathPanel("asset", select, prompts));
       appendFieldError(promptCard.card, select, "goal_file");
     }
     promptCard.card.classList.add("task-workspace-prompt-source", "task-workspace-task-primary-source");
@@ -1944,18 +1983,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const span = document.createElement("span");
         span.textContent = "No override prompt";
         note.append(strong, span);
-        aiCard.body.appendChild(note);
+        const panel = sourceModePanel("default");
+        panel.appendChild(note);
+        aiCard.body.appendChild(panel);
       } else if (source.aiMode === "write") {
         const textarea = document.createElement("textarea");
         textarea.id = "taskWorkspaceAiValidatorPromptText";
-        textarea.rows = 6;
         textarea.placeholder = "Only add instructions that differ from the workflow default";
         textarea.value = String(item.ai_validator_prompt || source.aiText || "");
         textarea.addEventListener("input", () => {
           source.aiText = textarea.value;
           updateItem(state.index, "ai_validator_prompt", textarea.value);
         });
-        aiCard.body.appendChild(textarea);
+        const panel = sourceModePanel("inline");
+        panel.appendChild(textarea);
+        aiCard.body.appendChild(panel);
         appendFieldError(aiCard.card, textarea, "ai_validator_prompt");
       } else if (source.aiMode === "file") {
         const control = pathControl(
@@ -1965,7 +2007,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           "Or type an existing AI prompt file path",
         );
         control.input.addEventListener("input", () => { source.aiFile = control.input.value; });
-        aiCard.body.appendChild(control.row);
+        const panel = sourceModePanel("file");
+        panel.appendChild(control.row);
+        aiCard.body.appendChild(panel);
         appendFieldError(aiCard.card, control.input, "ai_validator_prompt_file");
       } else {
         const select = promptAssetSelect(
@@ -1976,9 +2020,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             updateItem(state.index, "ai_validator_prompt_file", value);
           },
         );
-        aiCard.body.appendChild(select);
-        const prompts = promptsButton("taskWorkspaceAiAssetOpenPrompts");
-        if (prompts) aiCard.body.appendChild(prompts);
+        const prompts = sourceMiniAction(promptsButton("taskWorkspaceAiAssetOpenPrompts"));
+        aiCard.body.appendChild(sourceModePathPanel("asset", select, prompts));
         appendFieldError(aiCard.card, select, "ai_validator_prompt_file");
       }
       validationGrid.appendChild(aiCard.card);

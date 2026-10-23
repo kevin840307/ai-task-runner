@@ -218,6 +218,45 @@ def test_new_task_source_cards_match_final_feature_cascade() -> None:
     )
 
 
+
+
+def test_new_task_source_mode_typography_and_motion_match_feature_reference() -> None:
+    _same(
+        "#newTaskModal .task-source-mode-panel",
+        ".task-workspace-source-mode-panel",
+        ("width", "min-width", "box-sizing", "display", "flex-direction", "gap"),
+    )
+    _same(
+        ".validation-stack",
+        ".task-workspace-validation-stack",
+        ("display", "grid-template-columns"),
+    )
+    _same(
+        ".field input",
+        ".task-workspace-basics .task-workspace-field input",
+        ("font-size",),
+    )
+    _same(
+        ".source-body textarea",
+        ".task-workspace-shell.task-editor-route .task-workspace-source-body textarea",
+        ("padding", "resize"),
+    )
+    _same(
+        "#newTaskModal .task-primary-source>.source-body",
+        ".task-workspace-task-primary-source>.task-workspace-source-body",
+        ("display", "min-width"),
+    )
+    _same(
+        ".drawer",
+        ".task-workspace-shell",
+        ("transform", "transition"),
+    )
+    _same(
+        ".overlay.open .drawer",
+        ".task-workspace-overlay.open .task-workspace-shell",
+        ("transform",),
+    )
+
 def test_new_task_responsive_geometry_matches_feature_reference() -> None:
     _same(
         "#newTaskModal .task-basics",
@@ -283,6 +322,12 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     assert '[["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
     assert 'required.textContent = "Required"' in PRODUCTION_JS
     assert 'grid.append(projectField, workflowField, titleField)' in PRODUCTION_JS
+    assert 'grid.append(workflowField);\\n    body.appendChild(grid);' not in PRODUCTION_JS
+    assert 'className = "task-workspace-source-mode-panel"' in PRODUCTION_JS
+    assert 'prompt.rows = 10' not in PRODUCTION_JS
+    assert 'textarea.rows = 6' not in PRODUCTION_JS
+    assert 'overlay.classList.add("open")' in PRODUCTION_JS
+    assert 'overlay.classList.remove("open")' in PRODUCTION_JS
     assert 'body.appendChild(inputGrid)' in PRODUCTION_JS
     assert 'body.appendChild(workspaceSection)' in PRODUCTION_JS
 
