@@ -216,23 +216,23 @@ def test_new_task_source_cards_match_final_feature_cascade() -> None:
     _same(
         ".source-head",
         ".task-workspace-source-head",
-        ("padding", "border-bottom", "background"),
+        ("padding", "border-bottom", "background", "margin-bottom"),
     )
     _same(
         ".source-body",
         ".task-workspace-source-body",
-        ("padding",),
+        ("padding", "gap"),
     )
     # New Task-specific geometry overrides the generic .source-tabs values.
     _same(
         "#newTaskModal .task-primary-source .source-tabs",
-        ".task-workspace-source-tabs",
-        ("gap", "height"),
+        ".task-workspace-task-primary-source .task-workspace-source-tabs",
+        ("display", "grid-template-columns", "gap", "height"),
     )
     _same(
         "#newTaskModal .task-primary-source .source-tabs button",
-        ".task-workspace-source-tabs button",
-        ("height", "padding"),
+        ".task-workspace-task-primary-source .task-workspace-source-tabs button",
+        ("width", "min-width", "height", "padding", "white-space", "overflow", "text-overflow"),
     )
     _same(
         ".source-tabs button",
@@ -296,8 +296,8 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
     )
     _same(
         "#newTaskModal .task-primary-source .source-tabs",
-        ".task-workspace-source-tabs",
-        ("display", "width", "min-width", "box-sizing"),
+        ".task-workspace-task-primary-source .task-workspace-source-tabs",
+        ("display", "width", "min-width", "box-sizing", "grid-template-columns"),
     )
     _same(
         ".source-head small",
@@ -318,6 +318,16 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
         "#newTaskModal .task-primary-source>.source-body",
         ".task-workspace-task-primary-source>.task-workspace-source-body",
         ("display", "min-width"),
+    )
+    _same(
+        "#newTaskModal .task-ai-source .source-tabs",
+        ".task-workspace-task-ai-source .task-workspace-source-tabs",
+        ("display", "width", "min-width", "gap", "box-sizing", "grid-template-columns", "height"),
+    )
+    _same(
+        "#newTaskModal .task-ai-source .source-tabs button",
+        ".task-workspace-task-ai-source .task-workspace-source-tabs button",
+        ("width", "min-width", "height", "padding", "white-space", "overflow", "text-overflow"),
     )
     _same(
         "#newTaskModal .source-note",
