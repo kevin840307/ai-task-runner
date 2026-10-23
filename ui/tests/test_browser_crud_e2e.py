@@ -2015,6 +2015,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceHeaderActions").is_hidden()
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
             assert page.locator("#taskWorkspaceProject").is_editable() is True
             assert page.locator(".task-workspace-project-toggle").is_enabled()
@@ -2120,8 +2122,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
-            assert page.locator("#taskWorkspaceSave").is_disabled()
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceHeaderActions").is_visible()
+            assert page.locator("#taskWorkspaceHeaderCancel").is_visible()
+            assert page.locator("#taskWorkspaceHeaderCreateList").is_visible()
+            assert page.locator("#taskWorkspaceHeaderCreateList").inner_text() == "Create Task List"
+            assert page.locator("#taskWorkspaceHeaderCreateList").is_disabled()
+            assert page.locator("#taskWorkspaceSave").is_hidden()
             assert page.locator(".task-workspace-list-row").count() == 0
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
             assert page.locator(".task-workspace-list-side-card").count() == 2
@@ -2155,13 +2162,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 1
-            assert page.locator("#taskWorkspaceSave").is_enabled()
+            assert page.locator("#taskWorkspaceHeaderCreateList").is_enabled()
 
             # Transient Task List Draft may return to zero items; canonical Tasks may not.
             page.locator(".task-workspace-list-row").first.get_by_role("button", name="Remove").click()
             assert page.locator(".task-workspace-list-row").count() == 0
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
-            assert page.locator("#taskWorkspaceSave").is_disabled()
+            assert page.locator("#taskWorkspaceHeaderCreateList").is_disabled()
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "First list child")
@@ -2258,7 +2265,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             # Backend validation must route the error back to the exact field
             # without dropping the user's prompt/title.
-            page.click("#taskWorkspaceSave")
+            page.click("#taskWorkspaceHeaderCreateList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceValidator").get_attribute("aria-invalid") == "true"
             assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
@@ -2277,7 +2284,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
 
-            page.click("#taskWorkspaceSave")
+            page.click("#taskWorkspaceHeaderCreateList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").get_attribute("aria-invalid") == "true"
             assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt file is required", exact=False).is_visible()
@@ -2294,7 +2301,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
 
             # Double activation must still produce exactly one durable Task.
-            page.evaluate("const b=document.querySelector('#taskWorkspaceSave'); b.click(); b.click();")
+            page.evaluate("const b=document.querySelector('#taskWorkspaceHeaderCreateList'); b.click(); b.click();")
             page.wait_for_function(
                 "() => document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO' || Boolean(document.querySelector('#taskWorkspaceError'))"
             )
@@ -3283,6 +3290,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderAddTask").is_visible()
+            assert page.locator("#taskWorkspaceHeaderMoveExisting").is_visible()
+            assert page.locator("#taskWorkspaceHeaderYaml").is_visible()
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
             page.locator("#taskWorkspacePrompt").focus()
@@ -4040,12 +4050,12 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"
-            assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task List"
-            assert page.locator("#taskWorkspaceSave").is_disabled()
+            assert page.locator("#taskWorkspaceHeaderCreateList").inner_text() == "Create Task List"
+            assert page.locator("#taskWorkspaceHeaderCreateList").is_disabled()
             page.evaluate("window.I18n.setLanguage('zh-TW')")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === '任務清單'")
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "尚無任務\n+ 新增第一個任務"
-            assert page.locator("#taskWorkspaceSave").inner_text() == "建立任務清單"
+            assert page.locator("#taskWorkspaceHeaderCreateList").inner_text() == "建立任務清單"
             page.evaluate("window.I18n.setLanguage('en')")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceAddTask").inner_text() == "No tasks yet\n+ Add first task"

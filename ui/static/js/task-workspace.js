@@ -34,6 +34,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             <strong id="taskWorkspaceTitle">Edit Task</strong>
             <span id="taskWorkspaceMeta"></span>
           </div>
+          <div id="taskWorkspaceHeaderActions" class="task-workspace-header-actions" hidden>
+            <button id="taskWorkspaceHeaderAddTask" type="button">+ Add task</button>
+            <button id="taskWorkspaceHeaderMoveExisting" class="ghost" type="button">Move existing</button>
+            <button id="taskWorkspaceHeaderYaml" type="button">Edit YAML</button>
+            <button id="taskWorkspaceHeaderCancel" type="button">Cancel</button>
+            <button id="taskWorkspaceHeaderCreateList" class="primary" type="button">Create Task List</button>
+          </div>
           <button id="taskWorkspaceExpand" class="task-workspace-expand" type="button" aria-label="Expand task workspace" aria-pressed="false" title="Expand task workspace">⤢</button>
           <button id="taskWorkspaceClose" class="task-workspace-close" type="button" aria-label="Close task workspace">×</button>
         </header>
@@ -52,6 +59,19 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceHeaderBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceFooterBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
+    byId("taskWorkspaceHeaderAddTask").addEventListener("click", () => {
+      if (state?.route !== "list") return;
+      if (state.kind === "task") addTaskListItem();
+      else addDraftListItem();
+    });
+    byId("taskWorkspaceHeaderMoveExisting").addEventListener("click", () => {
+      if (state?.route === "list" && state.kind === "task") toggleMoveExisting();
+    });
+    byId("taskWorkspaceHeaderYaml").addEventListener("click", () => {
+      if (state?.route === "list") void openYaml();
+    });
+    byId("taskWorkspaceHeaderCancel").addEventListener("click", () => void handleBack());
+    byId("taskWorkspaceHeaderCreateList").addEventListener("click", () => void saveWorkspace());
     document.addEventListener("keydown", (event) => {
       if (!overlay || overlay.hidden || event.key !== "Escape") return;
       if (!overlay.contains(event.target)) return;
@@ -323,6 +343,58 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     if (back) back.setAttribute("aria-label", tr("task.back", "Back"));
     if (close) close.setAttribute("aria-label", tr("task.close_workspace", "Close task workspace"));
+  }
+
+  function renderHeaderActions() {
+    const group = byId("taskWorkspaceHeaderActions");
+    if (!group || !state) return;
+    const listRoute = state.route === "list";
+    const newList = listRoute && state.kind === "draft" && !!state.createOnSave && state.creationKind === "list";
+    const durableList = listRoute && state.kind === "task";
+    group.hidden = !(newList || durableList);
+
+    const add = byId("taskWorkspaceHeaderAddTask");
+    const move = byId("taskWorkspaceHeaderMoveExisting");
+    const yaml = byId("taskWorkspaceHeaderYaml");
+    const cancel = byId("taskWorkspaceHeaderCancel");
+    const create = byId("taskWorkspaceHeaderCreateList");
+    for (const button of [add, move, yaml, cancel, create]) if (button) button.hidden = true;
+
+    if (newList) {
+      if (cancel) {
+        cancel.hidden = false;
+        cancel.textContent = tr("task.cancel", "Cancel");
+      }
+      if (create) {
+        create.hidden = false;
+        create.textContent = tr("task.create_list", "Create Task List");
+        create.disabled = !Array.isArray(state.draft?.items) || state.draft.items.length === 0;
+      }
+      return;
+    }
+
+    if (durableList) {
+      const policy = taskEditPolicy(state.task);
+      const items = Array.isArray(state.editDraft?.items) ? state.editDraft.items : (Array.isArray(state.task?.items) ? state.task.items : []);
+      if (add) {
+        add.hidden = false;
+        add.textContent = tr("task.add_label", "+ Add task");
+        add.disabled = !policy.can_add_item;
+        add.title = add.disabled ? String(policy.reason || "") : "";
+      }
+      if (move) {
+        move.hidden = false;
+        const dirty = isDirty();
+        move.disabled = !policy.can_add_item || dirty;
+        move.title = dirty ? "Save Task List changes before moving an existing Task" : (move.disabled ? String(policy.reason || "") : "");
+      }
+      if (yaml) {
+        yaml.hidden = false;
+        yaml.textContent = tr("task.edit_yaml", "Edit YAML");
+        yaml.disabled = !policy.editable || items.length === 0;
+        yaml.title = yaml.disabled ? String(policy.reason || "") : "";
+      }
+    }
   }
 
   function setWorkspaceExpanded(expanded) {
@@ -2670,6 +2742,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     shell?.classList.toggle("task-list-route", state.route === "list");
     shell?.classList.toggle("task-yaml-route", state.route === "yaml");
     renderShellChrome();
+    renderHeaderActions();
     const footer = byId("taskWorkspaceFooterBack")?.closest("footer");
     const save = byId("taskWorkspaceSave");
     const back = byId("taskWorkspaceHeaderBack");
@@ -2717,12 +2790,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     if (footer) footer.hidden = false;
-    if (back) back.hidden = false;
-    if (save) save.hidden = false;
     const listRoute = state.route === "list";
     const yamlRoute = state.route === "yaml";
     const count = state.draft.items.length;
     const creating = !!state.createOnSave;
+    const rootCreateTask = creating && state.creationKind === "task" && state.route === "editor";
+    const rootCreateList = creating && state.creationKind === "list" && listRoute;
+    if (back) back.hidden = rootCreateTask || rootCreateList;
+    if (save) save.hidden = false;
     byId("taskWorkspaceEyebrow").textContent = yamlRoute ? tr("task.yaml", "TASK YAML") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.editor", "TASK EDITOR"));
     byId("taskWorkspaceTitle").textContent = yamlRoute
       ? String(state.draft.title || "Task YAML")
@@ -2739,7 +2814,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       : (listRoute
         ? (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))
         : (count > 1 ? tr("task.back_list", "Back to Task List") : (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))));
-    byId("taskWorkspaceSave").hidden = !yamlRoute && !listRoute && count > 1;
+    byId("taskWorkspaceSave").hidden = rootCreateList || (!yamlRoute && !listRoute && count > 1);
     byId("taskWorkspaceSave").textContent = yamlRoute
       ? "Apply YAML"
       : creating
