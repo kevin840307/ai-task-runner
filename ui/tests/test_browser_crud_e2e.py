@@ -548,6 +548,14 @@ def _bridge_for(state: UIState):
                         request_id=str(body.get("request_id", "")),
                         expected_updated_at=body.get("expected_updated_at"),
                     )
+                elif path == "/api/tasks/move-existing":
+                    data = state.tasks.move_existing(
+                        Path(body["project"]),
+                        str(body.get("target_task_id", "")),
+                        str(body.get("source_task_id", "")),
+                        request_id=str(body.get("request_id", "")),
+                        expected_updated_at=body.get("expected_updated_at"),
+                    )
                 elif path == "/api/tasks/delete":
                     data = state.tasks.delete(
                         Path(body["project"]),
@@ -2338,6 +2346,23 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             yaml_geometry = task_workspace_geometry()
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+
+            # Feature parity: Move existing is a secondary chooser. Moving the
+            # standalone New Task appends its item and retires its Board identity.
+            assert page.locator("#taskWorkspaceMoveExisting").is_enabled()
+            page.click("#taskWorkspaceMoveExisting")
+            page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
+            move_option = page.locator(".task-workspace-move-option").first
+            assert "Standalone browser task" in move_option.inner_text()
+            move_option.click()
+            assert page.locator(".task-workspace-move-option.selected").count() == 1
+            page.get_by_role("button", name="Move here", exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.task-workspace-list-row').length === 3")
+            moved_records = state.tasks.list(state.repo_root)["tasks"]
+            assert len(moved_records) == 1
+            assert moved_records[0]["task_id"] == created[1]["task_id"]
+            assert [item["prompt"] for item in moved_records[0]["items"]][-1] == "Standalone prompt"
+            assert page.locator(".task-workspace-move-existing").count() == 0
 
             for geometry in (list_geometry, editor_geometry, yaml_geometry):
                 assert abs(geometry["shell_width"] - info_geometry["shell_width"]) <= 1

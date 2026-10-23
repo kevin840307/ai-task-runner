@@ -896,9 +896,202 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return select;
   }
 
+  function moveExistingEligible(task) {
+    return Boolean(
+      task
+      && String(task.task_id || "") !== String(state?.task?.task_id || "")
+      && String(task.status || "") === "new"
+      && Array.isArray(task.items)
+      && task.items.length === 1
+      && task.edit_policy?.can_delete === true
+    );
+  }
+
+  async function loadMoveExistingCandidates() {
+    if (state?.kind !== "task" || !state.task) return;
+    const owner = state;
+    owner.moveExistingLoading = true;
+    owner.moveExistingError = "";
+    render();
+    try {
+      const data = await api("/api/tasks?project=" + encodeURIComponent(String(owner.task.project || "")), { timeoutMs: 15000 });
+      if (state !== owner) return;
+      owner.moveExistingCandidates = (Array.isArray(data?.tasks) ? data.tasks : []).filter(moveExistingEligible);
+      if (owner.moveExistingSelected && !owner.moveExistingCandidates.some((row) => String(row.task_id) === owner.moveExistingSelected)) {
+        owner.moveExistingSelected = "";
+        owner.moveExistingRequestId = "";
+      }
+    } catch (error) {
+      if (state !== owner) return;
+      owner.moveExistingCandidates = [];
+      owner.moveExistingError = String(error?.message || "Eligible Tasks failed to load");
+    } finally {
+      if (state === owner) {
+        owner.moveExistingLoading = false;
+        render();
+      }
+    }
+  }
+
+  function toggleMoveExisting() {
+    if (state?.kind !== "task" || !state.task) return;
+    if (isDirty()) return;
+    state.moveExistingOpen = !state.moveExistingOpen;
+    state.moveExistingSelected = "";
+    state.moveExistingRequestId = "";
+    state.moveExistingError = "";
+    if (state.moveExistingOpen) {
+      void loadMoveExistingCandidates();
+    } else {
+      render();
+    }
+  }
+
+  async function moveExistingSelected() {
+    if (state?.kind !== "task" || !state.task || isDirty()) return;
+    const sourceTaskId = String(state.moveExistingSelected || "");
+    if (!sourceTaskId || state.moveExistingBusy) return;
+    if (!state.moveExistingRequestId) state.moveExistingRequestId = newRequestId("task-move-existing");
+    const owner = state;
+    owner.moveExistingBusy = true;
+    owner.moveExistingError = "";
+    render();
+    try {
+      const updated = await api("/api/tasks/move-existing", {
+        method: "POST",
+        body: JSON.stringify({
+          project: owner.task.project,
+          target_task_id: owner.task.task_id,
+          source_task_id: sourceTaskId,
+          request_id: owner.moveExistingRequestId,
+          expected_updated_at: owner.task.updated_at,
+        }),
+      });
+      if (state !== owner) return;
+      owner.task = cloneDraft(updated);
+      owner.editDraft = taskDraftFromRecord(owner.task);
+      owner.editOriginal = draftSignature(owner.editDraft);
+      owner.saveRequestId = "";
+      owner.moveExistingOpen = false;
+      owner.moveExistingSelected = "";
+      owner.moveExistingRequestId = "";
+      owner.moveExistingCandidates = [];
+      owner.moveExistingError = "";
+      render();
+      await onTaskChanged?.();
+      showToast?.("New Task moved here");
+    } catch (error) {
+      if (state !== owner) return;
+      owner.moveExistingError = String(error?.message || "Move existing Task failed");
+      render();
+      showError?.(owner.moveExistingError, "Move existing Task failed");
+    } finally {
+      if (state === owner) {
+        owner.moveExistingBusy = false;
+        render();
+      }
+    }
+  }
+
+  function createMoveExistingChooser() {
+    const chooser = document.createElement("div");
+    chooser.className = "task-workspace-move-existing";
+    const note = document.createElement("div");
+    note.className = "task-workspace-move-note";
+    const strong = document.createElement("strong");
+    strong.textContent = "Move existing";
+    const span = document.createElement("span");
+    span.textContent = "Only standalone New Tasks can be moved. Their Board identity is retired.";
+    note.append(strong, span);
+    chooser.appendChild(note);
+
+    const list = document.createElement("div");
+    list.className = "task-workspace-move-options";
+    if (state.moveExistingLoading) {
+      const loading = document.createElement("div");
+      loading.className = "task-workspace-move-empty";
+      loading.textContent = "Loading eligible Tasks…";
+      list.appendChild(loading);
+    } else if (state.moveExistingError) {
+      const error = document.createElement("div");
+      error.className = "task-workspace-move-empty danger";
+      error.textContent = state.moveExistingError;
+      list.appendChild(error);
+    } else {
+      const candidates = Array.isArray(state.moveExistingCandidates) ? state.moveExistingCandidates : [];
+      if (!candidates.length) {
+        const empty = document.createElement("div");
+        empty.className = "task-workspace-move-empty";
+        empty.textContent = "No eligible New tasks. Only standalone New Tasks can be moved.";
+        list.appendChild(empty);
+      }
+      for (const task of candidates) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "task-workspace-move-option";
+        option.classList.toggle("selected", String(task.task_id || "") === String(state.moveExistingSelected || ""));
+        option.dataset.moveExistingTaskId = String(task.task_id || "");
+        const copy = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = String(task.title || task.task_id || "Task");
+        const meta = document.createElement("small");
+        meta.textContent = [String(task.task_id || ""), String(task.items?.[0]?.workflow || "")].filter(Boolean).join(" · ");
+        copy.append(title, meta);
+        const status = document.createElement("span");
+        status.textContent = "New";
+        option.append(copy, status);
+        option.addEventListener("click", () => {
+          state.moveExistingSelected = String(task.task_id || "");
+          state.moveExistingRequestId = "";
+          render();
+        });
+        list.appendChild(option);
+      }
+    }
+    chooser.appendChild(list);
+
+    const actions = document.createElement("div");
+    actions.className = "task-workspace-move-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.disabled = !!state.moveExistingBusy;
+    cancel.onclick = () => {
+      state.moveExistingOpen = false;
+      state.moveExistingSelected = "";
+      state.moveExistingRequestId = "";
+      state.moveExistingError = "";
+      render();
+    };
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "primary";
+    confirm.textContent = state.moveExistingBusy ? "Moving…" : "Move here";
+    confirm.disabled = !state.moveExistingSelected || !!state.moveExistingBusy || !!state.moveExistingLoading;
+    confirm.onclick = () => void moveExistingSelected();
+    actions.append(cancel, confirm);
+    chooser.appendChild(actions);
+    return chooser;
+  }
+
   function createTaskListTools({ editable, canYaml, reason = "" } = {}) {
+    const wrap = document.createElement("div");
+    wrap.className = "task-workspace-list-tools-wrap";
     const tools = document.createElement("div");
     tools.className = "task-workspace-list-tools";
+
+    if (state?.kind === "task") {
+      const move = document.createElement("button");
+      move.id = "taskWorkspaceMoveExisting";
+      move.type = "button";
+      move.textContent = "Move existing";
+      const dirty = isDirty();
+      move.disabled = !editable || !taskEditPolicy(state.task).can_add_item || dirty;
+      move.title = dirty ? "Save Task List changes before moving an existing Task" : (move.disabled ? reason : "");
+      move.onclick = toggleMoveExisting;
+      tools.appendChild(move);
+    }
+
     const yaml = document.createElement("button");
     yaml.id = "taskWorkspaceYamlButton";
     yaml.type = "button";
@@ -911,7 +1104,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const prompts = promptsButton();
       if (prompts) tools.appendChild(prompts);
     }
-    return tools;
+    wrap.appendChild(tools);
+    if (state?.kind === "task" && state.moveExistingOpen) wrap.appendChild(createMoveExistingChooser());
+    return wrap;
   }
 
   function createTaskListAddButton({ enabled = true, first = false, onClick, reason = "" } = {}) {

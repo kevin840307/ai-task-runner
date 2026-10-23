@@ -575,3 +575,36 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   .task-workspace-list-row:not(.task-workspace-info-row){grid-template-columns:18px 28px minmax(0,1fr)}
   .task-workspace-list-actions{grid-column:3;justify-content:flex-end;flex-wrap:wrap}
 }
+
+
+/* Feature secondary Move existing chooser; small inline surface, never a second large editor. */
+.task-workspace-list-tools-wrap{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.task-workspace-list-tools-wrap .task-workspace-list-tools{margin:0;padding:0;border:0;flex-wrap:wrap}
+.task-workspace-move-existing{display:grid;gap:7px;margin-top:8px}
+.task-workspace-move-note{
+  display:grid;gap:3px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--warn) 42%,var(--line));
+  border-radius:9px;background:var(--warning-soft)
+}
+.task-workspace-move-note strong{font-size:9px;color:var(--warn)}
+.task-workspace-move-note span{font-size:8px;color:var(--text);line-height:1.4}
+.task-workspace-move-options{display:grid;gap:5px;max-height:210px;overflow:auto}
+.task-workspace-move-option{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;
+  width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);text-align:left
+}
+.task-workspace-move-option:hover{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-soft)}
+.task-workspace-move-option.selected{
+  border-color:var(--accent);background:var(--accent-softer);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 7%,transparent)
+}
+.task-workspace-move-option strong{display:block;font-size:8.5px}
+.task-workspace-move-option small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px}
+.task-workspace-move-option>span{color:var(--muted);font-size:8px;font-weight:850}
+.task-workspace-move-empty{padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:8px;text-align:center}
+.task-workspace-move-empty.danger{color:var(--fail)}
+.task-workspace-move-actions{display:flex;justify-content:flex-end;gap:5px}
+.task-workspace-move-actions button{
+  min-height:28px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);
+  color:var(--text);font-size:8px;font-weight:850
+}
+.task-workspace-move-actions button.primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent,#fff)}
