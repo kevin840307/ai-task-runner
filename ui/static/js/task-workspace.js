@@ -576,6 +576,23 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       : { item_id: itemId, index, state: "locked", editable: false, restructure: false, reason: policy.reason };
   }
 
+  function moveItemTo(index, targetIndex) {
+    const draft = editorDraft();
+    const items = draft?.items;
+    if (!Array.isArray(items) || index < 0 || index >= items.length || targetIndex < 0 || targetIndex >= items.length) return;
+    const insertAt = index < targetIndex ? targetIndex - 1 : targetIndex;
+    if (insertAt === index) return;
+    if (state?.kind === "task") {
+      const currentPolicy = taskItemEditPolicy(index, items[index]);
+      const targetPolicy = taskItemEditPolicy(targetIndex, items[targetIndex]);
+      if (!currentPolicy.restructure || !targetPolicy.restructure) return;
+    }
+    const [item] = items.splice(index, 1);
+    items.splice(insertAt, 0, item);
+    touchEditor();
+    render();
+  }
+
   function moveItem(index, delta) {
     const draft = editorDraft();
     const items = draft?.items;
@@ -623,9 +640,32 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
     list.className = "task-workspace-list";
+    let dragIndex = null;
+    const clearDragState = () => {
+      dragIndex = null;
+      list.querySelectorAll(".task-workspace-list-row").forEach((node) => node.classList.remove("dragging", "drag-over"));
+    };
     values.forEach((item, index) => {
       const row = document.createElement("article");
       row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
+      const rowPolicy = Array.isArray(itemPolicies)
+        ? (String(item.item_id || "")
+          ? itemPolicies.find((value) => String(value?.item_id || "") === String(item.item_id || ""))
+          : itemPolicies[index])
+        : null;
+      const policy = rowPolicy || { editable: true, restructure: true, reason: "" };
+
+      if (editable) {
+        const grip = document.createElement("span");
+        grip.className = "task-workspace-drag-grip";
+        grip.setAttribute("aria-hidden", "true");
+        grip.textContent = "⋮⋮";
+        row.appendChild(grip);
+        row.draggable = policy.restructure !== false;
+        row.tabIndex = 0;
+        if (!row.draggable && policy.reason) row.title = String(policy.reason);
+      }
+
       const number = document.createElement("span");
       number.className = "task-workspace-list-number";
       number.textContent = String(index + 1);
@@ -634,11 +674,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const title = document.createElement("strong");
       title.textContent = String(item.title || "Task " + (index + 1));
       const meta = document.createElement("small");
-      const rowPolicy = Array.isArray(itemPolicies)
-        ? (String(item.item_id || "")
-          ? itemPolicies.find((value) => String(value?.item_id || "") === String(item.item_id || ""))
-          : itemPolicies[index])
-        : null;
       const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
         ? String(rowPolicy.state).toUpperCase()
         : "";
@@ -651,30 +686,60 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       prompt.textContent = String(item.prompt || item.goal_file || "");
       copy.append(title, meta, prompt);
       row.append(number, copy);
+
       if (editable) {
-        const policy = rowPolicy || { editable: true, restructure: true, reason: "" };
+        row.addEventListener("dblclick", (event) => {
+          if (event.target.closest("button")) return;
+          if (policy.editable !== false) editItem(index);
+        });
+        row.addEventListener("keydown", (event) => {
+          if (event.target.closest("button, input, select, textarea")) return;
+          if (event.key === "Enter" && policy.editable !== false) {
+            event.preventDefault();
+            editItem(index);
+            return;
+          }
+          if (event.altKey && event.key === "ArrowUp" && index > 0) {
+            event.preventDefault();
+            moveItem(index, -1);
+            return;
+          }
+          if (event.altKey && event.key === "ArrowDown" && index < values.length - 1) {
+            event.preventDefault();
+            moveItem(index, 1);
+          }
+        });
+        row.addEventListener("dragstart", (event) => {
+          if (event.target.closest("button") || policy.restructure === false) {
+            event.preventDefault();
+            return;
+          }
+          dragIndex = index;
+          row.classList.add("dragging");
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+        });
+        row.addEventListener("dragover", (event) => {
+          if (dragIndex == null || policy.restructure === false) return;
+          if (state?.kind === "task") {
+            const sourcePolicy = taskItemEditPolicy(dragIndex, values[dragIndex]);
+            if (!sourcePolicy.restructure || !policy.restructure) return;
+          }
+          event.preventDefault();
+          row.classList.add("drag-over");
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        });
+        row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+        row.addEventListener("drop", (event) => {
+          if (dragIndex == null) return;
+          event.preventDefault();
+          const source = dragIndex;
+          clearDragState();
+          moveItemTo(source, index);
+        });
+        row.addEventListener("dragend", clearDragState);
+
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
-        for (const [label, titleText, delta] of [["↑", tr("task.move_up", "Move up"), -1], ["↓", tr("task.move_down", "Move down"), 1]]) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = label;
-          const next = index + delta;
-          const adjacent = next >= 0 && next < values.length
-            ? (Array.isArray(itemPolicies)
-              ? (String(values[next]?.item_id || "")
-                ? itemPolicies.find((value) => String(value?.item_id || "") === String(values[next]?.item_id || ""))
-                : itemPolicies[next])
-              : null)
-            : null;
-          button.disabled = !policy.restructure
-            || next < 0
-            || next >= values.length
-            || adjacent?.restructure === false;
-          button.title = button.disabled && policy.reason ? String(policy.reason) : titleText;
-          button.onclick = () => moveItem(index, delta);
-          actions.appendChild(button);
-        }
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "task-workspace-row-edit";
@@ -684,6 +749,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         edit.onclick = () => editItem(index);
         const remove = document.createElement("button");
         remove.type = "button";
+        remove.className = "danger-item";
         remove.textContent = tr("task.remove", "Remove");
         remove.disabled = values.length <= 1 || policy.restructure === false;
         remove.title = remove.disabled && policy.reason ? String(policy.reason) : "";
@@ -710,7 +776,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     });
     return list;
   }
-
   function appendDraftListActions(body) {
     const actions = document.createElement("div");
     actions.className = "task-workspace-info-actions";

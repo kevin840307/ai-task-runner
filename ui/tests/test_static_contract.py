@@ -526,6 +526,10 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     task_workspace_js = (static / "js" / "task-workspace.js").read_text(encoding="utf-8")
     assert "task-create-menu-icon" in task_workspace_js
     assert "rect.right - width" in task_workspace_js
+    assert ".task-workspace-drag-grip" in workspace
+    assert 'row.draggable = policy.restructure !== false' in task_workspace_js
+    assert 'event.altKey && event.key === "ArrowUp"' in task_workspace_js
+    assert '[["↑"' not in task_workspace_js
 
 
 def test_global_settings_sidebar_uses_one_icon_and_plain_copy():

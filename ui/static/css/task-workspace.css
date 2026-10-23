@@ -176,3 +176,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 @media(max-width:760px){
   .task-workspace-shell,.task-workspace-shell.expanded{width:min(100%,620px);max-width:100%}
 }
+
+
+/* Feature Task List interaction: grip + drag is primary; Alt+Arrow is keyboard reorder. */
+.task-workspace-list-row:not(.task-workspace-info-row){
+  grid-template-columns:18px 25px minmax(0,1fr) auto;
+  user-select:none
+}
+.task-workspace-list-row[draggable="true"]{cursor:grab;transition:border-color .12s,background .12s,opacity .12s}
+.task-workspace-list-row[draggable="true"]:active{cursor:grabbing}
+.task-workspace-list-row[draggable="true"]:hover{border-color:color-mix(in srgb,var(--accent) 36%,var(--line))}
+.task-workspace-list-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.task-workspace-list-row.dragging{opacity:.5}
+.task-workspace-list-row.drag-over{outline:2px solid color-mix(in srgb,var(--accent) 28%,transparent);outline-offset:2px}
+.task-workspace-drag-grip{display:grid;place-items:center;width:18px;height:25px;color:var(--muted);font-size:11px;font-weight:900;line-height:1;cursor:grab}
+.task-workspace-list-actions .danger-item{color:var(--fail)}
+.task-workspace-info-row{grid-template-columns:25px minmax(0,1fr) auto}

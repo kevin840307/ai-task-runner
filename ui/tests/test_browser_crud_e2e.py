@@ -2161,14 +2161,18 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
 
-            # Reorder is deterministic and reversible; removing the third child
-            # leaves the two final Tasks used by validation/create below.
-            page.locator(".task-workspace-list-row").first.locator("button[title='Move down']").click()
+            # Feature parity: drag is the primary order gesture; Alt+Arrow is
+            # the keyboard equivalent and old arrow buttons are not rendered.
+            assert page.locator(".task-workspace-list-row").first.get_attribute("draggable") == "true"
+            assert page.locator(".task-workspace-list-row").get_by_title("Move up").count() == 0
+            assert page.locator(".task-workspace-list-row").get_by_title("Move down").count() == 0
+            page.locator(".task-workspace-list-row").first.drag_to(page.locator(".task-workspace-list-row").nth(2))
             page.wait_for_function(
                 "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"
             )
             assert "First list child" in page.locator(".task-workspace-list-row").nth(1).inner_text()
-            page.locator(".task-workspace-list-row").nth(1).locator("button[title='Move up']").click()
+            page.locator(".task-workspace-list-row").nth(1).focus()
+            page.keyboard.press("Alt+ArrowUp")
             page.wait_for_function(
                 "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('First list child')"
             )
@@ -3124,7 +3128,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
-            page.locator(".task-workspace-list-row").nth(2).get_by_title("Move up").click()
+            page.locator(".task-workspace-list-row").nth(2).focus()
+            page.keyboard.press("Alt+ArrowUp")
             page.locator(".task-workspace-list-row").nth(2).get_by_text("Remove", exact=True).click()
             assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceSave")
