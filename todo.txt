@@ -1906,12 +1906,17 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - tool/agent_live_probe.py --output <path> writes JSON with source HEAD, requested backends,
       diagnostic flags and formal_gate status.
     - Native session identity is redacted from the saved artifact; only session_id_present is retained.
+    - Formal mode now performs a real Native Ask roundtrip through ChatAgentService + ChatService:
+      wait for the provider Ask, answer through the canonical Ask schema, then require same-turn continuation.
+    - A capability flag alone is insufficient; chat_ping.ok and native_ask.ok must both be true for Qwen
+      and OpenCode before formal_gate can become true.
     - Diagnostic --discovery-only / --allow-missing / --allow-no-ask runs can never set formal_gate=true.
-    - tests/test_agent_live_probe.py locks redaction, formal-gate qualification and atomic replacement.
+    - tests/test_agent_live_probe.py locks redaction, formal-gate qualification, Ask orchestration,
+      active-Chat restoration and atomic evidence replacement.
 
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
-      python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output agent-live-evidence.json
+      python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
     - Use --model qwen=<id> / --model opencode=<id> when explicit model-selection evidence is required.
     - --allow-no-ask and --discovery-only are diagnostic modes only and do not satisfy this checkbox.
     - Do not mark the feature/todo formal adapter-live item complete until both installed CLIs pass.
