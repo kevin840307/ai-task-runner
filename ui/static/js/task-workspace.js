@@ -3108,9 +3108,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           yamlText: "",
           yamlOriginal: "",
           yamlReturn: "list",
+          workspaceOptions: null,
+          workspaceOptionsLoading: true,
+          workspaceOptionsError: "",
+          projectOptions: [],
+          projectOptionsLoading: false,
         };
         onTaskChanged?.(task);
         render();
+        void loadWorkspaceOptions();
         return;
       }
       await state.onSave?.(normalized);
