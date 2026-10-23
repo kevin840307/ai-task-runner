@@ -2017,6 +2017,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
             assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
             assert page.locator("#taskWorkspaceHeaderActions").is_hidden()
+            assert page.locator("#taskWorkspaceTitle").inner_text() == "New task"
+            assert page.locator("#taskWorkspaceMeta").inner_text() == "New Task"
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
             assert page.locator("#taskWorkspaceProject").is_editable() is True
             assert page.locator(".task-workspace-project-toggle").is_enabled()
@@ -2126,6 +2128,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceHeaderActions").is_visible()
             assert page.locator("#taskWorkspaceHeaderCancel").is_visible()
             assert page.locator("#taskWorkspaceHeaderCreateList").is_visible()
+            assert page.locator("#taskWorkspaceTitle").inner_text() == "New Task List"
+            assert page.locator("#taskWorkspaceMeta").inner_text() == "Draft · not created yet"
             assert page.locator("#taskWorkspaceHeaderCreateList").inner_text() == "Create Task List"
             assert page.locator("#taskWorkspaceHeaderCreateList").is_disabled()
             create_header_box = page.locator("#taskWorkspaceHeaderCreateList").bounding_box()

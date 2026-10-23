@@ -490,6 +490,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.index = index;
       if (state.route === "list") {
         if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        state.editorMode = "edit";
         state.route = "editor";
       }
     }
@@ -738,6 +739,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     state.draftEditorOriginal = draftSignature(state.draft);
+    state.editorMode = "edit";
     state.route = "editor";
     state.index = index;
     render();
@@ -2308,6 +2310,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.error = "";
     state.fieldErrors = {};
     state.draftEditorOriginal = draftSignature(state.draft);
+    state.editorMode = "create";
     state.route = "editor";
     render();
   }
@@ -2320,6 +2323,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     touchEditor();
     state.index = state.editDraft.items.length - 1;
     state.editorReturn = "list";
+    state.editorMode = "create";
     state.error = "";
     state.route = "editor";
     render();
@@ -2701,6 +2705,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const item = state.editDraft?.items?.[index];
     if (!taskItemEditPolicy(index, item).editable) return;
     state.editorReturn = returnRoute === "list" ? "list" : "info";
+    state.editorMode = "edit";
     state.index = Math.max(0, Math.min(Number(index) || 0, state.editDraft.items.length - 1));
     state.saveRequestId = "";
     state.error = "";
@@ -2738,17 +2743,22 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       byId("taskWorkspaceEyebrow").textContent = yamlRoute
         ? tr("task.yaml", "TASK YAML")
         : (editorRoute ? tr("task.editor", "TASK EDITOR") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.info", "TASK INFO")));
+      const taskItems = state.editDraft?.items || state.task?.items || [];
       byId("taskWorkspaceTitle").textContent = yamlRoute
-        ? String(state.editDraft?.title || state.task?.title || "Task YAML")
+        ? "Edit task list YAML"
         : editorRoute
-          ? String(state.editDraft?.items?.[state.index]?.title || state.task?.title || "Edit Task")
+          ? (state.editorMode === "create" ? "New task" : "Edit task")
           : String(state.task?.title || "Task");
       byId("taskWorkspaceMeta").textContent = yamlRoute
-        ? tr("task.same_canonical_items", "Same canonical items[]")
+        ? String(state.task?.task_id || "") + " · " + String(state.task?.title || "")
         : editorRoute
-          ? trf("task.item_position", { index: state.index + 1, count: state.editDraft?.items?.length || 0 }, "Task " + (state.index + 1) + " of " + String(state.editDraft?.items?.length || 0))
+          ? String(state.task?.task_id || "") + " · Task " + String(state.index + 1) + " of " + String(taskItems.length)
           : listRoute
-            ? trf("task.ordered_count", { count: (state.editDraft?.items || state.task?.items || []).length }, String((state.editDraft?.items || state.task?.items || []).length) + " ordered task(s)")
+            ? [
+                String(state.task?.task_id || ""),
+                String(state.task?.status || "new").replace(/^./, (value) => value.toUpperCase()),
+                String(taskItems.length) + " task" + (taskItems.length === 1 ? "" : "s"),
+              ].filter(Boolean).join(" · ")
             : String(state.task?.task_id || "");
       if (yamlRoute) {
         byId("taskWorkspaceFooterBack").textContent = tr("task.back_list", "Back to Task List");
@@ -2776,15 +2786,19 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (save) save.hidden = false;
     byId("taskWorkspaceEyebrow").textContent = yamlRoute ? tr("task.yaml", "TASK YAML") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.editor", "TASK EDITOR"));
     byId("taskWorkspaceTitle").textContent = yamlRoute
-      ? String(state.draft.title || "Task YAML")
+      ? "Edit task list YAML"
       : listRoute
         ? String(state.draft.title || (creating ? "New Task List" : "Task List"))
-        : String(state.draft.items[state.index]?.title || state.draft.title || (creating ? "New Task" : "Edit Task"));
+        : (state.editorMode === "edit" ? "Edit task" : "New task");
     byId("taskWorkspaceMeta").textContent = yamlRoute
       ? "Same canonical items[]"
-      : listRoute
-        ? trf("task.ordered_count", { count }, count + " ordered task" + (count === 1 ? "" : "s"))
-        : "Task " + (state.index + 1) + " of " + count;
+      : rootCreateList
+        ? "Draft · not created yet"
+        : listRoute
+          ? count + " ordered task" + (count === 1 ? "" : "s")
+          : rootCreateTask
+            ? "New Task"
+            : "Task " + (state.index + 1) + " of " + count;
     byId("taskWorkspaceFooterBack").textContent = yamlRoute
       ? tr("task.back_list", "Back to Task List")
       : (listRoute
@@ -2891,6 +2905,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.fieldErrors = { [fieldErrorKey(field, index)]: message };
       if (state.route === "list") {
         if (isDraftState()) state.draftEditorOriginal = draftSignature(state.draft);
+        state.editorMode = "edit";
         state.route = "editor";
       }
       render();
@@ -3050,6 +3065,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       onSave: null,
       createOnSave: true,
       creationKind: list ? "list" : "task",
+      editorMode: list ? "" : "create",
       createRequestId: newRequestId("task-create"),
       route: list ? "list" : "editor",
       index: 0,
@@ -3089,6 +3105,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       sourceModes: {},
       onSave,
       route: value.items.length > 1 ? "list" : "editor",
+      editorMode: value.items.length > 1 ? "" : "edit",
       index: 0,
       error: "",
       fieldErrors: {},
