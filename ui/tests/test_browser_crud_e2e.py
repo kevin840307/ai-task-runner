@@ -3305,6 +3305,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#taskWorkspaceHeaderAddTask").is_visible()
             assert page.locator("#taskWorkspaceHeaderMoveExisting").is_visible()
             assert page.locator("#taskWorkspaceHeaderYaml").is_visible()
+            assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_hidden()
+            page.locator(".task-workspace-list-row").first.click()
+            assert page.locator(".task-workspace-list-row").first.get_attribute("aria-selected") == "true"
+            assert "selected" in (page.locator(".task-workspace-list-row").first.get_attribute("class") or "")
+            assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_visible()
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
             page.locator("#taskWorkspacePrompt").focus()

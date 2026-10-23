@@ -451,6 +451,20 @@ const taskWorkspace = createTaskWorkspaceController({
   confirmDialog,
   showError: showActionError,
   onTaskChanged: () => tasksBoard?.refresh(),
+  openWorkflow: async ({ workflow, project }) => {
+    const projectPath = String(project || "").trim();
+    if (projectPath && !sameProjectPath(state.project?.path || "", projectPath)) {
+      const targetProject = state.projects.find((item) => sameProjectPath(item.path, projectPath));
+      if (targetProject) await selectProject(targetProject);
+    }
+    const assets = await refreshStudioFiles({ force: true, projectPath: state.project?.path || projectPath });
+    const wanted = normalizedPath(workflow);
+    const item = (assets?.workflows || []).find((row) =>
+      [row?.path, row?.id, row?.reference, row?.name].some((value) => normalizedPath(value) === wanted)
+    );
+    if (!item) return showActionError("Workflow asset is unavailable for this Task.", "Open Workflow failed");
+    openWorkflowEditorItem(item);
+  },
   openPrompts: async () => {
     await switchView("prompt");
     showToast("Prompt assets are managed in Prompts");

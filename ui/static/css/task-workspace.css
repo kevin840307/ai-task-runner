@@ -646,3 +646,11 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 .task-workspace-field-optional{text-transform:none;letter-spacing:0}
 .task-workspace-drag-grip{height:28px}
+
+
+/* Feature Task List row selection / conditional Workflow action. */
+.task-workspace-list-row.selected{
+  border-color:color-mix(in srgb,var(--accent) 56%,var(--line))!important;
+  background:var(--accent-softer)!important;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)
+}

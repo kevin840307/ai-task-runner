@@ -6,7 +6,7 @@ function cloneDraft(value) {
 }
 function draftSignature(value) { return JSON.stringify(value || {}); }
 
-export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged, openPrompts, openMergeChat }) {
+export function createTaskWorkspaceController({ api, confirmDialog, showError, onTaskChanged, openWorkflow, openPrompts, openMergeChat }) {
   let state = null;
   let pendingUploadActions = Promise.resolve();
   let overlay = null;
@@ -35,6 +35,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             <span id="taskWorkspaceMeta"></span>
           </div>
           <div id="taskWorkspaceHeaderActions" class="task-workspace-header-actions" hidden>
+            <button id="taskWorkspaceHeaderOpenWorkflow" class="ghost" type="button" hidden>Open Workflow</button>
             <button id="taskWorkspaceHeaderAddTask" type="button">+ Add task</button>
             <button id="taskWorkspaceHeaderMoveExisting" class="ghost" type="button">Move existing</button>
             <button id="taskWorkspaceHeaderYaml" type="button">Edit YAML</button>
@@ -59,6 +60,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceHeaderBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceFooterBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
+    byId("taskWorkspaceHeaderOpenWorkflow").addEventListener("click", () => {
+      if (state?.route !== "list" || state.kind !== "task") return;
+      const items = Array.isArray(state.editDraft?.items) ? state.editDraft.items : (Array.isArray(state.task?.items) ? state.task.items : []);
+      const item = items[Number(state.selectedListIndex)];
+      const workflow = String(item?.workflow || "").trim();
+      if (!workflow) return;
+      void openWorkflow?.({ workflow, project: String(item?.project || state.task?.project || "") });
+    });
     byId("taskWorkspaceHeaderAddTask").addEventListener("click", () => {
       if (state?.route !== "list") return;
       if (state.kind === "task") addTaskListItem();
@@ -353,12 +362,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const durableList = listRoute && state.kind === "task";
     group.hidden = !(newList || durableList);
 
+    const openWorkflowButton = byId("taskWorkspaceHeaderOpenWorkflow");
     const add = byId("taskWorkspaceHeaderAddTask");
     const move = byId("taskWorkspaceHeaderMoveExisting");
     const yaml = byId("taskWorkspaceHeaderYaml");
     const cancel = byId("taskWorkspaceHeaderCancel");
     const create = byId("taskWorkspaceHeaderCreateList");
-    for (const button of [add, move, yaml, cancel, create]) if (button) button.hidden = true;
+    for (const button of [openWorkflowButton, add, move, yaml, cancel, create]) if (button) button.hidden = true;
 
     if (newList) {
       if (cancel) {
@@ -376,6 +386,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (durableList) {
       const policy = taskEditPolicy(state.task);
       const items = Array.isArray(state.editDraft?.items) ? state.editDraft.items : (Array.isArray(state.task?.items) ? state.task.items : []);
+      const selected = items[Number(state.selectedListIndex)];
+      const selectedWorkflow = String(selected?.workflow || "").trim();
+      if (openWorkflowButton) {
+        openWorkflowButton.hidden = !selectedWorkflow;
+        openWorkflowButton.disabled = !selectedWorkflow;
+        openWorkflowButton.textContent = tr("task.open_workflow", "Open Workflow");
+      }
       if (add) {
         add.hidden = false;
         add.textContent = tr("task.add_label", "+ Add task");
@@ -701,6 +718,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     const [item] = items.splice(index, 1);
     items.splice(insertAt, 0, item);
+    state.selectedListIndex = insertAt;
     touchEditor();
     render();
   }
@@ -750,6 +768,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return policy.editable ? "" : String(policy.reason || "Task editing is unavailable");
   }
 
+  function selectTaskListRow(index) {
+    if (!state || state.route !== "list") return;
+    state.selectedListIndex = Number(index);
+    document.querySelectorAll(".task-workspace-list-row").forEach((row, rowIndex) => {
+      const selected = rowIndex === state.selectedListIndex;
+      row.classList.toggle("selected", selected);
+      row.setAttribute("aria-selected", String(selected));
+    });
+    renderHeaderActions();
+  }
+
   function renderTaskRows(items, { editable = false, itemPolicies = null, onEdit = null, disabledEditReason = "" } = {}) {
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
@@ -763,6 +792,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     values.forEach((item, index) => {
       const row = document.createElement("article");
       row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
+      row.classList.toggle("selected", Number(state?.selectedListIndex) === index);
+      row.setAttribute("aria-selected", String(Number(state?.selectedListIndex) === index));
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("button")) return;
+        selectTaskListRow(index);
+      });
       const rowPolicy = Array.isArray(itemPolicies)
         ? (String(item.item_id || "")
           ? itemPolicies.find((value) => String(value?.item_id || "") === String(item.item_id || ""))
@@ -801,6 +836,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (editable) {
         row.addEventListener("dblclick", (event) => {
           if (event.target.closest("button")) return;
+          selectTaskListRow(index);
           if (policy.editable !== false) editItem(index);
         });
         row.addEventListener("keydown", (event) => {
@@ -882,6 +918,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         actions.append(edit, remove);
         row.appendChild(actions);
       } else if (typeof onEdit === "function" || disabledEditReason) {
+        row.addEventListener("dblclick", (event) => {
+          if (event.target.closest("button")) return;
+          selectTaskListRow(index);
+          if (typeof onEdit === "function" && !disabledEditReason) onEdit(index);
+        });
         const actions = document.createElement("div");
         actions.className = "task-workspace-list-actions";
         const workspaceChip = document.createElement("span");
@@ -1185,6 +1226,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function buildTaskListPage({ items, editable, canAdd, canYaml, reason = "", durableTask = null } = {}) {
+    if (!Number.isInteger(state?.selectedListIndex) || state.selectedListIndex < 0 || state.selectedListIndex >= (items || []).length) {
+      state.selectedListIndex = null;
+    }
     const page = document.createElement("div");
     page.className = "task-workspace-list-page";
 
@@ -1259,9 +1303,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const helpTitle = document.createElement("h3");
     helpTitle.textContent = "Quick use";
     const firstHelp = document.createElement("p");
-    firstHelp.innerHTML = "<strong>Double-click</strong> edits a task.";
+    firstHelp.innerHTML = "<strong>Click</strong> selects a task · <strong>Double-click</strong> edits it.";
     const secondHelp = document.createElement("p");
-    secondHelp.innerHTML = "Drag the grip to reorder · <strong>Alt+↑/↓</strong> is the keyboard alternative.";
+    secondHelp.innerHTML = "Drag the grip to reorder. Edit / Remove stay on the selected row.";
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
 

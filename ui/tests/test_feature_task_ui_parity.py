@@ -182,6 +182,7 @@ def test_task_list_action_ownership_matches_prototype_html() -> None:
     # The feature shell owns these Task List actions; production maps them to
     # the same shared drawer header rather than duplicating controls in List info.
     feature_ids = {
+        "planOpenWorkflow": "taskWorkspaceHeaderOpenWorkflow",
         "planAddTask": "taskWorkspaceHeaderAddTask",
         "planAddExisting": "taskWorkspaceHeaderMoveExisting",
         "planEditYaml": "taskWorkspaceHeaderYaml",
