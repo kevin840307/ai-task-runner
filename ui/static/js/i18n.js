@@ -4,7 +4,7 @@
     "zh-TW": {
       "theme.open": "Theme & Appearance", "theme.settings": "Settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
       "language.label": "語言", "common.close": "關閉", "common.cancel": "取消", "theme.recommended": "推薦", "theme.enterprise": "企業", "theme.creative": "AI / 創意", "theme.focus": "暖色 / 專注", "theme.modern": "鮮明 / 現代",
-      "nav.tasks": "任務", "nav.workflows": "工作流程", "nav.prompts": "Prompts", "nav.settings": "設定",
+      "nav.tasks": "任務", "nav.workflows": "工作流程", "nav.prompts": "Prompts", "nav.settings": "設定", "nav.work": "工作", "nav.assets": "資產",
       "projects.label": "專案", "projects.new": "新增專案", "projects.add": "新增 / 開啟專案", "projects.open": "開啟專案", "projects.open_desc": "選擇 Runner 要操作的專案資料夾。專案只會加入側邊欄，不會複製或搬動檔案。",
       "settings.global_hint": "全域 Runner 偏好設定",
       "project.select": "選擇專案", "project.open_hint": "開啟本機專案資料夾以開始。",
@@ -69,7 +69,7 @@
     en: {
       "theme.open": "Theme and appearance", "theme.settings": "Interface settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
       "language.label": "Language", "common.close": "Close", "common.cancel": "Cancel", "theme.recommended": "Recommended", "theme.enterprise": "Enterprise", "theme.creative": "AI / Creative", "theme.focus": "Warm / Focus", "theme.modern": "Distinct / Modern",
-      "nav.tasks": "Tasks", "nav.workflows": "Workflows", "nav.prompts": "Prompts", "nav.settings": "Settings",
+      "nav.tasks": "Tasks", "nav.workflows": "Workflows", "nav.prompts": "Prompts", "nav.settings": "Settings", "nav.work": "Work", "nav.assets": "Assets",
       "projects.label": "Projects", "projects.new": "New Project", "projects.add": "Add / open project", "projects.open": "Open Project", "projects.open_desc": "Choose the project folder Runner should use. The project is added to the sidebar only; files are not copied or moved.",
       "settings.global_hint": "Global runner preferences",
       "project.select": "Select a project", "project.open_hint": "Open a local project folder to begin.",

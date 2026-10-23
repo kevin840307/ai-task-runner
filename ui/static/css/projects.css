@@ -794,3 +794,33 @@ body.projects-collapsed .new-project-button strong { display: none; }
   border-color: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+
+
+/* Feature prototype parity: keep fixed sidebar controls and project-list geometry aligned. */
+.projects{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:10px}
+.projects-head.brandrow{flex:0 0 auto;margin:0;padding-bottom:12px;border-bottom:1px solid color-mix(in srgb,var(--line) 82%,transparent)}
+.projects .brand{display:flex;align-items:center;gap:9px;min-width:0;font-size:14px;font-weight:760}
+.brandmark{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-size:14px;font-weight:950;box-shadow:0 10px 22px color-mix(in srgb,var(--accent) 22%,transparent)}
+.projects .new-project-button{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;height:38px;min-height:38px;margin:8px 0 4px;padding:0 10px;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--line));border-radius:9px;background:var(--panel-2);color:var(--text);text-align:left;font-size:11px;box-shadow:none}
+.projects .new-project-button .button-icon{display:inline;width:auto;height:auto;border-radius:0;background:transparent;color:var(--accent-dark);font-size:16px;line-height:1}
+.projects .new-project-button:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-soft);color:var(--accent-dark);box-shadow:none}
+.navgroup-label{flex:0 0 auto;margin:12px 9px 5px;color:color-mix(in srgb,var(--muted) 88%,transparent);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.projects .project-nav.nav-compact{flex:0 0 auto;display:grid;gap:2px;margin:0;padding:0;border:0}
+.projects .project-nav.nav-compact.asset-nav{padding-bottom:10px;border-bottom:1px solid color-mix(in srgb,var(--line) 82%,transparent)}
+.projects .project-nav.nav-compact .project-nav-link{min-height:36px;height:36px;padding:0 9px;gap:9px;border-color:transparent;border-radius:9px;background:transparent;box-shadow:none;font-size:12px}
+.projects .project-nav.nav-compact .project-nav-link:hover,.projects .project-nav.nav-compact .project-nav-link.active{transform:none;border-color:color-mix(in srgb,var(--accent) 14%,transparent);background:var(--accent-soft);color:var(--accent-dark);box-shadow:none}
+.projects .project-nav.nav-compact .project-nav-link .nav-icon{width:22px;height:22px;border-radius:7px}
+.projects .project-nav.nav-compact .project-nav-link strong{font-size:12px}
+.project-section-label{flex:0 0 auto;min-height:0;padding:13px 8px 5px;color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.projects .project-list{flex:1 1 auto;min-height:0;align-content:start;grid-auto-rows:max-content;gap:1px;margin:0;padding:1px 2px 8px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--muted) 38%,transparent) transparent}
+.projects .project-tree{padding:0}
+.projects .project-row{position:relative;grid-template-columns:minmax(0,1fr);gap:2px;align-items:center}
+.projects .project-root{grid-template-columns:9px minmax(0,1fr);gap:8px;width:100%;min-height:42px;margin:1px 0;padding:5px 34px 5px 8px;border:1px solid transparent;border-radius:8px;background:transparent}
+.projects .project-root:hover,.projects .project-tree.active .project-root{border-color:color-mix(in srgb,var(--accent) 16%,transparent);background:var(--accent-soft)}
+.projects .project-root::before{top:8px;bottom:8px}
+.projects .project-root strong{font-size:11px}
+.projects .project-root .project-copy small{font-size:8px}
+.projects .project-menu-button{top:8px;right:2px;width:26px;height:26px;border-radius:7px}
+.sidebar-global-settings.sidebar-global{flex:0 0 auto;margin-top:8px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--line) 82%,transparent)}
+.sidebar-global-settings .global-settings-button{width:100%;min-height:40px;height:40px;padding:6px 9px;border-color:transparent;border-radius:9px;background:transparent;box-shadow:none}
+.sidebar-global-settings .global-settings-button:hover{transform:none;border-color:color-mix(in srgb,var(--accent) 14%,transparent);background:var(--accent-soft);box-shadow:none}

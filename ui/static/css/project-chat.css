@@ -449,3 +449,14 @@
 .project-chat-ask-error { color: var(--fail, #b42318); font-size: 9px; font-weight: 750; }
 .project-chat-ask-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .project-chat-ask-actions button { min-height: 28px; padding: 4px 9px; font-size: 10px; }
+
+
+/* Feature prototype parity: compact Composer controls. */
+.project-chat-settings-button{width:30px;min-width:30px;min-height:30px;height:30px;padding:0;border-radius:9px;background:var(--panel-2);color:var(--muted);font-size:14px;line-height:1}
+.project-chat-settings-button:hover,.project-chat-settings-button[aria-expanded="true"]{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--accent-softer);color:var(--accent-dark);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 7%,transparent)}
+.project-chat-mode-quick{height:30px;min-height:30px;gap:5px;padding:0 6px 0 8px;border-radius:9px;font-size:6.8px;font-weight:950;letter-spacing:.05em;text-transform:uppercase}
+.project-chat-mode-quick:focus-within{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 7%,transparent)}
+.project-chat-mode-quick>span{font-size:6.8px;font-weight:950}
+.project-chat-mode-hint{min-width:64px;max-width:150px;height:26px;min-height:26px;padding:0 20px 0 4px;font-size:8px;font-weight:900;letter-spacing:0;text-transform:none}
+.project-chat-new-task{height:30px;min-height:30px;padding:0 8px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));border-radius:9px;background:var(--panel-2);color:var(--accent-dark);font-size:7.8px;font-weight:900}
+.project-chat-new-task:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--accent-softer);color:var(--accent-dark)}

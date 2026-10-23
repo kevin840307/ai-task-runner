@@ -624,3 +624,9 @@ html[data-appearance] .project-runtime-label.runtime-needs_attention { color: va
 .global-setting-check input { justify-self: end; }
 body.projects-collapsed .global-settings-button strong { display: none; }
 body.projects-collapsed .global-settings-button { width: 42px; height: 42px; padding: 0; justify-content: center; }
+
+
+/* Feature prototype parity for fixed sidebar actions. */
+html[data-appearance] .new-project-button{background:var(--panel-2);color:var(--text);border-color:var(--line);box-shadow:none}
+html[data-appearance] .new-project-button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-dark);border-color:color-mix(in srgb,var(--accent) 42%,var(--line));box-shadow:none}
+html[data-appearance] .projects .project-root:hover,html[data-appearance] .projects .project-tree.active .project-root{background:var(--accent-soft);color:var(--accent-dark);border-color:color-mix(in srgb,var(--accent) 16%,var(--line))}

@@ -452,3 +452,32 @@ def test_mixed_validation_resource_pickers_have_independent_two_row_height():
     assert "overflow: hidden !important" in css
     assert "#composePanel .options-button" in css
     assert "flex: 0 0 auto" in css
+
+
+def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
+    root = Path(__file__).resolve().parents[1]
+    static = root / "static"
+    index = (static / "index.html").read_text(encoding="utf-8")
+    projects = (static / "css" / "projects.css").read_text(encoding="utf-8")
+    tasks = (static / "css" / "tasks-board.css").read_text(encoding="utf-8")
+    chat = (static / "css" / "project-chat.css").read_text(encoding="utf-8")
+
+    assert index.index('id="openProject"') < index.index('id="chatNav"')
+    assert 'class="projects-head brandrow"' in index
+    assert 'class="brandmark"' in index
+    assert 'class="navgroup-label" data-i18n="nav.work"' in index
+    assert 'class="navgroup-label" data-i18n="nav.assets"' in index
+    assert 'class="tasks-project-chevron"' in index
+    assert 'class="stateful-content" id="tasksProjectFilterSummary"' in index
+
+    assert "height:38px" in projects
+    assert "min-height:36px" in projects
+    assert "min-height:42px" in projects
+    assert "overflow-y:auto" in projects
+    assert "height:34px" in tasks
+    assert "width:145px" in tasks
+    assert "width:310px" in tasks
+    assert 'input[type="checkbox"]' in tasks
+    assert "grid-template-columns:repeat(4,minmax(245px,1fr))" in tasks
+    assert "width:30px" in chat
+    assert "height:30px" in chat

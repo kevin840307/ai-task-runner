@@ -30,7 +30,7 @@
   --radius-md: 8px;
   --radius-lg: 11px;
   --radius-xl: 14px;
-  --rail-left: clamp(220px, 18vw, 280px);
+  --rail-left: 252px;
   --rail-right: clamp(360px, 32vw, 520px);
   --rail-collapsed: 64px;
   --details-collapsed: 52px;
