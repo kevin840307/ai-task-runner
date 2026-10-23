@@ -2396,6 +2396,158 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             browser.close()
 
 
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_task_info_tabs_render_canonical_runtime_output_and_history() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        (root / "runner" / "assets" / "workflows" / "workflow.yaml").write_text(
+            "stages: {}\nflow: []\n",
+            encoding="utf-8",
+        )
+        project_row = state.projects()[0]
+        created = state.tasks.create(
+            root,
+            {
+                "title": "Projected runtime task",
+                "items": [
+                    {
+                        "title": "Child A",
+                        "prompt": "First projected item",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "auto",
+                    },
+                    {
+                        "title": "Child B",
+                        "prompt": "Second projected item",
+                        "workflow": "workflow.yaml",
+                        "project": str(root),
+                        "workspace": "auto",
+                    },
+                ],
+            },
+            request_id="projected-runtime-tabs",
+            project_id=project_row["project_id"],
+        )
+        projected = json.loads(json.dumps(created))
+        projected.update({
+            "status": "ongoing",
+            "completed_item_count": 1,
+            "runner_runtime": {
+                "running": True,
+                "status": "running",
+                "run_id": "runtime-2",
+                "stage": "review",
+                "cycle": 4,
+                "task": "Child B",
+                "current": 2,
+                "total": 2,
+                "updated_at": 1_700_000_030,
+                "backend": "qwen",
+                "model": "qwen3-coder",
+                "effective_backend": "qwen",
+                "effective_model": "qwen3-coder",
+                "last_transition": {
+                    "stage": "execute",
+                    "status": "pass",
+                    "target": "review",
+                    "kind": "route",
+                },
+                "recovery": {"status": "running", "retry_mode": "same-session"},
+                "cli_lines": ["AI Task Runner", "review: checking projected result"],
+                "cli_status": "running",
+                "cli_detail": "Review in progress",
+                "activity_summary": ["Qwen review", {"kind": "tool", "detail": "validator"}],
+                "stream": "fallback stream line",
+            },
+            "run": {
+                "run_number": 2,
+                "item_index": 1,
+                "phase": "running",
+                "started_at": 1_700_000_020,
+                "updated_at": 1_700_000_030,
+                "error": "",
+                "workspace_result": {},
+            },
+            "history": [
+                {
+                    "run_number": 1,
+                    "item_index": 0,
+                    "phase": "worktree_ready",
+                    "started_at": 1_700_000_000,
+                    "updated_at": 1_700_000_010,
+                    "archived_at": 1_700_000_015,
+                    "lifecycle_end": "rerun",
+                    "error": "",
+                    "workspace_result": {"merge": {"status": "worktree_ready"}},
+                }
+            ],
+        })
+        state.task_runs.list = lambda _project: {"tasks": [json.loads(json.dumps(projected))]}
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function("document.querySelectorAll('#tasksBoardOngoing .tasks-board-card').length === 1")
+            page.locator("#tasksBoardOngoing .tasks-board-card").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+
+            page.get_by_role("button", name="Runtime", exact=True).click()
+            page.wait_for_selector("#taskWorkspaceRuntimePanel")
+            runtime_text = page.locator("#taskWorkspaceRuntimePanel").inner_text()
+            assert "review" in runtime_text
+            assert "2 / 2" in runtime_text
+            assert "qwen3-coder" in runtime_text
+            assert "execute PASS → review" in runtime_text
+            assert "same-session" in runtime_text
+
+            page.get_by_role("button", name="Output", exact=True).click()
+            page.wait_for_selector("#taskWorkspaceOutputPanel")
+            assert "Review in progress" in page.locator("#taskWorkspaceOutputPanel").inner_text()
+            assert "Qwen review" in page.locator("#taskWorkspaceActivityList").inner_text()
+            assert "tool · validator" in page.locator("#taskWorkspaceActivityList").inner_text()
+            assert "review: checking projected result" in page.locator("#taskWorkspaceCliOutput").inner_text()
+            assert "fallback stream line" not in page.locator("#taskWorkspaceCliOutput").inner_text()
+
+            page.get_by_role("button", name="History", exact=True).click()
+            page.wait_for_selector("#taskWorkspaceHistoryPanel")
+            rows = page.locator("#taskWorkspaceHistoryPanel .task-history-row")
+            assert rows.count() == 2
+            assert "Run #2" in rows.nth(0).inner_text()
+            assert "Current" in rows.nth(0).inner_text()
+            assert "Run #1" in rows.nth(1).inner_text()
+            assert "worktree ready" in rows.nth(1).inner_text().lower()
+            browser.close()
+
+
 @pytest.mark.skipif(
     _browser_unavailable(),
     reason="Playwright/Chromium unavailable outside browser CI",

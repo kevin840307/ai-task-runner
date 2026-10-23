@@ -2016,6 +2016,13 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Back / Expand / Close accessibility text uses the same zh-TW/en i18n owner.
     - Real Browser regression verifies the same shell DOM expands/collapses within the viewport and localized header controls remain correct.
 
+[x] Populate durable Task Drawer Runtime / Output / History from canonical projections.
+    - Runtime reads only TaskRunService.runner_runtime + durable Task run metadata; tab refresh is one canonical /api/tasks projection read, not a second scheduler/poller.
+    - Output renders the existing Runner cli_lines / activity_summary / stream projection and never tails files directly from the browser.
+    - History renders the existing durable Task run/history records; no duplicate history store was introduced.
+    - Empty New Tasks still show truthful no-runtime/no-output/no-history states, and refresh failure keeps the last projection visible with an inline error.
+    - Static contract plus real Chromium E2E cover Runtime stage/progress/backend/model, CLI activity/output, current+archived History and canonical refresh.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

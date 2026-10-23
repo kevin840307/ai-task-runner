@@ -337,6 +337,13 @@ class StaticContractTests(unittest.TestCase):
         )
         self.assertIn('id="taskWorkspaceExpand"', self.task_workspace_js)
         self.assertIn('classList.toggle("expanded"', self.task_workspace_js)
+        self.assertIn("function renderTaskRuntimeTab(", self.task_workspace_js)
+        self.assertIn("function renderTaskOutputTab(", self.task_workspace_js)
+        self.assertIn("function renderTaskHistoryTab(", self.task_workspace_js)
+        self.assertIn("task?.runner_runtime", self.task_workspace_js)
+        self.assertIn("Array.isArray(runtime.cli_lines)", self.task_workspace_js)
+        self.assertIn("Array.isArray(task?.history)", self.task_workspace_js)
+        self.assertIn('api("/api/tasks?project=" + encodeURIComponent(project)', self.task_workspace_js)
         self.assertNotIn('["overview", "steps",', self.task_workspace_js)
         self.assertNotIn('textContent = "Steps"', self.task_workspace_js)
 
