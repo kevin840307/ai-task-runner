@@ -1144,11 +1144,17 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     const tabs = document.createElement("div");
     tabs.className = "task-workspace-tabs";
+    const tabLabels = {
+      overview: tr("task.tab_overview", "Overview"),
+      runtime: tr("task.tab_runtime", "Runtime"),
+      output: tr("task.tab_output", "Output"),
+      history: tr("task.tab_history", "History"),
+    };
     for (const id of ["overview", "runtime", "output", "history"]) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "task-workspace-tab";
-      button.textContent = id.charAt(0).toUpperCase() + id.slice(1);
+      button.textContent = tabLabels[id];
       button.classList.toggle("active", state.tab === id);
       button.setAttribute("aria-pressed", String(state.tab === id));
       button.onclick = () => { state.tab = id; render(); };
@@ -1161,12 +1167,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       empty.className = "task-workspace-empty-panel";
       const title = document.createElement("strong");
       title.textContent = state.tab === "runtime"
-        ? "No Runner runtime yet"
+        ? tr("task.no_runtime", "No Runner runtime yet")
         : state.tab === "output"
-          ? "No Runner output yet"
-          : "No run history yet";
+          ? tr("task.no_output", "No Runner output yet")
+          : tr("task.no_history", "No run history yet");
       const copy = document.createElement("p");
-      copy.textContent = "This Task is New. Runtime data appears only after an explicit Run action.";
+      copy.textContent = tr("task.no_runtime_copy", "Runtime data appears only after an explicit Run action.");
       empty.append(title, copy);
       body.appendChild(empty);
       return;
@@ -1187,9 +1193,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const meta = document.createElement("dl");
     meta.className = "task-workspace-meta-grid";
     for (const [label, value] of [
-      ["Project", String(task.project || "")],
-      ["Type", task.kind === "task_list" ? "Task List" : "Task"],
-      ["Items", String(Array.isArray(task.items) ? task.items.length : 0)],
+      [tr("task.meta_project", "Project"), String(task.project || "")],
+      [tr("task.meta_type", "Type"), task.kind === "task_list" ? tr("task.type_list", "Task List") : tr("task.type_task", "Task")],
+      [tr("task.meta_items", "Items"), String(Array.isArray(task.items) ? task.items.length : 0)],
     ]) {
       const dt = document.createElement("dt"); dt.textContent = label;
       const dd = document.createElement("dd"); dd.textContent = value;
@@ -1199,7 +1205,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     const heading = document.createElement("div");
     heading.className = "task-workspace-intro";
-    heading.innerHTML = "<strong>Tasks</strong><span>Canonical ordered items</span>";
+    const headingTitle = document.createElement("strong");
+    headingTitle.textContent = tr("task.items_title", "Tasks");
+    const headingCopy = document.createElement("span");
+    headingCopy.textContent = tr("task.items_canonical", "Canonical ordered items");
+    heading.append(headingTitle, headingCopy);
     overview.appendChild(heading);
     overview.appendChild(renderTaskRows(task.items));
 
@@ -1903,31 +1913,35 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (save) {
         const canSaveList = listRoute && taskEditPolicy(state.task).editable && !!state.editDraft;
         save.hidden = !(editorRoute || canSaveList || yamlRoute);
-        save.textContent = yamlRoute ? "Apply YAML" : (canSaveList ? "Save Task List" : "Save Task");
+        save.textContent = yamlRoute
+          ? tr("task.apply_yaml", "Apply YAML")
+          : (canSaveList ? tr("task.save_list", "Save Task List") : tr("task.save", "Save Task"));
       }
       if (back) back.hidden = false;
-      byId("taskWorkspaceEyebrow").textContent = yamlRoute ? "TASK YAML" : (editorRoute ? "TASK EDITOR" : (listRoute ? "TASK LIST" : "TASK INFO"));
+      byId("taskWorkspaceEyebrow").textContent = yamlRoute
+        ? tr("task.yaml", "TASK YAML")
+        : (editorRoute ? tr("task.editor", "TASK EDITOR") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.info", "TASK INFO")));
       byId("taskWorkspaceTitle").textContent = yamlRoute
         ? String(state.editDraft?.title || state.task?.title || "Task YAML")
         : editorRoute
           ? String(state.editDraft?.items?.[state.index]?.title || state.task?.title || "Edit Task")
           : String(state.task?.title || "Task");
       byId("taskWorkspaceMeta").textContent = yamlRoute
-        ? "Same canonical items[]"
+        ? tr("task.same_canonical_items", "Same canonical items[]")
         : editorRoute
-          ? "Task " + (state.index + 1) + " of " + String(state.editDraft?.items?.length || 0)
+          ? trf("task.item_position", { index: state.index + 1, count: state.editDraft?.items?.length || 0 }, "Task " + (state.index + 1) + " of " + String(state.editDraft?.items?.length || 0))
           : listRoute
-            ? String((state.editDraft?.items || state.task?.items || []).length) + " ordered tasks"
+            ? trf("task.ordered_count", { count: (state.editDraft?.items || state.task?.items || []).length }, String((state.editDraft?.items || state.task?.items || []).length) + " ordered task(s)")
             : String(state.task?.task_id || "");
       if (yamlRoute) {
-        byId("taskWorkspaceFooterBack").textContent = "Back to Task List";
+        byId("taskWorkspaceFooterBack").textContent = tr("task.back_list", "Back to Task List");
         renderYaml();
       } else if (editorRoute) {
-        byId("taskWorkspaceFooterBack").textContent = state.editorReturn === "list" ? "Back to Task List" : "Back to Info";
+        byId("taskWorkspaceFooterBack").textContent = state.editorReturn === "list" ? tr("task.back_list", "Back to Task List") : tr("task.back_info", "Back to Info");
         renderEditor();
         byId("taskWorkspaceItemTitle")?.focus();
       } else if (listRoute) {
-        byId("taskWorkspaceFooterBack").textContent = "Back to Info";
+        byId("taskWorkspaceFooterBack").textContent = tr("task.back_info", "Back to Info");
         renderDurableTaskList();
       } else {
         renderTaskInfo();

@@ -2336,6 +2336,19 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             page.wait_for_function("document.querySelectorAll('#tasksBoardOngoing .tasks-board-card').length === 1")
             page.locator("#tasksBoardOngoing .tasks-board-card").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            assert page.locator(".task-workspace-tab").all_inner_texts() == ["Overview", "Runtime", "Output", "History"]
+            assert page.locator(".task-workspace-meta-grid dt").all_inner_texts() == ["Project", "Type", "Items"]
+
+            page.evaluate("window.I18n.setLanguage('zh-TW')")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === '任務資訊'")
+            assert page.locator(".task-workspace-tab").all_inner_texts() == ["總覽", "執行狀態", "輸出", "歷史"]
+            assert page.locator(".task-workspace-meta-grid dt").all_inner_texts() == ["專案", "類型", "項目"]
+            page.get_by_role("button", name="執行狀態", exact=True).click()
+            assert page.locator(".task-workspace-empty-panel strong").inner_text() == "尚無 Runner 執行狀態"
+            page.evaluate("window.I18n.setLanguage('en')")
+            page.wait_for_function("document.querySelector('.task-workspace-empty-panel strong')?.textContent === 'No Runner runtime yet'")
+            page.get_by_role("button", name="Overview", exact=True).click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             delete_button = page.locator("#taskWorkspaceDeleteTask")
             assert delete_button.is_disabled()

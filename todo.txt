@@ -2004,6 +2004,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Added the prototype-style Global runner preferences subtitle through the shared zh-TW/en i18n owner; collapsed sidebar keeps the same single Settings action without overflow.
     - Browser regression verifies Settings is the sidebar's last child, remains pinned to the bottom, Project list owns scrolling, and the subtitle rerenders on language changes.
 
+[x] Route durable Task Drawer shell text through the shared zh-TW/en i18n owner.
+    - Reused task-workspace.js's existing tr()/trf() and language-change rerender path; no Task-only translation state was added.
+    - Task Info tabs, empty Runtime/Output/History states, top-level metadata and durable List/Editor/YAML shell labels now rerender from the same i18n owner as Chat/Drafts.
+    - Replaced the Task Info ordered-items innerHTML label with explicit DOM nodes so translated copy stays data-only.
+    - Real Browser regression switches an open durable Task Info between English and zh-TW, verifies tabs/metadata/empty Runtime text, then switches back without closing the shared Drawer.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json
