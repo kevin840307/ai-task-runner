@@ -527,6 +527,15 @@ class Handler(SimpleHTTPRequestHandler):
                     request_id=str(body.get("request_id", "")),
                     expected_updated_at=expected_updated_at,
                 ))
+            if parsed.path == "/api/tasks/move-existing":
+                project = self._project(body)
+                return self._json(self.state.tasks.move_existing(
+                    project,
+                    str(body.get("target_task_id", "")),
+                    str(body.get("source_task_id", "")),
+                    request_id=str(body.get("request_id", "")),
+                    expected_updated_at=body.get("expected_updated_at"),
+                ))
             if parsed.path == "/api/tasks/delete":
                 project = self._project(body)
                 return self._json(self.state.tasks.delete(

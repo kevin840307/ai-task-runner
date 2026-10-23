@@ -539,6 +539,90 @@ def test_task_service_creates_only_after_explicit_create_and_is_idempotent(tmp_p
     assert duplicate["task_id"] == created["task_id"]
 
 
+def test_task_move_existing_is_atomic_idempotent_and_policy_checked(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    service = TaskService()
+
+    def draft(title: str, prompt: str, *, items: int = 1) -> dict:
+        return {
+            "title": title,
+            "project": str(project),
+            "items": [
+                {
+                    "title": f"{title} {index + 1}",
+                    "prompt": f"{prompt} {index + 1}",
+                    "workflow": "workflow.yaml",
+                    "project": str(project),
+                    "workspace": "auto",
+                }
+                for index in range(items)
+            ],
+        }
+
+    target = service.create(project, draft("Target", "Target", items=2), request_id="move-target")
+    source = service.create(project, draft("Source", "Source"), request_id="move-source")
+    stale_updated_at = float(target["updated_at"]) - 1
+    with pytest.raises(ValueError, match="changed since this picker"):
+        service.move_existing(
+            project,
+            target["task_id"],
+            source["task_id"],
+            request_id="move-stale",
+            expected_updated_at=stale_updated_at,
+        )
+
+    moved = service.move_existing(
+        project,
+        target["task_id"],
+        source["task_id"],
+        request_id="move-1",
+        expected_updated_at=target["updated_at"],
+    )
+    assert moved["duplicate"] is False
+    assert moved["moved_task_id"] == source["task_id"]
+    assert moved["kind"] == "task_list"
+    assert len(moved["items"]) == 3
+    assert moved["items"][-1]["title"] == "Source 1"
+    assert moved["items"][-1]["item_id"].startswith(target["task_id"] + "-item-")
+    assert [row["task_id"] for row in service.list(project)["tasks"]] == [target["task_id"]]
+
+    duplicate = TaskService().move_existing(
+        project,
+        target["task_id"],
+        source["task_id"],
+        request_id="move-1",
+    )
+    assert duplicate["duplicate"] is True
+    assert len(duplicate["items"]) == 3
+
+    with pytest.raises(ValueError, match="another Task move"):
+        service.move_existing(
+            project,
+            target["task_id"],
+            "task-" + "a" * 32,
+            request_id="move-1",
+        )
+
+    second_source = service.create(project, draft("Second", "Second"), request_id="move-source-2")
+    with pytest.raises(ValueError, match="different"):
+        service.move_existing(
+            project,
+            second_source["task_id"],
+            second_source["task_id"],
+            request_id="move-same",
+        )
+
+    list_source = service.create(project, draft("List Source", "List", items=2), request_id="move-list-source")
+    with pytest.raises(ValueError, match="standalone New"):
+        service.move_existing(
+            project,
+            target["task_id"],
+            list_source["task_id"],
+            request_id="move-list",
+        )
+
+
 def test_task_prompt_sources_and_ai_default_follow_runner_resource_contract(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

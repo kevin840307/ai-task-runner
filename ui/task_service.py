@@ -20,6 +20,7 @@ except ImportError:
 STATE_VERSION = 1
 CREATE_REQUEST_LIMIT = 512
 UPDATE_REQUEST_LIMIT = 512
+MOVE_REQUEST_LIMIT = 512
 DELETE_REQUEST_LIMIT = 512
 RUN_REQUEST_LIMIT = 512
 LIFECYCLE_REQUEST_LIMIT = 512
@@ -387,6 +388,111 @@ class TaskService:
                 self._uploads.finalize(project, materialized)
             return {**self._project_task(task), "duplicate": False}
 
+    def move_existing(
+        self,
+        project: Path,
+        target_task_id: str,
+        source_task_id: str,
+        *,
+        request_id: str,
+        expected_updated_at: float | None = None,
+    ) -> dict[str, Any]:
+        """Atomically move one eligible standalone New Task into another Task's items."""
+        target_key = validate_task_id(target_task_id)
+        source_key = validate_task_id(source_task_id)
+        if target_key == source_key:
+            raise ValueError("Source and target Task must be different")
+        request = str(request_id or "").strip()
+        if not request:
+            raise ValueError("request_id is required")
+        if len(request) > 240:
+            raise ValueError("request_id is too long")
+
+        with self._lock:
+            state = self._load(project)
+            existing = state["move_requests"].get(request)
+            if existing:
+                if (
+                    str(existing.get("target_task_id") or "") != target_key
+                    or str(existing.get("source_task_id") or "") != source_key
+                ):
+                    raise ValueError("request_id belongs to another Task move")
+                target = next((row for row in state["tasks"] if row["task_id"] == target_key), None)
+                if target is None:
+                    raise ValueError("Task move request points to a missing target Task")
+                return {
+                    **self._project_task(target),
+                    "moved_task_id": source_key,
+                    "duplicate": True,
+                }
+
+            target = next((row for row in state["tasks"] if row["task_id"] == target_key), None)
+            source = next((row for row in state["tasks"] if row["task_id"] == source_key), None)
+            if target is None:
+                raise ValueError("Target Task does not exist")
+            if source is None:
+                raise ValueError("Source Task does not exist")
+
+            target_policy = self.edit_policy(target)
+            if not target_policy["can_add_item"]:
+                raise ValueError("Target Task is not editable")
+            if expected_updated_at is not None:
+                try:
+                    expected = float(expected_updated_at)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("expected_updated_at is invalid") from exc
+                if abs(float(target.get("updated_at") or 0) - expected) > 1e-6:
+                    raise ValueError("Target Task changed since this picker was opened; reload before moving")
+
+            source_items = source.get("items") if isinstance(source.get("items"), list) else []
+            if str(source.get("status") or "") != "new" or len(source_items) != 1:
+                raise ValueError("Only standalone New Tasks can be moved")
+            if int(source.get("completed_item_count", 0)) != 0:
+                raise ValueError("Source Task has completed work and cannot be moved")
+            if not self.edit_policy(source)["can_delete"]:
+                raise ValueError("Source Task has retained runtime/workspace state and cannot be moved")
+
+            target_items = target.get("items") if isinstance(target.get("items"), list) else []
+            existing_ids = {
+                str(item.get("item_id") or "")
+                for item in target_items
+                if isinstance(item, dict) and str(item.get("item_id") or "")
+            }
+            prefix = f"{target_key}-item-"
+            next_index = 1
+            for item_id in existing_ids:
+                if item_id.startswith(prefix):
+                    try:
+                        next_index = max(next_index, int(item_id[len(prefix):]) + 1)
+                    except ValueError:
+                        pass
+            while f"{prefix}{next_index}" in existing_ids:
+                next_index += 1
+
+            source_item = deepcopy(source_items[0])
+            source_item.pop("item_id", None)
+            target_items.append({
+                "item_id": f"{prefix}{next_index}",
+                **source_item,
+            })
+            target["items"] = target_items
+            target["kind"] = "task_list" if len(target_items) > 1 else "task"
+            target["updated_at"] = time.time()
+
+            state["tasks"] = [row for row in state["tasks"] if row["task_id"] != source_key]
+            state["move_requests"][request] = {
+                "target_task_id": target_key,
+                "source_task_id": source_key,
+            }
+            while len(state["move_requests"]) > MOVE_REQUEST_LIMIT:
+                state["move_requests"].pop(next(iter(state["move_requests"])))
+            self._write(project, state)
+            return {
+                **self._project_task(target),
+                "moved_task_id": source_key,
+                "duplicate": False,
+            }
+
     def delete(
         self,
         project: Path,
@@ -725,6 +831,7 @@ class TaskService:
                 "tasks": [],
                 "create_requests": {},
                 "update_requests": {},
+                "move_requests": {},
                 "delete_requests": {},
                 "run_requests": {},
                 "lifecycle_requests": {},
@@ -738,6 +845,7 @@ class TaskService:
         tasks = raw.get("tasks")
         requests = raw.get("create_requests")
         update_requests = raw.get("update_requests", {})
+        move_requests = raw.get("move_requests", {})
         delete_requests = raw.get("delete_requests", {})
         run_requests = raw.get("run_requests", {})
         lifecycle_requests = raw.get("lifecycle_requests", {})
@@ -745,6 +853,7 @@ class TaskService:
             not isinstance(tasks, list)
             or not isinstance(requests, dict)
             or not isinstance(update_requests, dict)
+            or not isinstance(move_requests, dict)
             or not isinstance(delete_requests, dict)
             or not isinstance(run_requests, dict)
             or not isinstance(lifecycle_requests, dict)
@@ -791,6 +900,19 @@ class TaskService:
                 str(key): str(value)
                 for key, value in update_requests.items()
                 if str(key).strip() and str(value) in ids
+            },
+            "move_requests": {
+                str(key): {
+                    "target_task_id": str(value.get("target_task_id") or ""),
+                    "source_task_id": str(value.get("source_task_id") or ""),
+                }
+                for key, value in move_requests.items()
+                if (
+                    str(key).strip()
+                    and isinstance(value, dict)
+                    and str(value.get("target_task_id") or "") in ids
+                    and _safe_task_id(str(value.get("source_task_id") or ""))
+                )
             },
             "delete_requests": {
                 str(key): str(value)
