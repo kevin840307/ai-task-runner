@@ -1859,7 +1859,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const source = sourceState(item);
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
-      tr("task.prompt_source_help", "Write instructions, use a file, or reference an existing Prompt asset."),
+      tr("task.prompt_source_help", "Choose how this task gets its prompt"),
       "prompt",
       [["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]],
       source.promptMode,
