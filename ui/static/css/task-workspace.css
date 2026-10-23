@@ -665,8 +665,10 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 /* Feature drawer header action group: List owns actions in the shared shell. */
 .task-workspace-head{
-  grid-template-columns:auto minmax(0,1fr) auto auto auto
+  display:flex;align-items:center;gap:8px
 }
+.task-workspace-heading{flex:1 1 auto;min-width:0}
+.task-workspace-back,.task-workspace-expand,.task-workspace-close{flex:0 0 30px}
 .task-workspace-header-actions{
   display:flex;align-items:center;gap:5px;min-width:0;flex:0 0 auto
 }
