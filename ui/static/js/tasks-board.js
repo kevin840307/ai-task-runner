@@ -140,12 +140,48 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     summary.textContent = !chosen.length ? "None" : chosen.length === rows.length ? "All" : chosen.length === 1 ? String(chosen[0].name || "1 selected") : chosen.length + " selected";
   }
 
+  function taskItems(task) {
+    return Array.isArray(task?.items) ? task.items : [];
+  }
+
+  function shortProjectName(value) {
+    const text = String(value || "").replace(/[\\/]+$/, "");
+    if (!text) return "";
+    return text.split(/[\\/]/).filter(Boolean).pop() || text;
+  }
+
+  function taskUsesWorktree(task) {
+    if (taskItems(task).some((item) => String(item?.workspace || "").toLowerCase() === "worktree")) return true;
+    const workspace = task?.run?.workspace || {};
+    return String(workspace.effective_mode || "").toLowerCase() === "worktree"
+      || Boolean(workspace.worktree_path);
+  }
+
+  function runtimeClass(task) {
+    const status = String(task?.status || "new");
+    const phase = String(task?.run?.phase || "").toLowerCase();
+    if (status === "closed") return "done";
+    if (status === "paused") return "stopped";
+    if (status === "ongoing" && /(recover|conflict|attention)/.test(phase)) return "recover";
+    if (status === "ongoing") return "running";
+    return "idle";
+  }
+
   function runtimeLabel(task) {
-    const phase = String(task?.run?.phase || "");
-    if (String(task?.status || "") === "ongoing") return phase ? phase.replaceAll("_", " ") : "Running";
-    if (String(task?.status || "") === "paused") return phase ? phase.replaceAll("_", " ") : "Stopped";
-    if (String(task?.status || "") === "closed") return "Completed";
+    const cls = runtimeClass(task);
+    if (cls === "done") return "Completed";
+    if (cls === "stopped") return "Stopped";
+    if (cls === "recover") return "Recovering";
+    if (cls === "running") return "Running";
     return "Idle";
+  }
+
+  function taskProjectSummary(task) {
+    const items = taskItems(task);
+    const refs = [...new Set(items.map((item) => String(item?.project || "").trim()).filter(Boolean))];
+    if (refs.length === 1) return shortProjectName(refs[0]);
+    if (refs.length > 1) return refs.length + " Projects";
+    return String(task?._project_name || "Project");
   }
 
   function taskCard(task) {
@@ -154,6 +190,10 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     button.className = "tasks-board-card";
     button.dataset.taskId = String(task.task_id || "");
     button.draggable = true;
+
+    const items = taskItems(task);
+    const completed = Math.max(0, Math.min(Number(task.completed_item_count || 0), items.length));
+    const progressPct = items.length ? Math.round((completed / items.length) * 100) : 0;
 
     const top = document.createElement("span");
     top.className = "tasks-board-card-top";
@@ -164,28 +204,57 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     title.className = "tasks-board-card-title";
     title.textContent = String(task.title || task.task_id || "Task");
     const runtime = document.createElement("span");
-    runtime.className = "tasks-board-runtime " + String(task.status || "new");
+    runtime.className = "tasks-board-runtime " + runtimeClass(task);
     runtime.textContent = runtimeLabel(task);
     top.append(handle, title, runtime);
 
     const prompt = document.createElement("span");
     prompt.className = "tasks-board-card-prompt";
-    prompt.textContent = String(task.items?.[0]?.prompt || task.items?.[0]?.goal_file || "");
+    prompt.textContent = String(items[0]?.prompt || items[0]?.goal_file || "");
 
     const meta = document.createElement("span");
     meta.className = "tasks-board-card-meta";
-    const projectTag = document.createElement("span");
-    projectTag.className = "tasks-board-tag";
-    projectTag.textContent = String(task._project_name || "Project");
-    const kindTag = document.createElement("span");
-    kindTag.className = "tasks-board-tag";
-    kindTag.textContent = task.kind === "task_list" ? String(task.items?.length || 0) + " tasks" : "Task";
-    meta.append(projectTag, kindTag);
+    const workspaceTag = document.createElement("span");
+    workspaceTag.className = "tasks-board-tag" + (taskUsesWorktree(task) ? " worktree" : "");
+    workspaceTag.textContent = taskUsesWorktree(task)
+      ? "WORKTREE"
+      : String(items[0]?.workspace || "auto").toUpperCase();
+    meta.appendChild(workspaceTag);
+
+    const projectRefs = [...new Set(items.map((item) => String(item?.project || "").trim()).filter(Boolean))];
+    if (projectRefs.length > 1) {
+      const multi = document.createElement("span");
+      multi.className = "tasks-board-tag";
+      multi.textContent = projectRefs.length + " Projects";
+      multi.title = projectRefs.join(" · ");
+      meta.appendChild(multi);
+    }
+    const workflow = String(items[0]?.workflow || "").trim();
+    if (workflow) {
+      const workflowTag = document.createElement("span");
+      workflowTag.className = "tasks-board-tag";
+      workflowTag.textContent = workflow;
+      meta.appendChild(workflowTag);
+    }
+    if (items.length > 1) {
+      const countTag = document.createElement("span");
+      countTag.className = "tasks-board-tag";
+      countTag.textContent = items.length + " tasks";
+      meta.appendChild(countTag);
+    }
 
     const foot = document.createElement("span");
     foot.className = "tasks-board-card-foot";
     const progress = document.createElement("span");
-    progress.textContent = String(task.completed_item_count || 0) + " / " + String(task.items?.length || 0);
+    progress.className = "tasks-board-progress";
+    const bar = document.createElement("span");
+    bar.className = "tasks-board-progress-bar";
+    const fill = document.createElement("i");
+    fill.style.width = progressPct + "%";
+    bar.appendChild(fill);
+    const progressText = document.createElement("span");
+    progressText.textContent = completed + " / " + items.length;
+    progress.append(bar, progressText);
     const id = document.createElement("span");
     id.textContent = String(task.task_id || "");
     foot.append(progress, id);
@@ -207,7 +276,6 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     });
     return button;
   }
-
   function boardMoveRule(task, target) {
     const from = String(task?.status || "new");
     if (!target) return { ok: false, reason: "Unknown target" };
@@ -292,10 +360,24 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     const root = byId("tasksListRows");
     if (!root) return;
     root.innerHTML = "";
-    for (const task of visibleTasks()) {
+    const rows = visibleTasks();
+    if (!rows.length) return;
+
+    const table = document.createElement("div");
+    table.className = "tasks-list-table";
+    const head = document.createElement("div");
+    head.className = "tasks-list-row tasks-list-head";
+    for (const label of ["Status", "Name", "Tasks", "Runtime", "Project", "Progress"]) {
+      const cell = document.createElement("span");
+      cell.textContent = label;
+      head.appendChild(cell);
+    }
+    table.appendChild(head);
+
+    for (const task of rows) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "tasks-list-row";
+      button.className = "tasks-list-row tasks-list-data";
 
       const lifecycle = document.createElement("span");
       lifecycle.className = "tasks-list-status";
@@ -306,27 +388,31 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       const title = document.createElement("strong");
       title.textContent = String(task.title || task.task_id || "Task");
       const meta = document.createElement("small");
-      meta.textContent = [String(task._project_name || ""), String(task.task_id || "")].filter(Boolean).join(" · ");
+      meta.textContent = String(taskItems(task)[0]?.prompt || taskItems(task)[0]?.goal_file || task.task_id || "");
       copy.append(title, meta);
 
+      const count = document.createElement("span");
+      count.className = "tasks-list-count";
+      count.textContent = String(taskItems(task).length);
+
       const runtime = document.createElement("span");
-      runtime.className = "tasks-list-runtime " + String(task.status || "new");
+      runtime.className = "tasks-list-runtime " + runtimeClass(task);
       runtime.textContent = runtimeLabel(task);
 
-      const workflow = document.createElement("span");
-      workflow.className = "tasks-list-workflow";
-      workflow.textContent = String(task.items?.[0]?.workflow || "—");
+      const project = document.createElement("span");
+      project.className = "tasks-list-project";
+      project.textContent = taskProjectSummary(task);
 
       const progress = document.createElement("span");
       progress.className = "tasks-list-progress";
-      progress.textContent = String(task.completed_item_count || 0) + " / " + String(task.items?.length || 0);
+      progress.textContent = String(task.completed_item_count || 0) + " / " + String(taskItems(task).length);
 
-      button.append(lifecycle, copy, runtime, workflow, progress);
+      button.append(lifecycle, copy, count, runtime, project, progress);
       button.addEventListener("click", () => openTask?.(task, { returnFocus: button }));
-      root.appendChild(button);
+      table.appendChild(button);
     }
+    root.appendChild(table);
   }
-
   function render() {
     renderFilter();
     renderRunningState();

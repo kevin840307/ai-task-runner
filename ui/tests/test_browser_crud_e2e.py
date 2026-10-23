@@ -975,6 +975,16 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.click("#tasksRunningFilterButton")
             assert page.locator("#tasksRunningFilterButton").get_attribute("aria-pressed") == "false"
 
+            page.locator("[data-tasks-view-mode='list']").click()
+            assert page.locator("#tasksListRows .tasks-list-head").all_inner_texts() == [
+                "Status\nName\nTasks\nRuntime\nProject\nProgress"
+            ]
+            first_list_row = page.locator("#tasksListRows .tasks-list-data").first
+            assert first_list_row.locator(".tasks-list-count").count() == 1
+            assert first_list_row.locator(".tasks-list-project").count() == 1
+            assert first_list_row.locator(".tasks-list-runtime").count() == 1
+            page.locator("[data-tasks-view-mode='board']").click()
+
             column_add_box = page.locator("#tasksNewColumnButton").bounding_box()
             page.click("#tasksNewColumnButton")
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")

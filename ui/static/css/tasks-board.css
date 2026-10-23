@@ -168,3 +168,59 @@
   .tasks-list-row{grid-template-columns:auto minmax(0,1fr) auto}
   .tasks-list-workflow,.tasks-list-progress{display:none}
 }
+
+
+/* Final feature Board/List density and information hierarchy. */
+.tasks-board-column{display:flex;flex-direction:column;min-height:0}
+.tasks-board-column-head{justify-content:flex-start}
+.tasks-board-column-head span{min-width:20px;height:20px;padding:0 6px}
+.tasks-column-add{margin-left:auto;font-size:18px}
+.tasks-board-dropzone{flex:1;display:flex;flex-direction:column;min-height:140px;overflow:auto}
+.tasks-board-card-handle{font-size:12px;letter-spacing:-2px;user-select:none}
+.tasks-board-runtime{
+  font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.03em
+}
+.tasks-board-runtime.running{background:var(--info-soft);color:var(--run)}
+.tasks-board-runtime.stopped{background:var(--danger-soft);color:var(--fail)}
+.tasks-board-runtime.done{background:var(--success-soft);color:var(--pass)}
+.tasks-board-runtime.recover{background:var(--warning-soft);color:var(--warn)}
+.tasks-board-card-prompt{margin:7px 0 9px!important}
+.tasks-board-tag{padding:2px 6px;border-radius:6px;font-size:8px;font-weight:850}
+.tasks-board-tag.worktree{background:var(--warning-soft);color:var(--warn)}
+.tasks-board-card-foot{margin-top:9px;padding-top:8px}
+.tasks-board-progress{display:flex;align-items:center;gap:6px}
+.tasks-board-progress-bar{display:block;width:48px;height:4px;overflow:hidden;border-radius:999px;background:var(--panel-3)}
+.tasks-board-progress-bar i{display:block;height:100%;border-radius:999px;background:var(--accent)}
+
+.tasks-list-view{display:block;width:100%;max-width:none;margin:0}
+.tasks-list-table{min-width:760px;border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.tasks-list-row{
+  grid-template-columns:90px minmax(240px,1.5fr) 72px 105px minmax(150px,1fr) 88px;
+  min-height:44px;width:100%;margin:0;padding:0 10px;border:0;border-radius:0;border-bottom:1px solid var(--line);
+  background:var(--panel);box-shadow:none;text-align:left
+}
+.tasks-list-row:last-child{border-bottom:0}
+.tasks-list-head{
+  position:sticky;top:0;z-index:2;display:grid;align-items:center;
+  background:var(--panel-2);color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;cursor:default
+}
+.tasks-list-data:hover{background:var(--panel-2);border-color:var(--line)}
+.tasks-list-status{min-width:0;padding:3px 7px;border-radius:999px;background:var(--panel-3);font-size:8px;letter-spacing:.03em}
+.tasks-list-copy{display:block}
+.tasks-list-copy strong{display:block;font-size:10px}
+.tasks-list-copy small{display:block;margin-top:2px;font-size:8px}
+.tasks-list-count{font-size:9px;font-weight:800;color:var(--text)}
+.tasks-list-runtime,.tasks-list-project,.tasks-list-progress{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px
+}
+.tasks-list-runtime{font-weight:850;text-transform:capitalize}
+.tasks-list-runtime.running{color:var(--run)}
+.tasks-list-runtime.stopped{color:var(--fail)}
+.tasks-list-runtime.done{color:var(--pass)}
+.tasks-list-runtime.recover{color:var(--warn)}
+.tasks-list-project{color:var(--text)}
+.tasks-list-progress{color:var(--muted);text-align:left;font-variant-numeric:tabular-nums}
+@media(max-width:760px){
+  .tasks-list-table{min-width:680px}
+  .tasks-list-row{grid-template-columns:82px minmax(220px,1.5fr) 62px 92px minmax(130px,1fr) 74px}
+}
