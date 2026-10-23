@@ -3607,7 +3607,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('.project-chat-ask') === null")
             page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 0")
             page.wait_for_function("document.querySelector('#projectChatMessages')?.textContent.includes('Browser queued reply · queued while ask 3')")
-            queued_replies = page.locator("#projectChatMessages .message.assistant").all_inner_texts()
+            queued_replies = page.locator("#projectChatMessages .message.assistant > .message-body").all_inner_texts()
             queued_replies = [text for text in queued_replies if "Browser queued reply" in text]
             assert queued_replies[-3:] == [
                 "Browser queued reply · queued while ask 1",
