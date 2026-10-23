@@ -2361,7 +2361,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             moved_records = state.tasks.list(state.repo_root)["tasks"]
             assert len(moved_records) == 1
             assert moved_records[0]["task_id"] == created[1]["task_id"]
-            assert [item["prompt"] for item in moved_records[0]["items"]][-1] == "Standalone prompt"
+            assert [item["prompt"] for item in moved_records[0]["items"]][-1] == "Standalone task prompt"
             assert page.locator(".task-workspace-move-existing").count() == 0
 
             for geometry in (list_geometry, editor_geometry, yaml_geometry):
