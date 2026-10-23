@@ -3479,9 +3479,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 first_row.locator(".task-workspace-row-edit").click()
                 page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Edited multi draft"
-                page.click("#taskWorkspaceHeaderBack")
-                page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
                 if leave_kind == "back":
+                    page.click("#taskWorkspaceHeaderBack")
+                    page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
                     page.click("#taskWorkspaceFooterBack")
                 elif leave_kind == "x":
                     page.click("#taskWorkspaceClose")
