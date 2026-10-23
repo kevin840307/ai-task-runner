@@ -74,6 +74,7 @@
 .tasks-board-card:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 30%,var(--line));background:var(--panel);box-shadow:0 8px 18px color-mix(in srgb,var(--text) 7%,transparent)}
 
 @media(max-width:760px){
+#tasksBoardView{grid-template-rows:auto auto minmax(0,1fr)}
 #tasksBoardView>.header{height:auto;min-height:var(--page-header-height);grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;align-items:start}
 .tasks-board-header-actions{justify-content:flex-start}
 .tasks-board-toolbar{align-items:stretch;flex-direction:column}
