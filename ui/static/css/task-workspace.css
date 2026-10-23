@@ -160,8 +160,9 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-expand[aria-pressed="true"]{
   border-color:transparent;background:var(--accent-soft);color:var(--accent-dark)
 }
+#taskWorkspaceEyebrow{display:none}
 .task-workspace-heading strong{font-size:15px;line-height:1.35}
-.task-workspace-heading span{font-size:10px}
+.task-workspace-heading span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .task-workspace-body{
   padding:14px 16px;
   overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable
