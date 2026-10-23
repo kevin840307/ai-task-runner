@@ -9,6 +9,72 @@ import pytest
 import tool.agent_live_probe as probe
 
 
+class _FakeNativeAskAgentService:
+    def __init__(self, _root: Path) -> None:
+        self.cancelled = False
+
+    def turn(self, project, chat, **kwargs):
+        created = chat.create_ask(
+            project,
+            kwargs["session_id"],
+            request_id="native-probe-request",
+            questions=[{
+                "id": "continue",
+                "header": "Live probe",
+                "question": "Continue live adapter probe?",
+                "options": [{"value": "continue", "label": "Continue"}],
+            }],
+            source="native",
+            backend=kwargs["backend"],
+            agent_session_id="native-session",
+            native_request_id="native-request",
+        )
+        ask_id = created["ask"]["ask_id"]
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            current = chat.ask(project, kwargs["session_id"])["ask"]
+            if isinstance(current, dict) and current["status"] == "answered":
+                chat.append_message(
+                    project,
+                    kwargs["session_id"],
+                    "assistant",
+                    probe.ASK_MARKER,
+                )
+                return {"status": "idle", "ask_id": ask_id}
+            time.sleep(0.01)
+        raise RuntimeError("answer was not delivered")
+
+    def complete_ask(
+        self,
+        project,
+        chat,
+        *,
+        session_id,
+        ask_id,
+        request_id,
+        answers=None,
+        cancelled=False,
+    ):
+        if cancelled:
+            return chat.cancel_ask(
+                project,
+                session_id,
+                ask_id,
+                request_id=request_id,
+            )
+        return chat.submit_ask(
+            project,
+            session_id,
+            ask_id,
+            answers,
+            request_id=request_id,
+        )
+
+    def cancel_turn(self, *args, **kwargs):
+        self.cancelled = True
+        return {"status": "cancelled"}
+
+
 def test_project_skill_fixture_is_shared_and_cleans_only_owned_paths(tmp_path: Path) -> None:
     existing = tmp_path / ".agents" / "skills" / "existing" / "SKILL.md"
     existing.parent.mkdir(parents=True)
@@ -262,72 +328,11 @@ def test_native_ask_roundtrip_uses_chat_service_and_restores_active_session(
     original = seed.sessions(tmp_path)
     original_session = original["active_session_id"]
 
-    class FakeAgentService:
-        def __init__(self, _root: Path) -> None:
-            self.cancelled = False
-
-        def turn(self, project, chat, **kwargs):
-            created = chat.create_ask(
-                project,
-                kwargs["session_id"],
-                request_id="native-probe-request",
-                questions=[{
-                    "id": "continue",
-                    "header": "Live probe",
-                    "question": "Continue live adapter probe?",
-                    "options": [{"value": "continue", "label": "Continue"}],
-                }],
-                source="native",
-                backend=kwargs["backend"],
-                agent_session_id="native-session",
-                native_request_id="native-request",
-            )
-            ask_id = created["ask"]["ask_id"]
-            deadline = time.monotonic() + 3
-            while time.monotonic() < deadline:
-                current = chat.ask(project, kwargs["session_id"])["ask"]
-                if isinstance(current, dict) and current["status"] == "answered":
-                    chat.append_message(
-                        project,
-                        kwargs["session_id"],
-                        "assistant",
-                        probe.ASK_MARKER,
-                    )
-                    return {"status": "idle", "ask_id": ask_id}
-                time.sleep(0.01)
-            raise RuntimeError("answer was not delivered")
-
-        def complete_ask(
-            self,
-            project,
-            chat,
-            *,
-            session_id,
-            ask_id,
-            request_id,
-            answers=None,
-            cancelled=False,
-        ):
-            if cancelled:
-                return chat.cancel_ask(
-                    project,
-                    session_id,
-                    ask_id,
-                    request_id=request_id,
-                )
-            return chat.submit_ask(
-                project,
-                session_id,
-                ask_id,
-                answers,
-                request_id=request_id,
-            )
-
-        def cancel_turn(self, *args, **kwargs):
-            self.cancelled = True
-            return {"status": "cancelled"}
-
-    monkeypatch.setattr(probe, "ChatAgentService", FakeAgentService)
+    monkeypatch.setattr(
+        probe,
+        "ChatAgentService",
+        _FakeNativeAskAgentService,
+    )
 
     value = probe._run_native_ask_roundtrip(
         tmp_path,
@@ -345,6 +350,33 @@ def test_native_ask_roundtrip_uses_chat_service_and_restores_active_session(
     after = seed.sessions(tmp_path)
     assert after["active_session_id"] == original_session
     assert [item["session_id"] for item in after["sessions"]] == [original_session]
+
+
+def test_native_ask_roundtrip_fails_when_probe_chat_cleanup_leaks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = probe.ChatService
+    base().sessions(tmp_path)
+
+    class CleanupFailChatService(base):
+        def delete_session(self, project: Path, session_id: str):
+            raise RuntimeError("cleanup blocked")
+
+    monkeypatch.setattr(
+        probe,
+        "ChatAgentService",
+        _FakeNativeAskAgentService,
+    )
+    monkeypatch.setattr(probe, "ChatService", CleanupFailChatService)
+
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        probe._run_native_ask_roundtrip(
+            tmp_path,
+            "sample",
+            model="native/model",
+            timeout=3,
+        )
 
 
 def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session(
