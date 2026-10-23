@@ -2875,6 +2875,34 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert 0 <= sidebar_project_geometry["settingsGap"] <= 12
             assert page.locator(".sidebar-foot").count() == 0
             assert page.locator("#themeButton .global-settings-copy small").inner_text() == "Global runner preferences"
+            settings_visual = page.evaluate(
+                """() => {
+                    const button = document.querySelector('#themeButton');
+                    const icon = button.querySelector('.nav-icon');
+                    const copy = button.querySelector('.global-settings-copy');
+                    const ib = icon.getBoundingClientRect();
+                    const bb = button.getBoundingClientRect();
+                    const cs = getComputedStyle(copy);
+                    return {
+                        iconCount: button.querySelectorAll('.nav-icon').length,
+                        iconWidth: ib.width,
+                        iconHeight: ib.height,
+                        buttonHeight: bb.height,
+                        gap: getComputedStyle(button).gap,
+                        copyBackground: cs.backgroundColor,
+                        copyDisplay: cs.display,
+                        copyWidth: copy.getBoundingClientRect().width,
+                    };
+                }"""
+            )
+            assert settings_visual["iconCount"] == 1
+            assert abs(settings_visual["iconWidth"] - 24) <= 1
+            assert abs(settings_visual["iconHeight"] - 24) <= 1
+            assert abs(settings_visual["buttonHeight"] - 40) <= 1
+            assert settings_visual["gap"] == "9px"
+            assert settings_visual["copyBackground"] == "rgba(0, 0, 0, 0)"
+            assert settings_visual["copyDisplay"] == "grid"
+            assert settings_visual["copyWidth"] > 40
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
             page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
