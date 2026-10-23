@@ -1952,6 +1952,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - Removed the old floating themePanel positioning/outside-popover path instead of keeping two Settings shells.
     - Browser regression verifies the tabbed modal geometry/visibility and continues to exercise persistence/theme/language/workspace behavior.
 
+[x] Match Project Chat Mode ownership to the feature composer UX.
+    - Mode now has one visible editor: the Composer quick selector, matching the prototype direction.
+    - Removed the duplicate Mode row/listener from Project Chat Settings while keeping Agent / Model / Reasoning / Workflow and native Ask capability there.
+    - The quick Mode selector still uses the same adapter-projected mode catalog and now carries the selected mode safety description/YOLO warning in its title.
+    - Browser regression proves there is no second Mode selector and the unsafe-mode warning remains discoverable.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

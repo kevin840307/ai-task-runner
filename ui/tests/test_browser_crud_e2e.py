@@ -2634,6 +2634,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#projectChatSettingsButton")
             page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             assert page.locator("#projectChatSettingsPopover").is_visible()
+            assert page.locator("#projectChatModeSelect").count() == 0
             page.select_option("#projectChatAgentSelect", "opencode")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
             page.wait_for_function("document.querySelector('#projectChatAskCapability')?.textContent === 'Native'")
@@ -2642,8 +2643,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.select_option("#projectChatReasoningSelect", "deep")
             page.select_option("#projectChatModeQuick", "yolo")
             page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'yolo'")
-            page.wait_for_function("document.querySelector('#projectChatModeDescription')?.textContent.includes('Automatically approves tools')")
-            assert "Automatically approves tools" in page.locator("#projectChatModeDescription").inner_text()
+            page.wait_for_function("document.querySelector('#projectChatModeQuick')?.title.includes('Automatically approves tools')")
+            assert "Automatically approves tools" in (page.locator("#projectChatModeQuick").get_attribute("title") or "")
             page.select_option("#projectChatModeQuick", "read")
             page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
 

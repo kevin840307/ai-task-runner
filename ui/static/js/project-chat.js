@@ -178,7 +178,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   function renderSettingsControls() {
     const agent = byId("projectChatAgentSelect");
     const model = byId("projectChatModelSelect");
-    const mode = byId("projectChatModeSelect");
     const quick = byId("projectChatModeQuick");
     const reasoning = byId("projectChatReasoningSelect");
     const workflow = byId("projectChatWorkflowSelect");
@@ -195,13 +194,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       settingsCatalog.default_agent ? "Default · " + settingsCatalog.default_agent : "Runner default",
     );
     fillSelect(model, settingsCatalog.models, savedModel, "Agent default");
-    fillSelect(
-      mode,
-      modeRows(),
-      savedMode,
-      "Agent default",
-      (row) => [row.id, String(row.id || "").toUpperCase(), false],
-    );
     fillSelect(
       quick,
       modeRows(),
@@ -223,10 +215,9 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
       "Project default",
       (row) => [row.path, row.name + (row.scope ? " · " + row.scope : ""), false],
     );
-    const description = byId("projectChatModeDescription");
     const selectedMode = modeRows().find((row) => row.id === savedMode);
-    if (description) {
-      description.textContent = selectedMode
+    if (quick) {
+      quick.title = selectedMode
         ? selectedMode.description + (selectedMode.unsafe ? " · Automatically approves tools." : "")
         : "Permission / approval mode";
     }
@@ -1661,10 +1652,6 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   byId("projectChatModelSelect")?.addEventListener("change", (event) => {
     const value = event.currentTarget.value;
     void queuePreferenceAction(() => changeModel(value));
-  });
-  byId("projectChatModeSelect")?.addEventListener("change", (event) => {
-    const value = event.currentTarget.value;
-    void queuePreferenceAction(() => savePreferencePatch({ mode: value }));
   });
   byId("projectChatModeQuick")?.addEventListener("change", (event) => {
     const value = event.currentTarget.value;
