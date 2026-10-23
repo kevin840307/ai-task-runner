@@ -1362,9 +1362,14 @@ class QwenBackend(BaseBackend):
                 timeout=1,
             )
         except BackendError:
-            status = 0
-        if status < 200 or status >= 400:
+            # The owning turn can still be alive while loopback status briefly
+            # times out or reconnects. Keep the IPC record so the next poll can
+            # recover the same pending permission instead of orphaning it.
+            return None
+        if status == 404:
             _qwen_chat_bridge_delete(root, session_id)
+            return None
+        if status < 200 or status >= 400:
             return None
         return pending
 

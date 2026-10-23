@@ -1412,6 +1412,63 @@ def test_qwen_native_ask_bridge_reads_and_resolves_same_live_session(
         qwen_module._qwen_chat_bridge_delete(tmp_path, session_id)
 
 
+def test_qwen_native_ask_status_transient_does_not_delete_live_bridge(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from runner.agent import qwen as qwen_module
+
+    session_id = QwenBackend.ensure_native_session(tmp_path, "")
+    payload = {
+        "requestId": "ask-transient",
+        "toolCall": {
+            "kind": "ask_user_question",
+            "rawInput": {
+                "questions": [{
+                    "header": "Retry",
+                    "question": "Continue?",
+                    "options": [{"label": "Yes"}],
+                }],
+            },
+        },
+        "options": [{"optionId": "once", "kind": "allow_once"}],
+    }
+    qwen_module._qwen_chat_bridge_write(
+        tmp_path,
+        session_id,
+        {
+            "sessionId": session_id,
+            "baseUrl": "http://127.0.0.1:4170",
+            "clientId": "client-1",
+            "ownerPid": 123,
+            "pending": payload,
+        },
+    )
+    path = qwen_module._qwen_chat_bridge_path(tmp_path, session_id)
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_http_json_response",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            BackendError("connection reset")
+        ),
+    )
+    assert pending_native_ask("qwen", tmp_path, session_id) is None
+    assert path.exists()
+    assert qwen_module._qwen_chat_bridge_read(
+        tmp_path,
+        session_id,
+    )["pending"] == payload
+
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_http_json_response",
+        lambda *args, **kwargs: (404, {"code": "session_not_found"}),
+    )
+    assert pending_native_ask("qwen", tmp_path, session_id) is None
+    assert not path.exists()
+
+
 def test_qwen_sse_stream_pairs_cursor_with_event_epoch(monkeypatch):
     from runner.agent import qwen as qwen_module
 
