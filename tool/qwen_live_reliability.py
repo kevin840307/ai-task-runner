@@ -60,6 +60,9 @@ PROBE_ORDER = (
     "runtime-long-path",
     "readonly-long-path",
     "technical-artifact-safety",
+    "workspace-policy-cross-matrix",
+    "worktree-isolation",
+    "merge-cross-matrix",
     "resume",
     "real-session-expiry",
     "stop-request-resume",
@@ -5497,6 +5500,338 @@ def windows_orphan_cleanup_preflight(root: Path) -> None:
             child.wait(timeout=5)
 
 
+
+def _delivery_git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if check and result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            "delivery Git command failed: "
+            + " ".join(["git", *args])
+            + (f" · {detail}" if detail else "")
+        )
+    return result
+
+
+def _create_delivery_probe_repo(root: Path, name: str) -> Path:
+    if not shutil.which("git"):
+        raise RuntimeError("Git is required for Workspace/merge reliability probes")
+    repo = root / name
+    if repo.exists():
+        shutil.rmtree(repo)
+    repo.mkdir(parents=True)
+    _delivery_git(repo, "init")
+    _delivery_git(repo, "config", "user.email", "live-reliability@example.invalid")
+    _delivery_git(repo, "config", "user.name", "Live Reliability")
+    (repo / "app.txt").write_text("base\n", encoding="utf-8")
+    (repo / "target.txt").write_text("target-base\n", encoding="utf-8")
+    _delivery_git(repo, "add", "app.txt", "target.txt")
+    _delivery_git(repo, "commit", "-m", "probe base")
+    _delivery_git(repo, "checkout", "-b", "probe/main")
+    return repo
+
+
+def workspace_policy_cross_preflight() -> dict[str, int]:
+    """Cross-check every requested mode/policy/busy/concurrency combination."""
+    from workspace import WorkspaceBlockedError, resolve_workspace_mode
+
+    policies = ("busy-worktree", "always-worktree", "always-main")
+    requested_modes = ("auto", "main", "worktree")
+    tested = 0
+    blocked = 0
+    main = 0
+    worktree = 0
+
+    for requested in requested_modes:
+        for policy in policies:
+            for busy in (False, True):
+                for concurrent in (False, True):
+                    expected_blocked = False
+                    if requested == "worktree":
+                        expected = "worktree"
+                    elif requested == "main":
+                        expected = "main"
+                        expected_blocked = busy and not concurrent
+                    elif policy == "always-worktree" or (policy == "busy-worktree" and busy):
+                        expected = "worktree"
+                    else:
+                        expected = "main"
+                        expected_blocked = busy and not concurrent
+
+                    tested += 1
+                    try:
+                        result = resolve_workspace_mode(
+                            requested,
+                            auto_policy=policy,
+                            main_running=busy,
+                            allow_concurrent_main_tasks=concurrent,
+                        )
+                    except WorkspaceBlockedError:
+                        if not expected_blocked:
+                            raise RuntimeError(
+                                "Workspace policy matrix unexpectedly blocked "
+                                f"{requested}/{policy}/busy={busy}/concurrent={concurrent}"
+                            )
+                        blocked += 1
+                        continue
+
+                    if expected_blocked:
+                        raise RuntimeError(
+                            "Workspace policy matrix failed to block "
+                            f"{requested}/{policy}/busy={busy}/concurrent={concurrent}"
+                        )
+                    if result.effective_mode != expected:
+                        raise RuntimeError(
+                            "Workspace policy matrix mismatch "
+                            f"{requested}/{policy}/busy={busy}/concurrent={concurrent}: "
+                            f"expected {expected}, got {result.effective_mode}"
+                        )
+                    if expected == "main":
+                        main += 1
+                    else:
+                        worktree += 1
+
+    if tested != 36:
+        raise RuntimeError(f"Workspace policy cross matrix expected 36 cases, got {tested}")
+    return {
+        "tested": tested,
+        "blocked": blocked,
+        "main": main,
+        "worktree": worktree,
+    }
+
+
+def worktree_isolation_preflight(root: Path) -> dict[str, object]:
+    """Prove Task worktree isolation, durable snapshot, restore, and cleanup."""
+    from workspace import WorkspaceManager
+
+    repo = _create_delivery_probe_repo(root, "worktree-isolation-preflight")
+    committed_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+    (repo / "app.txt").write_text("dirty-user-change\n", encoding="utf-8")
+
+    manager = WorkspaceManager(worktree_root=root / "owned-worktrees")
+    prepared = manager.prepare(
+        repo,
+        task_id="live-worktree-isolation",
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "busy-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    if prepared.effective_mode != "worktree":
+        raise RuntimeError(f"Worktree probe resolved to {prepared.effective_mode}")
+    if prepared.project_root.resolve() == repo.resolve():
+        raise RuntimeError("Worktree probe reused the source Project root")
+    if prepared.task_base_sha != committed_head:
+        raise RuntimeError("Worktree probe captured the wrong base SHA")
+    if (prepared.project_root / "app.txt").read_text(encoding="utf-8") != "base\n":
+        raise RuntimeError("Uncommitted source Project changes leaked into the Task worktree")
+
+    (prepared.project_root / "result.txt").write_text("isolated-result\n", encoding="utf-8")
+    runtime_dir = prepared.project_root / ".ai-task-runner"
+    runtime_dir.mkdir()
+    (runtime_dir / "volatile.txt").write_text("runtime-only\n", encoding="utf-8")
+    snapshot = manager.snapshot_result(
+        prepared,
+        excluded_paths=(runtime_dir,),
+    )
+    if snapshot.no_changes or not snapshot.task_snapshot_sha:
+        raise RuntimeError("Worktree probe failed to create a durable Task snapshot")
+    if (repo / "result.txt").exists():
+        raise RuntimeError("Worktree Task result leaked into the source Project before merge")
+    if (repo / "app.txt").read_text(encoding="utf-8") != "dirty-user-change\n":
+        raise RuntimeError("Worktree Task mutated the user's dirty source Project")
+
+    restored = manager.restore(prepared.as_dict())
+    if restored.project_root != prepared.project_root or restored.task_branch != prepared.task_branch:
+        raise RuntimeError("Workspace restore changed durable Task identity")
+
+    cleanup = manager.cleanup(prepared)
+    if cleanup.status not in {"cleaned", "already_cleaned"}:
+        raise RuntimeError(f"Unexpected Worktree cleanup status: {cleanup.status}")
+    return {
+        "effective_mode": prepared.effective_mode,
+        "snapshot_created": snapshot.created_commit,
+        "snapshot_sha": snapshot.task_snapshot_sha,
+        "cleanup": cleanup.status,
+    }
+
+
+def _prepare_merge_probe(
+    root: Path,
+    name: str,
+    *,
+    task_id: str,
+) -> tuple[Path, object, object]:
+    from workspace import WorkspaceManager
+
+    repo = _create_delivery_probe_repo(root, name)
+    manager = WorkspaceManager(worktree_root=root / f"{name}-worktrees")
+    prepared = manager.prepare(
+        repo,
+        task_id=task_id,
+        run_number=1,
+        requested_mode="main",
+        execution_settings={
+            "auto_workspace_policy": "busy-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    return repo, manager, prepared
+
+
+def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
+    """Exercise clean merge, target advance validation, conflict, and recovery."""
+    from workspace import MergeManager
+
+    # 1) Clean target: direct merge, no extra validation required.
+    repo_clean, manager_clean, prepared_clean = _prepare_merge_probe(
+        root,
+        "merge-clean-preflight",
+        task_id="live-merge-clean",
+    )
+    (prepared_clean.project_root / "clean-result.txt").write_text(
+        "clean-result\n", encoding="utf-8"
+    )
+    snapshot_clean = manager_clean.snapshot_result(prepared_clean)
+    clean_result = MergeManager().merge(prepared_clean, snapshot_clean)
+    if clean_result.status != "merged" or clean_result.validation_required:
+        raise RuntimeError(
+            "Clean merge preflight mismatch: "
+            f"status={clean_result.status} validation_required={clean_result.validation_required}"
+        )
+    if (repo_clean / "clean-result.txt").read_text(encoding="utf-8") != "clean-result\n":
+        raise RuntimeError("Clean merge did not deliver the Task result")
+    manager_clean.cleanup(prepared_clean)
+
+    # 2) Target advanced without conflict: merged tree must be validated once.
+    repo_advanced, manager_advanced, prepared_advanced = _prepare_merge_probe(
+        root,
+        "merge-target-advance-preflight",
+        task_id="live-merge-target-advance",
+    )
+    (prepared_advanced.project_root / "task-side.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_advanced = manager_advanced.snapshot_result(prepared_advanced)
+    (repo_advanced / "target-side.txt").write_text("target-side\n", encoding="utf-8")
+    _delivery_git(repo_advanced, "add", "target-side.txt")
+    _delivery_git(repo_advanced, "commit", "-m", "advance target")
+    validation_calls: list[str] = []
+
+    def validate_advanced(project: Path) -> str:
+        validation_calls.append(str(project))
+        if (project / "task-side.txt").read_text(encoding="utf-8") != "task-side\n":
+            raise RuntimeError("Merged validation tree is missing Task-side content")
+        if (project / "target-side.txt").read_text(encoding="utf-8") != "target-side\n":
+            raise RuntimeError("Merged validation tree is missing target-side content")
+        return "PASS"
+
+    advanced_result = MergeManager().merge(
+        prepared_advanced,
+        snapshot_advanced,
+        validate=validate_advanced,
+    )
+    if (
+        advanced_result.status != "merged"
+        or not advanced_result.validation_required
+        or advanced_result.verdict != "PASS"
+        or len(validation_calls) != 1
+    ):
+        raise RuntimeError(
+            "Target-advance merge preflight mismatch: "
+            f"status={advanced_result.status} validation={advanced_result.validation_required} "
+            f"verdict={advanced_result.verdict} calls={len(validation_calls)}"
+        )
+    manager_advanced.cleanup(prepared_advanced)
+
+    # 3) Same-file conflict: retain source, prepare latest-target recovery, then merge recovery.
+    repo_conflict, manager_conflict, prepared_conflict = _prepare_merge_probe(
+        root,
+        "merge-conflict-recovery-preflight",
+        task_id="live-merge-conflict",
+    )
+    (prepared_conflict.project_root / "app.txt").write_text("task-side\n", encoding="utf-8")
+    snapshot_conflict = manager_conflict.snapshot_result(prepared_conflict)
+    (repo_conflict / "app.txt").write_text("target-side\n", encoding="utf-8")
+    _delivery_git(repo_conflict, "add", "app.txt")
+    _delivery_git(repo_conflict, "commit", "-m", "conflicting target advance")
+    latest_target = _delivery_git(repo_conflict, "rev-parse", "HEAD").stdout.strip()
+
+    conflict_manager = MergeManager()
+    conflict_result = conflict_manager.merge(prepared_conflict, snapshot_conflict)
+    if (
+        conflict_result.status != "conflict"
+        or not conflict_result.real_merge_failure
+        or "app.txt" not in conflict_result.conflict_files
+    ):
+        raise RuntimeError(
+            "Conflict merge preflight mismatch: "
+            f"status={conflict_result.status} files={conflict_result.conflict_files}"
+        )
+    if (prepared_conflict.project_root / "app.txt").read_text(encoding="utf-8") != "task-side\n":
+        raise RuntimeError("Conflict handling mutated the retained Task source")
+    if (repo_conflict / "app.txt").read_text(encoding="utf-8") != "target-side\n":
+        raise RuntimeError("Conflict handling mutated the target Project")
+
+    patch = manager_conflict.recovery_patch(prepared_conflict, snapshot_conflict)
+    if "app.txt" not in patch or "task-side" not in patch:
+        raise RuntimeError("Recovery patch omitted the conflicting Task delta")
+    recovery = manager_conflict.prepare_recovery(
+        prepared_conflict,
+        snapshot_conflict,
+        failure_number=1,
+    )
+    if recovery.task_base_sha != latest_target:
+        raise RuntimeError("Recovery worktree did not start from the latest target HEAD")
+    if (recovery.project_root / "app.txt").read_text(encoding="utf-8") != "target-side\n":
+        raise RuntimeError("Recovery worktree does not contain latest target content")
+
+    (recovery.project_root / "app.txt").write_text(
+        "integrated task + target\n", encoding="utf-8"
+    )
+    recovery_snapshot = manager_conflict.snapshot_result(recovery)
+    recovery_result = conflict_manager.merge(
+        recovery,
+        recovery_snapshot,
+        validate=lambda project: (
+            "PASS"
+            if (project / "app.txt").read_text(encoding="utf-8")
+            == "integrated task + target\n"
+            else "SOURCE_FAIL"
+        ),
+    )
+    if recovery_result.status != "merged":
+        raise RuntimeError(
+            "Recovery merge did not close successfully: "
+            f"{recovery_result.status} {recovery_result.detail}"
+        )
+    if (repo_conflict / "app.txt").read_text(encoding="utf-8") != "integrated task + target\n":
+        raise RuntimeError("Recovery merge did not deliver the integrated result")
+
+    manager_conflict.cleanup(recovery)
+    manager_conflict.cleanup(prepared_conflict)
+    return {
+        "clean": clean_result.status,
+        "target_advance": advanced_result.status,
+        "target_advance_validation_calls": len(validation_calls),
+        "conflict": conflict_result.status,
+        "conflict_files": list(conflict_result.conflict_files),
+        "recovery": recovery_result.status,
+    }
+
+
 def main() -> int:
     args = arguments()
     if args.list_probes:
@@ -5580,6 +5915,9 @@ def main() -> int:
     review_error_policy: dict[str, object] = {}
     review_max_failures: dict[str, object] = {}
     readonly_contract: dict[str, object] = {}
+    workspace_policy_matrix: dict[str, int] = {}
+    worktree_isolation: dict[str, object] = {}
+    merge_cross_matrix: dict[str, object] = {}
     transient_observed = False
     soak_result = SoakResult()
     example_results: list[tuple[ExampleSmokeCase, Path]] = []
@@ -5664,6 +6002,24 @@ def main() -> int:
     if probe_enabled("technical-artifact-safety", start_probe):
         technical_artifact_safety_preflight()
         print_probe_pass("technical-artifact-safety", "protected-path technical-artifact ignore preflight")
+    if probe_enabled("workspace-policy-cross-matrix", start_probe):
+        workspace_policy_matrix = workspace_policy_cross_preflight()
+        print_probe_pass(
+            "workspace-policy-cross-matrix",
+            f"{workspace_policy_matrix['tested']} Auto/Main/Worktree policy cross-cases",
+        )
+    if probe_enabled("worktree-isolation", start_probe):
+        worktree_isolation = worktree_isolation_preflight(run_root)
+        print_probe_pass(
+            "worktree-isolation",
+            "real Git worktree isolation + snapshot + restore + cleanup",
+        )
+    if probe_enabled("merge-cross-matrix", start_probe):
+        merge_cross_matrix = merge_cross_matrix_preflight(run_root)
+        print_probe_pass(
+            "merge-cross-matrix",
+            "clean + target-advance validation + conflict -> recovery merge",
+        )
 
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         if probe_enabled("resume", start_probe):
@@ -5846,6 +6202,9 @@ def main() -> int:
         "runtime_long_path_preflight": probe_enabled("runtime-long-path", start_probe),
         "readonly_long_path_preflight": probe_enabled("readonly-long-path", start_probe),
         "technical_artifact_safety_preflight": probe_enabled("technical-artifact-safety", start_probe),
+        "workspace_policy_cross_matrix": workspace_policy_matrix,
+        "worktree_isolation_preflight": worktree_isolation,
+        "merge_cross_matrix_preflight": merge_cross_matrix,
         "real_session_expiry_probe": probe_enabled("real-session-expiry", start_probe),
         "stop_request_resume_probe": probe_enabled("stop-request-resume", start_probe),
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
