@@ -204,6 +204,7 @@ TASK_LIST = PanelSpec(
 BOARD = PanelSpec(
     "ui/static/css/tasks-board.css",
     (
+        Pair(".tasks-project-trigger strong", ".tasks-project-trigger .stateful-content", ("max-width",)),
         Pair(".boardtools", ".tasks-board-toolbar", ("padding", "border-bottom", "background")),
         Pair(".search", ".tasks-board-search", ("width", "height", "padding", "border", "border-radius", "background", "color")),
         Pair(".toggle", ".tasks-view-toggle", ("padding", "border", "border-radius", "background")),
