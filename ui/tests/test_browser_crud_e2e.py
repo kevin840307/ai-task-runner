@@ -4764,13 +4764,31 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert len(prompt_widths) == 3
             assert max(prompt_widths) - min(prompt_widths) <= 2
             prompt_tab_geometry = page.locator("[data-task-source-group='prompt']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        display: style.display,
+                        columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
+                        gap: style.gap,
+                        height: style.height,
+                        firstHeight: getComputedStyle(node.querySelector('button')).height
+                    };
+                }"""
+            )
+            assert prompt_tab_geometry == {
+                "display": "grid",
+                "columns": 3,
+                "gap": "3px",
+                "height": "30px",
+                "firstHeight": "30px",
+            }
+            prompt_card_spacing = page.locator("[data-task-source-card='prompt']").evaluate(
                 """node => ({
-                    gap: getComputedStyle(node).gap,
-                    height: getComputedStyle(node).height,
-                    firstHeight: getComputedStyle(node.querySelector('button')).height
+                    headMarginBottom: getComputedStyle(node.querySelector('.task-workspace-source-head')).marginBottom,
+                    bodyGap: getComputedStyle(node.querySelector('.task-workspace-source-body')).gap
                 })"""
             )
-            assert prompt_tab_geometry == {"gap": "3px", "height": "30px", "firstHeight": "30px"}
+            assert prompt_card_spacing == {"headMarginBottom": "7px", "bodyGap": "6px"}
             assert page.locator("#taskWorkspacePrompt").evaluate(
                 "node => getComputedStyle(node).minHeight"
             ) == "112px"
@@ -4779,6 +4797,18 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             ai_widths = [button.bounding_box()["width"] for button in ai_tabs.all()]
             assert len(ai_widths) == 4
             assert max(ai_widths) - min(ai_widths) <= 2
+            ai_tab_geometry = page.locator("[data-task-source-group='ai']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        display: style.display,
+                        columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
+                        gap: style.gap,
+                        height: style.height
+                    };
+                }"""
+            )
+            assert ai_tab_geometry == {"display": "grid", "columns": 4, "gap": "3px", "height": "30px"}
             assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
 
             prompt_card_widths = []
