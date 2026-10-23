@@ -2734,21 +2734,21 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             rows = page.locator(".task-workspace-list-row")
             assert rows.count() == 3
-            assert "COMPLETED" in rows.nth(0).locator("small").inner_text()
-            assert "CURRENT" in rows.nth(1).locator("small").inner_text()
-            assert "FUTURE" in rows.nth(2).locator("small").inner_text()
+            assert rows.nth(0).locator(".task-workspace-list-state").inner_text() == "COMPLETED"
+            assert rows.nth(1).locator(".task-workspace-list-state").inner_text() == "CURRENT"
+            assert rows.nth(2).locator(".task-workspace-list-state").inner_text() == "FUTURE"
 
             completed_actions = rows.nth(0).locator(".task-workspace-list-actions button")
             assert all(button.is_disabled() for button in completed_actions.all())
+            assert rows.nth(0).get_attribute("draggable") == "false"
             current = rows.nth(1)
             assert current.locator(".task-workspace-row-edit").is_enabled()
             assert current.get_by_role("button", name="Remove").is_disabled()
-            current_actions = current.locator(".task-workspace-list-actions button")
-            assert current_actions.nth(0).is_disabled()
-            assert current_actions.nth(1).is_disabled()
+            assert current.get_attribute("draggable") == "false"
             future = rows.nth(2)
             assert future.locator(".task-workspace-row-edit").is_enabled()
-            assert future.locator(".task-workspace-list-actions button").nth(0).is_disabled()
+            assert future.get_by_role("button", name="Remove").is_enabled()
+            assert future.get_attribute("draggable") == "true"
             assert page.locator("#taskWorkspaceAddTask").is_enabled()
             assert page.locator("#taskWorkspaceYamlButton").is_disabled()
             assert "Completed Task items are frozen" in (
