@@ -2911,8 +2911,59 @@ def test_soak_transient_status_rotation_covers_all_http_classes():
     ] == [429, 502, 503, 429, 502, 503]
 
 
+
+def test_workspace_policy_cross_preflight_exercises_full_cross_matrix():
+    result = live.workspace_policy_cross_preflight()
+
+    assert result["tested"] == 36
+    assert result["blocked"] > 0
+    assert result["main"] > 0
+    assert result["worktree"] > 0
+    assert result["blocked"] + result["main"] + result["worktree"] == result["tested"]
+
+
+def test_worktree_isolation_preflight_uses_real_git_without_touching_dirty_target(
+    tmp_path: Path,
+):
+    result = live.worktree_isolation_preflight(tmp_path)
+
+    assert result["effective_mode"] == "worktree"
+    assert result["snapshot_sha"]
+    assert result["cleanup"] in {"cleaned", "already_cleaned"}
+    repo = tmp_path / "worktree-isolation-preflight"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "dirty-user-change\n"
+    assert not (repo / "result.txt").exists()
+
+
+def test_merge_cross_matrix_preflight_covers_clean_advance_conflict_and_recovery(
+    tmp_path: Path,
+):
+    result = live.merge_cross_matrix_preflight(tmp_path)
+
+    assert result == {
+        "clean": "merged",
+        "target_advance": "merged",
+        "target_advance_validation_calls": 1,
+        "conflict": "conflict",
+        "conflict_files": ["app.txt"],
+        "recovery": "merged",
+    }
+    recovered = tmp_path / "merge-conflict-recovery-preflight" / "app.txt"
+    assert recovered.read_text(encoding="utf-8") == "integrated task + target\n"
+
+
+def test_delivery_preflights_are_ordered_before_real_qwen_resume_probe():
+    for name in (
+        "workspace-policy-cross-matrix",
+        "worktree-isolation",
+        "merge-cross-matrix",
+    ):
+        assert name in live.PROBE_ORDER
+        assert live.PROBE_ORDER.index(name) < live.PROBE_ORDER.index("resume")
+
+
 def test_live_probe_order_runs_long_soak_last():
-    assert len(live.PROBE_ORDER) == 46
+    assert len(live.PROBE_ORDER) == 49
     assert live.PROBE_ORDER[-1] == "soak"
     assert live.PROBE_ORDER[-7:] == (
         "example-smoke",
@@ -2926,12 +2977,12 @@ def test_live_probe_order_runs_long_soak_last():
 
 
 def test_dynamic_handoff_extended_live_probes_run_before_soak():
-    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 41
-    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 42
-    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 43
-    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 44
-    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 45
-    assert live.PROBE_ORDER.index("soak") + 1 == 46
+    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 44
+    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 45
+    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 46
+    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 47
+    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 48
+    assert live.PROBE_ORDER.index("soak") + 1 == 49
 
 
 def test_main_executes_long_soak_after_dynamic_handoff_probes():
