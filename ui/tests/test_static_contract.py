@@ -28,7 +28,7 @@ class StaticContractTests(unittest.TestCase):
             "grid-template-columns:minmax(250px,1.45fr) minmax(175px,.92fr) minmax(140px,.72fr)",
             "grid-template-columns:minmax(0,1.34fr) minmax(245px,.86fr)",
             "grid-template-columns:repeat(2,minmax(0,1fr))",
-            "min-height:118px",
+            "min-height:112px",
             "min-height:58px",
             "padding:7px 8px",
             "width:min(920px,94vw)",
