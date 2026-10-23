@@ -1887,17 +1887,20 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
       probe refuses a model that the native catalog does not expose.
     - Probe fixture never overwrites an existing Skill and removes only paths it owns.
 
-[x] Fail closed Qwen Native Ask availability until the executable Project Chat bridge exists.
-    - Current Qwen mapping already understands ask_user_question payloads, but normal Project
-      Chat still uses a one-shot qwen subprocess and therefore cannot observe/respond to the
-      daemon permission request in the same live session.
-    - Do not advertise a Native Ask capability that ChatAgentService cannot actually continue.
-      OpenCode question_api remains unchanged and usable.
+[x] Keep Qwen Native Ask fail-closed unless qwen serve advertises the required native contract.
+    - Availability is feature-detected from the installed CLI daemon instead of hardcoding a model,
+      Skill list, or assuming a version string implies a usable transport.
+    - Qwen Ask mapping remains adapter-owned; OpenCode question_api remains unchanged and usable.
 
-[ ] Implement Qwen Project Chat daemon permission Ask bridge with one clear adapter owner.
+[x] Implement Qwen Project Chat daemon permission Ask bridge with one clear adapter owner.
     - Reuse the existing normalized Ask schema and Qwen ask_user_question encode/decode mapping.
-    - The same native session must own prompt, pending permission request, reply/cancel and cleanup.
-    - No UI provider branch, duplicate Queue scheduler, orphan qwen serve process or second Chat store.
+    - The same native session owns prompt, pending permission request, reply/cancel and cleanup.
+    - Qwen Project Chat uses one short-lived qwen serve per active turn; the persisted native
+      session UUID is resumed on the next turn and the daemon is always terminated in finally.
+    - The cross-process bridge is adapter-owned temp IPC only (loopback URL/client/pending request),
+      not a second Chat store/history/scheduler, and it is removed when the turn ends.
+    - ChatAgentService now gates native Ask by the generic advertised transport instead of
+      hardcoding OpenCode's question_api transport.
 
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):

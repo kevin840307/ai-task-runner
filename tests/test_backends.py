@@ -1,5 +1,6 @@
 import sys
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -1290,22 +1291,33 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
     monkeypatch.setattr(
         qwen_module,
         "run_process",
-        lambda *args, **kwargs: ProcessResult("qwen-code 0.23.2\n", 0),
+        lambda *args, **kwargs: ProcessResult("qwen-code 0.24.0\n", 0),
     )
+
+    @contextmanager
+    def qwen_daemon(root, *, environment=None):
+        yield "http://127.0.0.1:4170", set(qwen_module._QWEN_PROJECT_CHAT_FEATURES)
+
+    monkeypatch.setattr(qwen_module, "_qwen_daemon_process", qwen_daemon)
     qwen_features = chat_features("qwen", tmp_path)
-    assert qwen_features.ask is False
-    assert qwen_features.ask_transport == ""
+    assert qwen_features.ask is True
+    assert qwen_features.ask_transport == "daemon_permission_request"
     assert qwen_features.queue_mode == "service_fifo"
-    assert "fails closed" in qwen_features.detail
+    assert "native Project Chat daemon contract" in qwen_features.detail
+
+    @contextmanager
+    def incomplete_qwen_daemon(root, *, environment=None):
+        yield "http://127.0.0.1:4170", {"session_create", "session_prompt"}
 
     monkeypatch.setattr(
         qwen_module,
-        "run_process",
-        lambda *args, **kwargs: ProcessResult("qwen-code 0.22.9\n", 0),
+        "_qwen_daemon_process",
+        incomplete_qwen_daemon,
     )
-    old_qwen = chat_features("qwen", tmp_path)
-    assert old_qwen.ask is False
-    assert "0.23.2" in old_qwen.detail
+    incomplete_qwen = chat_features("qwen", tmp_path)
+    assert incomplete_qwen.ask is False
+    assert "missing the Project Chat contract" in incomplete_qwen.detail
+    assert "session_permission_vote" in incomplete_qwen.detail
 
     monkeypatch.setattr(
         opencode_module,
@@ -1323,6 +1335,267 @@ def test_agent_native_ask_capability_is_backend_owned(monkeypatch, tmp_path):
     unavailable_features = chat_features("opencode", tmp_path)
     assert unavailable_features.ask is False
     assert "unavailable" in unavailable_features.detail.lower()
+
+
+
+def test_qwen_native_ask_bridge_reads_and_resolves_same_live_session(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from runner.agent import qwen as qwen_module
+
+    session_id = QwenBackend.ensure_native_session(tmp_path, "")
+    assert QwenBackend.ensure_native_session(tmp_path, session_id) == session_id
+    payload = {
+        "requestId": "ask/request-1",
+        "toolCall": {
+            "kind": "ask_user_question",
+            "rawInput": {
+                "questions": [{
+                    "header": "Approach",
+                    "question": "Choose one",
+                    "options": [{"label": "Safe"}],
+                }],
+            },
+        },
+        "options": [{"optionId": "allow-once", "kind": "allow_once"}],
+    }
+    qwen_module._qwen_chat_bridge_write(
+        tmp_path,
+        session_id,
+        {
+            "sessionId": session_id,
+            "baseUrl": "http://127.0.0.1:4170",
+            "clientId": "client-1",
+            "pending": payload,
+        },
+    )
+    calls = []
+
+    def fake_http(base_url, path, **kwargs):
+        calls.append((base_url, path, kwargs))
+        return {}
+
+    monkeypatch.setattr(qwen_module, "_qwen_http_json", fake_http)
+    monkeypatch.setattr(
+        qwen_module,
+        "_qwen_http_json_response",
+        lambda *args, **kwargs: (200, {"status": "busy"}),
+    )
+    try:
+        assert pending_native_ask("qwen", tmp_path, session_id) == payload
+        resolve_native_ask(
+            "qwen",
+            tmp_path,
+            session_id,
+            payload,
+            {"q1": {"value": "Safe"}},
+        )
+        assert pending_native_ask("qwen", tmp_path, session_id) is None
+        assert calls == [(
+            "http://127.0.0.1:4170",
+            f"/session/{session_id}/permission/ask%2Frequest-1",
+            {
+                "method": "POST",
+                "body": {
+                    "outcome": {
+                        "outcome": "selected",
+                        "optionId": "allow-once",
+                    },
+                    "answers": {"0": "Safe"},
+                },
+                "client_id": "client-1",
+                "timeout": 30,
+            },
+        )]
+    finally:
+        qwen_module._qwen_chat_bridge_delete(tmp_path, session_id)
+
+
+def test_qwen_project_chat_uses_daemon_session_and_keeps_runner_path_separate(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from runner.agent import qwen as qwen_module
+
+    session_id = QwenBackend.ensure_native_session(tmp_path, "")
+    features = {
+        *qwen_module._QWEN_PROJECT_CHAT_FEATURES,
+        "session_scope_override",
+    }
+    calls = []
+
+    @contextmanager
+    def fake_daemon(root, *, environment=None):
+        calls.append(("daemon", Path(root), bool(environment)))
+        yield "http://127.0.0.1:4170", features
+
+    @contextmanager
+    def fake_stream(base_url, native_session, **kwargs):
+        calls.append(("stream", base_url, native_session, kwargs))
+        yield object()
+
+    def fake_response(base_url, path, **kwargs):
+        calls.append(("response", base_url, path, kwargs))
+        return 404, {"code": "session_not_found"}
+
+    def fake_http(base_url, path, **kwargs):
+        calls.append(("http", base_url, path, kwargs))
+        if path == "/session":
+            return {"sessionId": session_id, "clientId": "client-1"}
+        if path.endswith("/prompt"):
+            return {"promptId": "prompt-1", "lastEventId": 0}
+        return {}
+
+    def fake_events(stream, *, deadline=0):
+        assert deadline > 0
+        yield {
+            "type": "session_update",
+            "promptId": "old-prompt",
+            "data": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "stale"},
+                },
+            },
+        }
+        yield {
+            "type": "session_update",
+            "promptId": "prompt-1",
+            "data": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "daemon "},
+                },
+            },
+        }
+        yield {
+            "type": "session_update",
+            "promptId": "prompt-1",
+            "data": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "reply"},
+                },
+            },
+        }
+        yield {
+            "type": "turn_complete",
+            "promptId": "prompt-1",
+            "data": {"stopReason": "end_turn"},
+        }
+
+    monkeypatch.setattr(qwen_module, "_qwen_daemon_process", fake_daemon)
+    monkeypatch.setattr(qwen_module, "_qwen_sse_stream", fake_stream)
+    monkeypatch.setattr(qwen_module, "_qwen_sse_events", fake_events)
+    monkeypatch.setattr(qwen_module, "_qwen_http_json_response", fake_response)
+    monkeypatch.setattr(qwen_module, "_qwen_http_json", fake_http)
+
+    backend = QwenBackend(
+        sys.executable,
+        tmp_path,
+        ["--model", "native-model"],
+        timeout=30,
+    )
+    backend.configure_interaction("read")
+    result = backend.ask("hello", session_id)
+
+    assert result == BackendResult("daemon reply", session_id)
+    create = next(
+        row for row in calls
+        if row[0] == "http" and row[2] == "/session"
+    )
+    assert create[3]["body"]["sessionId"] == session_id
+    assert create[3]["body"]["approvalMode"] == "plan"
+    assert create[3]["body"]["sessionScope"] == "thread"
+    model = next(
+        row for row in calls
+        if row[0] == "http" and row[2].endswith("/model")
+    )
+    assert model[3]["body"] == {"modelId": "native-model"}
+    assert not qwen_module._qwen_chat_bridge_path(
+        tmp_path,
+        session_id,
+    ).exists()
+
+    runner_backend = QwenBackend(sys.executable, tmp_path, [])
+    assert runner_backend.interaction_mode is None
+    assert "--output-format" in runner_backend.build_command("runner", "")
+
+
+def test_qwen_native_ask_mapping_accepts_legacy_meta_questions():
+    payload = {
+        "requestId": "legacy-ask",
+        "toolCall": {
+            "rawInput": {},
+            "_meta": {
+                "qwenInteractionKind": "user_question",
+                "qwenQuestions": [{
+                    "header": "Approach",
+                    "question": "Choose one",
+                    "options": [{"label": "Safe"}],
+                }],
+            },
+        },
+        "options": [{"optionId": "proceed_once", "kind": "allow_once"}],
+    }
+
+    assert normalize_ask_request("qwen", payload) == [{
+        "id": "q1",
+        "header": "Approach",
+        "question": "Choose one",
+        "kind": "choice",
+        "options": [{
+            "value": "Safe",
+            "label": "Safe",
+            "description": "",
+        }],
+    }]
+    assert encode_ask_response(
+        "qwen",
+        payload,
+        {"q1": {"value": "Safe"}},
+    ) == {
+        "outcome": {
+            "outcome": "selected",
+            "optionId": "proceed_once",
+        },
+        "answers": {"0": "Safe"},
+    }
+
+
+def test_qwen_native_ask_mapping_preserves_multi_select():
+    payload = {
+        "toolCall": {
+            "kind": "ask_user_question",
+            "rawInput": {
+                "questions": [{
+                    "header": "Features",
+                    "question": "Which features?",
+                    "multiSelect": True,
+                    "options": [
+                        {"label": "Queue", "description": "Keep queue"},
+                        {"label": "Ask", "description": "Keep Ask"},
+                    ],
+                }],
+            },
+        },
+        "options": [{"optionId": "proceed_once", "kind": "allow_once"}],
+    }
+
+    questions = normalize_ask_request("qwen", payload)
+    assert questions[0]["kind"] == "multi_choice"
+    assert encode_ask_response(
+        "qwen",
+        payload,
+        {"q1": {"values": ["Queue", "Ask"], "other": "Tasks"}},
+    ) == {
+        "outcome": {
+            "outcome": "selected",
+            "optionId": "proceed_once",
+        },
+        "answers": {"0": "Queue, Ask, Tasks"},
+    }
 
 
 def test_qwen_native_ask_mapping_round_trip():

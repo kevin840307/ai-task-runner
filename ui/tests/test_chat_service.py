@@ -1288,7 +1288,7 @@ def test_native_ask_answer_continues_same_chat_turn(tmp_path: Path, monkeypatch)
         "ui.chat_agent_service.chat_features",
         lambda *args, **kwargs: ChatFeatureSpec(
             ask=True,
-            ask_transport="question_api",
+            ask_transport="daemon_permission_request",
         ),
     )
     monkeypatch.setattr(

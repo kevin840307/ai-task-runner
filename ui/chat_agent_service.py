@@ -328,9 +328,9 @@ class ChatAgentService:
             turn_id=turn_id,
         )
         features = chat_features(agent, project)
-        native_bridge = (
+        native_bridge = bool(
             features.ask
-            and features.ask_transport == "question_api"
+            and str(features.ask_transport or "").strip()
         )
         used_session = previous_session
         try:

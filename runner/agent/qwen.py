@@ -1,6 +1,7 @@
 """Qwen CLI agent backend and capability policy."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -12,20 +13,33 @@ import threading
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_QWEN_COMMAND
-from ..runtime.process_runner import run_process
+from ..runtime.process_runner import run_process, terminate_process_tree
 from ..utils import io_path
 from ..workspace import ensure_instruction_file, update_goal_reference
 from .backend import BackendError, BackendMode, BackendResult, BaseBackend, CapabilitySpec, ChatFeatureSpec, InteractionMode, InteractionModeSpec, ReasoningOptionSpec
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
-_QWEN_NATIVE_ASK_MIN_VERSION = (0, 23, 2)
+_QWEN_PROJECT_CHAT_FEATURES = frozenset({
+    "session_create",
+    "session_id_override",
+    "session_scope_override",
+    "session_resume",
+    "session_prompt",
+    "session_events",
+    "session_permission_vote",
+    "session_status",
+    "session_set_model",
+    "session_close",
+})
 _QWEN_AUTH_TYPES = {
     "openai",
     "openai-responses",
@@ -440,41 +454,99 @@ def _qwen_serve_command(root: Path) -> list[str]:
     return args
 
 
+def _qwen_http_json_response(
+    base_url: str,
+    path: str,
+    *,
+    method: str = "GET",
+    body: dict[str, Any] | None = None,
+    client_id: str = "",
+    timeout: float = 8,
+) -> tuple[int, dict[str, Any]]:
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    headers: dict[str, str] = {}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    if client_id:
+        headers["X-Qwen-Client-Id"] = client_id
+    request = urllib.request.Request(
+        base_url + path,
+        data=payload,
+        method=method,
+        headers=headers,
+    )
+    status = 0
+    raw = ""
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = int(getattr(response, "status", 200))
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        raw = exc.read().decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError) as exc:
+        raise BackendError(f"Qwen daemon request failed: {exc}") from exc
+    if not raw.strip():
+        return status, {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise BackendError("Qwen daemon returned invalid JSON") from exc
+    if not isinstance(value, dict):
+        raise BackendError("Qwen daemon returned invalid payload")
+    return status, value
+
+
+def _qwen_http_error(
+    status: int,
+    payload: dict[str, Any],
+    *,
+    method: str,
+    path: str,
+) -> BackendError:
+    detail = (
+        payload.get("message")
+        or payload.get("error")
+        or payload.get("code")
+        or payload
+        or f"HTTP {status}"
+    )
+    if isinstance(detail, (dict, list)):
+        detail = json.dumps(detail, ensure_ascii=False, separators=(",", ":"))
+    return BackendError(
+        f"Qwen daemon {method} {path} failed (HTTP {status}): {detail}"
+    )
+
+
 def _qwen_http_json(
     base_url: str,
     path: str,
     *,
     method: str = "GET",
     body: dict[str, Any] | None = None,
+    client_id: str = "",
+    timeout: float = 8,
 ) -> dict[str, Any]:
-    payload = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(
-        base_url + path,
-        data=payload,
+    status, value = _qwen_http_json_response(
+        base_url,
+        path,
         method=method,
-        headers={"Content-Type": "application/json"} if payload is not None else {},
+        body=body,
+        client_id=client_id,
+        timeout=timeout,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            raw = response.read().decode("utf-8")
-    except (OSError, urllib.error.URLError) as exc:
-        raise BackendError(f"Qwen capability discovery request failed: {exc}") from exc
-    if not raw.strip():
-        return {}
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise BackendError("Qwen capability discovery returned invalid JSON") from exc
-    if not isinstance(value, dict):
-        raise BackendError("Qwen capability discovery returned invalid payload")
+    if status >= 400:
+        raise _qwen_http_error(status, value, method=method, path=path)
     return value
 
 
 @contextmanager
-def _qwen_daemon_session(
+def _qwen_daemon_process(
     root: Path,
-) -> Iterator[tuple[str, str, set[str]]]:
-    """Own one short-lived native Qwen daemon session for catalog discovery."""
+    *,
+    environment: dict[str, str] | None = None,
+) -> Iterator[tuple[str, set[str]]]:
+    """Own one short-lived qwen serve process and expose its native feature set."""
     command = _qwen_serve_command(root)
     options: dict[str, Any] = {
         "cwd": root,
@@ -484,6 +556,8 @@ def _qwen_daemon_session(
         "encoding": "utf-8",
         "errors": "replace",
     }
+    if environment is not None:
+        options["env"] = environment
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -491,7 +565,7 @@ def _qwen_daemon_session(
     try:
         process = subprocess.Popen(command, **options)
     except OSError as exc:
-        raise BackendError(f"Qwen capability discovery failed to start: {exc}") from exc
+        raise BackendError(f"Qwen daemon failed to start: {exc}") from exc
 
     lines: queue.Queue[str] = queue.Queue()
 
@@ -505,7 +579,6 @@ def _qwen_daemon_session(
     thread = threading.Thread(target=reader, daemon=True)
     thread.start()
     base_url = ""
-    session_id = ""
     startup: list[str] = []
     try:
         deadline = time.monotonic() + 12
@@ -524,10 +597,21 @@ def _qwen_daemon_session(
                 break
         if not base_url:
             detail = "\n".join(startup[-20:]) or f"exit {process.poll()}"
-            raise BackendError(f"Qwen capability daemon did not become ready: {detail}")
+            raise BackendError(f"Qwen daemon did not become ready: {detail}")
 
         caps = _qwen_http_json(base_url, "/capabilities")
         features = {str(value) for value in caps.get("features") or []}
+        yield base_url, features
+    finally:
+        terminate_process_tree(process)
+
+
+@contextmanager
+def _qwen_daemon_session(
+    root: Path,
+) -> Iterator[tuple[str, str, set[str]]]:
+    """Own one short-lived native Qwen daemon session for catalog discovery."""
+    with _qwen_daemon_process(root) as (base_url, features):
         if "session_create" not in features:
             raise BackendError("Qwen capability daemon is missing: session_create")
         create_body: dict[str, Any] = {"cwd": str(root)}
@@ -535,24 +619,147 @@ def _qwen_daemon_session(
             create_body["sessionScope"] = "thread"
         created = _qwen_http_json(base_url, "/session", method="POST", body=create_body)
         session_id = str(created.get("sessionId") or "")
+        client_id = str(created.get("clientId") or "")
         if not session_id:
             raise BackendError("Qwen capability daemon did not return sessionId")
-        yield base_url, session_id, features
-    finally:
-        if base_url and session_id:
+        try:
+            yield base_url, session_id, features
+        finally:
             try:
-                _qwen_http_json(base_url, f"/session/{session_id}", method="DELETE")
+                _qwen_http_json(
+                    base_url,
+                    f"/session/{urllib.parse.quote(session_id, safe='')}",
+                    method="DELETE",
+                    client_id=client_id,
+                )
             except BackendError:
                 pass
-        try:
-            process.terminate()
-            process.wait(timeout=3)
-        except (OSError, subprocess.TimeoutExpired):
-            try:
-                process.kill()
-            except OSError:
-                pass
 
+
+def _qwen_chat_bridge_path(root: Path, session_id: str) -> Path:
+    key = hashlib.sha256(
+        (str(root.resolve()) + "\0" + str(session_id)).encode("utf-8")
+    ).hexdigest()
+    return (
+        Path(tempfile.gettempdir())
+        / "ai-task-runner-qwen-chat"
+        / f"{key}.json"
+    )
+
+
+def _qwen_chat_bridge_write(
+    root: Path,
+    session_id: str,
+    value: dict[str, Any],
+) -> None:
+    path = _qwen_chat_bridge_path(root, session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+
+
+def _qwen_chat_bridge_read(
+    root: Path,
+    session_id: str,
+) -> dict[str, Any] | None:
+    path = _qwen_chat_bridge_path(root, session_id)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    if str(value.get("sessionId") or "") != str(session_id):
+        return None
+    base_url = str(value.get("baseUrl") or "")
+    if not re.fullmatch(r"http://127\.0\.0\.1:\d+", base_url):
+        return None
+    return value
+
+
+def _qwen_chat_bridge_delete(root: Path, session_id: str) -> None:
+    try:
+        _qwen_chat_bridge_path(root, session_id).unlink()
+    except OSError:
+        pass
+
+
+@contextmanager
+def _qwen_sse_stream(
+    base_url: str,
+    session_id: str,
+    *,
+    client_id: str = "",
+    last_event_id: int = 0,
+    read_timeout: float = 30,
+) -> Iterator[Any]:
+    headers = {
+        "Accept": "text/event-stream",
+        "Last-Event-ID": str(last_event_id),
+    }
+    if client_id:
+        headers["X-Qwen-Client-Id"] = client_id
+    path = f"/session/{urllib.parse.quote(session_id, safe='')}/events"
+    request = urllib.request.Request(base_url + path, headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=read_timeout)
+    except (OSError, urllib.error.URLError) as exc:
+        raise BackendError(f"Qwen daemon event stream failed: {exc}") from exc
+    try:
+        yield response
+    finally:
+        try:
+            response.close()
+        except OSError:
+            pass
+
+
+def _qwen_sse_events(
+    response: Any,
+    *,
+    deadline: float = 0,
+) -> Iterator[dict[str, Any]]:
+    for raw_line in response:
+        if deadline and time.monotonic() > deadline:
+            raise BackendError("Qwen Project Chat daemon turn timed out")
+        if isinstance(raw_line, bytes):
+            line = raw_line.decode("utf-8", errors="replace").strip()
+        else:
+            line = str(raw_line).strip()
+        if not line.startswith("data:"):
+            continue
+        payload = line[5:].strip()
+        if not payload:
+            continue
+        try:
+            value = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise BackendError("Qwen daemon event stream returned invalid JSON") from exc
+        if isinstance(value, dict):
+            yield value
+
+
+def _qwen_is_ask_user_question(payload: dict[str, Any]) -> bool:
+    tool_call = payload.get("toolCall")
+    if not isinstance(tool_call, dict):
+        return False
+    if str(tool_call.get("kind") or "") == "ask_user_question":
+        return True
+    raw = tool_call.get("rawInput")
+    if isinstance(raw, dict) and isinstance(raw.get("questions"), list):
+        return True
+    meta = tool_call.get("_meta")
+    return (
+        isinstance(meta, dict)
+        and (
+            str(meta.get("qwenInteractionKind") or "") == "user_question"
+            or isinstance(meta.get("qwenQuestions"), list)
+        )
+    )
 
 def _qwen_daemon_snapshot(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     with _qwen_daemon_session(root) as (base_url, session_id, features):
@@ -807,11 +1014,258 @@ class QwenBackend(BaseBackend):
             except OSError:
                 pass
 
-    def ask(self, *args, **kwargs) -> BackendResult:
+    def ask(
+        self,
+        prompt: str,
+        session_id: str = "",
+        idle_timeout_after_change: float = 0,
+        change_detected=None,
+    ) -> BackendResult:
         try:
-            return super().ask(*args, **kwargs)
+            if self.interaction_mode is not None:
+                return self._ask_project_chat(prompt, session_id)
+            return super().ask(
+                prompt,
+                session_id,
+                idle_timeout_after_change,
+                change_detected,
+            )
         finally:
             self._cleanup_reasoning_settings()
+
+    def _ask_project_chat(self, prompt: str, session_id: str) -> BackendResult:
+        if not prompt.strip():
+            raise BackendError("qwen prompt is empty")
+        session_id = self.ensure_native_session(self.root, session_id)
+        native_mode = next(
+            item.native
+            for item in self.interaction_modes()
+            if item.id == self.interaction_mode
+        )
+        environment = dict(os.environ)
+        environment.update(self.process_environment())
+        encoded_session = urllib.parse.quote(session_id, safe="")
+        model = self.model_from_args(self.extra_args)
+        required = _QWEN_PROJECT_CHAT_FEATURES
+
+        with _qwen_daemon_process(
+            self.root,
+            environment=environment,
+        ) as (base_url, features):
+            missing = sorted(required - features)
+            if missing:
+                raise BackendError(
+                    "Qwen Project Chat daemon is missing: " + ", ".join(missing)
+                )
+
+            restore_body = {
+                "cwd": str(self.root),
+                "approvalMode": native_mode,
+            }
+            status, live = _qwen_http_json_response(
+                base_url,
+                f"/session/{encoded_session}/resume",
+                method="POST",
+                body=restore_body,
+                timeout=90,
+            )
+            if status == 404:
+                create_body: dict[str, Any] = {
+                    "cwd": str(self.root),
+                    "sessionId": session_id,
+                    "approvalMode": native_mode,
+                }
+                create_body["sessionScope"] = "thread"
+                live = _qwen_http_json(
+                    base_url,
+                    "/session",
+                    method="POST",
+                    body=create_body,
+                    timeout=90,
+                )
+            elif status >= 400:
+                raise _qwen_http_error(
+                    status,
+                    live,
+                    method="POST",
+                    path=f"/session/{encoded_session}/resume",
+                )
+
+            actual_session = str(live.get("sessionId") or session_id)
+            if actual_session.lower() != session_id.lower():
+                raise BackendError(
+                    "Qwen daemon returned a different Project Chat session id"
+                )
+            client_id = str(live.get("clientId") or "")
+            if model:
+                _qwen_http_json(
+                    base_url,
+                    f"/session/{encoded_session}/model",
+                    method="POST",
+                    body={"modelId": model},
+                    client_id=client_id,
+                    timeout=30,
+                )
+            if self.reasoning:
+                _qwen_http_json(
+                    base_url,
+                    f"/session/{encoded_session}/config-option",
+                    method="POST",
+                    body={
+                        "configId": "reasoning_effort",
+                        "value": self.reasoning,
+                        "persist": False,
+                    },
+                    client_id=client_id,
+                    timeout=30,
+                )
+
+            bridge: dict[str, Any] = {
+                "sessionId": session_id,
+                "baseUrl": base_url,
+                "clientId": client_id,
+                "ownerPid": os.getpid(),
+                "pending": None,
+            }
+            _qwen_chat_bridge_write(self.root, session_id, bridge)
+            try:
+                with _qwen_sse_stream(
+                    base_url,
+                    session_id,
+                    client_id=client_id,
+                    last_event_id=0,
+                    read_timeout=max(30, self.timeout + 30),
+                ) as stream:
+                    admitted = _qwen_http_json(
+                        base_url,
+                        f"/session/{encoded_session}/prompt",
+                        method="POST",
+                        body={
+                            "prompt": [{
+                                "type": "text",
+                                "text": prompt,
+                            }]
+                        },
+                        client_id=client_id,
+                        timeout=30,
+                    )
+                    prompt_id = str(admitted.get("promptId") or "")
+                    if not prompt_id:
+                        raise BackendError(
+                            "Qwen Project Chat daemon did not return promptId"
+                        )
+
+                    chunks: list[str] = []
+                    deadline = time.monotonic() + max(1, self.timeout)
+                    for event in _qwen_sse_events(stream, deadline=deadline):
+                        event_type = str(event.get("type") or "")
+                        data = event.get("data")
+                        if not isinstance(data, dict):
+                            data = {}
+                        event_prompt = str(event.get("promptId") or "")
+                        if event_prompt and event_prompt != prompt_id:
+                            continue
+
+                        if event_type == "session_update":
+                            update = data.get("update")
+                            if (
+                                isinstance(update, dict)
+                                and update.get("sessionUpdate") == "agent_message_chunk"
+                            ):
+                                content = update.get("content")
+                                if isinstance(content, dict):
+                                    text = str(content.get("text") or "")
+                                    if text:
+                                        chunks.append(text)
+                            continue
+
+                        if event_type == "permission_request":
+                            request_id = str(data.get("requestId") or "")
+                            if not request_id:
+                                continue
+                            if _qwen_is_ask_user_question(data):
+                                bridge["pending"] = data
+                                _qwen_chat_bridge_write(
+                                    self.root,
+                                    session_id,
+                                    bridge,
+                                )
+                            else:
+                                _qwen_http_json(
+                                    base_url,
+                                    (
+                                        f"/session/{encoded_session}/permission/"
+                                        + urllib.parse.quote(request_id, safe="")
+                                    ),
+                                    method="POST",
+                                    body={"outcome": {"outcome": "cancelled"}},
+                                    client_id=client_id,
+                                    timeout=30,
+                                )
+                            continue
+
+                        if event_type == "permission_resolved":
+                            request_id = str(data.get("requestId") or "")
+                            pending = bridge.get("pending")
+                            if (
+                                isinstance(pending, dict)
+                                and str(pending.get("requestId") or "") == request_id
+                            ):
+                                bridge["pending"] = None
+                                _qwen_chat_bridge_write(
+                                    self.root,
+                                    session_id,
+                                    bridge,
+                                )
+                            continue
+
+                        if event_type == "turn_error":
+                            message = str(
+                                data.get("message")
+                                or data.get("error")
+                                or "Qwen Project Chat turn failed"
+                            )
+                            raise BackendError(
+                                message,
+                                session_id=session_id,
+                                recovery_key="qwen:daemon-turn-error",
+                            )
+                        if event_type == "session_died":
+                            raise BackendError(
+                                str(data.get("reason") or "Qwen daemon session died"),
+                                session_id=session_id,
+                                recovery_key="qwen:daemon-session-died",
+                            )
+                        if event_type == "state_resync_required":
+                            raise BackendError(
+                                "Qwen daemon event replay requires resync",
+                                session_id=session_id,
+                                recovery_key="qwen:daemon-resync",
+                            )
+                        if event_type == "turn_complete":
+                            text = "".join(chunks).strip()
+                            if not text:
+                                raise BackendError(
+                                    "qwen returned an empty response",
+                                    session_id=session_id,
+                                )
+                            return BackendResult(text, session_id)
+                raise BackendError(
+                    "Qwen Project Chat event stream ended before turn completion",
+                    session_id=session_id,
+                )
+            finally:
+                _qwen_chat_bridge_delete(self.root, session_id)
+                try:
+                    _qwen_http_json(
+                        base_url,
+                        f"/session/{encoded_session}",
+                        method="DELETE",
+                        client_id=client_id,
+                        timeout=8,
+                    )
+                except BackendError:
+                    pass
 
 
     name = "qwen"
@@ -831,26 +1285,108 @@ class QwenBackend(BaseBackend):
     def chat_features(cls, root: Path) -> ChatFeatureSpec:
         try:
             version = _qwen_cli_version(root)
+            with _qwen_daemon_process(root) as (_, features):
+                missing = sorted(_QWEN_PROJECT_CHAT_FEATURES - features)
         except BackendError as exc:
             return ChatFeatureSpec(detail=str(exc))
-        supported = version >= _QWEN_NATIVE_ASK_MIN_VERSION
         version_text = ".".join(str(value) for value in version)
-        if not supported:
+        if missing:
             return ChatFeatureSpec(
                 detail=(
-                    f"Qwen {version_text} is older than the verified native Ask "
-                    "contract 0.23.2."
+                    f"Qwen {version_text} daemon is missing the Project Chat "
+                    "contract: " + ", ".join(missing)
                 )
             )
         return ChatFeatureSpec(
+            ask=True,
+            ask_transport="daemon_permission_request",
             detail=(
-                f"Qwen {version_text} exposes ask_user_question through daemon "
-                "permission requests, but Project Chat currently uses the one-shot "
-                "Qwen transport and cannot yet surface/resolve that live permission "
-                "request. Native Ask fails closed until the daemon bridge owns the "
-                "same Chat session."
-            )
+                f"Qwen {version_text} advertises the native Project Chat daemon "
+                "contract; ask_user_question is bridged through the session-scoped "
+                "permission route."
+            ),
         )
+
+    @classmethod
+    def ensure_native_session(cls, root: Path, session_id: str) -> str:
+        value = str(session_id or "").strip()
+        if value:
+            try:
+                return str(uuid.UUID(value))
+            except ValueError:
+                pass
+        return str(uuid.uuid4())
+
+    @classmethod
+    def pending_native_ask(
+        cls,
+        root: Path,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        bridge = _qwen_chat_bridge_read(root, session_id)
+        if not bridge:
+            return None
+        pending = bridge.get("pending")
+        if not isinstance(pending, dict):
+            return None
+        encoded_session = urllib.parse.quote(session_id, safe="")
+        try:
+            status, _ = _qwen_http_json_response(
+                str(bridge.get("baseUrl") or ""),
+                f"/session/{encoded_session}/status",
+                client_id=str(bridge.get("clientId") or ""),
+                timeout=1,
+            )
+        except BackendError:
+            status = 0
+        if status < 200 or status >= 400:
+            _qwen_chat_bridge_delete(root, session_id)
+            return None
+        return pending
+
+    @classmethod
+    def resolve_native_ask(
+        cls,
+        root: Path,
+        session_id: str,
+        payload: Any,
+        answers: dict[str, Any] | None,
+        *,
+        cancelled: bool = False,
+    ) -> None:
+        bridge = _qwen_chat_bridge_read(root, session_id)
+        if not bridge:
+            raise BackendError("Qwen Native Ask bridge is no longer active")
+        current = bridge.get("pending")
+        if not isinstance(current, dict):
+            raise BackendError("Qwen Native Ask is no longer pending")
+        request_id = str(current.get("requestId") or "")
+        supplied_id = (
+            str(payload.get("requestId") or "")
+            if isinstance(payload, dict)
+            else ""
+        )
+        if not request_id or (supplied_id and supplied_id != request_id):
+            raise BackendError("Qwen Native Ask request no longer matches")
+        response = cls.encode_ask_response(
+            current,
+            answers,
+            cancelled=cancelled,
+        )
+        base_url = str(bridge.get("baseUrl") or "")
+        client_id = str(bridge.get("clientId") or "")
+        encoded_session = urllib.parse.quote(session_id, safe="")
+        encoded_request = urllib.parse.quote(request_id, safe="")
+        _qwen_http_json(
+            base_url,
+            f"/session/{encoded_session}/permission/{encoded_request}",
+            method="POST",
+            body=response,
+            client_id=client_id,
+            timeout=30,
+        )
+        bridge["pending"] = None
+        _qwen_chat_bridge_write(root, session_id, bridge)
 
     @classmethod
     def normalize_ask_request(cls, payload: Any) -> list[dict[str, Any]]:
@@ -858,6 +1394,16 @@ class QwenBackend(BaseBackend):
             raise BackendError("Qwen Ask payload must be an object")
         tool_call = payload.get("toolCall")
         raw = tool_call.get("rawInput") if isinstance(tool_call, dict) else None
+        meta = tool_call.get("_meta") if isinstance(tool_call, dict) else None
+        if (
+            isinstance(meta, dict)
+            and isinstance(meta.get("qwenQuestions"), list)
+            and (
+                not isinstance(raw, dict)
+                or not isinstance(raw.get("questions"), list)
+            )
+        ):
+            raw = {"questions": meta["qwenQuestions"]}
         if not isinstance(raw, dict):
             raw = payload.get("rawInput")
         if not isinstance(raw, dict):
@@ -887,7 +1433,11 @@ class QwenBackend(BaseBackend):
                 "id": f"q{index + 1}",
                 "header": str(question.get("header") or f"Question {index + 1}"),
                 "question": str(question.get("question") or ""),
-                "kind": "choice" if rows else "text",
+                "kind": (
+                    "multi_choice"
+                    if rows and question.get("multiSelect") is True
+                    else "choice" if rows else "text"
+                ),
                 "options": rows,
             })
         return result
@@ -913,6 +1463,16 @@ class QwenBackend(BaseBackend):
             value = answers[key]
             if question["kind"] == "text":
                 text = str(value or "").strip()
+            elif question["kind"] == "multi_choice" and isinstance(value, dict):
+                selections = [
+                    str(item).strip()
+                    for item in value.get("values") or []
+                    if str(item).strip()
+                ]
+                custom = str(value.get("other") or "").strip()
+                if custom:
+                    selections.append(custom)
+                text = ", ".join(selections)
             elif isinstance(value, dict) and str(value.get("other") or "").strip():
                 text = str(value["other"]).strip()
             elif isinstance(value, dict):
