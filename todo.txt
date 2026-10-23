@@ -1924,6 +1924,12 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
       Ubuntu 1392 passed / 44 skipped / 3 subtests, Windows 1392 passed / 44 skipped / 3 subtests,
       Browser E2E 44 passed, Studio build PASS.
 
+[x] Bind formal Agent live evidence to an exact clean source state.
+    - Capture Git HEAD/cleanliness before the live probe and again when evidence is saved.
+    - formal_gate=true now requires a clean source tree before/after and the same non-empty HEAD,
+      so uncommitted adapter edits or a branch move during the probe cannot be credited to another commit.
+    - Diagnostic runs still work, but cannot satisfy the formal gate.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

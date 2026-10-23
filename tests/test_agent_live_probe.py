@@ -381,9 +381,7 @@ def test_native_ask_roundtrip_fails_when_probe_chat_cleanup_leaks(
 
 def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(probe, "_source_head", lambda: "source-head")
     results = [
         {
             "backend": backend,
@@ -411,10 +409,17 @@ def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session
         discovery_only=False,
         allow_missing=False,
         allow_no_ask=False,
+        source_before={"head": "source-head", "clean": True},
+        source_after={"head": "source-head", "clean": True},
     )
 
     assert value["schema_version"] == 1
     assert value["source_head"] == "source-head"
+    assert value["source_integrity"] == {
+        "clean_before": True,
+        "clean_after": True,
+        "same_head": True,
+    }
     assert value["formal_gate"] is True
     assert value["ok"] is True
     assert value["requested_backends"] == list(probe.DEFAULT_BACKENDS)
@@ -431,9 +436,58 @@ def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session
         discovery_only=True,
         allow_missing=False,
         allow_no_ask=False,
+        source_before={"head": "source-head", "clean": True},
+        source_after={"head": "source-head", "clean": True},
     )
     assert diagnostic["formal_gate"] is False
     assert diagnostic["diagnostic"]["discovery_only"] is True
+
+
+@pytest.mark.parametrize(
+    ("source_before", "source_after"),
+    [
+        (
+            {"head": "source-head", "clean": False},
+            {"head": "source-head", "clean": True},
+        ),
+        (
+            {"head": "source-head", "clean": True},
+            {"head": "source-head", "clean": False},
+        ),
+        (
+            {"head": "source-head", "clean": True},
+            {"head": "moved-head", "clean": True},
+        ),
+    ],
+)
+def test_evidence_formal_gate_requires_clean_stable_source(
+    tmp_path: Path,
+    source_before: dict[str, object],
+    source_after: dict[str, object],
+) -> None:
+    results = [
+        {
+            "backend": backend,
+            "status": "pass",
+            "chat_ping": {"ok": True, "session_id": "native"},
+            "native_ask": {"ok": True},
+        }
+        for backend in probe.DEFAULT_BACKENDS
+    ]
+
+    value = probe._evidence_payload(
+        tmp_path,
+        list(probe.DEFAULT_BACKENDS),
+        results,
+        ok=True,
+        discovery_only=False,
+        allow_missing=False,
+        allow_no_ask=False,
+        source_before=source_before,
+        source_after=source_after,
+    )
+
+    assert value["formal_gate"] is False
 
 
 def test_write_evidence_atomically_replaces_requested_json_path(tmp_path: Path) -> None:

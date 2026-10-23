@@ -668,6 +668,7 @@ AI Task Runner — Chat / Task / Workspace 整體待辦
     並移除 native session id，只保留 session_id_present。Diagnostic mode 永遠不能被標成 formal PASS。
 [x] 正式 live probe 不只檢查 Ask capability flag：會經 ChatAgentService + ChatService 等待真 Native Ask、
     以 canonical Ask schema 回答並要求同 turn continuation；Qwen/OpenCode 都需 native_ask.ok 才可能 formal PASS。
+[x] 正式 live evidence 綁定 clean/stable source HEAD；執行前後任一 dirty 或 HEAD 改變都不得 formal PASS。
 [ ] 正式 adapter 測試：Qwen / OpenCode 真實 Model、Slash / Skill、Mode、Ask 與 Queue capability。
 [x] Regression 測試：現有 Task board、Task List、Workflow / Prompt、YAML、Dry Run、Task history、Worktree、Merge 不退化。
     - HEAD 63c28bb 的 CI run 39884715632 已實跑 Windows/Linux full pytest、Browser E2E 與 Studio build，全數 PASS；後續 merge-safety tests 仍需以 final HEAD CI 再 gate。

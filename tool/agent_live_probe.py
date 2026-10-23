@@ -76,6 +76,25 @@ def _source_head() -> str:
     return completed.stdout.strip() if completed.returncode == 0 else ""
 
 
+def _source_identity() -> dict[str, Any]:
+    head = _source_head()
+    try:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"head": head, "clean": False}
+    return {
+        "head": head,
+        "clean": bool(head and completed.returncode == 0 and not completed.stdout.strip()),
+    }
+
+
 def _evidence_payload(
     project: Path,
     requested: list[str],
@@ -85,6 +104,8 @@ def _evidence_payload(
     discovery_only: bool,
     allow_missing: bool,
     allow_no_ask: bool,
+    source_before: dict[str, Any],
+    source_after: dict[str, Any],
 ) -> dict[str, Any]:
     sanitized = json.loads(json.dumps(results, ensure_ascii=False))
     for result in sanitized:
@@ -97,6 +118,14 @@ def _evidence_payload(
         chat["session_id_present"] = bool(session_id)
 
     diagnostic = bool(discovery_only or allow_missing or allow_no_ask)
+    before_head = str(source_before.get("head") or "").strip()
+    after_head = str(source_after.get("head") or "").strip()
+    source_integrity = {
+        "clean_before": source_before.get("clean") is True,
+        "clean_after": source_after.get("clean") is True,
+        "same_head": bool(before_head and before_head == after_head),
+    }
+    source_ok = all(source_integrity.values())
     by_backend = {
         str(item.get("backend") or ""): item
         for item in sanitized
@@ -106,6 +135,7 @@ def _evidence_payload(
     formal_gate = bool(
         ok
         and not diagnostic
+        and source_ok
         and required.issubset(set(requested))
         and all(
             isinstance(by_backend.get(backend), dict)
@@ -120,7 +150,8 @@ def _evidence_payload(
     return {
         "schema_version": 1,
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
-        "source_head": _source_head(),
+        "source_head": before_head,
+        "source_integrity": source_integrity,
         "project_root": (
             "."
             if Path(project).resolve() == ROOT
@@ -673,6 +704,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": False, "error": "timeout must be >= 1"}))
         return 2
 
+    source_before = _source_identity() if args.output else {"head": "", "clean": False}
+
     try:
         model_overrides = _parse_model_overrides(args.model)
         discover_plugins()
@@ -743,6 +776,8 @@ def main(argv: list[str] | None = None) -> int:
                 discovery_only=args.discovery_only,
                 allow_missing=args.allow_missing,
                 allow_no_ask=args.allow_no_ask,
+                source_before=source_before,
+                source_after=_source_identity(),
             )
             saved = _write_evidence(args.output, evidence)
             print(json.dumps(
