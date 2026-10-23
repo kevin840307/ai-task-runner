@@ -427,16 +427,24 @@ def test_failed_queue_head_can_be_released_for_fallback_without_blocking_next_ta
     assert (repo / "b.txt").read_text(encoding="utf-8") == "task b\n"
 
 
-def test_merge_queue_assigns_stable_fifo_sequence_to_multiple_main_tasks(tmp_path: Path):
+@pytest.mark.parametrize("task_count", [2, 5, 10])
+def test_merge_queue_assigns_stable_fifo_sequence_to_concurrent_main_tasks(
+    tmp_path: Path,
+    task_count: int,
+):
     repo = _repo(tmp_path)
     prepared = []
-    for index, suffix in enumerate(("a", "b", "c", "d", "e"), start=1):
+    suffixes = tuple(chr(ord("a") + index) for index in range(task_count))
+    for index, suffix in enumerate(suffixes, start=1):
         manager, workspace = _task(repo, suffix)
         if index == 1:
             (workspace.worktree_path / "app.txt").write_text("queue head\n", encoding="utf-8")
         else:
             (workspace.worktree_path / f"{suffix}.txt").write_text(f"{suffix}\n", encoding="utf-8")
         prepared.append((workspace, manager.snapshot_result(workspace)))
+
+    assert len({workspace.worktree_path for workspace, _snapshot in prepared}) == task_count
+    assert len({workspace.task_branch for workspace, _snapshot in prepared}) == task_count
 
     (repo / "app.txt").write_text("target conflict\n", encoding="utf-8")
     _git(repo, "add", "app.txt")
@@ -447,6 +455,7 @@ def test_merge_queue_assigns_stable_fifo_sequence_to_multiple_main_tasks(tmp_pat
     assert first.merge_queue_seq == 1
 
     for expected_seq, (workspace, snapshot) in enumerate(prepared[1:], start=2):
+        # A fresh manager models another process/restart reading the durable FIFO.
         result = MergeManager().merge(workspace, snapshot, validate=lambda _project: "PASS")
         assert result.status == "pending_merge"
         assert result.merge_queue_seq == expected_seq
