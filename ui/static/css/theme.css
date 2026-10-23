@@ -637,3 +637,31 @@ html[data-appearance] .global-settings-button .global-settings-copy{
   background:transparent;
   color:inherit;
 }
+
+
+/* Project Chat feature background ownership: only the inner composer is a panel. */
+html[data-appearance] #projectChatComposePanel{
+  background:linear-gradient(to bottom,transparent,var(--bg) 25px,var(--bg) 100%)!important;
+  border-color:transparent!important;
+}
+html[data-appearance] #projectChatComposePanel .composer-box{
+  background:var(--panel)!important;
+  color:var(--text)!important;
+  border-color:var(--line)!important;
+}
+html[data-appearance] #projectChatMessages .project-chat-message.user{
+  background:var(--accent-softer)!important;
+  color:var(--text)!important;
+  border-color:color-mix(in srgb,var(--accent) 38%,var(--line))!important;
+}
+html[data-appearance] #projectChatMessages .project-chat-message.assistant{
+  background:var(--panel)!important;
+  color:var(--text)!important;
+  border-color:var(--line)!important;
+}
+html[data-appearance="dark"] .project-chat-settings-body{background:var(--popover-bg)}
+html[data-appearance="dark"] .project-chat-settings-body label{background:transparent;color:var(--text)}
+html[data-appearance="dark"] .project-chat-settings-body label:hover{background:var(--panel-3)}
+html[data-appearance="dark"] .project-chat-settings-body select{
+  color-scheme:dark;background:var(--input-bg);color:var(--text);border-color:var(--line-strong)
+}

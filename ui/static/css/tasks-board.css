@@ -120,3 +120,13 @@
 @media(max-width:760px){
   .tasks-board-header-actions{flex-wrap:wrap}
 }
+
+
+/* Final feature Board control colors and dimensions. */
+.tasks-view-toggle{padding:3px;border-radius:9px;background:var(--panel)}
+.tasks-view-toggle button{
+  height:27px;min-height:27px;padding:0 10px;border-radius:6px;background:transparent;color:var(--muted);font-size:10px;font-weight:800
+}
+.tasks-view-toggle button.active{background:var(--accent-soft);color:var(--accent-dark);box-shadow:none}
+.tasks-board-search{border:1px solid var(--line);background:var(--input-bg);color:var(--text)}
+.tasks-board-column-head span{background:var(--panel-3)}

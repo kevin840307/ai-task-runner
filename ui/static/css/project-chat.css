@@ -546,3 +546,52 @@
   .project-chat-session-select{min-width:150px}
   #projectChatMessages{padding-left:12px;padding-right:12px}
 }
+
+
+/* Remaining feature Chat density: settings/suggest/queue surfaces. */
+.project-chat-settings-head{
+  position:sticky;top:0;z-index:2;gap:12px;padding:10px 11px;
+  background:linear-gradient(180deg,var(--panel),var(--panel-2))
+}
+.project-chat-settings-head>div{gap:2px}
+.project-chat-settings-head strong{font-size:10px}
+.project-chat-settings-head small{font-size:6.8px;font-weight:950;letter-spacing:.08em}
+.project-chat-settings-head button{
+  width:25px;height:25px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:16px
+}
+.project-chat-settings-head button:hover{background:var(--panel-3);color:var(--text)}
+.project-chat-settings-body{gap:4px;padding:6px}
+.project-chat-suggest{
+  width:min(900px,calc(100% - 28px));margin:0;border-radius:12px;
+  background:var(--popover-bg);color:var(--text);box-shadow:var(--shadow-popover)
+}
+.project-chat-suggest-head{gap:10px;padding:8px 10px;background:var(--panel-2)}
+.project-chat-suggest-head strong{font-size:9px}
+.project-chat-suggest-head small{font-size:7.5px;font-weight:750}
+.project-chat-suggest-list{max-height:232px;padding:4px}
+.project-chat-suggest-item{
+  grid-template-columns:minmax(0,1fr) auto;gap:9px;padding:8px 9px;border:0;border-radius:8px
+}
+.project-chat-suggest-item:hover,.project-chat-suggest-item.active{background:var(--accent-softer);border-color:transparent}
+.project-chat-suggest-token{font-size:9px;font-weight:900;color:var(--accent)}
+.project-chat-suggest-description{font-size:7.5px}
+.project-chat-suggest-meta{font-size:6.8px;font-weight:900}
+.project-chat-turn-status,.project-chat-queue{width:min(900px,calc(100% - 28px))}
+.project-chat-turn-status{
+  margin-bottom:6px;padding:7px 10px;border-radius:9px;
+  background:var(--accent-softer);color:var(--accent-dark);font-size:8px;font-weight:850
+}
+.project-chat-queue{margin-bottom:7px;border-radius:12px;box-shadow:var(--shadow-md)}
+.project-chat-queue-head{padding:8px 10px;background:var(--panel-2)}
+.project-chat-queue-head strong{font-size:8.8px}
+.project-chat-queue-head small{font-size:7.5px;font-weight:800}
+.project-chat-queue-list{gap:4px;max-height:170px;padding:5px}
+.project-chat-queue-item{
+  gap:8px;padding:7px 8px;border:1px solid transparent;border-radius:9px;background:var(--panel-2)
+}
+.project-chat-queue-item+.project-chat-queue-item{border-top-color:transparent}
+.project-chat-queue-item:hover{border-color:var(--line-strong);background:var(--panel)}
+.project-chat-queue-copy{font-size:8.5px;line-height:1.45}
+.project-chat-queue-actions button{
+  height:25px;min-height:25px;padding:0 7px;border:0;border-radius:7px;background:transparent;font-size:7.5px;font-weight:900
+}
