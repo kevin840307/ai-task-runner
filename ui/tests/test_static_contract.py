@@ -15,6 +15,42 @@ class StaticContractTests(unittest.TestCase):
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
 
+    def test_task_editor_geometry_tracks_feature_prototype(self):
+        feature_root = self.root.parent / "feature" / "ui-prototype"
+        feature_css = (feature_root / "styles.css").read_text(encoding="utf-8")
+        feature_template = (feature_root / "task-ui-templates.js").read_text(encoding="utf-8")
+        production_css = (self.root / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
+
+        # Feature source of truth: Project / Workflow / Title share the desktop basics row,
+        # Prompt + validation own one input grid, mixed validation becomes a 2-card row,
+        # Workspace is secondary, and the shared task workspace route is 920px.
+        for token in (
+            "grid-template-columns:minmax(250px,1.45fr) minmax(175px,.92fr) minmax(140px,.72fr)",
+            "grid-template-columns:minmax(0,1.34fr) minmax(245px,.86fr)",
+            "grid-template-columns:repeat(2,minmax(0,1fr))",
+            "min-height:118px",
+            "width:min(920px,94vw)",
+        ):
+            self.assertIn(token, feature_css, token)
+            self.assertIn(token, production_css, token)
+
+        project_i = feature_template.index("task-project-field")
+        workflow_i = feature_template.index("task-workflow-field")
+        title_i = feature_template.index("task-title-field")
+        prompt_i = feature_template.index("newTaskPromptSource")
+        validation_i = feature_template.index("newTaskValidationSource")
+        workspace_i = feature_template.index("workspace-selector-wrap")
+        self.assertLess(project_i, workflow_i)
+        self.assertLess(workflow_i, title_i)
+        self.assertLess(title_i, prompt_i)
+        self.assertLess(prompt_i, validation_i)
+        self.assertLess(validation_i, workspace_i)
+
+        production = self.task_workspace_js
+        self.assertLess(production.index("grid.append(projectField, workflowField, titleField)"), production.index("body.appendChild(workflowCaps)"))
+        self.assertLess(production.index("body.appendChild(workflowCaps)"), production.index("body.appendChild(inputGrid)"))
+        self.assertLess(production.index("body.appendChild(inputGrid)"), production.index("body.appendChild(workspaceSection)"))
+
     def test_ui_does_not_import_runner_core(self):
         for path in self.root.rglob("*.py"):
             if "tests" in path.parts:

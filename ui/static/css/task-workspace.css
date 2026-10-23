@@ -242,7 +242,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   grid-template-rows:minmax(30px,auto) 30px
 }
 .task-workspace-validation-grid:has(> [data-task-source-card="validator"] + [data-task-source-card="ai"]) [data-task-source-card="validator"] .task-workspace-source-head::after{
-  content:"";display:block;height:30px
+  content:none
 }
 
 .task-workspace-workspace-selector{

@@ -4504,6 +4504,7 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
 @pytest.mark.parametrize(
     ("viewport", "color_scheme"),
     [
+        ({"width": 1366, "height": 900}, "light"),
         ({"width": 820, "height": 900}, "light"),
         ({"width": 820, "height": 900}, "dark"),
         ({"width": 620, "height": 900}, "light"),
@@ -4625,7 +4626,11 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             workflow_box = page.locator("#taskWorkspaceWorkflow").bounding_box()
             title_box = page.locator("#taskWorkspaceItemTitle").bounding_box()
             assert project_box and workflow_box and title_box
-            if viewport["width"] == 820:
+            if viewport["width"] > 820:
+                assert abs(project_box["y"] - workflow_box["y"]) <= 1
+                assert abs(project_box["y"] - title_box["y"]) <= 1
+                assert project_box["width"] > workflow_box["width"] > title_box["width"]
+            elif viewport["width"] == 820:
                 assert abs(project_box["y"] - workflow_box["y"]) <= 1
                 assert title_box["y"] > project_box["y"] + project_box["height"] - 1
             else:
@@ -4636,9 +4641,11 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("#taskWorkspaceWorkflowCaps .task-workspace-cap-chip").count() == 2
             workspace_cards = page.locator(".task-workspace-workspace-options [data-workspace-option]")
             assert workspace_cards.count() == 3
-            if viewport["width"] == 820:
-                workspace_boxes = [card.bounding_box() for card in workspace_cards.all()]
+            workspace_boxes = [card.bounding_box() for card in workspace_cards.all()]
+            if viewport["width"] > 620:
                 assert max(box["y"] for box in workspace_boxes) - min(box["y"] for box in workspace_boxes) <= 1
+            else:
+                assert workspace_boxes[0]["y"] < workspace_boxes[1]["y"] < workspace_boxes[2]["y"]
 
             initial_prompt_box = assert_inside_drawer("[data-task-source-card='prompt']")
             initial_validator_box = assert_inside_drawer("[data-task-source-card='validator']")
@@ -4701,7 +4708,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             ai_box = ai_card.bounding_box()
             assert prompt_box and validator_box and ai_box
             assert validator_box["y"] > prompt_box["y"] + prompt_box["height"] - 1
-            if viewport["width"] == 820:
+            if viewport["width"] > 620:
                 assert abs(validator_box["y"] - ai_box["y"]) <= 1
                 assert abs(validator_box["width"] - ai_box["width"]) <= 2
             else:
