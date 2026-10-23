@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -197,8 +198,16 @@ def test_probe_backend_reuses_canonical_catalogs_and_chat_ping(
         probe,
         "_run_chat_ping",
         lambda project, backend, model, timeout: (
-            calls.append((Path(project), backend, model, timeout))
+            calls.append(("chat", Path(project), backend, model, timeout))
             or {"ok": True, "session_id": "s", "model_override": model}
+        ),
+    )
+    monkeypatch.setattr(
+        probe,
+        "_run_native_ask_roundtrip",
+        lambda project, backend, model, timeout: (
+            calls.append(("ask", Path(project), backend, model, timeout))
+            or {"ok": True, "question_count": 1, "answered": True, "continued": True}
         ),
     )
 
@@ -211,7 +220,132 @@ def test_probe_backend_reuses_canonical_catalogs_and_chat_ping(
 
     assert value["status"] == "pass"
     assert value["model_count"] == 1
-    assert calls == [(tmp_path, "sample", "native/model", 7)]
+    assert value["native_ask"]["continued"] is True
+    assert calls == [
+        ("chat", tmp_path, "sample", "native/model", 7),
+        ("ask", tmp_path, "sample", "native/model", 7),
+    ]
+
+def test_answers_for_ask_reuses_canonical_question_shape() -> None:
+    answers = probe._answers_for_ask({
+        "questions": [
+            {
+                "question_id": "choice",
+                "kind": "choice",
+                "options": [{"value": "continue", "label": "Continue"}],
+            },
+            {
+                "question_id": "multi",
+                "kind": "multi_choice",
+                "options": [{"value": "queue", "label": "Queue"}],
+            },
+            {
+                "question_id": "text",
+                "kind": "text",
+                "options": [],
+            },
+        ],
+    })
+
+    assert answers == {
+        "choice": {"value": "continue"},
+        "multi": {"values": ["queue"]},
+        "text": "Continue",
+    }
+
+
+def test_native_ask_roundtrip_uses_chat_service_and_restores_active_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed = probe.ChatService()
+    original = seed.sessions(tmp_path)
+    original_session = original["active_session_id"]
+
+    class FakeAgentService:
+        def __init__(self, _root: Path) -> None:
+            self.cancelled = False
+
+        def turn(self, project, chat, **kwargs):
+            created = chat.create_ask(
+                project,
+                kwargs["session_id"],
+                request_id="native-probe-request",
+                questions=[{
+                    "id": "continue",
+                    "header": "Live probe",
+                    "question": "Continue live adapter probe?",
+                    "options": [{"value": "continue", "label": "Continue"}],
+                }],
+                source="native",
+                backend=kwargs["backend"],
+                agent_session_id="native-session",
+                native_request_id="native-request",
+            )
+            ask_id = created["ask"]["ask_id"]
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                current = chat.ask(project, kwargs["session_id"])["ask"]
+                if isinstance(current, dict) and current["status"] == "answered":
+                    chat.append_message(
+                        project,
+                        kwargs["session_id"],
+                        "assistant",
+                        probe.ASK_MARKER,
+                    )
+                    return {"status": "idle", "ask_id": ask_id}
+                time.sleep(0.01)
+            raise RuntimeError("answer was not delivered")
+
+        def complete_ask(
+            self,
+            project,
+            chat,
+            *,
+            session_id,
+            ask_id,
+            request_id,
+            answers=None,
+            cancelled=False,
+        ):
+            if cancelled:
+                return chat.cancel_ask(
+                    project,
+                    session_id,
+                    ask_id,
+                    request_id=request_id,
+                )
+            return chat.submit_ask(
+                project,
+                session_id,
+                ask_id,
+                answers,
+                request_id=request_id,
+            )
+
+        def cancel_turn(self, *args, **kwargs):
+            self.cancelled = True
+            return {"status": "cancelled"}
+
+    monkeypatch.setattr(probe, "ChatAgentService", FakeAgentService)
+
+    value = probe._run_native_ask_roundtrip(
+        tmp_path,
+        "sample",
+        model="native/model",
+        timeout=3,
+    )
+
+    assert value == {
+        "ok": True,
+        "question_count": 1,
+        "answered": True,
+        "continued": True,
+    }
+    after = seed.sessions(tmp_path)
+    assert after["active_session_id"] == original_session
+    assert [item["session_id"] for item in after["sessions"]] == [original_session]
+
 
 def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session(
     tmp_path: Path,
@@ -226,6 +360,12 @@ def test_evidence_payload_marks_only_full_nondiagnostic_gate_and_redacts_session
                 "ok": True,
                 "session_id": f"{backend}-native-session",
                 "model_override": "",
+            },
+            "native_ask": {
+                "ok": True,
+                "question_count": 1,
+                "answered": True,
+                "continued": True,
             },
         }
         for backend in probe.DEFAULT_BACKENDS
