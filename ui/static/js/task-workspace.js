@@ -1278,23 +1278,28 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     });
 
     const selectedAvailability = workspaceOption(workspace.value);
-    const availabilityNote = document.createElement("small");
+    const availabilityNote = document.createElement("div");
     availabilityNote.id = "taskWorkspaceWorkspaceAvailability";
     availabilityNote.className = "task-workspace-workspace-preview";
+    availabilityNote.classList.toggle("worktree-active", workspace.value === "worktree");
+    const previewTitle = document.createElement("strong");
+    previewTitle.textContent = workspace.value === "worktree" ? "WORKTREE · ISOLATED DEVELOPMENT" : "Execution preview";
+    const previewCopy = document.createElement("span");
     if (loadingWorkspace) {
-      availabilityNote.textContent = "Checking current Workspace availability…";
+      previewCopy.textContent = "Checking current Workspace availability…";
     } else if (state.workspaceOptionsError) {
-      availabilityNote.textContent = state.workspaceOptionsError + " · Auto/Main disabled until Backend availability is known.";
+      previewCopy.textContent = state.workspaceOptionsError + " · Auto/Main disabled until Backend availability is known.";
     } else if (selectedAvailability?.enabled === false) {
-      availabilityNote.textContent = String(selectedAvailability.error || "This Workspace choice is currently unavailable.");
+      previewCopy.textContent = String(selectedAvailability.error || "This Workspace choice is currently unavailable.");
     } else if (selectedAvailability?.effective_mode) {
       const effective = selectedAvailability.effective_mode === "main" ? "Main" : "Isolated Worktree";
-      availabilityNote.textContent = workspace.value === "auto"
+      previewCopy.textContent = workspace.value === "auto"
         ? "Auto currently resolves to " + effective + "."
         : "Current effective Workspace: " + effective + ".";
     } else {
-      availabilityNote.textContent = "Isolated Worktree is always safe to select.";
+      previewCopy.textContent = "Isolated Worktree is always safe to select.";
     }
+    availabilityNote.append(previewTitle, previewCopy);
     workspaceSection.append(workspaceHead, workspace, workspaceOptions, availabilityNote);
 
     grid.append(workflowField);

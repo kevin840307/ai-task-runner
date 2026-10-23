@@ -4537,6 +4537,15 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             "flow: [planning, validate_file, validate_ai]\n",
             encoding="utf-8",
         )
+        file_only = workflows / "file-only.yaml"
+        file_only.write_text(
+            "stages:\n"
+            "  planning:\n    type: plan\n"
+            "  validate_file:\n    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "flow: [planning, validate_file]\n",
+            encoding="utf-8",
+        )
         prompt_asset = root / "runner" / "assets" / "prompts" / "common" / "task_source_asset.md"
         prompt_asset.write_text("Task source asset\n", encoding="utf-8")
         state.project_preferences.update(root, {"workflow": str(mixed)})
@@ -4604,6 +4613,8 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
             page.locator("[data-workspace-option='worktree']").click()
             assert page.locator("#taskWorkspaceWorkspace").input_value() == "worktree"
+            assert page.locator("#taskWorkspaceWorkspaceAvailability").get_attribute("class").find("worktree-active") >= 0
+            assert "WORKTREE" in page.locator("#taskWorkspaceWorkspaceAvailability strong").inner_text()
             page.locator("[data-workspace-option='auto']").click()
             assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
 
@@ -4723,6 +4734,26 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                 assert abs(validator_box["width"] - ai_box["width"]) <= 2
             else:
                 assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
+
+            # File-only reference: desktop keeps Prompt and Validator in the 1.34/.86 grid;
+            # <=820 follows the feature breakpoint and stacks them.
+            page.select_option("#taskWorkspaceWorkflow", str(file_only))
+            page.wait_for_function(
+                "() => document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
+            )
+            single_prompt_box = page.locator("[data-task-source-card='prompt']").bounding_box()
+            single_validator_box = page.locator("[data-task-source-card='validator']").bounding_box()
+            assert single_prompt_box and single_validator_box
+            if viewport["width"] > 820:
+                assert abs(single_prompt_box["y"] - single_validator_box["y"]) <= 1
+                assert single_prompt_box["width"] > single_validator_box["width"]
+            else:
+                assert single_validator_box["y"] > single_prompt_box["y"] + single_prompt_box["height"] - 1
+
+            page.select_option("#taskWorkspaceWorkflow", str(mixed))
+            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"]') !== null")
+            validator_card = page.locator("[data-task-source-card='validator']")
+            ai_card = page.locator("[data-task-source-card='ai']")
 
             ai_card_widths = []
             for mode, control in (
