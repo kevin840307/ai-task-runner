@@ -400,3 +400,44 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   .task-workspace-input-grid.has-mixed-validation .task-workspace-validation-stack{grid-template-columns:1fr!important}
   .task-workspace-workspace-options{grid-template-columns:1fr}
 }
+
+
+/* Feature Project combobox geometry. Durable Task edits keep the control readonly by contract. */
+.task-workspace-project-combobox{
+  position:relative;display:grid;grid-template-columns:minmax(0,1fr) 34px
+}
+.task-workspace-project-combobox>input{
+  border-radius:7px 0 0 7px!important;border-right:0!important
+}
+.task-workspace-project-toggle{
+  display:grid;place-items:center;width:34px;height:34px;padding:0;
+  border:1px solid var(--line);border-radius:0 7px 7px 0;
+  background:var(--input-bg);color:var(--muted);box-shadow:none
+}
+.task-workspace-project-toggle:hover:not(:disabled),
+.task-workspace-project-toggle[aria-expanded="true"]{
+  background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 44%,var(--line));color:var(--accent-dark)
+}
+.task-workspace-project-toggle:disabled{cursor:not-allowed;opacity:.45}
+.task-workspace-project-chevron{
+  width:8px;height:8px;margin-top:-4px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
+  transform:rotate(45deg);transition:transform .14s ease,margin .14s ease
+}
+.task-workspace-project-toggle[aria-expanded="true"] .task-workspace-project-chevron{
+  margin-top:4px;transform:rotate(225deg)
+}
+.task-workspace-project-dropdown{
+  position:absolute;z-index:620;top:calc(100% + 5px);left:0;right:0;max-height:230px;overflow:auto;
+  padding:4px;border:1px solid var(--line);border-radius:9px;background:var(--popover-bg,var(--panel));box-shadow:var(--shadow-popover)
+}
+.task-workspace-project-dropdown[hidden]{display:none}
+.task-workspace-project-dropdown-option{
+  display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text)
+}
+.task-workspace-project-dropdown-option:hover{background:var(--accent-soft)}
+.task-workspace-project-dropdown-option strong{display:block;font-size:9px}
+.task-workspace-project-dropdown-option small{
+  display:block;margin-top:2px;overflow:hidden;color:var(--muted);font-size:7.5px;text-overflow:ellipsis;white-space:nowrap
+}
+.task-workspace-project-dropdown-empty{padding:10px;color:var(--muted);font-size:8px;text-align:center}
+.task-workspace-field-help{display:block;margin-top:3px;color:var(--muted);font-size:7px;line-height:1.3}

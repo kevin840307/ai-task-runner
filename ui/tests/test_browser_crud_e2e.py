@@ -2008,6 +2008,12 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+            assert page.locator("#taskWorkspaceProject").is_editable() is True
+            assert page.locator(".task-workspace-project-toggle").is_enabled()
+            page.locator(".task-workspace-project-toggle").click()
+            assert page.locator(".task-workspace-project-dropdown").is_visible()
+            assert page.locator(".task-workspace-project-dropdown-option").count() >= 1
+            page.keyboard.press("Escape")
             page.fill("#taskWorkspaceItemTitle", "Standalone browser task")
             page.fill("#taskWorkspacePrompt", "Standalone task prompt")
 
@@ -2047,6 +2053,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
             assert page.locator("#taskWorkspaceProject").is_editable() is False
+            assert page.locator(".task-workspace-project-toggle").is_disabled()
 
             assert page.locator("#taskWorkspaceDraftTitle").count() == 0
             page.fill("#taskWorkspaceItemTitle", "Dirty standalone title")

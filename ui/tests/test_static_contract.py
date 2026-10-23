@@ -50,6 +50,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertLess(production.index("grid.append(projectField, workflowField, titleField)"), production.index("body.appendChild(workflowCaps)"))
         self.assertLess(production.index("body.appendChild(workflowCaps)"), production.index("body.appendChild(inputGrid)"))
         self.assertLess(production.index("body.appendChild(inputGrid)"), production.index("body.appendChild(workspaceSection)"))
+        self.assertIn("task-workspace-project-combobox", production)
+        self.assertIn("task-workspace-project-dropdown", production)
+        self.assertIn("projectEditable = state.kind === \"draft\"", production)
+        self.assertIn("project-combobox", feature_template)
+        self.assertIn("project-dropdown", feature_template)
 
     def test_ui_does_not_import_runner_core(self):
         for path in self.root.rglob("*.py"):

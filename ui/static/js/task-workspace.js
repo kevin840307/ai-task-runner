@@ -70,11 +70,31 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return "item-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
   }
 
+  async function loadProjectOptions() {
+    if (!state) return;
+    const owner = state;
+    owner.projectOptionsLoading = true;
+    try {
+      const data = await api("/api/projects", { timeoutMs: 15000 });
+      if (state !== owner) return;
+      owner.projectOptions = Array.isArray(data?.projects) ? data.projects.slice() : [];
+    } catch (error) {
+      if (state !== owner) return;
+      owner.projectOptions = [];
+    } finally {
+      if (state === owner) {
+        owner.projectOptionsLoading = false;
+        if (state.route === "editor") render();
+      }
+    }
+  }
+
   async function loadWorkspaceOptions() {
     if (!state) return;
     const owner = state;
     const token = ++workspaceOptionsToken;
-    const project = String(state.kind === "task" ? state.task?.project : state.project || "").trim();
+    const editorProject = String(editorDraft()?.items?.[state.index]?.project || "").trim();
+    const project = String(editorProject || (state.kind === "task" ? state.task?.project : state.project) || "").trim();
     const taskId = state.kind === "task" ? String(state.task?.task_id || "").trim() : "";
     if (!project) return;
     owner.workspaceOptionsLoading = true;
@@ -977,12 +997,118 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     projectField.className = "task-workspace-field task-workspace-project-field";
     const projectLabel = document.createElement("span");
     projectLabel.textContent = "Project";
+    const projectCombo = document.createElement("div");
+    projectCombo.className = "task-workspace-project-combobox";
     const project = document.createElement("input");
     project.id = "taskWorkspaceProject";
+    project.autocomplete = "off";
+    project.placeholder = "Select a project or type a path";
     project.value = String(item.project || state.project || "");
-    project.readOnly = true;
-    project.title = "Task stays scoped to the selected Project";
-    projectField.append(projectLabel, project);
+    const projectEditable = state.kind === "draft";
+    project.readOnly = !projectEditable;
+    project.title = projectEditable
+      ? "Select a Project or type a local path"
+      : "Existing Task Project is fixed by the durable Task contract";
+
+    const projectToggle = document.createElement("button");
+    projectToggle.type = "button";
+    projectToggle.className = "task-workspace-project-toggle";
+    projectToggle.setAttribute("aria-label", "Show all projects");
+    projectToggle.setAttribute("aria-expanded", "false");
+    projectToggle.disabled = !projectEditable;
+    const chevron = document.createElement("span");
+    chevron.className = "task-workspace-project-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    projectToggle.appendChild(chevron);
+
+    const projectDropdown = document.createElement("div");
+    projectDropdown.className = "task-workspace-project-dropdown";
+    projectDropdown.hidden = true;
+
+    const applyProject = (value) => {
+      const next = String(value || "").trim();
+      project.value = next;
+      updateItem(state.index, "project", next);
+      if (state.kind === "draft" && state.creationKind === "task") {
+        state.project = next;
+        state.draft.project = next;
+      }
+      state.workspaceOptions = null;
+      state.workspaceOptionsError = "";
+      void loadWorkspaceOptions();
+    };
+    const renderProjectDropdown = (filter = "") => {
+      const query = String(filter || "").trim().toLowerCase();
+      const rows = Array.isArray(state.projectOptions) ? state.projectOptions : [];
+      projectDropdown.innerHTML = "";
+      const filtered = rows.filter((row) => {
+        const name = String(row?.name || "");
+        const path = String(row?.path || "");
+        return !query || name.toLowerCase().includes(query) || path.toLowerCase().includes(query);
+      });
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.className = "task-workspace-project-dropdown-empty";
+        empty.textContent = state.projectOptionsLoading ? "Loading Projects…" : "No matching Project. Type a local path.";
+        projectDropdown.appendChild(empty);
+        return;
+      }
+      for (const row of filtered) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "task-workspace-project-dropdown-option";
+        const strong = document.createElement("strong");
+        strong.textContent = String(row.name || row.path || "Project");
+        const small = document.createElement("small");
+        small.textContent = String(row.path || "");
+        option.append(strong, small);
+        option.addEventListener("mousedown", (event) => event.preventDefault());
+        option.addEventListener("click", () => {
+          applyProject(String(row.path || ""));
+          projectDropdown.hidden = true;
+          projectToggle.setAttribute("aria-expanded", "false");
+          project.focus();
+        });
+        projectDropdown.appendChild(option);
+      }
+    };
+    const setProjectDropdownOpen = (open, showAll = false) => {
+      if (!projectEditable) return;
+      if (open) renderProjectDropdown(showAll ? "" : project.value);
+      projectDropdown.hidden = !open;
+      projectToggle.setAttribute("aria-expanded", String(open));
+    };
+
+    projectToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      setProjectDropdownOpen(projectDropdown.hidden, true);
+    });
+    if (projectEditable) {
+      project.addEventListener("focus", () => setProjectDropdownOpen(true, true));
+      project.addEventListener("input", () => {
+        updateItem(state.index, "project", project.value);
+        renderProjectDropdown(project.value);
+        setProjectDropdownOpen(true);
+      });
+      project.addEventListener("change", () => applyProject(project.value));
+      project.addEventListener("blur", () => setTimeout(() => {
+        if (!projectDropdown.matches(":hover")) setProjectDropdownOpen(false);
+      }, 0));
+      project.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || projectDropdown.hidden) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setProjectDropdownOpen(false);
+      });
+    }
+
+    projectCombo.append(project, projectToggle, projectDropdown);
+    const projectHelp = document.createElement("small");
+    projectHelp.className = "task-workspace-field-help";
+    projectHelp.textContent = projectEditable
+      ? "Current Project is used by default · choose another Project or type a local path."
+      : "Project is fixed for an existing durable Task.";
+    projectField.append(projectLabel, projectCombo, projectHelp);
     appendFieldError(projectField, project, "project");
 
     const workflowField = document.createElement("label");
@@ -2490,6 +2616,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       sourceModes: {},
       onSave: null,
       createOnSave: true,
+      creationKind: list ? "list" : "task",
       createRequestId: newRequestId("task-create"),
       route: list ? "list" : "editor",
       index: 0,
@@ -2502,9 +2629,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       workspaceOptions: null,
       workspaceOptionsLoading: true,
       workspaceOptionsError: "",
+      projectOptions: [],
+      projectOptionsLoading: false,
     };
     showNow();
     render();
+    void loadProjectOptions();
     void loadWorkspaceOptions();
   }
 
@@ -2536,9 +2666,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       workspaceOptions: null,
       workspaceOptionsLoading: true,
       workspaceOptionsError: "",
+      projectOptions: [],
+      projectOptionsLoading: false,
     };
     showNow();
     render();
+    void loadProjectOptions();
     void loadWorkspaceOptions();
   }
 
@@ -2570,9 +2703,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       workspaceOptions: null,
       workspaceOptionsLoading: true,
       workspaceOptionsError: "",
+      projectOptions: [],
+      projectOptionsLoading: false,
     };
     showNow();
     render();
+    void loadProjectOptions();
     void loadWorkspaceOptions();
   }
 
