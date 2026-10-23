@@ -1203,10 +1203,13 @@ Therefore concurrent Tasks still get real Git conflict detection while keeping t
 - [ ] Merge-repair handoff includes original base, committed Task snapshot/diff, latest target HEAD, current merge source, conflict details, and relevant development rules; original Task prompt is intent context only.
 - [ ] Repair incrementally within the latest-target-based recovery worktree: preserve completed Task changes and current Project changes, resolve only integration differences; no full clone/pull/redevelopment or overwrite of the target tree.
 - [ ] Existing Runner reviews/validates the integrated result; resume repairs without discarding prior recovery progress. Publish the replacement merge-source pointer only after a durable recovery commit.
-- [ ] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
+- [x] Tests cover both-side edits to same file, nonconflicting changes, renamed/moved file, new target commits during repair, restart in mid-repair, validation failure, and failure-limit fallback without loss of committed Task output.
+  - [x] Both-side same-file conflict + incremental integration is covered by test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source.
+  - [x] SOURCE_FAIL validation is covered by test_merge_validation_source_fail_counts_once_and_starts_recovery.
   - [x] New target commit during repair + nonconflicting integration: service-level regression advances the captured target after recovery starts, then requires PASS validation on the latest integrated tree before merge commit.
   - [x] Failure-limit fallback boundary: four successive real conflicts verify recoveries 1/2/3 and fallback on 4 while retaining the latest recovery merge source.
   - [x] Restart mid-repair: a new TaskService/TaskRunService instance resumes the same durable recovery branch/worktree, preserves partial repair files, and finishes without launching a replacement recovery.
+  - [x] Renamed/moved file: recovery moves app.txt to src/app.txt; the durable recovery snapshot becomes the merge source and the target receives the move without replaying the original Task.
 
 ### Phase F — UI
 

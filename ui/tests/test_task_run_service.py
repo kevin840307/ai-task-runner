@@ -1244,6 +1244,73 @@ def test_real_merge_failure_runs_incremental_recovery_and_retries_latest_source(
     assert (original_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
 
 
+def test_merge_recovery_can_deliver_renamed_file_without_replaying_original_task(
+    tmp_path: Path,
+):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    created = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="create-recovery-rename",
+    )
+    runtime = {
+        "running": True,
+        "launching": False,
+        "completed": False,
+        "resumable": False,
+        "actions": {},
+    }
+    launches = []
+    service = _service(
+        tasks,
+        repo,
+        runtime=runtime,
+        launches=launches,
+        stops=[],
+        resumes=[],
+        merge_validator=lambda _project, _goal, **_kwargs: "PASS",
+    )
+
+    started = service.start(
+        repo,
+        created["task_id"],
+        request_id="recovery-rename-run",
+    )
+    source_root = Path(started["run"]["workspace"]["project_root"])
+    (source_root / "app.txt").write_text("task side\n", encoding="utf-8")
+    (repo / "app.txt").write_text("target side\n", encoding="utf-8")
+    _git(repo, "add", "app.txt")
+    _git(repo, "commit", "-m", "create rename recovery conflict")
+
+    runtime.update({"running": False, "completed": True})
+    recovering = service.reconcile(repo, created["task_id"])
+    assert recovering["run"]["phase"] == "conflict_recovery"
+    recovery = recovering["run"]["workspace_result"]["recovery"]
+    recovery_root = Path(recovery["workspace"]["project_root"])
+    recovery_branch = recovery["workspace"]["task_branch"]
+
+    runtime.update({"running": True, "completed": False})
+    moved = recovery_root / "src" / "app.txt"
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    (recovery_root / "app.txt").rename(moved)
+    moved.write_text("integrated after move\n", encoding="utf-8")
+
+    runtime.update({"running": False, "completed": True})
+    closed = service.reconcile(repo, created["task_id"])
+
+    assert closed["status"] == "closed"
+    assert closed["run"]["phase"] == "merged"
+    assert closed["merge_failure_count"] == 1
+    result = closed["run"]["workspace_result"]
+    assert result["merge_source"]["workspace"]["task_branch"] == recovery_branch
+    assert not (repo / "app.txt").exists()
+    assert (repo / "src" / "app.txt").read_text(encoding="utf-8") == "integrated after move\n"
+    assert (source_root / "app.txt").read_text(encoding="utf-8") == "task side\n"
+    assert len(launches) == 2
+
+
 def test_service_restart_resumes_same_merge_recovery_workspace_without_losing_progress(
     tmp_path: Path,
 ):
