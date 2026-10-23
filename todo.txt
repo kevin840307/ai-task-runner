@@ -1971,6 +1971,13 @@ FUTURE UI - AGENT ADAPTER LIVE ACCEPTANCE (2026-10-23)
     - The same Project preference API/catalog owner is reused; no duplicate state or provider-specific list was added.
     - Browser regression locks the Settings trigger inside Composer and forbids the removed preference bar.
 
+[x] Match Project Chat session navigation to the latest feature header UX.
+    - Replaced the permanent inner Chats sidebar with one header session selector plus Rename / Delete / New Chat actions.
+    - Existing ChatService session CRUD, Queue, Ask and Project-scoped preferences remain the only state owners.
+    - Removed the obsolete sidebar renderer/CSS instead of retaining a second session navigation path.
+    - Added shared zh-TW/en labels for the header controls.
+    - Browser regressions use the header selector/actions for multi-session switching, rename/delete, Queue/Ask isolation and Project preference persistence.
+
 [ ] Execute and save authenticated real Qwen + OpenCode adapter live evidence.
     - Formal gate (after the Qwen Ask bridge is complete):
       python tool/agent_live_probe.py --project-root . --backend qwen --backend opencode --output .ai-task-runner/agent-live-evidence.json

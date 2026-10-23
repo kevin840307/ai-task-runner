@@ -33,14 +33,13 @@
           <p id="projectChatPath">Open a local project folder to begin.</p>
         </div>
         <div class="project-chat-header-actions">
-          <button id="newProjectChatButton" class="primary action-button" type="button">+ New Chat</button>
+          <select id="projectChatSessionSelect" class="project-chat-session-select" aria-label="Chat session" data-i18n-aria="chat.session"></select>
+          <button id="renameProjectChatButton" class="action-button" type="button" data-i18n="chat.rename">Rename</button>
+          <button id="deleteProjectChatButton" class="action-button danger" type="button" data-i18n="chat.delete">Delete</button>
+          <button id="newProjectChatButton" class="primary action-button" type="button" data-i18n="chat.new_chat">+ New Chat</button>
         </div>
       </header>
       <div class="project-chat-body">
-        <aside class="project-chat-sessions" aria-label="Project Chats">
-          <div class="project-chat-session-head"><span>Chats</span></div>
-          <div id="projectChatSessionList" class="project-chat-session-list"></div>
-        </aside>
         <section class="project-chat-conversation">
           <div id="projectChatSettingsPopover" class="project-chat-settings-popover" role="dialog" aria-label="Project Chat settings" hidden>
             <div class="project-chat-settings-head"><div><strong data-i18n="chat.settings_title">Project settings</strong><small data-i18n="chat.settings_shared">Shared by every Chat in this Project</small></div><button id="projectChatSettingsClose" type="button" aria-label="Close">×</button></div>

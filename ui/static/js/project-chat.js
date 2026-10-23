@@ -700,45 +700,29 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     renderSettingsControls();
   }
 
+  function activeSession() {
+    return sessions.find((session) => session.session_id === activeSessionId) || null;
+  }
+
   function renderSessions() {
-    const root = byId("projectChatSessionList");
-    if (!root) return;
-    root.innerHTML = "";
-    for (const session of sessions) {
-      const row = document.createElement("div");
-      row.className = "project-chat-session-row";
-      if (session.session_id === activeSessionId) row.classList.add("active");
-
-      const open = document.createElement("button");
-      open.type = "button";
-      open.className = "project-chat-session-open";
-      open.textContent = session.title || "New Chat";
-      open.title = session.title || "New Chat";
-      open.onclick = () => void selectSession(session.session_id);
-
-      const actions = document.createElement("span");
-      actions.className = "project-chat-session-actions";
-      const rename = document.createElement("button");
-      rename.type = "button";
-      rename.textContent = "Rename";
-      rename.title = "Rename Chat";
-      rename.onclick = (event) => {
-        event.stopPropagation();
-        void renameSession(session);
-      };
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.textContent = "×";
-      remove.title = "Delete Chat";
-      remove.setAttribute("aria-label", "Delete Chat");
-      remove.onclick = (event) => {
-        event.stopPropagation();
-        void deleteSession(session);
-      };
-      actions.append(rename, remove);
-      row.append(open, actions);
-      root.appendChild(row);
+    const select = byId("projectChatSessionSelect");
+    if (select) {
+      select.innerHTML = "";
+      for (const session of sessions) {
+        const option = document.createElement("option");
+        option.value = session.session_id;
+        option.textContent = session.title || "New Chat";
+        option.title = option.textContent;
+        select.appendChild(option);
+      }
+      if (activeSessionId) select.value = activeSessionId;
+      select.disabled = !project || sessions.length === 0;
     }
+    const current = activeSession();
+    const rename = byId("renameProjectChatButton");
+    const remove = byId("deleteProjectChatButton");
+    if (rename) rename.disabled = !project || !current;
+    if (remove) remove.disabled = !project || !current;
   }
 
   function activeDrafts() {
@@ -1614,6 +1598,17 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
   }
 
   byId("newProjectChatButton")?.addEventListener("click", () => void createSession());
+  byId("projectChatSessionSelect")?.addEventListener("change", (event) => {
+    void selectSession(event.currentTarget.value);
+  });
+  byId("renameProjectChatButton")?.addEventListener("click", () => {
+    const session = activeSession();
+    if (session) void renameSession(session);
+  });
+  byId("deleteProjectChatButton")?.addEventListener("click", () => {
+    const session = activeSession();
+    if (session) void deleteSession(session);
+  });
   byId("projectChatNewTaskButton")?.addEventListener("click", (event) => {
     openTaskCreateMenu?.({
       anchor: event.currentTarget,

@@ -1784,14 +1784,18 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
             for _ in range(2):
                 page.click("#newProjectChatButton")
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 3")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 3")
 
             # Delete a non-active middle Chat; the other Project must not change.
-            middle = page.locator("#projectChatSessionList .project-chat-session-row").nth(1)
-            middle.hover()
-            middle.locator("button[aria-label='Delete Chat']").click()
+            middle_id = state.chat_service.sessions(root)["sessions"][1]["session_id"]
+            page.select_option("#projectChatSessionSelect", middle_id)
+            page.wait_for_function(
+                "(value) => document.querySelector('#projectChatSessionSelect')?.value === value",
+                arg=middle_id,
+            )
+            page.click("#deleteProjectChatButton")
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 2")
             assert [
                 row["session_id"]
                 for row in state.chat_service.sessions(second)["sessions"]
@@ -1801,8 +1805,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             # active turn is stopped or completes.
             active_id = state.chat_service.sessions(root)["active_session_id"]
             state._browser_chat_busy = {active_id: True}
-            active_row = page.locator("#projectChatSessionList .project-chat-session-row.active")
-            active_row.locator("button[aria-label='Delete Chat']").click()
+            page.click("#deleteProjectChatButton")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function(
                 "() => Array.from(document.querySelectorAll('.app-toast.error')).some((n) => n.textContent.includes('Stop or wait for the active Chat turn'))"
@@ -1822,19 +1825,18 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             draft_id = draft_card.get_attribute("data-draft-id")
             draft_session = draft_card.get_attribute("data-session-id")
             assert draft_session == active_id
-            active_row = page.locator("#projectChatSessionList .project-chat-session-row.active")
-            active_row.locator("button[aria-label='Delete Chat']").click()
+            page.click("#deleteProjectChatButton")
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
             with pytest.raises(ValueError, match="no longer available"):
                 state.task_drafts.get(root, draft_id, session_id=draft_session)
             assert page.locator(".project-chat-task-draft").count() == 0
 
             # Deleting the final Chat immediately creates a fresh empty Chat.
             last_before = state.chat_service.sessions(root)["active_session_id"]
-            page.locator("#projectChatSessionList .project-chat-session-row.active button[aria-label='Delete Chat']").click()
+            page.click("#deleteProjectChatButton")
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
             replacement = state.chat_service.sessions(root)
             assert replacement["active_session_id"] != last_before
             assert replacement["sessions"][0]["title"] == "New Chat"
@@ -1842,7 +1844,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
             page.locator("#projectList .project-root").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Second Project'")
             page.wait_for_function(
-                f"document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === {len(second_ids)}"
+                f"document.querySelectorAll('#projectChatSessionSelect option').length === {len(second_ids)}"
             )
             assert [
                 row["session_id"]
@@ -2630,10 +2632,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#workflowView").is_hidden()
 
             # Project Chat session lifecycle is real Backend state, not a browser-only mock.
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 1")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 1")
             assert page.locator(".project-chat-preference-bar").count() == 0
             assert page.locator("#projectChatPreferences").count() == 0
             assert page.locator(".composer-left > #projectChatSettingsButton").count() == 1
+            assert page.locator(".project-chat-sessions").count() == 0
+            assert page.locator("#projectChatSessionSelect").is_visible()
+            assert page.locator("#renameProjectChatButton").is_visible()
+            assert page.locator("#deleteProjectChatButton").is_visible()
             page.click("#projectChatSettingsButton")
             page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             assert page.locator("#projectChatSettingsPopover").is_visible()
@@ -3042,13 +3048,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatQueueCount").inner_text() == "3"
 
             page.click("#newProjectChatButton")
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 2")
             assert page.locator(".project-chat-ask").count() == 0
             assert page.locator("#projectChatQueue").is_hidden()
             assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
             assert page.locator("#projectChatModeQuick").input_value() == "read"
 
-            page.locator("#projectChatSessionList .project-chat-session-open").first.click()
+            page.select_option("#projectChatSessionSelect", index=0)
             page.wait_for_function("document.querySelector('.project-chat-ask') !== null")
             page.wait_for_function("document.querySelectorAll('#projectChatQueueList .project-chat-queue-item').length === 3")
             assert page.locator("#projectChatAgentSelect").input_value() == "opencode"
@@ -3128,18 +3134,16 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#projectChatQueue").is_hidden()
 
             page.click("#newProjectChatButton")
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 3")
-            active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
-            active_chat.locator("button[title='Rename Chat']").click()
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 3")
+            page.click("#renameProjectChatButton")
             page.locator(".ui-dialog-input").fill("Implementation Chat")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function(
-                "Array.from(document.querySelectorAll('#projectChatSessionList .project-chat-session-open')).some((n) => n.textContent === 'Implementation Chat')"
+                "Array.from(document.querySelectorAll('#projectChatSessionSelect option')).some((n) => n.textContent === 'Implementation Chat')"
             )
-            active_chat = page.locator("#projectChatSessionList .project-chat-session-row.active")
-            active_chat.locator("button[aria-label='Delete Chat']").click()
+            page.click("#deleteProjectChatButton")
             page.locator("[data-dialog-ok]").click()
-            page.wait_for_function("document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2")
+            page.wait_for_function("document.querySelectorAll('#projectChatSessionSelect option').length === 2")
 
             page.click("#promptNav")
             page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
@@ -3779,7 +3783,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             first_session = state.chat_service.sessions(added_project)["active_session_id"]
             page.click("#newProjectChatButton")
             page.wait_for_function(
-                "document.querySelectorAll('#projectChatSessionList .project-chat-session-row').length === 2"
+                "document.querySelectorAll('#projectChatSessionSelect option').length === 2"
             )
             second_session = state.chat_service.sessions(added_project)["active_session_id"]
             assert second_session != first_session
@@ -3795,11 +3799,10 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
 
             # Switching Chat sessions within one Project must not fork Project-level
             # Agent/Model/Mode/Reasoning/Workflow preferences.
-            page.locator(
-                "#projectChatSessionList .project-chat-session-row"
-            ).first.locator(".project-chat-session-open").click()
+            page.select_option("#projectChatSessionSelect", first_session)
             page.wait_for_function(
-                "() => document.querySelectorAll('#projectChatSessionList .project-chat-session-row')[0]?.classList.contains('active')"
+                "(value) => document.querySelector('#projectChatSessionSelect')?.value === value",
+                arg=first_session,
             )
             assert state.chat_service.sessions(added_project)["active_session_id"] == first_session
             assert_chat_preferences(defaults)
