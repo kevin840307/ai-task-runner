@@ -1572,6 +1572,62 @@ def test_failed_native_ask_turn_is_cancelled_immediately_and_queue_unblocks(
     ]
 
 
+def test_failed_turn_native_ask_cleanup_falls_back_when_provider_bridge_is_gone(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    chat = ChatService()
+    session_id = chat.sessions(project)["active_session_id"]
+    created = chat.create_ask(
+        project,
+        session_id,
+        request_id="failed-turn-native-fallback",
+        turn_id="turn-failed",
+        questions=[{
+            "id": "q1",
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": ["Yes", "No"],
+        }],
+        source="native",
+        backend="qwen",
+        agent_session_id="ses-native",
+        native_request_id="native-failed",
+    )
+    payload = {
+        "id": "native-failed",
+        "questions": [{
+            "header": "Confirm",
+            "question": "Continue?",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+        }],
+    }
+    monkeypatch.setattr(
+        "ui.chat_agent_service.pending_native_ask",
+        lambda *args, **kwargs: payload,
+    )
+    monkeypatch.setattr(
+        "ui.chat_agent_service.resolve_native_ask",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("provider bridge gone")
+        ),
+    )
+    service = ChatAgentService(repo, runner=lambda **kwargs: {})
+
+    assert service._cancel_failed_turn_native_ask(
+        project,
+        chat,
+        session_id=session_id,
+        turn_id="turn-failed",
+    ) == ""
+    current = chat.ask(project, session_id)["ask"]
+    assert current["ask_id"] == created["ask"]["ask_id"]
+    assert current["status"] == "cancelled"
+
+
 def test_failed_turn_cleanup_does_not_cancel_another_turns_native_ask(
     tmp_path: Path,
     monkeypatch,
