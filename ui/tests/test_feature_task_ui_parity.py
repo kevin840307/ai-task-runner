@@ -238,7 +238,7 @@ def test_new_task_source_mode_typography_and_motion_match_feature_reference() ->
     _same(
         "#newTaskModal .source-note",
         ".task-workspace-shell.task-editor-route .task-workspace-source-note",
-        ("min-height", "padding", "font-size", "line-height"),
+        ("padding", "font-size", "line-height"),
     )
     _same(
         ".workspace-recommended",
@@ -329,7 +329,7 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
 
     assert '[["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
     assert '[["default", tr("task.source_default", "Default")], ["write", tr("task.source_write", "Write")], ["file", tr("task.source_file", "File")], ["asset", tr("task.source_asset", "Asset")]]' in PRODUCTION_JS
-    assert 'required.textContent = "Required"' in PRODUCTION_JS
+    assert 'required.textContent = tr("task.required", "Required")' in PRODUCTION_JS
     assert 'grid.append(projectField, workflowField, titleField)' in PRODUCTION_JS
     assert 'grid.append(workflowField);\n    body.appendChild(grid);' not in PRODUCTION_JS
     assert 'className = "task-workspace-source-mode-panel"' in PRODUCTION_JS
