@@ -982,14 +982,14 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
 
             closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
             closed_card.drag_to(page.locator("#tasksBoardNew"))
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text("Move completed Task back to New?", exact=True).is_visible()
             page.locator("[data-dialog-cancel]").click()
             assert state.tasks.get(root, closed_move["task_id"])["status"] == "closed"
 
             closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
             closed_card.drag_to(page.locator("#tasksBoardNew"))
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function(
                 "(taskId) => [...document.querySelectorAll('#tasksBoardNew .tasks-board-card')].some(node => node.dataset.taskId === taskId)",
@@ -1002,7 +1002,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             ).click()
             page.wait_for_function("!document.querySelector('#taskWorkspaceOverlay')?.hidden")
             page.click("#taskWorkspaceResetTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text(
                 "Reset paused Task and move it to New?", exact=True
             ).is_visible()
@@ -1010,7 +1010,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             assert state.tasks.get(root, paused["task_id"])["status"] == "paused"
 
             page.click("#taskWorkspaceResetTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("!document.querySelector('#taskWorkspaceResetTask')")
             assert state.tasks.get(root, paused["task_id"])["status"] == "new"
@@ -1023,14 +1023,14 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
                 has_text=failed["task_id"]
             ).click()
             page.click("#taskWorkspaceRerunTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text(
                 "Rerun this Task from the beginning?", exact=True
             ).is_visible()
             page.locator("[data-dialog-cancel]").click()
             assert state._browser_task_lifecycle_actions == []
             page.click("#taskWorkspaceRerunTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_timeout(100)
             assert state._browser_task_lifecycle_actions == [("rerun", failed["task_id"])]
@@ -1040,14 +1040,14 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
                 has_text=completed["task_id"]
             ).click()
             page.click("#taskWorkspaceRerunTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text(
                 "Rerun this completed Task?", exact=True
             ).is_visible()
             page.locator("[data-dialog-cancel]").click()
             assert state._browser_task_lifecycle_actions == [("rerun", failed["task_id"])]
             page.click("#taskWorkspaceRerunTask")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_timeout(100)
             assert state._browser_task_lifecycle_actions == [
@@ -1246,7 +1246,7 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
             assert "merge_failure_limit_exceeded" in page.locator("#taskWorkspaceFallback").inner_text()
             assert page.locator("#taskWorkspacePublish").is_enabled()
             page.click("#taskWorkspacePublish")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text(
                 "Publish completed result to origin?", exact=True
             ).is_visible()
@@ -1260,7 +1260,7 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
             assert page.locator("#taskWorkspaceCleanupWorktrees").is_enabled()
             assert page.locator("#taskWorkspaceDeleteTask").is_disabled()
             page.click("#taskWorkspaceCleanupWorktrees")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text(
                 "Cleanup retained Task worktrees?", exact=True
             ).is_visible()
@@ -1360,7 +1360,7 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
             page.click("#optionsButton")
             page.wait_for_function("!document.querySelector('#optionsPanel')?.hidden")
             page.click("#rerunButton")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             assert page.locator(".ui-dialog-card").get_by_text("Rerun completed task?", exact=True).is_visible()
             page.locator("[data-dialog-cancel]").click()
             assert state._browser_runtime_actions == []
@@ -1368,7 +1368,7 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
             page.click("#optionsButton")
             page.wait_for_function("!document.querySelector('#optionsPanel')?.hidden")
             page.click("#rerunButton")
-            page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#rerunButton')?.getAttribute('aria-busy') !== 'true'")
             assert state._browser_runtime_actions == ["rerun"]
@@ -1766,7 +1766,7 @@ def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> Non
                 page.locator(".project-action-menu-portal").get_by_role(
                     "button", name="Remove project"
                 ).click()
-                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                page.locator(".ui-dialog-card").wait_for(state="visible")
                 page.locator("[data-dialog-ok]").click()
                 page.wait_for_function(
                     "(name) => !Array.from(document.querySelectorAll('.project-row')).some((row) => row.textContent.includes(name))",
@@ -2006,7 +2006,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                     page.locator("#taskWorkspaceOverlay").click(position={"x": 8, "y": 8})
                 else:
                     page.click("#taskWorkspaceFooterBack")
-                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                page.locator(".ui-dialog-card").wait_for(state="visible")
                 assert page.locator(".ui-dialog-card").get_by_text("unsaved TaskDraft edits", exact=False).is_visible()
                 page.locator("[data-dialog-cancel]").click()
                 assert page.locator("#taskWorkspacePrompt").input_value() == "Standalone task prompt"
@@ -3145,7 +3145,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 else:
                     page.locator("#taskWorkspaceYamlText").focus()
                     page.keyboard.press("Escape")
-                page.wait_for_function("!document.querySelector('.ui-dialog-backdrop')?.hidden")
+                page.locator(".ui-dialog-card").wait_for(state="visible")
                 page.locator("[data-dialog-cancel]").click()
                 assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK YAML"
                 assert page.locator("#taskWorkspaceYamlText").input_value() == dirty_yaml
@@ -3725,7 +3725,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                     const compose = document.querySelector('#projectChatComposePanel');
                     const composer = compose.querySelector('.composer-box');
                     const input = document.querySelector('#projectChatInput');
-                    const mode = document.querySelector('#projectChatModeQuick');
+                    const modeControl = document.querySelector('.project-chat-mode-quick');
+                    const modeSelect = document.querySelector('#projectChatModeQuick');
                     return {
                         sessionHeight: session.getBoundingClientRect().height,
                         sessionRadius: getComputedStyle(session).borderRadius,
@@ -3734,7 +3735,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                         composeBackgroundImage: getComputedStyle(compose).backgroundImage,
                         composerBackground: getComputedStyle(composer).backgroundColor,
                         inputHeight: input.getBoundingClientRect().height,
-                        modeHeight: mode.getBoundingClientRect().height,
+                        modeControlHeight: modeControl.getBoundingClientRect().height,
+                        modeSelectHeight: modeSelect.getBoundingClientRect().height,
                     };
                 }"""
             )
@@ -3745,7 +3747,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert "linear-gradient" in chat_geometry["composeBackgroundImage"]
             assert chat_geometry["composerBackground"] != "rgba(0, 0, 0, 0)"
             assert abs(chat_geometry["inputHeight"] - 44) <= 1
-            assert abs(chat_geometry["modeHeight"] - 30) <= 1
+            assert abs(chat_geometry["modeControlHeight"] - 30) <= 1
+            assert abs(chat_geometry["modeSelectHeight"] - 26) <= 1
 
             # Build the dynamic Chat surfaces before cycling themes so every
             # palette exercises the real composer / TaskDraft / Ask / Queue.

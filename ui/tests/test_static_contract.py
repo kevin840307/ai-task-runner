@@ -486,6 +486,8 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".projects .project-area" in projects
     assert ".project-current-path" in projects
     assert "overflow:visible" in projects
+    assert "overflow-x:visible" in projects
+    assert "overflow-y:visible" in projects
     assert "height:34px" in tasks
     assert "width:145px" in tasks
     assert "width:310px" in tasks

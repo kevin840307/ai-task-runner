@@ -842,7 +842,7 @@ body.projects-collapsed .new-project-button strong { display: none; }
 .projects .sidebar-scroll::-webkit-scrollbar-thumb{border-radius:999px;background:color-mix(in srgb,var(--muted) 38%,transparent)}
 .projects .sidebar-scroll::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 62%,transparent)}
 .projects .project-area{display:block;margin-top:10px;overflow:visible}
-.projects .project-list{display:grid;flex:none;min-height:0;align-content:start;grid-auto-rows:max-content;gap:1px;margin:0;padding:1px 2px 8px;overflow:visible}
+.projects .project-list{display:grid;flex:none;min-height:0;align-content:start;grid-auto-rows:max-content;gap:1px;margin:0;padding:1px 2px 8px;overflow:visible;overflow-x:visible;overflow-y:visible}
 .project-current-path{flex:0 0 auto;margin-top:6px;padding:7px 8px;border-top:1px solid color-mix(in srgb,var(--line) 82%,transparent);color:var(--muted);font:8px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.projects-collapsed .sidebar-scroll{overflow:hidden;padding-right:0}
 body.projects-collapsed .project-area,body.projects-collapsed .project-current-path{display:none}
