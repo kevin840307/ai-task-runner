@@ -2308,7 +2308,7 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             assert list_button.is_visible()
             assert list_button.is_enabled()
             restriction = page.locator(".task-workspace-action-note").inner_text()
-            assert "Only New Tasks can be deleted safely" in restriction
+            assert "Delete is unavailable while this Task has active or resumable lifecycle state." in restriction
             assert "Task List is view-only. Pause this Task before editing runtime-affecting content." in restriction
 
             list_button.click()
