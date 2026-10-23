@@ -567,7 +567,7 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "overflow-x:visible" in projects
     assert "overflow-y:visible" in projects
     assert "height:34px" in tasks
-    assert "width:145px" in tasks
+    assert "width:190px" in tasks
     assert "width:310px" in tasks
     assert 'input[type="checkbox"]' in tasks
     assert "grid-template-columns:repeat(4,minmax(245px,1fr))" in tasks
