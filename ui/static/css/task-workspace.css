@@ -207,7 +207,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceProject){order:1}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceWorkflow){order:2}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceItemTitle){order:3}
-.task-workspace-basics .task-workspace-field>span{margin-bottom:4px;font-size:9px}
+.task-workspace-basics .task-workspace-field>span{margin-bottom:4px;font-size:9px;font-weight:850}
 .task-workspace-basics .task-workspace-field input,
 .task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;padding:0 9px;border-radius:8px}
 
