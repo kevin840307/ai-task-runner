@@ -29,7 +29,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     overlay.className = "task-workspace-overlay";
     overlay.hidden = true;
     overlay.innerHTML = `
-      <section id="taskWorkspaceShell" class="task-workspace-shell" role="dialog" aria-modal="true" aria-labelledby="taskWorkspaceTitle">
+      <section id="taskWorkspaceShell" class="task-workspace-shell" role="dialog" aria-modal="true" aria-labelledby="taskWorkspaceTitle" tabindex="-1">
         <header class="task-workspace-head">
           <button id="taskWorkspaceHeaderBack" class="task-workspace-back" type="button" aria-label="Back">←</button>
           <div class="task-workspace-heading">
