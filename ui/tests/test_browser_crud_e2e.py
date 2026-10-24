@@ -5632,6 +5632,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 "document.querySelector('#newTaskValidationSource .task-ai-source') !== null"
             )
 
+            production_page.click("#chatNav")
+            production_page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             production_page.click("#tasksNewButton")
             production_page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
             production_page.wait_for_function(
