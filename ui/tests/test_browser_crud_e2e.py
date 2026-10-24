@@ -5649,6 +5649,21 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["display", "gridTemplateColumns", "gap", "alignItems", "marginTop"],
                 ),
                 (
+                    "#newTaskModal .task-basics label",
+                    ".task-workspace-basics .task-workspace-field>label",
+                    ["display", "alignItems", "gap", "marginBottom", "fontSize"],
+                ),
+                (
+                    "#newTaskModal .task-basics input",
+                    ".task-workspace-basics #taskWorkspaceProject",
+                    ["height", "minHeight", "fontSize"],
+                ),
+                (
+                    "#newTaskModal .field-help",
+                    ".task-workspace-field-help",
+                    ["marginTop", "fontSize", "lineHeight"],
+                ),
+                (
                     "#newTaskModal .task-primary-source>.source-head",
                     "[data-task-source-card='prompt']>.task-workspace-source-head",
                     [
@@ -5673,6 +5688,26 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["display", "gridTemplateColumns", "gap", "height", "minWidth"],
                 ),
                 (
+                    "#newTaskModal .task-primary-source .source-head strong",
+                    "[data-task-source-card='prompt'] .task-workspace-source-head strong",
+                    ["fontSize"],
+                ),
+                (
+                    "#newTaskModal .task-primary-source .source-head small",
+                    "[data-task-source-card='prompt'] .task-workspace-source-head small",
+                    ["fontSize"],
+                ),
+                (
+                    "#newTaskModal .task-file-source .cap-chip",
+                    "[data-task-source-card='file'] .task-workspace-required-chip",
+                    ["fontSize"],
+                ),
+                (
+                    "#newTaskModal .source-note",
+                    ".task-workspace-source-note",
+                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "lineHeight"],
+                ),
+                (
                     "#newTaskModal .task-editor-secondary",
                     ".task-workspace-editor-secondary",
                     ["marginTop", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
@@ -5681,6 +5716,21 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     "#newTaskModal .task-editor-secondary .workspace-options",
                     ".task-workspace-editor-secondary .task-workspace-workspace-options",
                     ["display", "gridTemplateColumns", "gap"],
+                ),
+                (
+                    "#newTaskModal .task-editor-secondary .workspace-option",
+                    ".task-workspace-editor-secondary .task-workspace-workspace-option",
+                    ["minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+                (
+                    "#newTaskModal .task-editor-secondary .workspace-option small",
+                    ".task-workspace-editor-secondary .task-workspace-workspace-option small",
+                    ["marginTop", "fontSize", "lineHeight"],
+                ),
+                (
+                    "#newTaskModal .task-editor-secondary .workspace-option .workspace-status",
+                    ".task-workspace-editor-secondary .task-workspace-workspace-status",
+                    ["marginTop", "fontSize"],
                 ),
                 (
                     "#newTaskModal>.modal-foot",
@@ -5749,6 +5799,16 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     "#planModal .empty-plan-cta.large",
                     ".task-workspace-empty-list-cta",
                     ["display", "minHeight", "gap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "flexDirection"],
+                ),
+                (
+                    "#planModal .empty-plan-cta strong",
+                    ".task-workspace-empty-list-cta strong",
+                    ["fontSize"],
+                ),
+                (
+                    "#planModal .empty-plan-cta span",
+                    ".task-workspace-empty-list-cta span",
+                    ["fontSize", "fontWeight"],
                 ),
                 (
                     "#planModal .plan-page-foot",
