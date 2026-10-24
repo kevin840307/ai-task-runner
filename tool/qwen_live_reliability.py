@@ -6179,6 +6179,76 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
     fifo_manager.cleanup(prepared_fifo_b)
     fifo_manager.cleanup(prepared_fifo_a)
 
+    # 12) A no-change Task must close idempotently without creating target history.
+    repo_no_change, manager_no_change, prepared_no_change = _prepare_merge_probe(
+        root,
+        "merge-no-change-preflight",
+        task_id="live-merge-no-change",
+    )
+    no_change_target_head = _delivery_git(
+        repo_no_change, "rev-parse", "HEAD"
+    ).stdout.strip()
+    snapshot_no_change = manager_no_change.snapshot_result(prepared_no_change)
+    if not snapshot_no_change.no_changes:
+        raise RuntimeError("No-change merge preflight unexpectedly created a Task commit")
+    no_change_result = MergeManager().merge(prepared_no_change, snapshot_no_change)
+    if no_change_result.status != "no_changes" or no_change_result.real_merge_failure:
+        raise RuntimeError(
+            "No-change merge preflight mismatch: "
+            f"status={no_change_result.status} real_failure={no_change_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_no_change, "rev-parse", "HEAD").stdout.strip() != no_change_target_head:
+        raise RuntimeError("No-change merge mutated target HEAD")
+    manager_no_change.cleanup(prepared_no_change)
+
+    # 13) A foreign active Git operation on the target must block delivery without aborting it.
+    repo_active, manager_active, prepared_active = _prepare_merge_probe(
+        root,
+        "merge-active-operation-preflight",
+        task_id="live-merge-active-operation",
+    )
+    (prepared_active.project_root / "active-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_active = manager_active.snapshot_result(prepared_active)
+    active_target_head = _delivery_git(repo_active, "rev-parse", "HEAD").stdout.strip()
+    _delivery_git(repo_active, "checkout", "-b", "external/operation")
+    (repo_active / "external-operation.txt").write_text(
+        "external-operation\n", encoding="utf-8"
+    )
+    _delivery_git(repo_active, "add", "external-operation.txt")
+    _delivery_git(repo_active, "commit", "-m", "prepare foreign merge operation")
+    _delivery_git(repo_active, "checkout", prepared_active.target_branch)
+    _delivery_git(
+        repo_active,
+        "merge",
+        "--no-ff",
+        "--no-commit",
+        "external/operation",
+    )
+    active_result = MergeManager().merge(prepared_active, snapshot_active)
+    if (
+        active_result.status != "waiting_target_workspace"
+        or active_result.real_merge_failure
+        or "active Git operation" not in active_result.detail
+    ):
+        raise RuntimeError(
+            "Active-operation merge preflight mismatch: "
+            f"status={active_result.status} detail={active_result.detail!r} "
+            f"real_failure={active_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_active, "rev-parse", "HEAD").stdout.strip() != active_target_head:
+        raise RuntimeError("Active-operation wait mutated target HEAD")
+    if (repo_active / "active-task.txt").exists():
+        raise RuntimeError("Active-operation wait leaked Task content into target Project")
+    merge_head = _delivery_git(
+        repo_active, "rev-parse", "-q", "--verify", "MERGE_HEAD"
+    ).stdout.strip()
+    if not merge_head:
+        raise RuntimeError("Active-operation guard aborted a foreign merge")
+    _delivery_git(repo_active, "merge", "--abort")
+    manager_active.cleanup(prepared_active)
+
     return {
         "clean": clean_result.status,
         "target_advance": advanced_result.status,
@@ -6210,6 +6280,11 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "fifo_delivered": fifo_delivered.status,
         "fifo_delivered_seq": fifo_delivered.merge_queue_seq,
         "fifo_validation_calls": fifo_validation_calls,
+        "no_change": no_change_result.status,
+        "no_change_real_failure": no_change_result.real_merge_failure,
+        "active_operation": active_result.status,
+        "active_operation_real_failure": active_result.real_merge_failure,
+        "active_operation_detail": active_result.detail,
     }
 
 def runner_workspace_delivery_probe(

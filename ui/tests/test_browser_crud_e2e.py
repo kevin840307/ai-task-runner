@@ -6105,4 +6105,32 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             production_list_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
             assert feature_list_shell and production_list_shell
             assert abs(feature_list_shell["width"] - production_list_shell["width"]) <= 1
+
+            # Final prototype responsive contract: at <=900px the shared Task
+            # workspace is full width and Task List hides the secondary side rail.
+            feature_page.set_viewport_size({"width": 880, "height": 900})
+            production_page.set_viewport_size({"width": 880, "height": 900})
+            feature_page.wait_for_timeout(50)
+            production_page.wait_for_timeout(50)
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planModal .plan-page-body",
+                production_page,
+                ".task-workspace-list-page",
+                ["gridTemplateColumns"],
+            )
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planModal .plan-side",
+                production_page,
+                ".task-workspace-list-side",
+                ["display"],
+            )
+            assert feature_page.locator("#planModal .plan-side").is_hidden()
+            assert production_page.locator(".task-workspace-list-side").is_hidden()
+            feature_narrow_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
+            production_narrow_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
+            assert feature_narrow_shell and production_narrow_shell
+            assert abs(feature_narrow_shell["width"] - production_narrow_shell["width"]) <= 1
+            assert abs(production_narrow_shell["width"] - 880) <= 1
             browser.close()

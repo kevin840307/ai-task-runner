@@ -556,12 +556,17 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
     _same(
         ".plan-row-head>.drag-grip",
         ".task-workspace-drag-grip",
-        ("width", "height", "font-size"),
+        ("width", "height", "margin", "color", "font-size", "font-weight", "line-height", "cursor", "user-select"),
     )
     _same(
         ".plan-workspace-chip",
         ".task-workspace-list-chip",
-        ("font-size", "font-weight"),
+        ("padding", "border-radius", "background", "color", "font-size", "font-weight"),
+    )
+    _same(
+        ".plan-workspace-chip.worktree",
+        ".task-workspace-list-chip.worktree",
+        ("background", "color", "border", "font-weight", "letter-spacing"),
     )
     _same(
         ".plan-page-body",
@@ -576,6 +581,20 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("grid-template-columns",),
         feature_media="max-width:960px",
         production_media="max-width:960px",
+    )
+    _same(
+        ".plan-page-body",
+        ".task-workspace-list-page",
+        ("grid-template-columns",),
+        feature_media="max-width:900px",
+        production_media="max-width:900px",
+    )
+    _same(
+        ".plan-side",
+        ".task-workspace-list-side",
+        ("display",),
+        feature_media="max-width:900px",
+        production_media="max-width:900px",
     )
 
 

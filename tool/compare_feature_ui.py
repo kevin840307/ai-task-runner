@@ -305,8 +305,21 @@ TASK_LIST = PanelSpec(
         Pair(".draft-plan-row", ".task-workspace-list-row[draggable=\"true\"]", ("transition",)),
         Pair(".plan-row-compact.dragging", ".task-workspace-list-row.dragging", ("opacity",)),
         Pair(".plan-row-compact.drag-over", ".task-workspace-list-row.drag-over", ("outline", "outline-offset")),
-        Pair(".plan-row-head>.drag-grip", ".task-workspace-drag-grip", ("width", "height", "font-size")),
-        Pair(".plan-workspace-chip", ".task-workspace-list-chip", ("font-size", "font-weight")),
+        Pair(
+            ".plan-row-head>.drag-grip",
+            ".task-workspace-drag-grip",
+            ("width", "height", "margin", "color", "font-size", "font-weight", "line-height", "cursor", "user-select"),
+        ),
+        Pair(
+            ".plan-workspace-chip",
+            ".task-workspace-list-chip",
+            ("padding", "border-radius", "background", "color", "font-size", "font-weight"),
+        ),
+        Pair(
+            ".plan-workspace-chip.worktree",
+            ".task-workspace-list-chip.worktree",
+            ("background", "color", "border", "font-weight", "letter-spacing"),
+        ),
         Pair(".plan-row", ".task-workspace-list-row", ("border", "border-radius", "background", "overflow")),
         Pair(".plan-row-head", ".task-workspace-list-row", ("padding",)),
         Pair(".plan-row-compact .plan-row-head", ".task-workspace-list-row", ("min-height",)),
@@ -350,6 +363,8 @@ TASK_LIST = PanelSpec(
         Pair(".empty-plan-cta span", ".task-workspace-empty-list-cta span", ("font-size", "font-weight")),
         Pair(".plan-page-body", ".task-workspace-list-page", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
         Pair(".plan-side", ".task-workspace-list-side", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
+        Pair(".plan-page-body", ".task-workspace-list-page", ("grid-template-columns",), feature_media="max-width:900px", production_media="max-width:900px"),
+        Pair(".plan-side", ".task-workspace-list-side", ("display",), feature_media="max-width:900px", production_media="max-width:900px"),
         Pair("#planModal .plan-page-foot", ".task-workspace-foot", ("display", "justify-content", "gap", "padding", "border-top", "background")),
         Pair(
             ".task-context-menu",
