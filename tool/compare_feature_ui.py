@@ -159,6 +159,22 @@ TASK_EDITOR = PanelSpec(
             ("padding", "font-size", "line-height"),
         ),
         Pair(
+            ".file-upload-hint",
+            ".task-workspace-file-upload-hint",
+            ("display", "align-items", "gap", "min-width", "border", "border-radius", "background", "font-size"),
+        ),
+        Pair(
+            "#newTaskModal .file-upload-hint",
+            ".task-workspace-shell.task-editor-route .task-workspace-file-upload-hint",
+            ("padding",),
+        ),
+        Pair(
+            ".file-upload-hint strong",
+            ".task-workspace-file-upload-hint strong",
+            ("flex", "min-width", "overflow", "text-overflow", "white-space"),
+        ),
+        Pair(".file-upload-hint span", ".task-workspace-file-upload-hint span", ("color",)),
+        Pair(
             "#newTaskModal .task-primary-source .source-tabs",
             ".task-workspace-task-primary-source .task-workspace-source-tabs",
             ("display", "grid-template-columns", "width", "min-width", "gap", "box-sizing", "height"),

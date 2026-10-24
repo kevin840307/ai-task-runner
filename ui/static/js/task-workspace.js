@@ -641,6 +641,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const path = String(data.path || "");
         updateItem(state.index, field, path);
         const source = sourceState(item);
+        if (!source.uploadNames) source.uploadNames = {};
+        source.uploadNames[field] = file.name;
         if (field === "goal_file") source.promptFile = path;
         else if (field === "ai_validator_prompt_file") source.aiFile = path;
         render();
@@ -1388,6 +1390,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         aiText: String(item.ai_validator_prompt || ""),
         aiFile: String(item.ai_validator_prompt_file || ""),
         aiAsset: aiAsset ? String(item.ai_validator_prompt_file || "") : "",
+        uploadNames: {},
       };
     }
     return state.sourceModes[key];
@@ -1439,6 +1442,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       // it explicitly discards custom text/file overrides.
       if (previous === "file" && mode === "default" && managedUploadPath(item.ai_validator_prompt_file)) {
         queueUploadCancel(item.ai_validator_prompt_file);
+        if (source.uploadNames) delete source.uploadNames.ai_validator_prompt_file;
       }
       source.aiMode = mode;
       if (mode === "default") {
@@ -1886,6 +1890,23 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workspaceSection.append(workspaceHead, workspace, workspaceOptions, availabilityNote);
 
     const source = sourceState(item);
+
+    function stagedUploadHint(field, value) {
+      const filename = String(source.uploadNames?.[field] || "").trim();
+      if (!filename || !managedUploadPath(value)) return null;
+      const hint = document.createElement("div");
+      hint.className = "task-workspace-file-upload-hint";
+      const strong = document.createElement("strong");
+      strong.textContent = trf("task.uploaded_file", { name: filename }, "Uploaded · " + filename);
+      const span = document.createElement("span");
+      span.textContent = tr(
+        "task.upload_managed_hint",
+        "Managed target path is shown above now; file bytes are copied there when the Task is created/saved.",
+      );
+      hint.append(strong, span);
+      return hint;
+    }
+
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
       tr("task.prompt_source_help", "Choose how this task gets its prompt"),
@@ -1922,7 +1943,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.placeholder = tr("task.goal_file_alt", "Or type an existing prompt file path");
       input.addEventListener("input", () => {
         const previous = String(item.goal_file || "");
-        if (previous !== input.value) queueUploadCancel(previous);
+        if (previous !== input.value) {
+          queueUploadCancel(previous);
+          if (source.uploadNames) delete source.uploadNames.goal_file;
+        }
         source.promptFile = input.value;
         updateItem(state.index, "goal_file", input.value);
       });
@@ -1937,6 +1961,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       row.append(input, upload);
       const panel = sourceModePanel("file");
       panel.appendChild(row);
+      const uploadHint = stagedUploadHint("goal_file", input.value);
+      if (uploadHint) panel.appendChild(uploadHint);
       promptCard.body.appendChild(panel);
       appendFieldError(promptCard.card, input, "goal_file");
     } else {
@@ -1971,7 +1997,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       input.placeholder = placeholder;
       input.addEventListener("input", () => {
         const previous = String(editorDraft()?.items?.[state.index]?.[key] || "");
-        if (previous !== input.value) queueUploadCancel(previous);
+        if (previous !== input.value) {
+          queueUploadCancel(previous);
+          if (source.uploadNames) delete source.uploadNames[key];
+        }
         updateItem(state.index, key, input.value);
       });
       const row = document.createElement("div");
@@ -1983,7 +2012,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       upload.textContent = tr("task.upload_file", "Upload file");
       upload.addEventListener("click", () => chooseUpload(key, upload));
       row.append(input, upload);
-      return { row, input };
+      return { row, input, uploadHint: stagedUploadHint(key, input.value) };
     }
 
     if (capability?.requires_python_validator) {
@@ -2002,6 +2031,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       validatorCard.card.querySelector(".task-workspace-source-head")?.appendChild(required);
       const control = pathControl("taskWorkspaceValidator", "validator", item.validator, "Or type an existing validator path");
       validatorCard.body.appendChild(control.row);
+      if (control.uploadHint) validatorCard.body.appendChild(control.uploadHint);
       const validatorNote = document.createElement("p");
       validatorNote.className = "task-workspace-source-note";
       validatorNote.textContent = tr("task.validator_upload_note", "Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.");
@@ -2063,6 +2093,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         control.input.addEventListener("input", () => { source.aiFile = control.input.value; });
         const panel = sourceModePanel("file");
         panel.appendChild(control.row);
+        if (control.uploadHint) panel.appendChild(control.uploadHint);
         aiCard.body.appendChild(panel);
         appendFieldError(aiCard.card, control.input, "ai_validator_prompt_file");
       } else {

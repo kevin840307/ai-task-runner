@@ -592,6 +592,25 @@ def test_new_task_editor_source_note_chrome_matches_feature_reference() -> None:
     )
 
 
+def test_new_task_staged_upload_hint_matches_feature_reference() -> None:
+    _same(
+        ".file-upload-hint",
+        ".task-workspace-file-upload-hint",
+        ("display", "align-items", "gap", "min-width", "border", "border-radius", "background", "font-size"),
+    )
+    _same(
+        "#newTaskModal .file-upload-hint",
+        ".task-workspace-shell.task-editor-route .task-workspace-file-upload-hint",
+        ("padding",),
+    )
+    _same(
+        ".file-upload-hint strong",
+        ".task-workspace-file-upload-hint strong",
+        ("flex", "min-width", "overflow", "text-overflow", "white-space"),
+    )
+    _same(".file-upload-hint span", ".task-workspace-file-upload-hint span", ("color",))
+
+
 def test_task_list_effective_row_geometry_matches_feature_reference() -> None:
     _same(
         ".plan-row-compact .plan-row-head",

@@ -2357,8 +2357,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.value.includes('.ai-task-runner')")
             staged_validator = page.locator("#taskWorkspaceValidator").input_value()
             assert state.task_uploads.staged_exists(root, staged_validator) is True
+            validator_hint = page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint")
+            assert validator_hint.is_visible()
+            assert "Uploaded · validator-upload.py" in validator_hint.inner_text()
+            assert "Managed target path is shown above now" in validator_hint.inner_text()
             manual_validator = str(state.repo_root / "validate.py")
             page.fill("#taskWorkspaceValidator", manual_validator)
+            assert page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint").count() == 0
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             page.click("#taskWorkspaceHeaderBack")
@@ -2376,6 +2381,9 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.value.includes('.ai-task-runner')")
             managed_ai_prompt = page.locator("#taskWorkspaceAiValidatorPrompt").input_value()
             assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+            ai_upload_hint = page.locator("[data-task-source-card='ai'] .task-workspace-file-upload-hint")
+            assert ai_upload_hint.is_visible()
+            assert "Uploaded · ai-upload.md" in ai_upload_hint.inner_text()
 
             # Feature parity: File -> Write/Asset is non-destructive. A staged
             # custom file must remain usable when the user switches back; only
