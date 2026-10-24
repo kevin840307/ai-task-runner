@@ -4724,6 +4724,13 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             "flow: [planning, validate_file]\n",
             encoding="utf-8",
         )
+        plain = workflows / "plain.yaml"
+        plain.write_text(
+            "stages:\n"
+            "  planning:\n    type: plan\n"
+            "flow: [planning]\n",
+            encoding="utf-8",
+        )
         prompt_asset = root / "runner" / "assets" / "prompts" / "common" / "task_source_asset.md"
         prompt_asset.write_text("Task source asset\n", encoding="utf-8")
         state.project_preferences.update(root, {"workflow": str(mixed)})
@@ -4961,12 +4968,19 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             else:
                 assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
 
+            # Workflow changes match the feature editor: controls disappear
+            # according to capability, but their draft values are not destroyed.
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            page.fill("#taskWorkspaceAiValidatorPrompt", str(root / "workflow-ai.md"))
+
             # File-only reference: desktop keeps Prompt and Validator in the 1.34/.86 grid;
             # <=820 follows the feature breakpoint and stacks them.
             page.select_option("#taskWorkspaceWorkflow", str(file_only))
             page.wait_for_function(
                 "() => document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
             )
+            assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
             single_prompt_box = page.locator("[data-task-source-card='prompt']").bounding_box()
             single_validator_box = page.locator("[data-task-source-card='validator']").bounding_box()
             assert single_prompt_box and single_validator_box
@@ -4978,6 +4992,22 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
 
             page.select_option("#taskWorkspaceWorkflow", str(mixed))
             page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"]') !== null")
+            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").get_attribute("aria-pressed") == "true"
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
+            assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
+
+            page.select_option("#taskWorkspaceWorkflow", str(plain))
+            page.wait_for_function(
+                "() => !document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
+            )
+            page.select_option("#taskWorkspaceWorkflow", str(mixed))
+            page.wait_for_function(
+                "() => document.querySelector('[data-task-source-card=\"validator\"]') && document.querySelector('[data-task-source-card=\"ai\"]')"
+            )
+            assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
+            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").get_attribute("aria-pressed") == "true"
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
+
             validator_card = page.locator("[data-task-source-card='validator']")
             ai_card = page.locator("[data-task-source-card='ai']")
 
