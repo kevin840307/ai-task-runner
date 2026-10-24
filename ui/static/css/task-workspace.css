@@ -644,6 +644,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 .task-workspace-empty-list-cta strong{font-size:9px}
 .task-workspace-empty-list-cta span{color:var(--accent);font-size:8px;font-weight:850}
+html[data-appearance] .task-workspace-empty-list-cta:hover:not(:disabled){border-color:var(--line);background:var(--panel-2)}
 
 @media(max-width:960px){
   .task-workspace-list-page{grid-template-columns:1fr}
