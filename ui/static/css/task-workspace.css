@@ -709,13 +709,12 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-header-actions[hidden]{display:none!important}
 .task-workspace-header-actions button{
   height:30px;min-height:30px;padding:0 8px;border:1px solid var(--line);border-radius:8px;
-  background:var(--panel-2);color:var(--text);box-shadow:none;font-size:9px;font-weight:850;white-space:nowrap
+  background:var(--panel);color:var(--text);box-shadow:none;font-size:9px;font-weight:800;white-space:nowrap
 }
-.task-workspace-header-actions button:hover:not(:disabled){
-  border-color:color-mix(in srgb,var(--accent) 34%,var(--line));background:var(--accent-soft);color:var(--accent-dark)
-}
-.task-workspace-header-actions button.primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent,#fff)}
-.task-workspace-header-actions button.ghost{background:transparent}
+.task-workspace-header-actions button:hover:not(:disabled){border-color:var(--accent)}
+.task-workspace-header-actions button.primary{border-color:var(--accent);background:var(--accent);color:#fff}
+.task-workspace-header-actions button.primary:hover:not(:disabled){background:var(--accent-dark)}
+.task-workspace-header-actions button.ghost{border-color:transparent;background:transparent;color:var(--muted)}
 .task-workspace-header-actions button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:900px){
   .task-workspace-header-actions .ghost{display:none}

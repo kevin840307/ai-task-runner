@@ -6238,6 +6238,24 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ".task-workspace-shell.task-list-route .task-workspace-foot",
                     ["display", "justifyContent", "gap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
                 ),
+                (
+                    "#cancelTaskListDraft",
+                    "#taskWorkspaceHeaderCancel",
+                    [
+                        "height", "minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius",
+                        "backgroundColor", "color", "fontSize", "fontWeight",
+                    ],
+                ),
+                (
+                    "#confirmTaskListDraft",
+                    "#taskWorkspaceHeaderCreateList",
+                    [
+                        "height", "minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius",
+                        "backgroundColor", "color", "fontSize", "fontWeight",
+                    ],
+                ),
             ]
             for feature_selector, production_selector, properties in list_pairs:
                 _assert_feature_computed_style_parity(
