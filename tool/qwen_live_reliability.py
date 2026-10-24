@@ -6300,6 +6300,8 @@ def runner_workspace_delivery_probe(
         ("auto_idle", "auto", False, "main", "none"),
         ("auto_busy", "auto", True, "worktree", "none"),
         ("worktree_target_advance", "worktree", False, "worktree", "advance"),
+        ("worktree_source_fail", "worktree", False, "worktree", "source_fail"),
+        ("worktree_technical_error", "worktree", False, "worktree", "technical_error"),
         ("main_conflict_recovery", "main", False, "main", "conflict"),
     )
     results: dict[str, object] = {}
@@ -6391,10 +6393,13 @@ def runner_workspace_delivery_probe(
 
         validation_calls = 0
         validate_delivery = None
-        if target_mutation == "advance":
+        if target_mutation in {"advance", "source_fail", "technical_error"}:
             (repo / "target-side.txt").write_text("advanced target\n", encoding="utf-8")
             _delivery_git(repo, "add", "target-side.txt")
             _delivery_git(repo, "commit", "-m", "advance target during Task execution")
+            result["target_head_before_delivery"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
 
             def validate_delivery(project: Path) -> str:
                 nonlocal validation_calls
@@ -6408,6 +6413,10 @@ def runner_workspace_delivery_probe(
                     and (project / "target-side.txt").read_text(encoding="utf-8")
                     == "advanced target\n"
                 )
+                if target_mutation == "technical_error":
+                    raise RuntimeError("injected runner delivery validator outage")
+                if target_mutation == "source_fail":
+                    return "SOURCE_FAIL"
                 return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
         elif target_mutation == "conflict":
             (repo / "health.txt").write_text("target-conflict\n", encoding="utf-8")
@@ -6516,6 +6525,47 @@ def runner_workspace_delivery_probe(
                     f"{recovery_cleanup.status}"
                 )
             result["recovery_cleanup"] = recovery_cleanup.status
+        elif target_mutation in {"source_fail", "technical_error"}:
+            expected_status = "source_fail" if target_mutation == "source_fail" else "technical_error"
+            expected_verdict = "SOURCE_FAIL" if target_mutation == "source_fail" else "TECHNICAL_ERROR"
+            expected_real_failure = target_mutation == "source_fail"
+            target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+            if (
+                merged.status != expected_status
+                or merged.verdict != expected_verdict
+                or merged.real_merge_failure is not expected_real_failure
+                or validation_calls != 1
+            ):
+                raise RuntimeError(
+                    "Runner/workspace validation-failure cross-case mismatch: "
+                    f"case={case_key} status={merged.status} verdict={merged.verdict} "
+                    f"real_failure={merged.real_merge_failure} calls={validation_calls}"
+                )
+            if target_head != result["target_head_before_delivery"]:
+                raise RuntimeError(
+                    "Runner/workspace validation failure mutated target HEAD"
+                )
+            if (repo / "health.txt").exists():
+                raise RuntimeError(
+                    "Runner/workspace validation failure leaked Task output into target Project"
+                )
+            if retained.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace validation failure mutated retained Task output"
+                )
+            if (
+                target_mutation == "technical_error"
+                and "injected runner delivery validator outage" not in merged.detail
+            ):
+                raise RuntimeError(
+                    "Runner/workspace technical error lost validator diagnostics"
+                )
+            result["delivery"] = merged.status
+            result["validation_required"] = merged.validation_required
+            result["validation_verdict"] = merged.verdict
+            result["validation_calls"] = validation_calls
+            result["real_merge_failure"] = merged.real_merge_failure
+            result["target_head_after_delivery"] = target_head
         else:
             if merged.status != "merged":
                 raise RuntimeError(
