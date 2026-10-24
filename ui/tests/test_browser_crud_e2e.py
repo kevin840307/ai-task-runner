@@ -5947,6 +5947,10 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # through the same public create menu on both implementations.
             feature_page.click("#taskEditorBack")
             feature_page.wait_for_function(
+                "document.querySelector('#taskEditorDiscardModal')?.classList.contains('open')"
+            )
+            feature_page.click("#confirmDiscardTaskEditor")
+            feature_page.wait_for_function(
                 "!document.querySelector('#newTaskModal')?.classList.contains('open')"
             )
             feature_page.click("#newTask")
@@ -5956,6 +5960,10 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             )
 
             production_page.click("#taskWorkspaceFooterBack")
+            production_page.wait_for_function(
+                "() => !document.querySelector('.ui-dialog-card')?.hidden"
+            )
+            production_page.locator("[data-dialog-ok]").click()
             production_page.wait_for_function(
                 "document.querySelector('#taskWorkspaceOverlay')?.hidden === true"
             )
