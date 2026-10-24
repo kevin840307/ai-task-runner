@@ -181,6 +181,11 @@ def test_new_task_source_cards_match_final_feature_cascade() -> None:
         ("min-height",),
     )
     _same(
+        ".pathrow input",
+        ".task-workspace-path-row input",
+        ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size"),
+    )
+    _same(
         ".workspace-selector-wrap",
         ".task-workspace-workspace-selector",
         ("margin-top", "padding", "border-radius", "background"),
