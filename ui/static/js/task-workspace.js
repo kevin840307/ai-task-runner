@@ -1415,9 +1415,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (previous === "write") source.promptText = String(item.prompt || "");
       else if (previous === "file") source.promptFile = String(item.goal_file || "");
       else if (previous === "asset") source.promptAsset = String(item.goal_file || "");
-      if (previous === "file" && mode !== "file" && managedUploadPath(item.goal_file)) {
-        queueUploadCancel(item.goal_file);
-      }
+      // Final feature prototype keeps alternate Prompt sources while the
+      // user switches between Write/File/Asset. Do not cancel a staged File
+      // merely because another source tab is being previewed; switching back
+      // must restore a usable path, not a path whose staged bytes were deleted.
       source.promptMode = mode;
       if (mode === "write") {
         item.prompt = source.promptText;
@@ -1433,7 +1434,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (previous === "write") source.aiText = String(item.ai_validator_prompt || "");
       else if (previous === "file") source.aiFile = String(item.ai_validator_prompt_file || "");
       else if (previous === "asset") source.aiAsset = String(item.ai_validator_prompt_file || "");
-      if (previous === "file" && mode !== "file" && managedUploadPath(item.ai_validator_prompt_file)) {
+      // Non-default AI modes retain each other's alternate source just like
+      // the feature prototype. "Default" is the one destructive transition:
+      // it explicitly discards custom text/file overrides.
+      if (previous === "file" && mode === "default" && managedUploadPath(item.ai_validator_prompt_file)) {
         queueUploadCancel(item.ai_validator_prompt_file);
       }
       source.aiMode = mode;
