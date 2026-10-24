@@ -211,6 +211,11 @@ TASK_EDITOR = PanelSpec(
         ),
         Pair("#newTaskModal .task-primary-source .task-source-mode-panel>textarea", ".task-workspace-task-primary-source .task-workspace-source-mode-panel>textarea", ("min-height",)),
         Pair("#newTaskModal .task-ai-source .task-source-mode-panel>textarea", ".task-workspace-task-ai-source .task-workspace-source-mode-panel>textarea", ("min-height",)),
+        Pair(
+            ".pathrow input",
+            ".task-workspace-path-row input",
+            ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size"),
+        ),
         Pair(".workspace-option", ".task-workspace-workspace-option", ("min-height", "padding", "border-radius", "background")),
         Pair(".overlay", ".task-workspace-overlay", ("position", "inset", "overflow", "background", "backdrop-filter")),
         Pair(
