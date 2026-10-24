@@ -238,7 +238,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-source-body>input,.task-workspace-source-body>select{height:32px;min-height:32px;padding:0 8px;border-radius:7px;font-size:9px}
 .task-workspace-path-row{gap:6px}
 .task-workspace-path-row input,.task-workspace-path-row select{width:100%;height:32px;min-height:32px;padding:0 8px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg);color:var(--text);font-size:9px}
-.task-workspace-upload{height:32px;min-height:32px;padding:0 9px;border:1px solid color-mix(in srgb,var(--accent) 54%,var(--line));border-radius:7px;background:var(--accent-soft);color:var(--accent-dark);font-size:9px;font-weight:850}
+.task-workspace-upload{height:32px;min-height:32px;padding:0 9px;border:1px solid color-mix(in srgb,var(--accent) 54%,var(--line));border-color:color-mix(in srgb,var(--accent) 54%,var(--line));border-radius:7px;background:var(--accent-soft);color:var(--accent-dark);font-size:9px;font-weight:850}
 .task-workspace-upload:hover{background:var(--accent-softer);border-color:var(--accent)}
 .task-workspace-validation-grid{gap:8px;margin-top:8px}
 .task-workspace-validation-grid:has(> [data-task-source-card="validator"] + [data-task-source-card="ai"]) .task-workspace-source-head{
