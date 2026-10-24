@@ -50,6 +50,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         </header>
         <main id="taskWorkspaceBody" class="task-workspace-body"></main>
         <footer class="task-workspace-foot">
+          <button id="taskWorkspaceFooterInfo" type="button" hidden>Back to Info</button>
           <button id="taskWorkspaceFooterBack" type="button">Back</button>
           <button id="taskWorkspaceSave" class="primary" type="button">Save draft</button>
         </footer>
@@ -109,6 +110,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceClose").addEventListener("click", () => void requestClose());
     byId("taskWorkspaceExpand").addEventListener("click", () => setWorkspaceExpanded(!byId("taskWorkspaceShell").classList.contains("expanded")));
     byId("taskWorkspaceHeaderBack").addEventListener("click", () => void handleBack());
+    byId("taskWorkspaceFooterInfo").addEventListener("click", () => void showTaskInfoFromList());
     byId("taskWorkspaceFooterBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
     byId("taskWorkspaceHeaderOpenWorkflow").addEventListener("click", () => {
@@ -2740,6 +2742,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function beginTaskListEdit() {
+    state.listReturn = "info";
     if (!ensureTaskEditDraft()) {
       state.route = "list";
       render();
@@ -3169,6 +3172,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (!state || !overlay) return;
     hideTaskContextMenu();
     const shell = byId("taskWorkspaceShell");
+    const footerInfo = byId("taskWorkspaceFooterInfo");
+    if (footerInfo) footerInfo.hidden = true;
     const workspaceRoute = ["editor", "list", "yaml"].includes(String(state.route || ""));
     shell?.classList.toggle("workspace-route", workspaceRoute);
     shell?.classList.toggle("task-editor-route", state.route === "editor");
@@ -3191,7 +3196,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           ? tr("task.apply_yaml", "Apply YAML")
           : (canSaveList ? tr("task.save_list", "Save Task List") : tr("task.save", "Save Task"));
       }
-      if (back) back.hidden = false;
+      const directNewList = listRoute
+        && state.listReturn === "close"
+        && String(state.task?.status || "").toLowerCase() === "new";
+      if (back) back.hidden = directNewList;
+      if (footerInfo) {
+        footerInfo.hidden = !directNewList;
+        footerInfo.textContent = tr("task.back_info", "Back to Info");
+      }
       byId("taskWorkspaceEyebrow").textContent = yamlRoute
         ? tr("task.yaml", "TASK YAML")
         : (editorRoute ? tr("task.editor", "TASK EDITOR") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.info", "TASK INFO")));
@@ -3219,7 +3231,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         byId("taskWorkspaceFooterBack").textContent = state.editorReturn === "list" ? tr("task.back_list", "Back to Task List") : tr("task.back_info", "Back to Info");
         renderEditor();
       } else if (listRoute) {
-        byId("taskWorkspaceFooterBack").textContent = tr("task.back_info", "Back to Info");
+        byId("taskWorkspaceFooterBack").textContent = state.listReturn === "close"
+          ? tr("task.back", "Back")
+          : tr("task.back_info", "Back to Info");
         renderDurableTaskList();
       } else {
         renderTaskInfo();
@@ -3265,6 +3279,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
   }
 
+  async function showTaskInfoFromList() {
+    if (!state || state.kind !== "task" || state.route !== "list") return;
+    if (!(await confirmDiscardIfDirty())) return;
+    state.editDraft = null;
+    state.editOriginal = "";
+    state.saveRequestId = "";
+    state.listReturn = "info";
+    state.route = "info";
+    state.tab = "overview";
+    render();
+  }
+
   async function handleBack() {
     if (!state) return;
     if (state.route === "yaml") {
@@ -3303,9 +3329,14 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       if (state.route === "list") {
         if (!(await confirmDiscardIfDirty())) return;
+        const closeList = state.listReturn === "close";
         state.editDraft = null;
         state.editOriginal = "";
         state.saveRequestId = "";
+        if (closeList) {
+          closeNow();
+          return;
+        }
         state.route = "info";
         state.tab = "overview";
         render();
@@ -3595,13 +3626,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     restoreFocus = returnFocus || document.activeElement;
+    const directList = String(value.status || "").toLowerCase() === "new";
     state = {
       kind: "task",
       task: value,
       workflows: Array.isArray(workflows) ? workflows.slice() : [],
       prompts: Array.isArray(prompts) ? prompts.slice() : [],
       sourceModes: {},
-      route: "info",
+      route: directList ? "list" : "info",
+      listReturn: directList ? "close" : "info",
       tab: "overview",
       editDraft: null,
       editOriginal: "",

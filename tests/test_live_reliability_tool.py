@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 8
+    assert len(calls) == 9
     assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"
@@ -3081,6 +3081,13 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert technical["real_merge_failure"] is False
     assert technical["target_head_after_delivery"] == technical["target_head_before_delivery"]
 
+    dirty = result["worktree_dirty_target_wait"]
+    assert dirty["requested_mode"] == "worktree"
+    assert dirty["effective_mode"] == "worktree"
+    assert dirty["delivery"] == "waiting_target_clean"
+    assert dirty["real_merge_failure"] is False
+    assert dirty["target_head_after_delivery"] == dirty["target_head_before_delivery"]
+
     conflict = result["main_conflict_recovery"]
     assert conflict["requested_mode"] == "main"
     assert conflict["effective_mode"] == "main"
@@ -3109,6 +3116,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     target_advance_repo = tmp_path / "runner-workspace-worktree-target-advance-probe"
     source_fail_repo = tmp_path / "runner-workspace-worktree-source-fail-probe"
     technical_repo = tmp_path / "runner-workspace-worktree-technical-error-probe"
+    dirty_repo = tmp_path / "runner-workspace-worktree-dirty-target-wait-probe"
     conflict_repo = tmp_path / "runner-workspace-main-conflict-recovery-probe"
     for repo in (
         main_repo,
@@ -3122,6 +3130,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     for repo in (source_fail_repo, technical_repo):
         assert not (repo / "health.txt").exists()
         assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert not (dirty_repo / "health.txt").exists()
+    assert (dirty_repo / "user-uncommitted.txt").read_text(encoding="utf-8") == "keep user work\n"
     assert (target_advance_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (conflict_repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
 

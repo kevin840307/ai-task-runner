@@ -1785,11 +1785,12 @@ def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> Non
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
-            # Existing Board card opens Info, then the same Task List route.
+            # Prototype contract: New Board items open the Task List directly.
             page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Smoke task list").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceFooterInfo").is_visible()
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back"
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
@@ -3485,6 +3486,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("[data-tasks-view-mode='list']").click()
             assert page.locator("#tasksListRows .tasks-list-data").count() == 1
             page.locator("#tasksListRows .tasks-list-data").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceFooterInfo").is_visible()
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back"
+            page.click("#taskWorkspaceFooterInfo")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             # Escape belongs to the focused top layer. The Task Workspace stays
@@ -3531,6 +3537,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             page.locator("#tasksListRows .tasks-list-data").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceFooterInfo")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
             page.click("#taskWorkspaceDeleteTask")
@@ -4786,8 +4794,9 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
             assert task_card.count() == 1
             task_card.click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceEditTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            page.locator(".task-workspace-list-row").first.dblclick()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
             assert page.locator("#taskWorkspaceWorkflow").input_value() == str(second_workflow.resolve())
@@ -5799,6 +5808,63 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # Open the actual prototype and production Task editors through
             # their user-facing + New entry points.
             feature_page.click("#newTask")
+            feature_page.wait_for_function("!document.querySelector('#createTypeMenu')?.hidden")
+
+            production_page.click("#chatNav")
+            production_page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            production_page.click("#tasksNewButton")
+            production_page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
+
+            # Compare the actual create popover before entering the Editor.
+            # This catches cascade/layout drift that static selector mapping
+            # cannot see (including the pointer affordance on clickable rows).
+            create_menu_pairs = [
+                (
+                    "#createTypeMenu",
+                    "#taskCreateMenu",
+                    [
+                        "position", "zIndex", "width",
+                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius",
+                    ],
+                ),
+                (
+                    "#createTypeMenu [data-create-type='task']",
+                    "#taskCreateMenu [data-task-create-kind='task']",
+                    [
+                        "display", "gridTemplateColumns", "gap", "alignItems", "width",
+                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderRadius", "cursor",
+                    ],
+                ),
+                (
+                    "#createTypeMenu [data-create-type='task'] .create-type-icon",
+                    "#taskCreateMenu [data-task-create-kind='task'] .task-create-menu-icon",
+                    ["display", "width", "height", "borderRadius", "fontSize", "fontWeight"],
+                ),
+                (
+                    "#createTypeMenu [data-create-type='task'] strong",
+                    "#taskCreateMenu [data-task-create-kind='task'] strong",
+                    ["display", "fontSize"],
+                ),
+                (
+                    "#createTypeMenu [data-create-type='task'] small",
+                    "#taskCreateMenu [data-task-create-kind='task'] small",
+                    ["display", "marginTop", "fontSize", "lineHeight"],
+                ),
+            ]
+            for feature_selector, production_selector, properties in create_menu_pairs:
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    feature_selector,
+                    production_page,
+                    production_selector,
+                    properties,
+                )
+            feature_create_menu = _box(feature_page, "#createTypeMenu")
+            production_create_menu = _box(production_page, "#taskCreateMenu")
+            assert abs(feature_create_menu["width"] - production_create_menu["width"]) <= 1
+
             feature_page.locator("#createTypeMenu [data-create-type='task']").click()
             feature_page.wait_for_function(
                 "document.querySelector('#newTaskModal')?.classList.contains('open')"
@@ -5808,9 +5874,6 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 "document.querySelector('#newTaskValidationSource .task-ai-source') !== null"
             )
 
-            production_page.click("#chatNav")
-            production_page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
-            production_page.click("#tasksNewButton")
             production_page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
             production_page.wait_for_function(
                 "document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'"

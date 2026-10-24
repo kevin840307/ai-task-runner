@@ -44,7 +44,7 @@
 
 .task-create-menu{position:fixed;z-index:260;width:250px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--popover-bg,var(--panel));box-shadow:var(--shadow-popover)}
 .task-create-menu[hidden]{display:none}
-.task-create-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left}
+.task-create-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
 .task-create-menu button+button{margin-top:2px}
 .task-create-menu button:hover,.task-create-menu button:focus-visible{background:var(--accent-soft);outline:none}
 .task-create-menu-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:900}

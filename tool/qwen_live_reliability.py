@@ -6302,6 +6302,7 @@ def runner_workspace_delivery_probe(
         ("worktree_target_advance", "worktree", False, "worktree", "advance"),
         ("worktree_source_fail", "worktree", False, "worktree", "source_fail"),
         ("worktree_technical_error", "worktree", False, "worktree", "technical_error"),
+        ("worktree_dirty_target_wait", "worktree", False, "worktree", "dirty"),
         ("main_conflict_recovery", "main", False, "main", "conflict"),
     )
     results: dict[str, object] = {}
@@ -6418,6 +6419,13 @@ def runner_workspace_delivery_probe(
                 if target_mutation == "source_fail":
                     return "SOURCE_FAIL"
                 return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
+        elif target_mutation == "dirty":
+            (repo / "user-uncommitted.txt").write_text(
+                "keep user work\n", encoding="utf-8"
+            )
+            result["target_head_before_delivery"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
         elif target_mutation == "conflict":
             (repo / "health.txt").write_text("target-conflict\n", encoding="utf-8")
             _delivery_git(repo, "add", "health.txt")
@@ -6525,6 +6533,35 @@ def runner_workspace_delivery_probe(
                     f"{recovery_cleanup.status}"
                 )
             result["recovery_cleanup"] = recovery_cleanup.status
+        elif target_mutation == "dirty":
+            target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+            if merged.status != "waiting_target_clean" or merged.real_merge_failure:
+                raise RuntimeError(
+                    "Runner/workspace dirty-target cross-case mismatch: "
+                    f"status={merged.status} real_failure={merged.real_merge_failure}"
+                )
+            if target_head != result["target_head_before_delivery"]:
+                raise RuntimeError(
+                    "Runner/workspace dirty-target wait mutated target HEAD"
+                )
+            if (repo / "health.txt").exists():
+                raise RuntimeError(
+                    "Runner/workspace dirty-target wait leaked Task output into target Project"
+                )
+            if (
+                (repo / "user-uncommitted.txt").read_text(encoding="utf-8")
+                != "keep user work\n"
+            ):
+                raise RuntimeError(
+                    "Runner/workspace dirty-target wait mutated user work"
+                )
+            if retained.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace dirty-target wait mutated retained Task output"
+                )
+            result["delivery"] = merged.status
+            result["real_merge_failure"] = merged.real_merge_failure
+            result["target_head_after_delivery"] = target_head
         elif target_mutation in {"source_fail", "technical_error"}:
             expected_status = "source_fail" if target_mutation == "source_fail" else "technical_error"
             expected_verdict = "SOURCE_FAIL" if target_mutation == "source_fail" else "TECHNICAL_ERROR"

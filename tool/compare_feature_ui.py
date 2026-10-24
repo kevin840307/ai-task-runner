@@ -137,6 +137,19 @@ def declarations(
 TASK_EDITOR = PanelSpec(
     "ui/static/css/task-workspace.css",
     (
+        Pair(".create-type-menu", ".task-create-menu", ("position", "z-index", "width", "padding", "border", "border-radius")),
+        Pair(
+            ".create-type-menu button",
+            ".task-create-menu button",
+            ("display", "grid-template-columns", "gap", "align-items", "width", "padding", "border", "border-radius", "background", "color", "text-align", "cursor"),
+        ),
+        Pair(
+            ".create-type-icon",
+            ".task-create-menu-icon",
+            ("display", "place-items", "width", "height", "border-radius", "color", "font-size", "font-weight"),
+        ),
+        Pair(".create-type-menu strong", ".task-create-menu button strong", ("display", "font-size")),
+        Pair(".create-type-menu small", ".task-create-menu button small", ("display", "margin-top", "color", "font-size", "line-height")),
         Pair("#newTaskModal>.modal-body", ".task-workspace-shell.task-editor-route .task-workspace-body", ("padding",)),
         Pair("#newTaskModal .task-basics", ".task-workspace-basics", ("grid-template-columns", "gap", "align-items")),
         Pair(".field", ".task-workspace-basics>.task-workspace-field", ("margin-top",)),
