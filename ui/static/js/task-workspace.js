@@ -2101,6 +2101,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         if (previous !== input.value) {
           queueUploadCancel(previous);
           if (source.uploadNames) delete source.uploadNames.goal_file;
+          input.closest(".task-workspace-source-mode-panel")
+            ?.querySelector(".task-workspace-file-upload-hint")
+            ?.remove();
         }
         source.promptFile = input.value;
         updateItem(state.index, "goal_file", input.value);
@@ -2155,6 +2158,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         if (previous !== input.value) {
           queueUploadCancel(previous);
           if (source.uploadNames) delete source.uploadNames[key];
+          input.closest(".task-workspace-source-card")
+            ?.querySelector(".task-workspace-file-upload-hint")
+            ?.remove();
         }
         updateItem(state.index, key, input.value);
       });

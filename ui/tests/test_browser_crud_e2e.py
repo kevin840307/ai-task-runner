@@ -2657,8 +2657,14 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
             list_button.click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
-            assert page.locator(".task-workspace-durable-edit").count() == 2
-            assert all(button.is_disabled() for button in page.locator(".task-workspace-durable-edit").all())
+            assert page.locator(".task-workspace-row-more").count() == 2
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").click()
+            readonly_menu = page.locator("#taskWorkspaceContextMenu")
+            assert readonly_menu.is_visible()
+            assert readonly_menu.get_by_role("button", name="Edit", exact=True).is_disabled()
+            assert readonly_menu.get_by_role("button", name="Remove", exact=True).is_disabled()
+            page.keyboard.press("Escape")
+            assert readonly_menu.is_hidden()
             add_button = page.locator("#taskWorkspaceAddTask")
             yaml_button = page.locator("#taskWorkspaceHeaderYaml")
             assert add_button.is_disabled()
@@ -2924,16 +2930,26 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
             assert rows.nth(1).locator(".task-workspace-list-state").inner_text() == "CURRENT"
             assert rows.nth(2).locator(".task-workspace-list-state").inner_text() == "FUTURE"
 
-            completed_actions = rows.nth(0).locator(".task-workspace-list-actions button")
-            assert all(button.is_disabled() for button in completed_actions.all())
-            assert rows.nth(0).get_attribute("draggable") == "false"
+            context_menu = page.locator("#taskWorkspaceContextMenu")
+            completed = rows.nth(0)
+            completed.locator(".task-workspace-row-more").click()
+            assert context_menu.get_by_role("button", name="Edit", exact=True).is_disabled()
+            assert context_menu.get_by_role("button", name="Remove", exact=True).is_disabled()
+            page.keyboard.press("Escape")
+            assert completed.get_attribute("draggable") == "false"
+
             current = rows.nth(1)
-            assert current.locator(".task-workspace-row-edit").is_enabled()
-            assert current.get_by_role("button", name="Remove").is_disabled()
+            current.locator(".task-workspace-row-more").click()
+            assert context_menu.get_by_role("button", name="Edit", exact=True).is_enabled()
+            assert context_menu.get_by_role("button", name="Remove", exact=True).is_disabled()
+            page.keyboard.press("Escape")
             assert current.get_attribute("draggable") == "false"
+
             future = rows.nth(2)
-            assert future.locator(".task-workspace-row-edit").is_enabled()
-            assert future.get_by_role("button", name="Remove").is_enabled()
+            future.locator(".task-workspace-row-more").click()
+            assert context_menu.get_by_role("button", name="Edit", exact=True).is_enabled()
+            assert context_menu.get_by_role("button", name="Remove", exact=True).is_enabled()
+            page.keyboard.press("Escape")
             assert future.get_attribute("draggable") == "true"
             assert page.locator("#taskWorkspaceAddTask").is_enabled()
             assert page.locator("#taskWorkspaceHeaderYaml").is_disabled()
@@ -2941,7 +2957,8 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
                 page.locator("#taskWorkspaceHeaderYaml").get_attribute("title") or ""
             )
 
-            current.locator(".task-workspace-row-edit").click()
+            current.locator(".task-workspace-row-more").click()
+            context_menu.get_by_role("button", name="Edit", exact=True).click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspacePrompt", "Edited current prompt")
             page.click("#taskWorkspaceSave")
@@ -3345,7 +3362,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
-            page.locator(".task-workspace-row-edit").first.click()
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").click()
+            page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Edit", exact=True).click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.evaluate(
                 "window.__sharedTaskWorkspaceShell === document.querySelector('#taskWorkspaceShell')"
@@ -3370,7 +3388,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-list-row").count() == 3
             page.locator(".task-workspace-list-row").nth(2).focus()
             page.keyboard.press("Alt+ArrowUp")
-            page.locator(".task-workspace-list-row").nth(2).get_by_role("button", name="Remove").click()
+            page.locator(".task-workspace-list-row").nth(2).locator(".task-workspace-row-more").click()
+            page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Remove", exact=True).click()
             assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
@@ -3458,7 +3477,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-list-row").first.get_attribute("aria-selected") == "true"
             assert "selected" in (page.locator(".task-workspace-list-row").first.get_attribute("class") or "")
             assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_visible()
-            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").click()
+            page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Edit", exact=True).click()
             page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
             page.locator("#taskWorkspacePrompt").focus()
             page.keyboard.press("Escape")
