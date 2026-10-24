@@ -5806,9 +5806,9 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             )
             _assert_feature_computed_style_parity(
                 feature_page,
-                "#taskAiFile.closest('.pathrow')",
+                "#newTaskModal .task-ai-source .pathrow",
                 production_page,
-                "#taskWorkspaceAiValidatorPrompt.closest('.task-workspace-path-row')",
+                "[data-task-source-card='ai'] .task-workspace-path-row",
                 ["display", "gap", "alignItems"],
             )
 
