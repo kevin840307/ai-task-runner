@@ -296,8 +296,8 @@ TASK_LIST = PanelSpec(
         Pair(".plan-side", ".task-workspace-list-side", ("display", "gap", "align-content")),
         Pair("#planModal .plan-side", ".task-workspace-list-side", ("min-height", "overflow")),
         Pair(".plan-side-card", ".task-workspace-list-side-card", ("padding", "border-radius", "background")),
-        Pair(".plan-side-card.info-active", ".task-workspace-list-side-card.info-active", ("border-color", "background")),
-        Pair(".plan-side-card.info-active h3", ".task-workspace-list-side-card.info-active h3", ("color",)),
+        Pair("#planModal .plan-side-card.info-active", ".task-workspace-list-side-card.info-active", ("border-color", "background")),
+        Pair("#planModal .plan-side-card.info-active h3", ".task-workspace-list-side-card.info-active h3", ("color",)),
         Pair(
             ".plan-add-task-footer",
             ".task-workspace-add-task-footer",
