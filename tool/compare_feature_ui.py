@@ -216,6 +216,11 @@ TASK_EDITOR = PanelSpec(
             ".task-workspace-path-row input",
             ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size"),
         ),
+        Pair(
+            "#newTaskModal .task-upload-btn",
+            ".task-workspace-upload",
+            ("border-color", "background", "color"),
+        ),
         Pair(".workspace-option", ".task-workspace-workspace-option", ("min-height", "padding", "border-radius", "background")),
         Pair(".overlay", ".task-workspace-overlay", ("position", "inset", "overflow", "background", "backdrop-filter")),
         Pair(
