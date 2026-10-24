@@ -1842,10 +1842,12 @@ def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> Non
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
-            # Prototype contract: Board single-click always opens Task Info.
+            # Prototype contract: New Board items open the Task List directly.
             page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Smoke task list").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            assert page.locator("#taskWorkspaceOpenList").is_visible()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceFooterInfo").is_visible()
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back"
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
@@ -3700,10 +3702,6 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             page.locator("#tasksListRows .tasks-list-data").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceClose")
-            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
-            page.locator("#tasksListRows .tasks-list-data").dblclick()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.click("#taskWorkspaceFooterInfo")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
@@ -4961,8 +4959,9 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
             assert task_card.count() == 1
             task_card.click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceEditTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            page.locator(".task-workspace-list-row").first.dblclick()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
             assert page.locator("#taskWorkspaceWorkflow").input_value() == str(second_workflow.resolve())
