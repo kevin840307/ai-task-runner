@@ -992,8 +992,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     values.forEach((item, index) => {
       const row = document.createElement("article");
       row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
-      row.classList.toggle("selected", Number(state?.selectedListIndex) === index);
-      row.setAttribute("aria-selected", String(Number(state?.selectedListIndex) === index));
+      row.classList.toggle("selected", Number.isInteger(state?.selectedListIndex) && state.selectedListIndex === index);
+      row.setAttribute("aria-selected", String(Number.isInteger(state?.selectedListIndex) && state.selectedListIndex === index));
       row.addEventListener("click", (event) => {
         if (event.target.closest("button")) return;
         selectTaskListRow(index);
