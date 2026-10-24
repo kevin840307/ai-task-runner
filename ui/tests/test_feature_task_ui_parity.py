@@ -624,6 +624,24 @@ def test_task_list_effective_row_geometry_matches_feature_reference() -> None:
     )
 
 
+def test_task_list_context_menu_matches_feature_reference() -> None:
+    _same(
+        ".task-context-menu",
+        ".task-workspace-context-menu",
+        ("position", "z-index", "width", "padding", "border", "border-radius", "background", "box-shadow"),
+    )
+    _same(".task-context-actions", ".task-workspace-context-actions", ("padding",))
+    _same(
+        ".task-context-menu button",
+        ".task-workspace-context-menu button",
+        ("display", "align-items", "justify-content", "width", "padding", "border", "border-radius", "background", "color", "font-size", "text-align", "cursor"),
+    )
+    _same(".task-context-menu button:disabled", ".task-workspace-context-menu button:disabled", ("opacity", "cursor"))
+    _same(".task-context-menu .danger-item", ".task-workspace-context-menu .danger-item", ("color",))
+    _same(".task-context-menu kbd", ".task-workspace-context-menu kbd", ("font", "color"))
+    _same(".context-separator", ".task-workspace-context-separator", ("height", "margin", "background"))
+
+
 def test_task_list_action_ownership_matches_prototype_html() -> None:
     feature_ids = {
         "planOpenWorkflow": "taskWorkspaceHeaderOpenWorkflow",

@@ -2244,6 +2244,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
+            assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").count() == 1
+            assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").count() == 0
             task_row_geometry = page.locator(".task-workspace-list-row").first.evaluate(
                 """node => {
                     const row = getComputedStyle(node);
@@ -2461,7 +2463,26 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
 
-            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            # Final prototype contract: durable rows collapse Edit/Remove into
+            # one ⋯ action and expose the same action set on right-click.
+            durable_rows = page.locator(".task-workspace-list-row")
+            assert durable_rows.first.locator(".task-workspace-row-edit").count() == 0
+            assert durable_rows.first.locator(".task-workspace-row-more").count() == 1
+            quick_help = page.locator(".task-workspace-list-help").inner_text()
+            assert "Right-click or ⋯ for Info / Workflow / Remove." in quick_help
+            durable_rows.first.locator(".task-workspace-row-more").click()
+            context_menu = page.locator("#taskWorkspaceContextMenu")
+            assert context_menu.is_visible()
+            assert context_menu.get_by_role("button", name="Edit", exact=True).is_enabled()
+            assert context_menu.get_by_role("button", name="Info", exact=True).is_enabled()
+            assert context_menu.get_by_role("button", name="Open Workflow", exact=True).is_enabled()
+            assert context_menu.get_by_role("button", name="Remove", exact=True).is_enabled()
+            page.keyboard.press("Escape")
+            assert context_menu.is_hidden()
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
+            durable_rows.nth(1).click(button="right")
+            assert context_menu.is_visible()
+            context_menu.get_by_role("button", name="Edit", exact=True).click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             editor_geometry = task_workspace_geometry(workspace_route=True)
             page.click("#taskWorkspaceHeaderBack")

@@ -14,6 +14,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   let createMenu = null;
   let createContext = null;
   let createMenuOpenedAt = -Infinity;
+  let taskContextMenu = null;
+  let taskContextState = null;
   let workspaceOptionsToken = 0;
   let taskProjectionToken = 0;
   const byId = (id) => document.getElementById(id);
@@ -53,6 +55,50 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         </footer>
       </section>`;
     document.body.appendChild(overlay);
+    taskContextMenu = document.createElement("div");
+    taskContextMenu.id = "taskWorkspaceContextMenu";
+    taskContextMenu.className = "task-workspace-context-menu";
+    taskContextMenu.hidden = true;
+    taskContextMenu.innerHTML = `
+      <div class="task-workspace-context-actions">
+        <button type="button" data-task-context-action="edit"><span>Edit</span><kbd>↵</kbd></button>
+        <button type="button" data-task-context-action="info"><span>Info</span><kbd>i</kbd></button>
+        <button type="button" data-task-context-action="workflow"><span>Open Workflow</span><kbd>↗</kbd></button>
+        <div class="task-workspace-context-separator"></div>
+        <button type="button" data-task-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
+      </div>`;
+    document.body.appendChild(taskContextMenu);
+    taskContextMenu.querySelectorAll("[data-task-context-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.disabled || !taskContextState) return;
+        const context = { ...taskContextState };
+        const action = button.dataset.taskContextAction;
+        hideTaskContextMenu();
+        if (action === "edit") {
+          editItem(context.index);
+          return;
+        }
+        if (action === "info") {
+          void handleBack();
+          return;
+        }
+        if (action === "workflow") {
+          const draft = editorDraft();
+          const item = draft?.items?.[context.index];
+          const workflow = String(item?.workflow || "").trim();
+          if (workflow) void openWorkflow?.({ workflow, project: String(item?.project || state?.task?.project || "") });
+          return;
+        }
+        if (action === "remove") removeItem(context.index);
+      });
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (!taskContextMenu || taskContextMenu.hidden) return;
+      if (taskContextMenu.contains(event.target) || event.target.closest?.(".task-workspace-row-more")) return;
+      hideTaskContextMenu();
+    });
+    window.addEventListener("resize", hideTaskContextMenu);
+    window.addEventListener("scroll", hideTaskContextMenu, true);
     overlay.addEventListener("mousedown", (event) => {
       if (event.target === overlay) void requestClose();
     });
@@ -83,6 +129,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceHeaderCancel").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceHeaderCreateList").addEventListener("click", () => void saveWorkspace());
     document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && taskContextMenu && !taskContextMenu.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        hideTaskContextMenu();
+        return;
+      }
       if (!overlay || overlay.hidden || event.key !== "Escape") return;
       if (!overlay.contains(event.target)) return;
       const projectDropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
@@ -458,6 +510,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function closeNow({ restore = true } = {}) {
+    hideTaskContextMenu();
     setWorkspaceExpanded(false);
     if (overlay) {
       overlay.classList.remove("open");
@@ -820,6 +873,53 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     renderHeaderActions();
   }
 
+  function hideTaskContextMenu() {
+    if (!taskContextMenu) return;
+    taskContextMenu.hidden = true;
+    taskContextState = null;
+  }
+
+  function setTaskContextAction(name, { visible = true, enabled = true, label = "" } = {}) {
+    const button = taskContextMenu?.querySelector(`[data-task-context-action="${name}"]`);
+    if (!button) return;
+    button.hidden = !visible;
+    button.disabled = !enabled;
+    if (label) {
+      const span = button.querySelector("span");
+      if (span) span.textContent = label;
+    }
+  }
+
+  function positionTaskContextMenu(x, y) {
+    if (!taskContextMenu) return;
+    taskContextMenu.hidden = false;
+    const rect = taskContextMenu.getBoundingClientRect();
+    const width = rect.width || 205;
+    const height = rect.height || 180;
+    taskContextMenu.style.left = Math.min(window.innerWidth - width - 8, Math.max(8, Number(x) || 8)) + "px";
+    taskContextMenu.style.top = Math.min(window.innerHeight - height - 8, Math.max(8, Number(y) || 8)) + "px";
+  }
+
+  function openTaskItemContextMenu(event, index, item, policy, values) {
+    if (state?.kind !== "task") return;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    selectTaskListRow(index);
+    const workflow = String(item?.workflow || "").trim();
+    const canEdit = policy?.editable !== false;
+    const canRemove = canEdit && policy?.restructure !== false && values.length > 1;
+    taskContextState = { index };
+    setTaskContextAction("edit", { visible: true, enabled: canEdit, label: tr("task.edit_action", "Edit") });
+    setTaskContextAction("info", { visible: true, enabled: true, label: tr("task.info_action", "Info") });
+    setTaskContextAction("workflow", {
+      visible: true,
+      enabled: Boolean(workflow && workflow !== "—" && workflow !== "Tasks"),
+      label: tr("task.open_workflow", "Open Workflow"),
+    });
+    setTaskContextAction("remove", { visible: true, enabled: canRemove, label: tr("task.remove", "Remove") });
+    positionTaskContextMenu(event?.clientX, event?.clientY);
+  }
+
   function renderTaskRows(items, { editable = false, itemPolicies = null, onEdit = null, disabledEditReason = "" } = {}) {
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
@@ -848,6 +948,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
         ? String(rowPolicy.state).toUpperCase()
         : "";
+      if (state?.kind === "task") {
+        row.addEventListener("contextmenu", (event) => openTaskItemContextMenu(event, index, item, policy, values));
+      }
 
       if (editable) {
         const grip = document.createElement("span");
@@ -939,24 +1042,49 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           actions.appendChild(stateChip);
         }
 
-        const edit = document.createElement("button");
-        edit.type = "button";
-        edit.className = "task-workspace-row-edit";
-        edit.textContent = tr("task.edit_action", "Edit");
-        edit.disabled = policy.editable === false;
-        edit.title = edit.disabled ? String(policy.reason || disabledEditReason || "") : "";
-        edit.onclick = () => editItem(index);
+        if (state?.kind === "task") {
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "task-workspace-row-more";
+          more.textContent = "⋯";
+          more.title = tr("task.more_actions", "More actions");
+          more.setAttribute("aria-label", tr("task.more_actions", "More actions"));
+          more.onclick = (event) => {
+            const rect = more.getBoundingClientRect();
+            openTaskItemContextMenu(
+              {
+                preventDefault: () => event.preventDefault(),
+                stopPropagation: () => event.stopPropagation(),
+                clientX: rect.right - 4,
+                clientY: rect.bottom + 4,
+              },
+              index,
+              item,
+              policy,
+              values,
+            );
+          };
+          actions.appendChild(more);
+        } else {
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "task-workspace-row-edit";
+          edit.textContent = tr("task.edit_action", "Edit");
+          edit.disabled = policy.editable === false;
+          edit.title = edit.disabled ? String(policy.reason || disabledEditReason || "") : "";
+          edit.onclick = () => editItem(index);
 
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "danger-item";
-        remove.textContent = "×";
-        remove.setAttribute("aria-label", tr("task.remove", "Remove"));
-        remove.disabled = (state?.kind === "task" && values.length <= 1) || policy.restructure === false;
-        remove.title = remove.disabled && policy.reason ? String(policy.reason) : tr("task.remove", "Remove");
-        remove.onclick = () => removeItem(index);
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "danger-item";
+          remove.textContent = "×";
+          remove.setAttribute("aria-label", tr("task.remove", "Remove"));
+          remove.disabled = policy.restructure === false;
+          remove.title = remove.disabled && policy.reason ? String(policy.reason) : tr("task.remove", "Remove");
+          remove.onclick = () => removeItem(index);
 
-        actions.append(edit, remove);
+          actions.append(edit, remove);
+        }
         row.appendChild(actions);
       } else if (typeof onEdit === "function" || disabledEditReason) {
         row.addEventListener("dblclick", (event) => {
@@ -976,17 +1104,42 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           stateChip.textContent = stateLabel;
           actions.appendChild(stateChip);
         }
-        const edit = document.createElement("button");
-        edit.type = "button";
-        edit.className = "task-workspace-durable-edit";
-        edit.textContent = tr("task.edit_action", "Edit");
-        if (disabledEditReason) {
-          edit.disabled = true;
-          edit.title = disabledEditReason;
+        if (state?.kind === "task") {
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "task-workspace-row-more";
+          more.textContent = "⋯";
+          more.title = tr("task.more_actions", "More actions");
+          more.setAttribute("aria-label", tr("task.more_actions", "More actions"));
+          more.onclick = (event) => {
+            const rect = more.getBoundingClientRect();
+            openTaskItemContextMenu(
+              {
+                preventDefault: () => event.preventDefault(),
+                stopPropagation: () => event.stopPropagation(),
+                clientX: rect.right - 4,
+                clientY: rect.bottom + 4,
+              },
+              index,
+              item,
+              policy,
+              values,
+            );
+          };
+          actions.appendChild(more);
         } else {
-          edit.onclick = () => onEdit(index);
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "task-workspace-durable-edit";
+          edit.textContent = tr("task.edit_action", "Edit");
+          if (disabledEditReason) {
+            edit.disabled = true;
+            edit.title = disabledEditReason;
+          } else {
+            edit.onclick = () => onEdit(index);
+          }
+          actions.appendChild(edit);
         }
-        actions.appendChild(edit);
         row.appendChild(actions);
       }
       list.appendChild(row);
@@ -1346,7 +1499,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const firstHelp = document.createElement("p");
     firstHelp.textContent = tr("task.quick_use_select", "Click selects a task · Double-click edits it.");
     const secondHelp = document.createElement("p");
-    secondHelp.textContent = tr("task.quick_use_drag", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
+    secondHelp.textContent = durableTask
+      ? tr("task.quick_use_drag", "Drag the grip to reorder. Right-click or ⋯ for Info / Workflow / Remove.")
+      : tr("task.quick_use_drag_draft", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
 
@@ -2901,6 +3056,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function render() {
     if (!state || !overlay) return;
+    hideTaskContextMenu();
     const shell = byId("taskWorkspaceShell");
     const workspaceRoute = ["editor", "list", "yaml"].includes(String(state.route || ""));
     shell?.classList.toggle("workspace-route", workspaceRoute);

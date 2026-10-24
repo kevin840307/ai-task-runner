@@ -736,3 +736,21 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 @media(prefers-reduced-motion:reduce){
   .task-workspace-shell{transition:none}
 }
+
+/* Final feature Task List row actions: durable Tasks use one shared ⋯ / right-click menu. */
+.task-workspace-context-menu{
+  position:fixed;z-index:320;width:205px;padding:5px;border:1px solid var(--line);
+  border-radius:10px;background:var(--popover-bg);box-shadow:var(--shadow-pop)
+}
+.task-workspace-context-menu[hidden]{display:none}
+.task-workspace-context-actions{padding:5px}
+.task-workspace-context-menu button{
+  display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 8px;
+  border:0;border-radius:7px;background:transparent;color:var(--text);font-size:8.5px;
+  text-align:left;cursor:pointer
+}
+.task-workspace-context-menu button:hover:not(:disabled){background:var(--accent-soft)}
+.task-workspace-context-menu button:disabled{opacity:.38;cursor:not-allowed}
+.task-workspace-context-menu .danger-item{color:#b42318}
+.task-workspace-context-menu kbd{font:700 7px/1 Inter,Segoe UI,sans-serif;color:var(--muted)}
+.task-workspace-context-separator{height:1px;margin:4px 3px;background:#edf0f3}

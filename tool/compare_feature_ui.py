@@ -332,6 +332,21 @@ TASK_LIST = PanelSpec(
         Pair(".plan-page-body", ".task-workspace-list-page", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
         Pair(".plan-side", ".task-workspace-list-side", ("grid-template-columns",), feature_media="max-width:960px", production_media="max-width:960px"),
         Pair("#planModal .plan-page-foot", ".task-workspace-foot", ("display", "justify-content", "gap", "padding", "border-top", "background")),
+        Pair(
+            ".task-context-menu",
+            ".task-workspace-context-menu",
+            ("position", "z-index", "width", "padding", "border", "border-radius", "background", "box-shadow"),
+        ),
+        Pair(".task-context-actions", ".task-workspace-context-actions", ("padding",)),
+        Pair(
+            ".task-context-menu button",
+            ".task-workspace-context-menu button",
+            ("display", "align-items", "justify-content", "width", "padding", "border", "border-radius", "background", "color", "font-size", "text-align", "cursor"),
+        ),
+        Pair(".task-context-menu button:disabled", ".task-workspace-context-menu button:disabled", ("opacity", "cursor")),
+        Pair(".task-context-menu .danger-item", ".task-workspace-context-menu .danger-item", ("color",)),
+        Pair(".task-context-menu kbd", ".task-workspace-context-menu kbd", ("font", "color")),
+        Pair(".context-separator", ".task-workspace-context-separator", ("height", "margin", "background")),
     ),
 )
 
