@@ -529,6 +529,16 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("padding", "border-radius", "background"),
     )
     _same(
+        ".plan-side-card.info-active",
+        ".task-workspace-list-side-card.info-active",
+        ("border-color", "background"),
+    )
+    _same(
+        ".plan-side-card.info-active h3",
+        ".task-workspace-list-side-card.info-active h3",
+        ("color",),
+    )
+    _same(
         ".plan-add-task-footer",
         ".task-workspace-add-task-footer",
         ("width", "min-height", "gap", "margin-top", "border-radius", "font-size"),
