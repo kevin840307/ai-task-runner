@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 14
+    assert len(calls) == 16
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3141,6 +3141,20 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert conflict["recovery_validation_calls"] == 1
     assert conflict["recovery_cleanup"] in {"cleaned", "already_cleaned"}
 
+    auto_always_main = result["auto_always_main_idle"]
+    assert auto_always_main["requested_mode"] == "auto"
+    assert auto_always_main["main_running"] is False
+    assert auto_always_main["auto_workspace_policy"] == "always-main"
+    assert auto_always_main["effective_mode"] == "main"
+    assert auto_always_main["delivery"] == "merged"
+
+    auto_always_worktree = result["auto_always_worktree_idle"]
+    assert auto_always_worktree["requested_mode"] == "auto"
+    assert auto_always_worktree["main_running"] is False
+    assert auto_always_worktree["auto_workspace_policy"] == "always-worktree"
+    assert auto_always_worktree["effective_mode"] == "worktree"
+    assert auto_always_worktree["delivery"] == "merged"
+
     for case_key in (
         "main",
         "worktree",
@@ -3150,6 +3164,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "main_busy_concurrent",
         "auto_always_main_busy_concurrent",
         "main_conflict_recovery",
+        "auto_always_main_idle",
+        "auto_always_worktree_idle",
     ):
         assert result[case_key]["merged_target_head_sha"]
 
@@ -3169,6 +3185,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     main_busy_repo = tmp_path / "rw-12"
     auto_main_busy_repo = tmp_path / "rw-13"
     conflict_repo = tmp_path / "rw-14"
+    auto_always_main_repo = tmp_path / "rw-15"
+    auto_always_worktree_repo = tmp_path / "rw-16"
     for repo in (
         main_repo,
         worktree_repo,
@@ -3178,6 +3196,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         main_busy_repo,
         auto_main_busy_repo,
         conflict_repo,
+        auto_always_main_repo,
+        auto_always_worktree_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     for repo in (source_fail_repo, technical_repo):

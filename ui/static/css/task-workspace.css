@@ -268,7 +268,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   position:relative;display:block;min-height:72px;padding:9px;border:1px solid var(--line);
   border-radius:9px;background:var(--panel);cursor:pointer
 }
-.task-workspace-workspace-option:hover:not(.disabled){border-color:color-mix(in srgb,var(--accent) 36%,var(--line))}
+.task-workspace-workspace-option:hover:not(.disabled){border-color:color-mix(in srgb,var(--accent) 36%,transparent)}
 .task-workspace-workspace-option.selected{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 8%,transparent)}
 .task-workspace-workspace-option.disabled{opacity:.5;cursor:not-allowed;background:var(--panel-2)}
 .task-workspace-workspace-option input{position:absolute;opacity:0;pointer-events:none}
@@ -631,8 +631,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   margin-top:2px;border:1px dashed var(--line-strong);border-radius:9px;background:var(--panel-2);
   color:var(--accent);font-size:9px;font-weight:850;cursor:pointer
 }
-.task-workspace-add-task-footer:hover:not(:disabled),
-.task-workspace-empty-list-cta:hover:not(:disabled){
+.task-workspace-add-task-footer:hover:not(:disabled){
   border-color:var(--accent);background:var(--accent-softer)
 }
 .task-workspace-add-task-footer:disabled,.task-workspace-empty-list-cta:disabled{cursor:not-allowed;opacity:.5}
@@ -644,6 +643,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 .task-workspace-empty-list-cta strong{font-size:9px}
 .task-workspace-empty-list-cta span{color:var(--accent);font-size:8px;font-weight:850}
+.task-workspace-empty-list-cta:hover:not(:disabled){border-color:var(--accent);background:#f7fcfb}
 
 @media(max-width:960px){
   .task-workspace-list-page{grid-template-columns:1fr}

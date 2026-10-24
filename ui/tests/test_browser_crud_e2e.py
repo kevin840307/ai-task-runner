@@ -1842,12 +1842,10 @@ def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> Non
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
-            # Prototype contract: New Board items open the Task List directly.
+            # Prototype contract: Board single-click always opens Task Info.
             page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Smoke task list").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
-            assert page.locator("#taskWorkspaceFooterInfo").is_visible()
-            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back"
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            assert page.locator("#taskWorkspaceOpenList").is_visible()
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
@@ -3702,6 +3700,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
             page.locator("#tasksListRows .tasks-list-data").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            page.locator("#tasksListRows .tasks-list-data").dblclick()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             page.click("#taskWorkspaceFooterInfo")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
@@ -4959,8 +4961,10 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
             assert task_card.count() == 1
             task_card.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
+            assert page.locator("#taskWorkspaceHeaderBack").is_visible()
             page.locator(".task-workspace-list-row").first.dblclick()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
@@ -6416,6 +6420,15 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     properties,
                 )
 
+            feature_page.locator("#planModal .empty-plan-cta.large").hover()
+            production_page.locator(".task-workspace-empty-list-cta").hover()
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planModal .empty-plan-cta.large",
+                production_page,
+                ".task-workspace-empty-list-cta",
+                ["borderTopColor", "backgroundColor"],
+            )
             feature_page.locator("#planModal .empty-plan-cta.large").click()
             production_page.locator(".task-workspace-empty-list-cta").click()
             feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'New task'")
@@ -6430,6 +6443,15 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             assert feature_page.locator("#planFormList [data-draft-row]").count() == 0
             assert production_page.locator(".task-workspace-list-row").count() == 0
 
+            feature_page.locator("#planModal .empty-plan-cta.large").hover()
+            production_page.locator(".task-workspace-empty-list-cta").hover()
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planModal .empty-plan-cta.large",
+                production_page,
+                ".task-workspace-empty-list-cta",
+                ["borderTopColor", "backgroundColor"],
+            )
             feature_page.locator("#planModal .empty-plan-cta.large").click()
             production_page.locator(".task-workspace-empty-list-cta").click()
             feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'New task'")

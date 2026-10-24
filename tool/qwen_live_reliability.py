@@ -6309,11 +6309,13 @@ def runner_workspace_delivery_probe(
         ("main_busy_concurrent", "main", True, "main", "none", "busy-worktree", True),
         ("auto_always_main_busy_concurrent", "auto", True, "main", "none", "always-main", True),
         ("main_conflict_recovery", "main", False, "main", "conflict", "busy-worktree", False),
+        ("auto_always_main_idle", "auto", False, "main", "none", "always-main", False),
+        ("auto_always_worktree_idle", "auto", False, "worktree", "none", "always-worktree", False),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
-    # Auto policy, allow concurrent Main. The last two cases explicitly cross
-    # the concurrency settings into the real WorkspaceManager + MergeManager
-    # delivery path instead of testing the resolver in isolation.
+    # Auto policy and concurrency are crossed through the real
+    # WorkspaceManager + Runner + MergeManager delivery path instead of only
+    # testing the resolver in isolation.
     cases = tuple(
         row if len(row) == 7 else (*row, "busy-worktree", False)
         for row in cases
