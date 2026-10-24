@@ -3544,9 +3544,42 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
             assert page.locator("#tasksBoardNewCount").inner_text() == "1"
             assert page.locator("#tasksProjectFilterSummary").inner_text() in {"All", "Fixture Project"}
+
+            # Prototype parity: Board cards and List rows expose the same
+            # list-level right-click menu.
+            board_card = page.locator("#tasksBoardNew .tasks-board-card").first
+            board_card.click(button="right")
+            board_menu = page.locator("#tasksBoardContextMenu")
+            assert board_menu.is_visible()
+            assert board_menu.get_by_role("button").all_inner_texts() == [
+                "Open list\n↵", "Rename\nF2", "Info\ni", "Delete\nDel",
+            ]
+            page.keyboard.press("Escape")
+            assert board_menu.is_hidden()
+
             page.locator("[data-tasks-view-mode='list']").click()
             assert page.locator("#tasksListRows .tasks-list-data").count() == 1
-            page.locator("#tasksListRows .tasks-list-data").click()
+            task_list_row = page.locator("#tasksListRows .tasks-list-data").first
+            task_list_row.click(button="right")
+            assert board_menu.is_visible()
+            assert board_menu.get_by_role("button", name="Rename", exact=True).is_enabled()
+            assert board_menu.get_by_role("button", name="Delete", exact=True).is_enabled()
+            board_menu.get_by_role("button", name="Info", exact=True).click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            task_list_row.click(button="right")
+            board_menu.get_by_role("button", name="Rename", exact=True).click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator("#taskWorkspaceTitle").get_attribute("contenteditable") == "true"
+            page.keyboard.press("Escape")
+            assert page.locator("#taskWorkspaceTitle").get_attribute("contenteditable") == "false"
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
+            task_list_row.click(button="right")
+            board_menu.get_by_role("button", name="Open list", exact=True).click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
             assert page.locator("#taskWorkspaceFooterInfo").is_visible()

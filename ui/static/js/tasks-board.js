@@ -15,6 +15,9 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
   let runningOnly = false;
   let refreshToken = 0;
   let draggedTaskId = "";
+  let taskContextMenu = null;
+  let taskContextTask = null;
+  let taskContextReturnFocus = null;
   const byId = (id) => document.getElementById(id);
   const requestId = (prefix) => prefix + ":" + (globalThis.crypto?.randomUUID?.() || (Date.now() + "-" + Math.random().toString(16).slice(2)));
 
@@ -184,6 +187,128 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     return String(task?._project_name || "Project");
   }
 
+  function hideTaskContextMenu() {
+    if (taskContextMenu) taskContextMenu.hidden = true;
+    taskContextTask = null;
+    taskContextReturnFocus = null;
+  }
+
+  function taskContextPolicy(task) {
+    const policy = task?.edit_policy && typeof task.edit_policy === "object" ? task.edit_policy : {};
+    return {
+      canRename: policy.can_rename === true || policy.editable === true,
+      canDelete: policy.can_delete === true,
+    };
+  }
+
+  async function handleTaskContextAction(action) {
+    const task = taskContextTask;
+    const returnFocus = taskContextReturnFocus;
+    hideTaskContextMenu();
+    if (!task) return;
+
+    if (action === "open") {
+      await openTask?.(task, { returnFocus, route: "list" });
+      return;
+    }
+    if (action === "info") {
+      await openTask?.(task, { returnFocus, route: "info" });
+      return;
+    }
+    if (action === "rename") {
+      if (!taskContextPolicy(task).canRename) return;
+      await openTask?.(task, { returnFocus, route: "list" });
+      const rename = byId("taskWorkspaceRenameList");
+      if (rename && !rename.hidden && !rename.disabled) rename.click();
+      return;
+    }
+    if (action !== "remove" || !taskContextPolicy(task).canDelete) return;
+
+    const confirmed = await confirmDialog?.({
+      title: "Delete Task?",
+      message: "This deletes the durable Task record. It does not delete Project files.",
+      details: [
+        { label: "Task ID:", value: String(task.task_id || "") },
+        { label: "Name:", value: String(task.title || "") },
+        { label: "Project:", value: String(task.project || "") },
+      ],
+      confirmLabel: "Delete Task",
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await api("/api/tasks/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          project: String(task.project || ""),
+          task_id: String(task.task_id || ""),
+          request_id: "task-delete-" + String(task.task_id || ""),
+        }),
+        timeoutMs: 15000,
+      });
+      showToast?.("Task deleted");
+      await refresh();
+    } catch (error) {
+      showError?.(error?.message || String(error), "Delete Task failed");
+    }
+  }
+
+  function ensureTaskContextMenu() {
+    if (taskContextMenu) return taskContextMenu;
+    taskContextMenu = document.createElement("div");
+    taskContextMenu.id = "tasksBoardContextMenu";
+    taskContextMenu.className = "task-workspace-context-menu tasks-board-context-menu";
+    taskContextMenu.hidden = true;
+    taskContextMenu.setAttribute("role", "menu");
+    taskContextMenu.innerHTML = `
+      <div class="task-workspace-context-actions">
+        <button type="button" data-tasks-context-action="open"><span>Open list</span><kbd>↵</kbd></button>
+        <button type="button" data-tasks-context-action="rename"><span>Rename</span><kbd>F2</kbd></button>
+        <button type="button" data-tasks-context-action="info"><span>Info</span><kbd>i</kbd></button>
+        <div class="task-workspace-context-separator"></div>
+        <button type="button" data-tasks-context-action="remove" class="danger-item"><span>Delete</span><kbd>Del</kbd></button>
+      </div>`;
+    document.body.appendChild(taskContextMenu);
+    taskContextMenu.querySelectorAll("[data-tasks-context-action]").forEach((button) => {
+      button.addEventListener("click", () => void handleTaskContextAction(button.dataset.tasksContextAction));
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (!taskContextMenu || taskContextMenu.hidden || taskContextMenu.contains(event.target)) return;
+      hideTaskContextMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !taskContextMenu || taskContextMenu.hidden) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      hideTaskContextMenu();
+      taskContextReturnFocus?.focus?.({ preventScroll: true });
+    });
+    window.addEventListener("resize", hideTaskContextMenu);
+    window.addEventListener("scroll", hideTaskContextMenu, true);
+    return taskContextMenu;
+  }
+
+  function openTaskContextMenu(event, task, returnFocus) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const menu = ensureTaskContextMenu();
+    taskContextTask = task;
+    taskContextReturnFocus = returnFocus || null;
+    const policy = taskContextPolicy(task);
+    const rename = menu.querySelector('[data-tasks-context-action="rename"]');
+    const remove = menu.querySelector('[data-tasks-context-action="remove"]');
+    if (rename) rename.disabled = !policy.canRename;
+    if (remove) remove.disabled = !policy.canDelete;
+    menu.hidden = false;
+    const width = 205;
+    const height = 220;
+    const x = Number(event?.clientX) || 8;
+    const y = Number(event?.clientY) || 8;
+    menu.style.left = Math.min(window.innerWidth - width - 8, Math.max(8, x)) + "px";
+    menu.style.top = Math.min(window.innerHeight - height - 8, Math.max(8, y)) + "px";
+  }
+
   function taskCard(task) {
     const button = document.createElement("button");
     button.type = "button";
@@ -268,6 +393,9 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
           route: String(task?.status || "") === "new" ? "list" : "info",
         });
       }
+    });
+    button.addEventListener("contextmenu", (event) => {
+      if (!button.classList.contains("dragging")) openTaskContextMenu(event, task, button);
     });
     button.addEventListener("dragstart", (event) => {
       draggedTaskId = String(task.task_id || "");
@@ -423,11 +551,13 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
         returnFocus: button,
         route: "list",
       }));
+      button.addEventListener("contextmenu", (event) => openTaskContextMenu(event, task, button));
       table.appendChild(button);
     }
     root.appendChild(table);
   }
   function render() {
+    hideTaskContextMenu();
     renderFilter();
     renderRunningState();
     const board = byId("tasksBoardColumns");
