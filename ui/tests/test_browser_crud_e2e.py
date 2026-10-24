@@ -5937,6 +5937,12 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
         )
         state.tasks._workflow_requirements = state._task_workflow_requirements
         state.task_drafts._workflow_requirements = state._task_workflow_requirements
+        # Keep + New deterministic: this parity test adds validator-heavy
+        # Workflows only to compare controls. Task List creation must still
+        # inherit the Project's canonical saved Workflow rather than whichever
+        # catalog row happens to sort first.
+        default_workflow = root / "runner" / "assets" / "workflows" / "workflow.yaml"
+        state.project_preferences.update(root, {"workflow": str(default_workflow)})
 
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
@@ -6426,6 +6432,9 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
 
             feature_page.locator("#planModal .empty-plan-cta.large").click()
             production_page.locator(".task-workspace-empty-list-cta").click()
+            feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'New task'")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert production_page.locator("#taskWorkspaceWorkflow").input_value() == str(default_workflow)
             feature_page.fill("#newTaskTitle", "Parity child")
             feature_page.fill("#newTaskModal .task-primary-source .task-source-mode-panel>textarea", "Parity child prompt")
             production_page.fill("#taskWorkspaceItemTitle", "Parity child")

@@ -695,14 +695,14 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 /* Feature drawer header action group: List owns actions in the shared shell. */
 .task-workspace-head{
-  display:flex;align-items:center;gap:8px
+  display:flex;align-items:center;gap:8px;min-width:0
 }
 .task-workspace-heading{flex:1 1 auto;min-width:0}
 .task-workspace-title-edit{display:grid;place-items:center;width:25px;height:25px;flex:0 0 25px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer}
 .task-workspace-title-edit:hover{background:var(--accent-soft);color:var(--accent-dark)}
 .task-workspace-title-edit:disabled{display:none}
 #taskWorkspaceTitle[contenteditable="true"]{max-width:520px;padding:2px 5px;border:1px solid color-mix(in srgb,var(--accent) 60%,var(--line));border-radius:6px;background:var(--input-bg);outline:none;overflow:visible;text-overflow:clip}
-.task-workspace-back,.task-workspace-expand,.task-workspace-close{flex:0 0 30px}
+.task-workspace-back,.task-workspace-expand,.task-workspace-close{display:grid;place-items:center;flex:0 0 30px}
 .task-workspace-header-actions{
   display:flex;align-items:center;gap:5px;min-width:0;flex:0 0 auto
 }
