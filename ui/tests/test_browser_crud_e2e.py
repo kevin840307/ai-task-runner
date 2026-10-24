@@ -2497,7 +2497,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
             inspector = page.locator(".task-workspace-list-side-card.info-active")
             assert inspector.is_visible()
-            assert inspector.locator("h3").inner_text() == "Task info"
+            assert inspector.locator("h3").inner_text() == "TASK INFO"
             inspector_labels = inspector.locator(".task-workspace-list-kv>span").all_inner_texts()
             assert inspector_labels == [
                 "Task", "Status", "Project", "Workflow", "Prompt",
