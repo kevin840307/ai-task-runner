@@ -3010,7 +3010,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 5
+    assert len(calls) == 6
     assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"
@@ -3032,7 +3032,25 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert result["worktree_target_advance"]["validation_verdict"] == "PASS"
     assert result["worktree_target_advance"]["validation_calls"] == 1
 
-    for case_key in ("main", "worktree", "auto_idle", "auto_busy", "worktree_target_advance"):
+    conflict = result["worktree_conflict_recovery"]
+    assert conflict["requested_mode"] == "worktree"
+    assert conflict["effective_mode"] == "worktree"
+    assert conflict["delivery"] == "conflict"
+    assert conflict["conflict_files"] == ["health.txt"]
+    assert conflict["recovery"] == "merged"
+    assert conflict["recovery_validation_required"] is True
+    assert conflict["recovery_validation_verdict"] == "PASS"
+    assert conflict["recovery_validation_calls"] == 1
+    assert conflict["recovery_cleanup"] in {"cleaned", "already_cleaned"}
+
+    for case_key in (
+        "main",
+        "worktree",
+        "auto_idle",
+        "auto_busy",
+        "worktree_target_advance",
+        "worktree_conflict_recovery",
+    ):
         assert result[case_key]["merged_target_head_sha"]
 
     main_repo = tmp_path / "runner-workspace-main-probe"
@@ -3040,9 +3058,18 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
     auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
     target_advance_repo = tmp_path / "runner-workspace-worktree-target-advance-probe"
-    for repo in (main_repo, worktree_repo, auto_idle_repo, auto_busy_repo, target_advance_repo):
+    conflict_repo = tmp_path / "runner-workspace-worktree-conflict-recovery-probe"
+    for repo in (
+        main_repo,
+        worktree_repo,
+        auto_idle_repo,
+        auto_busy_repo,
+        target_advance_repo,
+        conflict_repo,
+    ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     assert (target_advance_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert (conflict_repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
 
 
 def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():

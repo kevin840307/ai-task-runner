@@ -5993,14 +5993,15 @@ def runner_workspace_delivery_probe(
     from workspace import MergeManager, WorkspaceManager
 
     cases = (
-        ("main", "main", False, "main", False),
-        ("worktree", "worktree", False, "worktree", False),
-        ("auto_idle", "auto", False, "main", False),
-        ("auto_busy", "auto", True, "worktree", False),
-        ("worktree_target_advance", "worktree", False, "worktree", True),
+        ("main", "main", False, "main", "none"),
+        ("worktree", "worktree", False, "worktree", "none"),
+        ("auto_idle", "auto", False, "main", "none"),
+        ("auto_busy", "auto", True, "worktree", "none"),
+        ("worktree_target_advance", "worktree", False, "worktree", "advance"),
+        ("worktree_conflict_recovery", "worktree", False, "worktree", "conflict"),
     )
     results: dict[str, object] = {}
-    for case_key, requested_mode, main_running, expected_mode, target_advance in cases:
+    for case_key, requested_mode, main_running, expected_mode, target_mutation in cases:
         case_name = f"runner-workspace-{case_key.replace('_', '-')}-probe"
         repo = _create_delivery_probe_repo(root, case_name)
         (repo / "prompt.md").write_text(
@@ -6088,7 +6089,7 @@ def runner_workspace_delivery_probe(
 
         validation_calls = 0
         validate_delivery = None
-        if target_advance:
+        if target_mutation == "advance":
             (repo / "target-side.txt").write_text("advanced target\n", encoding="utf-8")
             _delivery_git(repo, "add", "target-side.txt")
             _delivery_git(repo, "commit", "-m", "advance target during Task execution")
@@ -6106,36 +6107,142 @@ def runner_workspace_delivery_probe(
                     == "advanced target\n"
                 )
                 return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
+        elif target_mutation == "conflict":
+            (repo / "health.txt").write_text("target-conflict\n", encoding="utf-8")
+            _delivery_git(repo, "add", "health.txt")
+            _delivery_git(repo, "commit", "-m", "conflict with Task output")
+            result["target_conflict_head_sha"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
 
-        merged = MergeManager().merge(prepared, snapshot, validate=validate_delivery)
-        if merged.status != "merged":
-            raise RuntimeError(
-                "Runner/workspace delivery failed: "
-                f"case={case_key} mode={prepared.effective_mode} "
-                f"{merged.status} {merged.detail}"
-            )
-        target = repo / "health.txt"
-        if (
-            not target.is_file()
-            or target.read_text(encoding="utf-8") != EXPECTED
-        ):
-            raise RuntimeError(
-                "Runner/workspace delivery did not publish the validated result"
-            )
-        result["delivery"] = merged.status
-        result["merged_target_head_sha"] = merged.merged_target_head_sha
-        result["validation_required"] = merged.validation_required
-        result["validation_verdict"] = merged.verdict
-        result["validation_calls"] = validation_calls
-        if target_advance:
-            if not merged.validation_required or merged.verdict != "PASS":
+        merge_manager = MergeManager()
+        merged = merge_manager.merge(prepared, snapshot, validate=validate_delivery)
+
+        if target_mutation == "conflict":
+            if (
+                merged.status != "conflict"
+                or not merged.real_merge_failure
+                or "health.txt" not in merged.conflict_files
+            ):
                 raise RuntimeError(
-                    "Runner/workspace target-advance merge skipped required validation"
+                    "Runner/workspace conflict cross-case mismatch: "
+                    f"status={merged.status} files={merged.conflict_files}"
                 )
-            if validation_calls != 1:
+            if (repo / "health.txt").read_text(encoding="utf-8") != "target-conflict\n":
+                raise RuntimeError("Runner/workspace conflict mutated target content")
+            if retained.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError("Runner/workspace conflict mutated retained Task output")
+
+            patch = manager.recovery_patch(prepared, snapshot)
+            if "health.txt" not in patch or EXPECTED not in patch:
+                raise RuntimeError("Runner/workspace conflict recovery patch lost Task output")
+            recovery = manager.prepare_recovery(
+                prepared,
+                snapshot,
+                failure_number=1,
+            )
+            if recovery.task_base_sha != result["target_conflict_head_sha"]:
                 raise RuntimeError(
-                    "Runner/workspace target-advance merge must validate exactly once"
+                    "Runner/workspace recovery did not start from latest target HEAD"
                 )
+            (recovery.project_root / "health.txt").write_text(
+                EXPECTED, encoding="utf-8"
+            )
+            recovery_snapshot = manager.snapshot_result(recovery)
+
+            # Advance target again on a distinct path so recovery delivery must
+            # validate the merged tree, not only resolve the original conflict.
+            (repo / "recovery-target-side.txt").write_text(
+                "advanced during recovery\n", encoding="utf-8"
+            )
+            _delivery_git(repo, "add", "recovery-target-side.txt")
+            _delivery_git(repo, "commit", "-m", "advance target during recovery")
+            recovery_validation_calls = 0
+
+            def validate_recovery(project: Path) -> str:
+                nonlocal recovery_validation_calls
+                recovery_validation_calls += 1
+                healthy = (
+                    (project / "health.txt").is_file()
+                    and (project / "health.txt").read_text(encoding="utf-8") == EXPECTED
+                )
+                target_preserved = (
+                    (project / "recovery-target-side.txt").is_file()
+                    and (project / "recovery-target-side.txt").read_text(encoding="utf-8")
+                    == "advanced during recovery\n"
+                )
+                return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
+
+            recovery_merged = merge_manager.merge(
+                recovery,
+                recovery_snapshot,
+                validate=validate_recovery,
+            )
+            if (
+                recovery_merged.status != "merged"
+                or not recovery_merged.validation_required
+                or recovery_merged.verdict != "PASS"
+                or recovery_validation_calls != 1
+            ):
+                raise RuntimeError(
+                    "Runner/workspace recovery merge did not close with one validation: "
+                    f"status={recovery_merged.status} "
+                    f"validation={recovery_merged.validation_required} "
+                    f"verdict={recovery_merged.verdict} "
+                    f"calls={recovery_validation_calls}"
+                )
+            target = repo / "health.txt"
+            if not target.is_file() or target.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace recovery did not publish the Task result"
+                )
+            result.update(
+                {
+                    "delivery": merged.status,
+                    "conflict_files": list(merged.conflict_files),
+                    "recovery": recovery_merged.status,
+                    "recovery_validation_required": recovery_merged.validation_required,
+                    "recovery_validation_verdict": recovery_merged.verdict,
+                    "recovery_validation_calls": recovery_validation_calls,
+                    "merged_target_head_sha": recovery_merged.merged_target_head_sha,
+                }
+            )
+            recovery_cleanup = manager.cleanup(recovery)
+            if recovery_cleanup.status not in {"cleaned", "already_cleaned"}:
+                raise RuntimeError(
+                    "Runner/workspace recovery cleanup failed: "
+                    f"{recovery_cleanup.status}"
+                )
+            result["recovery_cleanup"] = recovery_cleanup.status
+        else:
+            if merged.status != "merged":
+                raise RuntimeError(
+                    "Runner/workspace delivery failed: "
+                    f"case={case_key} mode={prepared.effective_mode} "
+                    f"{merged.status} {merged.detail}"
+                )
+            target = repo / "health.txt"
+            if (
+                not target.is_file()
+                or target.read_text(encoding="utf-8") != EXPECTED
+            ):
+                raise RuntimeError(
+                    "Runner/workspace delivery did not publish the validated result"
+                )
+            result["delivery"] = merged.status
+            result["merged_target_head_sha"] = merged.merged_target_head_sha
+            result["validation_required"] = merged.validation_required
+            result["validation_verdict"] = merged.verdict
+            result["validation_calls"] = validation_calls
+            if target_mutation == "advance":
+                if not merged.validation_required or merged.verdict != "PASS":
+                    raise RuntimeError(
+                        "Runner/workspace target-advance merge skipped required validation"
+                    )
+                if validation_calls != 1:
+                    raise RuntimeError(
+                        "Runner/workspace target-advance merge must validate exactly once"
+                    )
 
         cleanup = manager.cleanup(prepared)
         if cleanup.status not in {"cleaned", "already_cleaned"}:
@@ -6377,7 +6484,7 @@ def main() -> int:
             )
             print_probe_pass(
                 "runner-workspace-delivery",
-                "real Runner × owned Worktree × retain/Main merge cross probe",
+                "real Runner × Main/Worktree × target-advance/conflict/recovery merge cross probe",
             )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
