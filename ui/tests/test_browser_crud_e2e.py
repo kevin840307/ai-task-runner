@@ -5926,8 +5926,11 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             assert feature_page.locator("#taskAiFile").input_value() == ""
             assert production_page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
 
-            feature_page.locator("#newTaskWorkspace input[name='workspaceMode'][value='worktree']").check()
-            production_page.locator("[data-workspace-option='worktree'] input[type='radio']").check()
+            # Click the visible option cards, matching actual user interaction.
+            # The prototype radio is intentionally covered by its label content,
+            # so direct input.check() bypasses the surface we are comparing.
+            feature_page.locator("#newTaskWorkspace .workspace-option.worktree-option").click()
+            production_page.locator("[data-workspace-option='worktree']").click()
             feature_page.wait_for_function("document.querySelector('#newTaskWorkspace input[name=\"workspaceMode\"][value=\"worktree\"]')?.checked === true")
             production_page.wait_for_function("document.querySelector('[data-workspace-option=\"worktree\"] input')?.checked === true")
             assert "selected" in (feature_page.locator("#newTaskWorkspace .workspace-option.worktree-option").get_attribute("class") or "")

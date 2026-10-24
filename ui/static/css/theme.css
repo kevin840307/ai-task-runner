@@ -206,7 +206,7 @@ html[data-appearance] button:hover:not(:disabled):not(.primary) { border-color: 
 html[data-appearance] .task-workspace-shell.task-editor-route .task-workspace-upload {
   background: var(--accent-soft);
   color: var(--accent-dark);
-  border-color: color-mix(in srgb, var(--accent) 54%, var(--line));
+  border-color: color-mix(in srgb,var(--accent) 54%,var(--line));
 }
 html[data-appearance] .task-workspace-shell.task-editor-route .task-workspace-upload:hover:not(:disabled) {
   background: var(--accent-softer);
