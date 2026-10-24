@@ -5842,11 +5842,13 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "task-side\n", encoding="utf-8"
     )
     snapshot_history = manager_history.snapshot_result(prepared_history)
-    empty_tree = _delivery_git(repo_history, "mktree").stdout.strip()
+    rewritten_tree = _delivery_git(
+        repo_history, "rev-parse", "HEAD^{tree}"
+    ).stdout.strip()
     rewritten = _delivery_git(
         repo_history,
         "commit-tree",
-        empty_tree,
+        rewritten_tree,
         "-m",
         "rewritten target",
     ).stdout.strip()
