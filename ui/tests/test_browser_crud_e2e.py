@@ -2246,6 +2246,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-list-row").count() == 3
             assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").count() == 1
             assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").count() == 0
+            assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-drag-grip").inner_text() == "⋮⋮"
             task_row_geometry = page.locator(".task-workspace-list-row").first.evaluate(
                 """node => {
                     const row = getComputedStyle(node);
@@ -2468,6 +2469,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             durable_rows = page.locator(".task-workspace-list-row")
             assert durable_rows.first.locator(".task-workspace-row-edit").count() == 0
             assert durable_rows.first.locator(".task-workspace-row-more").count() == 1
+            assert durable_rows.first.locator(".task-workspace-drag-grip").inner_text() == "⠿"
             quick_help = page.locator(".task-workspace-list-help").inner_text()
             assert "Right-click or ⋯ for Info / Workflow / Remove." in quick_help
             durable_rows.first.locator(".task-workspace-row-more").click()

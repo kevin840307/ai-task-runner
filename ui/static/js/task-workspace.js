@@ -956,7 +956,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         const grip = document.createElement("span");
         grip.className = "task-workspace-drag-grip";
         grip.setAttribute("aria-hidden", "true");
-        grip.textContent = "⋮⋮";
+        grip.textContent = state?.kind === "task" ? "⠿" : "⋮⋮";
         row.appendChild(grip);
         row.draggable = policy.restructure !== false;
         row.tabIndex = 0;
