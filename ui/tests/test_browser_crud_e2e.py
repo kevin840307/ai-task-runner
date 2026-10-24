@@ -2352,6 +2352,18 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.value.includes('.ai-task-runner')")
             managed_ai_prompt = page.locator("#taskWorkspaceAiValidatorPrompt").input_value()
             assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+
+            # Feature parity: File -> Write/Asset is non-destructive. A staged
+            # custom file must remain usable when the user switches back; only
+            # choosing Default discards the custom AI file.
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='write']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPromptText') !== null")
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == managed_ai_prompt
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
