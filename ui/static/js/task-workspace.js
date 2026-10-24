@@ -1690,14 +1690,34 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     workflow.value = String(item.workflow || "");
     workflow.addEventListener("change", () => {
+      const activeItem = editorDraft()?.items?.[state.index] || item;
+      const source = sourceState(activeItem);
       updateItem(state.index, "workflow", workflow.value);
       const capability = workflowMeta(workflow.value);
-      if (!capability?.requires_python_validator) updateItem(state.index, "validator", "");
+
+      // Match the final feature editor: changing Workflow only changes which
+      // validation controls are visible. File Validator stays available if the
+      // user switches back to a Workflow that needs it.
+      //
+      // AI overrides cannot remain on the canonical item while a Workflow has
+      // no AI validator (the backend correctly rejects that combination), so
+      // keep the alternate values in source-state and restore them when an
+      // AI-capable Workflow is selected again.
       if (!capability?.has_ai_validator) {
         updateItem(state.index, "ai_validator_prompt", "");
         updateItem(state.index, "ai_validator_prompt_file", "");
-        const source = sourceState(editorDraft()?.items?.[state.index] || item);
-        source.aiMode = "default";
+      } else if (source.aiMode === "write") {
+        updateItem(state.index, "ai_validator_prompt", source.aiText);
+        updateItem(state.index, "ai_validator_prompt_file", "");
+      } else if (source.aiMode === "file") {
+        updateItem(state.index, "ai_validator_prompt", "");
+        updateItem(state.index, "ai_validator_prompt_file", source.aiFile);
+      } else if (source.aiMode === "asset") {
+        updateItem(state.index, "ai_validator_prompt", "");
+        updateItem(state.index, "ai_validator_prompt_file", source.aiAsset);
+      } else {
+        updateItem(state.index, "ai_validator_prompt", "");
+        updateItem(state.index, "ai_validator_prompt_file", "");
       }
       render();
     });
