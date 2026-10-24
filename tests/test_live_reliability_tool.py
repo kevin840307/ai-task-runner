@@ -3016,7 +3016,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert result["main"]["delivery"] == "merged"
     assert result["worktree"]["requested_mode"] == "worktree"
     assert result["worktree"]["effective_mode"] == "worktree"
-    assert result["worktree"]["delivery"] == "worktree_ready"
+    assert result["worktree"]["delivery"] == "merged"
     assert result["auto_idle"]["requested_mode"] == "auto"
     assert result["auto_idle"]["main_running"] is False
     assert result["auto_idle"]["effective_mode"] == "main"
@@ -3024,16 +3024,17 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert result["auto_busy"]["requested_mode"] == "auto"
     assert result["auto_busy"]["main_running"] is True
     assert result["auto_busy"]["effective_mode"] == "worktree"
-    assert result["auto_busy"]["delivery"] == "worktree_ready"
+    assert result["auto_busy"]["delivery"] == "merged"
+
+    for case_key in ("main", "worktree", "auto_idle", "auto_busy"):
+        assert result[case_key]["merged_target_head_sha"]
 
     main_repo = tmp_path / "runner-workspace-main-probe"
     worktree_repo = tmp_path / "runner-workspace-worktree-probe"
     auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
     auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
-    assert (main_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
-    assert (auto_idle_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
-    assert not (worktree_repo / "health.txt").exists()
-    assert not (auto_busy_repo / "health.txt").exists()
+    for repo in (main_repo, worktree_repo, auto_idle_repo, auto_busy_repo):
+        assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
 
 
 def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():

@@ -6067,36 +6067,41 @@ def runner_workspace_delivery_probe(
             "effective_mode": prepared.effective_mode,
             "snapshot_sha": snapshot.task_snapshot_sha,
         }
-        if prepared.effective_mode == "main":
-            merged = MergeManager().merge(prepared, snapshot)
-            if merged.status != "merged":
-                raise RuntimeError(
-                    "Runner/workspace Main delivery failed: "
-                    f"{merged.status} {merged.detail}"
-                )
-            target = repo / "health.txt"
-            if (
-                not target.is_file()
-                or target.read_text(encoding="utf-8") != EXPECTED
-            ):
-                raise RuntimeError(
-                    "Runner/workspace Main delivery did not publish the validated result"
-                )
-            result["delivery"] = merged.status
-        else:
-            if (repo / "health.txt").exists():
-                raise RuntimeError(
-                    "Worktree-only Runner delivery leaked into the target Project"
-                )
-            retained = prepared.project_root / "health.txt"
-            if (
-                not retained.is_file()
-                or retained.read_text(encoding="utf-8") != EXPECTED
-            ):
-                raise RuntimeError(
-                    "Worktree-only Runner delivery lost the validated result"
-                )
-            result["delivery"] = "worktree_ready"
+
+        # Cross the full production boundary for every workspace choice:
+        # Runner -> isolated execution root -> durable snapshot -> MergeManager
+        # -> target Project. The target must stay pristine until this point,
+        # including explicit/Auto worktree cases.
+        retained = prepared.project_root / "health.txt"
+        if (
+            not retained.is_file()
+            or retained.read_text(encoding="utf-8") != EXPECTED
+        ):
+            raise RuntimeError(
+                "Runner/workspace delivery lost the validated result before merge"
+            )
+        if (repo / "health.txt").exists():
+            raise RuntimeError(
+                "Runner/workspace delivery leaked into the target Project before merge"
+            )
+
+        merged = MergeManager().merge(prepared, snapshot)
+        if merged.status != "merged":
+            raise RuntimeError(
+                "Runner/workspace delivery failed: "
+                f"case={case_key} mode={prepared.effective_mode} "
+                f"{merged.status} {merged.detail}"
+            )
+        target = repo / "health.txt"
+        if (
+            not target.is_file()
+            or target.read_text(encoding="utf-8") != EXPECTED
+        ):
+            raise RuntimeError(
+                "Runner/workspace delivery did not publish the validated result"
+            )
+        result["delivery"] = merged.status
+        result["merged_target_head_sha"] = merged.merged_target_head_sha
 
         cleanup = manager.cleanup(prepared)
         if cleanup.status not in {"cleaned", "already_cleaned"}:
