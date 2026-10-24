@@ -278,15 +278,25 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       hideTaskContextMenu();
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !taskContextMenu || taskContextMenu.hidden) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const returnFocus = taskContextReturnFocus;
-      hideTaskContextMenu();
-      returnFocus?.focus?.({ preventScroll: true });
+      if (!taskContextMenu || taskContextMenu.hidden) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const returnFocus = taskContextReturnFocus;
+        hideTaskContextMenu();
+        returnFocus?.focus?.({ preventScroll: true });
+        return;
+      }
+      if (["PageUp", "PageDown", "Home", "End", " "].includes(event.key)) hideTaskContextMenu();
     });
     window.addEventListener("resize", hideTaskContextMenu);
-    window.addEventListener("scroll", hideTaskContextMenu, true);
+    // Production refresh replaces Board/List rows while the prototype is
+    // static. A capture-phase scroll listener sees layout-induced descendant
+    // scroll events and used to dismiss this menu without user input. Dismiss
+    // on real scrolling gestures instead; scrollbar clicks are already caught
+    // by the outside-mousedown handler above.
+    document.addEventListener("wheel", hideTaskContextMenu, { capture: true, passive: true });
+    document.addEventListener("touchmove", hideTaskContextMenu, { capture: true, passive: true });
     return taskContextMenu;
   }
 
