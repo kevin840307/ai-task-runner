@@ -950,10 +950,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           : itemPolicies[index])
         : null;
       const policy = rowPolicy || { editable: true, restructure: true, reason: "" };
-      const stateLabel = ["completed", "current", "future"].includes(String(rowPolicy?.state || ""))
-        ? String(rowPolicy.state).toUpperCase()
+      const rowState = String(rowPolicy?.state || "");
+      const stateLabel = ["completed", "current", "future"].includes(rowState)
+        ? rowState.toUpperCase()
         : "";
       if (state?.kind === "task") {
+        row.classList.toggle("done", rowState === "completed");
+        row.classList.toggle("current", rowState === "current");
         row.addEventListener("contextmenu", (event) => openTaskItemContextMenu(event, index, item, policy, values));
       }
 

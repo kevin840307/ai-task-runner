@@ -729,10 +729,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 
 /* Feature Task List row selection / conditional Workflow action. */
+.task-workspace-list-row.current{
+  border-color:color-mix(in srgb,var(--accent) 44%,var(--line));background:var(--accent-softer)
+}
+.task-workspace-list-row.done{opacity:.68}
 .task-workspace-list-row.selected{
   border-color:color-mix(in srgb,var(--accent) 56%,var(--line))!important;
   background:var(--accent-softer)!important;
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)
+}
+html[data-appearance] .task-workspace-list-row.current,
+html[data-appearance] .task-workspace-list-row.selected{
+  background:var(--accent-softer)!important;
+  border-color:color-mix(in srgb,var(--accent) 48%,var(--line))!important
 }
 
 

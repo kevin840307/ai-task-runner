@@ -305,6 +305,18 @@ TASK_LIST = PanelSpec(
         Pair(".draft-plan-row", ".task-workspace-list-row[draggable=\"true\"]", ("transition",)),
         Pair(".plan-row-compact.dragging", ".task-workspace-list-row.dragging", ("opacity",)),
         Pair(".plan-row-compact.drag-over", ".task-workspace-list-row.drag-over", ("outline", "outline-offset")),
+        Pair(".plan-row-compact.current", ".task-workspace-list-row.current", ("border-color", "background")),
+        Pair(".plan-row-compact.done", ".task-workspace-list-row.done", ("opacity",)),
+        Pair(
+            "html[data-appearance] #planModal .plan-row-compact.current",
+            "html[data-appearance] .task-workspace-list-row.current",
+            ("background", "border-color"),
+        ),
+        Pair(
+            "html[data-appearance] #planModal .plan-row-compact.selected",
+            "html[data-appearance] .task-workspace-list-row.selected",
+            ("background", "border-color"),
+        ),
         Pair(
             ".plan-row-head>.drag-grip",
             ".task-workspace-drag-grip",

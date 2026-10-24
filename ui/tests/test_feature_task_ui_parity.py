@@ -554,6 +554,26 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("outline", "outline-offset"),
     )
     _same(
+        ".plan-row-compact.current",
+        ".task-workspace-list-row.current",
+        ("border-color", "background"),
+    )
+    _same(
+        ".plan-row-compact.done",
+        ".task-workspace-list-row.done",
+        ("opacity",),
+    )
+    _same(
+        "html[data-appearance] #planModal .plan-row-compact.current",
+        "html[data-appearance] .task-workspace-list-row.current",
+        ("background", "border-color"),
+    )
+    _same(
+        "html[data-appearance] #planModal .plan-row-compact.selected",
+        "html[data-appearance] .task-workspace-list-row.selected",
+        ("background", "border-color"),
+    )
+    _same(
         ".plan-row-head>.drag-grip",
         ".task-workspace-drag-grip",
         ("width", "height", "margin", "color", "font-size", "font-weight", "line-height", "cursor", "user-select"),

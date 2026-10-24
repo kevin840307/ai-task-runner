@@ -2931,6 +2931,14 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
             assert rows.nth(0).locator(".task-workspace-list-state").inner_text() == "COMPLETED"
             assert rows.nth(1).locator(".task-workspace-list-state").inner_text() == "CURRENT"
             assert rows.nth(2).locator(".task-workspace-list-state").inner_text() == "FUTURE"
+            assert "done" in (rows.nth(0).get_attribute("class") or "").split()
+            assert "current" in (rows.nth(1).get_attribute("class") or "").split()
+            assert "done" not in (rows.nth(2).get_attribute("class") or "").split()
+            assert "current" not in (rows.nth(2).get_attribute("class") or "").split()
+            assert rows.nth(0).evaluate("node => getComputedStyle(node).opacity") == "0.68"
+            current_background = rows.nth(1).evaluate("node => getComputedStyle(node).backgroundColor")
+            future_background = rows.nth(2).evaluate("node => getComputedStyle(node).backgroundColor")
+            assert current_background != future_background
 
             context_menu = page.locator("#taskWorkspaceContextMenu")
             completed = rows.nth(0)
