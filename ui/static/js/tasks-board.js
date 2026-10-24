@@ -260,6 +260,7 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     foot.append(progress, id);
 
     button.append(top, prompt, meta, foot);
+    button.title = String(task?.status || "") === "new" ? "Open Task list" : "Open Task info";
     button.addEventListener("click", () => {
       if (!button.classList.contains("dragging")) {
         openTask?.(task, {
@@ -413,9 +414,14 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       progress.textContent = String(task.completed_item_count || 0) + " / " + String(taskItems(task).length);
 
       button.append(lifecycle, copy, count, runtime, project, progress);
+      button.title = String(task?.status || "") === "new" ? "Open Task list" : "Open Task info";
       button.addEventListener("click", () => openTask?.(task, {
         returnFocus: button,
         route: String(task?.status || "") === "new" ? "list" : "info",
+      }));
+      button.addEventListener("dblclick", () => openTask?.(task, {
+        returnFocus: button,
+        route: "list",
       }));
       table.appendChild(button);
     }

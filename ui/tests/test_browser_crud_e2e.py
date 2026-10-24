@@ -991,6 +991,20 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             assert first_list_row.locator(".tasks-list-count").count() == 1
             assert first_list_row.locator(".tasks-list-project").count() == 1
             assert first_list_row.locator(".tasks-list-runtime").count() == 1
+
+            # Final prototype contract: List rows keep a distinct double-click
+            # shortcut to Task List, while a normal click on non-New Tasks opens Info.
+            paused_list_row = page.locator("#tasksListRows .tasks-list-data").filter(has_text="Paused Reset")
+            assert paused_list_row.get_attribute("title") == "Open Task info"
+            paused_list_row.click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+            paused_list_row.dblclick()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
             page.locator("[data-tasks-view-mode='board']").click()
 
             column_add_box = page.locator("#tasksNewColumnButton").bounding_box()
