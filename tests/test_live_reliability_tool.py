@@ -3136,18 +3136,20 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     ):
         assert result[case_key]["merged_target_head_sha"]
 
-    main_repo = tmp_path / "runner-workspace-main-probe"
-    worktree_repo = tmp_path / "runner-workspace-worktree-probe"
-    auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
-    auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
-    target_advance_repo = tmp_path / "runner-workspace-worktree-target-advance-probe"
-    source_fail_repo = tmp_path / "runner-workspace-worktree-source-fail-probe"
-    technical_repo = tmp_path / "runner-workspace-worktree-technical-error-probe"
-    dirty_repo = tmp_path / "runner-workspace-worktree-dirty-target-wait-probe"
-    history_repo = tmp_path / "runner-workspace-worktree-target-history-wait-probe"
-    unmanaged_repo = tmp_path / "runner-workspace-worktree-unmanaged-target-wait-probe"
-    missing_branch_repo = tmp_path / "runner-workspace-worktree-missing-target-branch-wait-probe"
-    conflict_repo = tmp_path / "runner-workspace-main-conflict-recovery-probe"
+    # Descriptive scenario names are result keys; physical repo names stay
+    # compact so the same real Git/worktree probe is safe on Windows paths.
+    main_repo = tmp_path / "rw-01"
+    worktree_repo = tmp_path / "rw-02"
+    auto_idle_repo = tmp_path / "rw-03"
+    auto_busy_repo = tmp_path / "rw-04"
+    target_advance_repo = tmp_path / "rw-05"
+    source_fail_repo = tmp_path / "rw-06"
+    technical_repo = tmp_path / "rw-07"
+    dirty_repo = tmp_path / "rw-08"
+    history_repo = tmp_path / "rw-09"
+    unmanaged_repo = tmp_path / "rw-10"
+    missing_branch_repo = tmp_path / "rw-11"
+    conflict_repo = tmp_path / "rw-12"
     for repo in (
         main_repo,
         worktree_repo,
