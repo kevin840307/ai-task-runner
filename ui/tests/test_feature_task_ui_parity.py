@@ -186,6 +186,11 @@ def test_new_task_source_cards_match_final_feature_cascade() -> None:
         ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size"),
     )
     _same(
+        "#newTaskModal .task-upload-btn",
+        ".task-workspace-upload",
+        ("border-color", "background", "color"),
+    )
+    _same(
         ".workspace-selector-wrap",
         ".task-workspace-workspace-selector",
         ("margin-top", "padding", "border-radius", "background"),
