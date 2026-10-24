@@ -607,7 +607,8 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert "task-create-menu-icon" in task_workspace_js
     assert "rect.right - width" in task_workspace_js
     assert ".task-workspace-drag-grip" in workspace
-    assert 'row.draggable = policy.restructure !== false' in task_workspace_js
+    assert 'const durableWorkspaceGrip = listWorkspace && state?.kind === "task"' in task_workspace_js
+    assert 'row.draggable = editable && policy.restructure !== false' in task_workspace_js
     assert 'event.altKey && event.key === "ArrowUp"' in task_workspace_js
     assert ".task-workspace-basics" in workspace
     assert ".task-workspace-workspace-options" in workspace
