@@ -5635,6 +5635,19 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             "  - validate_ai\n",
             encoding="utf-8",
         )
+        feature_file_only = root / "runner" / "assets" / "workflows" / "file.yaml"
+        feature_file_only.write_text(
+            "stages:\n"
+            "  planning:\n"
+            "    type: plan\n"
+            "  validate_file:\n"
+            "    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "flow:\n"
+            "  - planning\n"
+            "  - validate_file\n",
+            encoding="utf-8",
+        )
         state.tasks._workflow_requirements = state._task_workflow_requirements
         state.task_drafts._workflow_requirements = state._task_workflow_requirements
 
@@ -5873,11 +5886,32 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 ],
             )
 
-            # Behavior parity: source-mode and Workspace changes must produce
-            # the same retained/reset state as the final feature prototype and
-            # must never redirect focus into the Title field.
+            # Behavior parity: source-mode, Workflow and Workspace changes must
+            # produce the same retained/reset state as the final feature
+            # prototype and must never redirect focus into the Title field.
+            feature_page.fill("#taskValidatorFile", "feature-validator.py")
+            production_page.fill("#taskWorkspaceValidator", "feature-validator.py")
             feature_page.fill("#taskAiFile", "feature-ai-override.md")
             production_page.fill("#taskWorkspaceAiValidatorPrompt", "feature-ai-override.md")
+
+            feature_page.select_option("#newTaskWorkflow", "file.yaml")
+            production_page.select_option("#taskWorkspaceWorkflow", str(feature_file_only))
+            feature_page.wait_for_function(
+                "() => document.querySelector('#newTaskValidationSource .task-file-source') && !document.querySelector('#newTaskValidationSource .task-ai-source')"
+            )
+            production_page.wait_for_function(
+                "() => document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
+            )
+            assert feature_page.locator("#taskValidatorFile").input_value() == "feature-validator.py"
+            assert production_page.locator("#taskWorkspaceValidator").input_value() == "feature-validator.py"
+
+            feature_page.select_option("#newTaskWorkflow", "mixed.yaml")
+            production_page.select_option("#taskWorkspaceWorkflow", str(mixed))
+            feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert feature_page.locator("#taskAiFile").input_value() == "feature-ai-override.md"
+            assert production_page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == "feature-ai-override.md"
+
             feature_page.locator("[data-task-ai-mode][data-source-value='default']").click()
             production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
             feature_page.wait_for_function("document.querySelector('#newTaskModal .task-ai-source [data-source-mode=\"default\"]') !== null")
