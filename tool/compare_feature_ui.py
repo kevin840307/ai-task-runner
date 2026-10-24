@@ -146,7 +146,7 @@ TASK_EDITOR = PanelSpec(
         Pair(
             ".create-type-icon",
             ".task-create-menu-icon",
-            ("display", "place-items", "width", "height", "border-radius", "color", "font-size", "font-weight"),
+            ("display", "place-items", "width", "height", "border-radius", "background", "color", "font-size", "font-weight"),
         ),
         Pair(".create-type-menu strong", ".task-create-menu button strong", ("display", "font-size")),
         Pair(".create-type-menu small", ".task-create-menu button small", ("display", "margin-top", "color", "font-size", "line-height")),

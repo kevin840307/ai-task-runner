@@ -47,7 +47,7 @@
 .task-create-menu button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
 .task-create-menu button+button{margin-top:2px}
 .task-create-menu button:hover,.task-create-menu button:focus-visible{background:var(--accent-soft);outline:none}
-.task-create-menu-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:900}
+.task-create-menu-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#eef6f5;color:var(--accent);font-size:14px;font-weight:900}
 .task-create-menu-copy{min-width:0}
 .task-create-menu button strong{display:block;font-size:9px}
 .task-create-menu button small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.35}

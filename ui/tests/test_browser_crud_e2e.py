@@ -5873,6 +5873,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                         "position", "zIndex", "width",
                         "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
                         "borderTopWidth", "borderTopStyle", "borderRadius",
+                        "backgroundColor", "boxShadow",
                     ],
                 ),
                 (
@@ -5887,7 +5888,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 (
                     "#createTypeMenu [data-create-type='task'] .create-type-icon",
                     "#taskCreateMenu [data-task-create-kind='task'] .task-create-menu-icon",
-                    ["display", "width", "height", "borderRadius", "fontSize", "fontWeight"],
+                    ["display", "width", "height", "borderRadius", "backgroundColor", "color", "fontSize", "fontWeight"],
                 ),
                 (
                     "#createTypeMenu [data-create-type='task'] strong",
