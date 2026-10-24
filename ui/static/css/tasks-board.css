@@ -147,8 +147,9 @@
 .tasks-board-tag{padding:3px 6px;border-radius:999px;background:var(--panel-3);color:var(--muted);font-size:8px;font-weight:800}
 .tasks-board-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding-top:8px;border-top:1px solid var(--line);color:var(--muted);font-size:9px}
 .tasks-board-dropzone.over{background:color-mix(in srgb,var(--accent) 6%,transparent);outline:2px dashed color-mix(in srgb,var(--accent) 25%,transparent);outline-offset:-5px;border-radius:10px}
-.tasks-board-dropzone.allowed{background:color-mix(in srgb,var(--accent) 5%,transparent);outline:2px dashed color-mix(in srgb,var(--accent) 24%,transparent);outline-offset:-5px;border-radius:10px}
-.tasks-board-dropzone.blocked{background:color-mix(in srgb,var(--fail) 3%,transparent);outline:2px dashed color-mix(in srgb,var(--fail) 16%,transparent);outline-offset:-5px;border-radius:10px}
+.tasks-board-dropzone.allowed{background:color-mix(in srgb,var(--accent) 55%,transparent);outline:2px dashed color-mix(in srgb,var(--accent) 34%,transparent);outline-offset:-5px;border-radius:10px}
+.tasks-board-dropzone.blocked{background:rgba(180,35,24,.035);outline:2px dashed rgba(180,35,24,.20);outline-offset:-5px;border-radius:10px;cursor:not-allowed}
+.tasks-board-dropzone.blocked:after{content:"不可移到此狀態";display:block;margin:auto;padding:6px 9px;border-radius:999px;background:var(--danger-soft);color:var(--fail);font-size:9px;font-weight:850}
 
 
 /* Feature List mode columns: status / title / runtime / workflow / progress. */

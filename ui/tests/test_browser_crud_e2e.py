@@ -1006,6 +1006,26 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.wait_for_function("document.querySelector('#taskCreateMenu')?.hidden === true")
 
             closed_card = page.locator("#tasksBoardClosed .tasks-board-card").filter(has_text=closed_move["task_id"])
+
+            # Prototype drag feedback: valid targets are highlighted, invalid
+            # targets are visibly blocked and explain why.
+            closed_card.evaluate(
+                """node => {
+                    const transfer = new DataTransfer();
+                    node.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer:transfer}));
+                }"""
+            )
+            assert "allowed" in (page.locator("#tasksBoardNew").get_attribute("class") or "").split()
+            assert "blocked" in (page.locator("#tasksBoardOngoing").get_attribute("class") or "").split()
+            assert page.locator("#tasksBoardOngoing").evaluate(
+                "node => getComputedStyle(node, '::after').content"
+            ) == '"不可移到此狀態"'
+            closed_card.evaluate(
+                """node => node.dispatchEvent(new DragEvent('dragend', {
+                    bubbles:true, dataTransfer:new DataTransfer()
+                }))"""
+            )
+
             closed_card.evaluate(
                 """node => {
                     const zone = document.querySelector('#tasksBoardNew');
