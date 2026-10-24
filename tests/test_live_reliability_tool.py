@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 6
+    assert len(calls) == 8
     assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"
@@ -3060,6 +3060,26 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert result["worktree_target_advance"]["validation_required"] is True
     assert result["worktree_target_advance"]["validation_verdict"] == "PASS"
     assert result["worktree_target_advance"]["validation_calls"] == 1
+
+    source_fail = result["worktree_source_fail"]
+    assert source_fail["requested_mode"] == "worktree"
+    assert source_fail["effective_mode"] == "worktree"
+    assert source_fail["delivery"] == "source_fail"
+    assert source_fail["validation_required"] is True
+    assert source_fail["validation_verdict"] == "SOURCE_FAIL"
+    assert source_fail["validation_calls"] == 1
+    assert source_fail["real_merge_failure"] is True
+    assert source_fail["target_head_after_delivery"] == source_fail["target_head_before_delivery"]
+
+    technical = result["worktree_technical_error"]
+    assert technical["requested_mode"] == "worktree"
+    assert technical["effective_mode"] == "worktree"
+    assert technical["delivery"] == "technical_error"
+    assert technical["validation_required"] is True
+    assert technical["validation_verdict"] == "TECHNICAL_ERROR"
+    assert technical["validation_calls"] == 1
+    assert technical["real_merge_failure"] is False
+    assert technical["target_head_after_delivery"] == technical["target_head_before_delivery"]
 
     conflict = result["main_conflict_recovery"]
     assert conflict["requested_mode"] == "main"
@@ -3087,6 +3107,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
     auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
     target_advance_repo = tmp_path / "runner-workspace-worktree-target-advance-probe"
+    source_fail_repo = tmp_path / "runner-workspace-worktree-source-fail-probe"
+    technical_repo = tmp_path / "runner-workspace-worktree-technical-error-probe"
     conflict_repo = tmp_path / "runner-workspace-main-conflict-recovery-probe"
     for repo in (
         main_repo,
@@ -3097,6 +3119,9 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         conflict_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    for repo in (source_fail_repo, technical_repo):
+        assert not (repo / "health.txt").exists()
+        assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (target_advance_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (conflict_repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
 
