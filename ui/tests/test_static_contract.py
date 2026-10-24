@@ -371,7 +371,13 @@ class StaticContractTests(unittest.TestCase):
         confirm = dialogs.index('data-dialog-ok class=')
         self.assertLess(cancel, confirm)
         self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
-        self.assertIn('if (event.key === "Escape")', dialogs)
+        self.assertIn('const dialogStack = []', dialogs)
+        self.assertIn('document.addEventListener("keydown", (event) => {', dialogs)
+        self.assertIn('if (event.key !== "Escape") return;', dialogs)
+        self.assertIn('[...dialogStack].reverse().find', dialogs)
+        self.assertIn('event.stopImmediatePropagation()', dialogs)
+        self.assertIn('box.__dialogEscape()', dialogs)
+        self.assertIn('}, true);', dialogs)
         self.assertIn('requestAnimationFrame(() => trigger.focus())', dialogs)
 
     def test_no_static_contract_tests_are_defined_after_main_guard(self):
