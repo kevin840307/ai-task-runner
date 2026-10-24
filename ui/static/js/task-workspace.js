@@ -384,8 +384,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     menu.hidden = false;
     menu.style.visibility = "hidden";
     const rect = anchor?.getBoundingClientRect?.() || { left: 16, top: 16, bottom: 16, right: 160 };
-    const width = menu.offsetWidth || 250;
-    const height = menu.offsetHeight || 112;
+    const width = 250;
+    const height = 112;
     const gap = 6;
     const left = Math.min(window.innerWidth - width - 10, Math.max(10, rect.right - width));
     let top = rect.bottom + gap;
@@ -953,9 +953,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function positionTaskContextMenu(x, y) {
     if (!taskContextMenu) return;
     taskContextMenu.hidden = false;
-    const rect = taskContextMenu.getBoundingClientRect();
-    const width = rect.width || 205;
-    const height = rect.height || 180;
+    const width = 205;
+    const height = 220;
     taskContextMenu.style.left = Math.min(window.innerWidth - width - 8, Math.max(8, Number(x) || 8)) + "px";
     taskContextMenu.style.top = Math.min(window.innerHeight - height - 8, Math.max(8, Number(y) || 8)) + "px";
   }

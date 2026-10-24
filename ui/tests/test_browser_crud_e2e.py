@@ -2540,9 +2540,22 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             ]
             assert page.locator(".task-workspace-list-row.selected").count() == 1
 
-            # Escape only dismisses the context menu; the shared Drawer remains.
-            durable_rows.first.locator(".task-workspace-row-more").click()
+            # Prototype reserves a fixed 205x220 placement box so a right-click
+            # near the viewport edge never jumps lower than the reference UI.
+            durable_rows.first.evaluate(
+                """node => node.dispatchEvent(new MouseEvent('contextmenu', {
+                    bubbles:true, cancelable:true,
+                    clientX:window.innerWidth - 1,
+                    clientY:window.innerHeight - 1
+                }))"""
+            )
             assert context_menu.is_visible()
+            context_box = context_menu.bounding_box()
+            assert context_box
+            assert context_box["x"] <= 1440 - 205 - 8 + 1
+            assert context_box["y"] <= 900 - 220 - 8 + 1
+
+            # Escape only dismisses the context menu; the shared Drawer remains.
             page.keyboard.press("Escape")
             assert context_menu.is_hidden()
             assert page.locator("#taskWorkspaceOverlay").is_visible()

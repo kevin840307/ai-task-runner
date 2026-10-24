@@ -8,11 +8,14 @@ from tool.compare_feature_ui import compare_panel, declarations as _declarations
 ROOT = Path(__file__).resolve().parents[2]
 FEATURE_CSS = (ROOT / "feature" / "ui-prototype" / "styles.css").read_text(encoding="utf-8")
 FEATURE_EDITOR_JS = (ROOT / "feature" / "ui-prototype" / "task-editor.js").read_text(encoding="utf-8")
+FEATURE_WORKSPACE_JS = (ROOT / "feature" / "ui-prototype" / "task-workspace.js").read_text(encoding="utf-8")
+FEATURE_TASKS_PAGE_JS = (ROOT / "feature" / "ui-prototype" / "tasks-page.js").read_text(encoding="utf-8")
 FEATURE_TEMPLATES = (ROOT / "feature" / "ui-prototype" / "task-ui-templates.js").read_text(encoding="utf-8")
 PROTOTYPE_HTML = (ROOT / "feature" / "ai-task-runner-ui-prototype.html").read_text(encoding="utf-8")
 PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
 PRODUCTION_THEME = (ROOT / "ui" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
 PRODUCTION_JS = (ROOT / "ui" / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
+PRODUCTION_TASKS_BOARD_JS = (ROOT / "ui" / "static" / "js" / "tasks-board.js").read_text(encoding="utf-8")
 PRODUCTION_TOKENS = (ROOT / "ui" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
 PRODUCTION_BOOTSTRAP = (ROOT / "ui" / "static" / "js" / "ui-bootstrap.js").read_text(encoding="utf-8")
 PRODUCTION_APP = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
@@ -46,6 +49,33 @@ def test_task_panels_have_no_prototype_geometry_or_motion_drift() -> None:
     for panel in ("task-editor", "task-list", "board"):
         drift.extend(compare_panel(panel, root=ROOT))
     assert drift == [], "\n".join(drift)
+
+
+def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() -> None:
+    # Tasks Board/List owns the New -> Task List shortcut. Generic openTask
+    # remains Info-first so create-from-draft and other entry points do not drift.
+    assert "if(t.status==='new'){openPlanDialog(t.id);return}" in FEATURE_TASKS_PAGE_JS
+    assert 'route: String(task?.status || "") === "new" ? "list" : "info"' in PRODUCTION_TASKS_BOARD_JS
+    assert 'function openTask(task, { returnFocus, workflows = [], prompts = [], route = "info" } = {})' in PRODUCTION_JS
+
+    # Task List Draft retains all three reorder paths from the accepted
+    # prototype: explicit arrows, drag/drop, and Alt+Arrow keyboard movement.
+    assert 'data-draft-up="' in FEATURE_EDITOR_JS
+    assert 'data-draft-down="' in FEATURE_EDITOR_JS
+    assert 'task-workspace-row-up' in PRODUCTION_JS
+    assert 'task-workspace-row-down' in PRODUCTION_JS
+    assert 'event.altKey && event.key === "ArrowUp"' in PRODUCTION_JS
+    assert 'event.altKey && event.key === "ArrowDown"' in PRODUCTION_JS
+
+    # Popover edge placement uses the same reserved geometry as the prototype,
+    # rather than varying with transient DOM-measured content height.
+    assert "const r=anchor.getBoundingClientRect(),w=250,gap=6;" in FEATURE_EDITOR_JS
+    assert "if(top+112>window.innerHeight)" in FEATURE_EDITOR_JS
+    assert "const width = 250;" in PRODUCTION_JS
+    assert "const height = 112;" in PRODUCTION_JS
+    assert "const w=205,h=220;" in FEATURE_WORKSPACE_JS
+    assert "const width = 205;" in PRODUCTION_JS
+    assert "const height = 220;" in PRODUCTION_JS
 
 def test_first_paint_loader_matches_feature_prototype_contract() -> None:
     feature_loader = _declarations(FEATURE_CSS, ".app-bootstrap-loader")
