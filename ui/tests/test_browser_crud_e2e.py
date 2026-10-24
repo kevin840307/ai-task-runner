@@ -5017,6 +5017,14 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "ai-review.md")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
             page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='write']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPromptText') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPromptText").input_value() == ""
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
+            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
 
             if viewport["width"] == 820 and color_scheme == "light":
                 page.evaluate("window.I18n.setLanguage('en')")
@@ -5822,6 +5830,34 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     "backgroundColor", "color", "fontSize", "fontWeight",
                 ],
             )
+
+            # Behavior parity: source-mode and Workspace changes must produce
+            # the same retained/reset state as the final feature prototype and
+            # must never redirect focus into the Title field.
+            feature_page.fill("#taskAiFile", "feature-ai-override.md")
+            production_page.fill("#taskWorkspaceAiValidatorPrompt", "feature-ai-override.md")
+            feature_page.locator("[data-task-ai-mode][data-source-value='default']").click()
+            production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
+            feature_page.wait_for_function("document.querySelector('#newTaskModal .task-ai-source [data-source-mode=\"default\"]') !== null")
+            production_page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
+            assert feature_page.evaluate("document.activeElement?.id !== 'newTaskTitle'")
+            assert production_page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
+
+            feature_page.locator("[data-task-ai-mode][data-source-value='file']").click()
+            production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert feature_page.locator("#taskAiFile").input_value() == ""
+            assert production_page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
+
+            feature_page.locator("#newTaskWorkspace input[name='workspaceMode'][value='worktree']").check()
+            production_page.locator("[data-workspace-option='worktree'] input[type='radio']").check()
+            feature_page.wait_for_function("document.querySelector('#newTaskWorkspace input[name=\"workspaceMode\"][value=\"worktree\"]')?.checked === true")
+            production_page.wait_for_function("document.querySelector('[data-workspace-option=\"worktree\"] input')?.checked === true")
+            assert "selected" in (feature_page.locator("#newTaskWorkspace .workspace-option.worktree-option").get_attribute("class") or "")
+            assert "selected" in (production_page.locator("[data-workspace-option='worktree']").get_attribute("class") or "")
+            assert feature_page.evaluate("document.activeElement?.id !== 'newTaskTitle'")
+            assert production_page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
 
             feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
             production_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
