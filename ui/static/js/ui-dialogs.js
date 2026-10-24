@@ -1,27 +1,34 @@
 (() => {
   "use strict";
+  const dialogStack = [];
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const box = [...dialogStack].reverse().find((item) => item?.isConnected && typeof item.__dialogEscape === "function");
+    if (!box) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    box.__dialogEscape();
+  }, true);
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function shell({ title, message = "" }) {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const box = document.createElement("div"); box.className = "designer-export-box designer-confirm-box";
     box.innerHTML = `<div class="designer-export-card ui-dialog-card" role="dialog" aria-modal="true"><div class="designer-step-card-title"><div><h2 class="ui-dialog-title">${escapeHtml(title)}</h2><p class="designer-form-hint ui-dialog-message">${escapeHtml(message)}</p></div><button type="button" data-dialog-close aria-label="Close" title="Close">×</button></div><div class="ui-dialog-body"></div><div class="designer-footer-actions ui-dialog-actions"></div></div>`;
     box.__dialogTrigger = trigger;
+    dialogStack.push(box);
     document.body.appendChild(box); return box;
   }
   function finishDialog(box, value, resolve) {
     const trigger = box.__dialogTrigger;
+    const index = dialogStack.lastIndexOf(box);
+    if (index >= 0) dialogStack.splice(index, 1);
+    box.__dialogEscape = null;
     box.remove();
     if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
     resolve(value);
   }
   function closeOnEscape(box, close) {
-    box.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-      }
-    });
+    box.__dialogEscape = close;
   }
   function confirm({ title, message, details = [], confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false }) {
     return new Promise((resolve) => {
