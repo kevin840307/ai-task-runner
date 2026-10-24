@@ -92,6 +92,31 @@ def test_new_task_editor_base_geometry_matches_final_feature_cascade() -> None:
         ("grid-template-columns", "gap"),
     )
     _same(
+        ".field",
+        ".task-workspace-basics>.task-workspace-field",
+        ("margin-top",),
+    )
+    _same(
+        "#newTaskModal .task-basics label",
+        ".task-workspace-basics .task-workspace-field>span",
+        ("margin-bottom",),
+    )
+    _same(
+        ".field label",
+        ".task-workspace-basics .task-workspace-field>span",
+        ("font-size", "font-weight", "text-transform", "letter-spacing"),
+    )
+    _same(
+        ".field input",
+        ".task-workspace-basics .task-workspace-field input",
+        ("padding",),
+    )
+    _same(
+        ".field select",
+        ".task-workspace-basics .task-workspace-field select",
+        ("padding",),
+    )
+    _same(
         "#newTaskModal .task-input-grid",
         ".task-workspace-input-grid",
         ("grid-template-columns", "gap", "margin-top"),
