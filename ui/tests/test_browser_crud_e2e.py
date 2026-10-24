@@ -5811,6 +5811,17 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 "[data-task-source-card='ai'] .task-workspace-path-row",
                 ["display", "gap", "alignItems"],
             )
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#taskPickAi",
+                production_page,
+                "[data-task-source-card='ai'] .task-workspace-upload",
+                [
+                    "height", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                    "borderTopWidth", "borderTopStyle", "borderTopColor", "borderRadius",
+                    "backgroundColor", "color", "fontSize", "fontWeight",
+                ],
+            )
 
             feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
             production_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
