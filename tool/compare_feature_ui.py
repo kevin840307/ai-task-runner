@@ -279,7 +279,7 @@ TASK_EDITOR = PanelSpec(
         Pair(".drawerheadtop", ".task-workspace-head", ("display", "gap", "align-items")),
         Pair(".drawerhead h2", ".task-workspace-heading strong", ("font-size", "line-height", "white-space", "overflow", "text-overflow")),
         Pair(".drawer-back", ".task-workspace-back", ("width", "height", "border", "border-radius", "background", "font-size", "font-weight")),
-        Pair(".drawerfoot", ".task-workspace-foot", ("display", "align-items", "justify-content", "flex-wrap", "gap", "height", "min-height", "max-height", "overflow", "padding", "border-top", "background")),
+        Pair(".drawerfoot", ".task-workspace-foot", ("display", "align-items", "justify-content", "flex-wrap", "gap", "height", "min-height", "max-height", "overflow", "padding", "border-top", "background", "position", "width", "z-index")),
         Pair(".drawerfoot .btn", ".task-workspace-foot button", ("height", "min-height", "max-height", "padding-block", "line-height", "white-space")),
         Pair("#newTaskModal>.modal-foot", ".task-workspace-shell.task-editor-route .task-workspace-foot", ("padding",)),
         Pair(".overlay.open .drawer", ".task-workspace-overlay.open .task-workspace-shell", ("transform",)),
@@ -296,6 +296,8 @@ TASK_LIST = PanelSpec(
         Pair(".plan-side", ".task-workspace-list-side", ("display", "gap", "align-content")),
         Pair("#planModal .plan-side", ".task-workspace-list-side", ("min-height", "overflow")),
         Pair(".plan-side-card", ".task-workspace-list-side-card", ("padding", "border-radius", "background")),
+        Pair(".plan-side-card.info-active", ".task-workspace-list-side-card.info-active", ("border-color", "background")),
+        Pair(".plan-side-card.info-active h3", ".task-workspace-list-side-card.info-active h3", ("color",)),
         Pair(
             ".plan-add-task-footer",
             ".task-workspace-add-task-footer",
