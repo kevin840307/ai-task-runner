@@ -3040,6 +3040,12 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     )
 
     assert len(calls) == 12
+    # Physical probe paths must remain compact enough for Windows Git worktree
+    # metadata. Scenario names stay descriptive in result keys instead.
+    for _, project in calls:
+        relative = project.relative_to(tmp_path)
+        assert len(str(relative)) < 96
+        assert all(len(part) < 48 for part in relative.parts)
     assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"

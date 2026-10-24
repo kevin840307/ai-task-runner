@@ -6309,11 +6309,16 @@ def runner_workspace_delivery_probe(
         ("main_conflict_recovery", "main", False, "main", "conflict"),
     )
     results: dict[str, object] = {}
-    for case_key, requested_mode, main_running, expected_mode, target_mutation in cases:
-        case_name = f"runner-workspace-{case_key.replace('_', '-')}-probe"
+    for case_index, (case_key, requested_mode, main_running, expected_mode, target_mutation) in enumerate(cases, start=1):
+        case_label = f"runner-workspace-{case_key.replace('_', '-')}-probe"
+        # Keep physical Git/worktree names deliberately short. Windows Git expands
+        # worktree metadata under .git/worktrees; descriptive case names repeated in
+        # repo/worktree/task-id segments can otherwise fail before the probe reaches
+        # the Runner -> snapshot -> MergeManager behavior it is meant to test.
+        case_name = f"rw-{case_index:02d}"
         repo = _create_delivery_probe_repo(root, case_name)
         (repo / "prompt.md").write_text(
-            case_prompt(PROMPT, case_name),
+            case_prompt(PROMPT, case_label),
             encoding="utf-8",
         )
         (repo / "validation.py").write_text(VALIDATOR, encoding="utf-8")
@@ -6328,11 +6333,11 @@ def runner_workspace_delivery_probe(
         _delivery_git(repo, "commit", "-m", "add Runner reliability fixture")
 
         manager = WorkspaceManager(
-            worktree_root=root / f"{case_name}-worktrees"
+            worktree_root=root / f"rw-wt-{case_index:02d}"
         )
         prepared = manager.prepare(
             repo,
-            task_id=f"live-runner-{case_key.replace('_', '-')}",
+            task_id=f"lr-{case_index:02d}",
             run_number=1,
             requested_mode=requested_mode,
             execution_settings={
@@ -6444,7 +6449,7 @@ def runner_workspace_delivery_probe(
             result["target_head_before_delivery"] = rewritten
         elif target_mutation == "unmanaged":
             _delivery_git(repo, "checkout", "-b", "user/other")
-            user_target = root / f"{case_name}-user-target"
+            user_target = root / f"rw-user-{case_index:02d}"
             _delivery_git(
                 repo,
                 "worktree",

@@ -214,6 +214,24 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return "item-" + (globalThis.crypto?.randomUUID?.() || String(Date.now()) + "-" + Math.random().toString(16).slice(2));
   }
 
+  function renderPreservingActiveControl() {
+    const active = document.activeElement;
+    const activeId = active && typeof active.id === "string" ? active.id : "";
+    const selection = activeId && typeof active?.selectionStart === "number" && typeof active?.selectionEnd === "number"
+      ? { start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection || "none" }
+      : null;
+    render();
+    if (!activeId) return;
+    const next = byId(activeId);
+    if (!next || typeof next.focus !== "function") return;
+    next.focus({ preventScroll: true });
+    if (selection && typeof next.setSelectionRange === "function") {
+      try {
+        next.setSelectionRange(selection.start, selection.end, selection.direction);
+      } catch (_) {}
+    }
+  }
+
   async function loadProjectOptions() {
     if (!state) return;
     const owner = state;
@@ -228,7 +246,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } finally {
       if (state === owner) {
         owner.projectOptionsLoading = false;
-        if (["editor", "list"].includes(state.route)) render();
+        if (["editor", "list"].includes(state.route)) renderPreservingActiveControl();
       }
     }
   }
@@ -257,7 +275,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     } finally {
       if (state === owner && token === workspaceOptionsToken) {
         owner.workspaceOptionsLoading = false;
-        render();
+        renderPreservingActiveControl();
       }
     }
   }
@@ -3656,7 +3674,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const defaultWorkflow = resolveWorkflowSelection(rows, workflow);
     const draft = {
       schema_version: 1,
-      title: list ? "New Task List" : "New Task",
+      title: list ? tr("task.new_list", "New Task List") : tr("task.new", "New Task"),
       project: projectPath,
       items: list ? [] : [blankItem(projectPath, defaultWorkflow)],
     };
@@ -3689,8 +3707,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       projectOptions: [],
       projectOptionsLoading: false,
     };
+    const newDraftState = state;
     showNow();
     render();
+    if (list) {
+      window.setTimeout(() => {
+        if (state !== newDraftState || state.route !== "list" || state.creationKind !== "list") return;
+        const title = byId("taskWorkspaceDraftTitle");
+        if (!title) return;
+        title.focus({ preventScroll: true });
+        title.select?.();
+      }, 0);
+    }
     void loadProjectOptions();
     void loadWorkspaceOptions();
   }

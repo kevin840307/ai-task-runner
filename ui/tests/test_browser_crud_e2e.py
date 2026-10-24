@@ -2264,6 +2264,11 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceDraftTitle'")
+            assert page.evaluate("""() => {
+                const input = document.querySelector('#taskWorkspaceDraftTitle');
+                return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+            }""")
             assert page.locator(".task-workspace-list-row").count() == 0
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
@@ -6290,6 +6295,16 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             production_page.wait_for_function(
                 "document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'"
             )
+            feature_page.wait_for_function("document.activeElement?.id === 'taskListDraftTitle'")
+            production_page.wait_for_function("document.activeElement?.id === 'taskWorkspaceDraftTitle'")
+            assert feature_page.evaluate("""() => {
+                const input = document.querySelector('#taskListDraftTitle');
+                return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+            }""")
+            assert production_page.evaluate("""() => {
+                const input = document.querySelector('#taskWorkspaceDraftTitle');
+                return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+            }""")
 
             list_pairs = [
                 (
@@ -6311,6 +6326,22 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     "#planModal .plan-side>.plan-side-card:first-child",
                     ".task-workspace-list-side>.task-workspace-list-side-card:first-child",
                     ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderRadius"],
+                ),
+                (
+                    "#taskListDraftTitle",
+                    "#taskWorkspaceDraftTitle",
+                    [
+                        "width", "minWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius", "backgroundColor", "color", "fontSize",
+                    ],
+                ),
+                (
+                    "#taskListDraftProject",
+                    "#taskWorkspaceListProject",
+                    [
+                        "width", "minWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius", "backgroundColor", "color", "fontSize",
+                    ],
                 ),
                 (
                     "#planModal .empty-plan-cta.large",

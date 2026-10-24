@@ -498,6 +498,15 @@ def test_new_task_list_child_back_is_owned_by_parent_route() -> None:
 
 
 
+def test_new_task_list_initial_focus_matches_feature_reference() -> None:
+    assert "taskListDraftTitle');input?.focus();input?.select()" in FEATURE_EDITOR_JS
+    assert 'const title = byId("taskWorkspaceDraftTitle");' in PRODUCTION_JS
+    assert 'title.focus({ preventScroll: true });' in PRODUCTION_JS
+    assert 'title.select?.();' in PRODUCTION_JS
+    assert "function renderPreservingActiveControl()" in PRODUCTION_JS
+    assert PRODUCTION_JS.count("renderPreservingActiveControl();") >= 2
+
+
 def test_task_workspace_dynamic_copy_is_language_owned() -> None:
     i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
     for key in (

@@ -326,6 +326,17 @@ TASK_LIST = PanelSpec(
         Pair(".plan-side-card", ".task-workspace-list-side-card", ("padding", "border-radius", "background")),
         Pair("#planModal .plan-side-card.info-active", ".task-workspace-list-side-card.info-active", ("border-color", "background")),
         Pair("#planModal .plan-side-card.info-active h3", ".task-workspace-list-side-card.info-active h3", ("color",)),
+        Pair(".task-list-draft-control", ".task-workspace-list-draft-control", ("display", "min-width")),
+        Pair(
+            ".task-list-draft-control input",
+            ".task-workspace-list-draft-control input",
+            ("width", "min-width", "padding", "border", "border-radius", "background", "color", "font-size"),
+        ),
+        Pair(
+            ".task-list-draft-control select",
+            "#taskWorkspaceListProject",
+            ("width", "min-width", "padding", "border", "border-radius", "background", "color", "font-size"),
+        ),
         Pair(
             ".plan-add-task-footer",
             ".task-workspace-add-task-footer",
