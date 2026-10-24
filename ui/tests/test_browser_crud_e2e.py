@@ -5777,12 +5777,12 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 ),
                 (
                     "#newTaskModal .task-file-source .cap-chip",
-                    "[data-task-source-card='file'] .task-workspace-required-chip",
+                    "[data-task-source-card='validator'] .task-workspace-required-chip",
                     ["fontSize"],
                 ),
                 (
                     "#newTaskModal .task-file-source .source-note",
-                    "[data-task-source-card='file'] .task-workspace-source-note",
+                    "[data-task-source-card='validator'] .task-workspace-source-note",
                     ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "lineHeight"],
                 ),
                 (
