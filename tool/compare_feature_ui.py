@@ -141,6 +141,7 @@ TASK_EDITOR = PanelSpec(
         Pair("#newTaskModal .task-basics", ".task-workspace-basics", ("grid-template-columns", "gap", "align-items")),
         Pair(".field", ".task-workspace-basics>.task-workspace-field", ("margin-top",)),
         Pair("#newTaskModal .task-basics label", ".task-workspace-basics .task-workspace-field>span", ("margin-bottom",)),
+        Pair(".field label", ".task-workspace-basics .task-workspace-field>span", ("font-size", "font-weight", "text-transform", "letter-spacing")),
         Pair(".field input", ".task-workspace-basics .task-workspace-field input", ("padding",)),
         Pair(".field select", ".task-workspace-basics .task-workspace-field select", ("padding",)),
         Pair("#newTaskModal .task-input-grid", ".task-workspace-input-grid", ("grid-template-columns", "gap", "align-items", "margin-top")),
