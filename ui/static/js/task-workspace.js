@@ -2891,7 +2891,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       } else if (editorRoute) {
         byId("taskWorkspaceFooterBack").textContent = state.editorReturn === "list" ? tr("task.back_list", "Back to Task List") : tr("task.back_info", "Back to Info");
         renderEditor();
-        byId("taskWorkspaceItemTitle")?.focus();
       } else if (listRoute) {
         byId("taskWorkspaceFooterBack").textContent = tr("task.back_info", "Back to Info");
         renderDurableTaskList();
@@ -2937,7 +2936,6 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         : tr("task.save_draft", "Save draft");
     byId("taskWorkspaceSave").disabled = Boolean(listRoute && creating && count === 0);
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
-    if (!yamlRoute) (listRoute ? byId("taskWorkspaceDraftTitle") : byId("taskWorkspaceItemTitle"))?.focus();
   }
 
   async function handleBack() {
