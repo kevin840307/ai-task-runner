@@ -3010,15 +3010,30 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 2
+    assert len(calls) == 4
+    assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"
+    assert result["worktree"]["requested_mode"] == "worktree"
     assert result["worktree"]["effective_mode"] == "worktree"
     assert result["worktree"]["delivery"] == "worktree_ready"
+    assert result["auto_idle"]["requested_mode"] == "auto"
+    assert result["auto_idle"]["main_running"] is False
+    assert result["auto_idle"]["effective_mode"] == "main"
+    assert result["auto_idle"]["delivery"] == "merged"
+    assert result["auto_busy"]["requested_mode"] == "auto"
+    assert result["auto_busy"]["main_running"] is True
+    assert result["auto_busy"]["effective_mode"] == "worktree"
+    assert result["auto_busy"]["delivery"] == "worktree_ready"
+
     main_repo = tmp_path / "runner-workspace-main-probe"
     worktree_repo = tmp_path / "runner-workspace-worktree-probe"
+    auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
+    auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
     assert (main_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert (auto_idle_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     assert not (worktree_repo / "health.txt").exists()
+    assert not (auto_busy_repo / "health.txt").exists()
 
 
 def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():
