@@ -207,7 +207,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceProject){order:1}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceWorkflow){order:2}
 .task-workspace-basics .task-workspace-field:has(#taskWorkspaceItemTitle){order:3}
-.task-workspace-basics .task-workspace-field>span{font-size:9px}
+.task-workspace-basics .task-workspace-field>span{margin-bottom:4px;font-size:9px}
 .task-workspace-basics .task-workspace-field input,
 .task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;padding:0 9px;border-radius:8px}
 
@@ -305,7 +305,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   grid-template-columns:minmax(250px,1.45fr) minmax(175px,.92fr) minmax(140px,.72fr)!important;
   gap:8px!important;align-items:start;margin:0
 }
-.task-workspace-basics>.task-workspace-field{min-width:0}
+.task-workspace-basics>.task-workspace-field{min-width:0;margin-top:7px}
 .task-workspace-project-field{grid-column:1!important}
 .task-workspace-workflow-field{grid-column:2!important}
 .task-workspace-title-field{grid-column:3!important}
@@ -314,7 +314,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-basics .task-workspace-field{gap:4px}
 .task-workspace-basics .task-workspace-field>span{font-size:9px}
 .task-workspace-basics .task-workspace-field input,
-.task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;font-size:10px}
+.task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;padding:8px;font-size:10px}
 .task-workspace-workflow-caps{
   display:flex;align-items:center;gap:6px;min-height:20px;margin:5px 0 0;flex-wrap:wrap
 }
