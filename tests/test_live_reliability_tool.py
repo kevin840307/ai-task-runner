@@ -3032,9 +3032,9 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert result["worktree_target_advance"]["validation_verdict"] == "PASS"
     assert result["worktree_target_advance"]["validation_calls"] == 1
 
-    conflict = result["worktree_conflict_recovery"]
-    assert conflict["requested_mode"] == "worktree"
-    assert conflict["effective_mode"] == "worktree"
+    conflict = result["main_conflict_recovery"]
+    assert conflict["requested_mode"] == "main"
+    assert conflict["effective_mode"] == "main"
     assert conflict["delivery"] == "conflict"
     assert conflict["conflict_files"] == ["health.txt"]
     assert conflict["recovery"] == "merged"
@@ -3049,7 +3049,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "auto_idle",
         "auto_busy",
         "worktree_target_advance",
-        "worktree_conflict_recovery",
+        "main_conflict_recovery",
     ):
         assert result[case_key]["merged_target_head_sha"]
 
@@ -3058,7 +3058,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     auto_idle_repo = tmp_path / "runner-workspace-auto-idle-probe"
     auto_busy_repo = tmp_path / "runner-workspace-auto-busy-probe"
     target_advance_repo = tmp_path / "runner-workspace-worktree-target-advance-probe"
-    conflict_repo = tmp_path / "runner-workspace-worktree-conflict-recovery-probe"
+    conflict_repo = tmp_path / "runner-workspace-main-conflict-recovery-probe"
     for repo in (
         main_repo,
         worktree_repo,

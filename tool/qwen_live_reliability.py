@@ -5998,7 +5998,7 @@ def runner_workspace_delivery_probe(
         ("auto_idle", "auto", False, "main", "none"),
         ("auto_busy", "auto", True, "worktree", "none"),
         ("worktree_target_advance", "worktree", False, "worktree", "advance"),
-        ("worktree_conflict_recovery", "worktree", False, "worktree", "conflict"),
+        ("main_conflict_recovery", "main", False, "main", "conflict"),
     )
     results: dict[str, object] = {}
     for case_key, requested_mode, main_running, expected_mode, target_mutation in cases:
@@ -6484,7 +6484,7 @@ def main() -> int:
             )
             print_probe_pass(
                 "runner-workspace-delivery",
-                "real Runner × Main/Worktree × target-advance/conflict/recovery merge cross probe",
+                "real Runner × Worktree target-advance + Main conflict/recovery merge cross probe",
             )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
