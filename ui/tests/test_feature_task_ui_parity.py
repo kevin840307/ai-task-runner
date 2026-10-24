@@ -529,12 +529,12 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("padding", "border-radius", "background"),
     )
     _same(
-        ".plan-side-card.info-active",
+        "#planModal .plan-side-card.info-active",
         ".task-workspace-list-side-card.info-active",
         ("border-color", "background"),
     )
     _same(
-        ".plan-side-card.info-active h3",
+        "#planModal .plan-side-card.info-active h3",
         ".task-workspace-list-side-card.info-active h3",
         ("color",),
     )
