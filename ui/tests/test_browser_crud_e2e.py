@@ -5477,3 +5477,296 @@ def test_workspace_options_follow_backend_resolver_and_merge_failure_count_is_ta
             assert page.locator("#taskWorkspaceMergeFailures").inner_text() == "2"
             assert not errors
             browser.close()
+
+
+def _load_feature_prototype(page, feature_root: Path) -> None:
+    def serve_feature(route) -> None:
+        parsed = urlparse(route.request.url)
+        prefix = "/feature/"
+        if not parsed.path.startswith(prefix):
+            route.abort()
+            return
+        relative = parsed.path[len(prefix):]
+        source = (feature_root / relative).resolve()
+        try:
+            source.relative_to(feature_root.resolve())
+        except ValueError:
+            route.abort()
+            return
+        if not source.is_file():
+            route.fulfill(status=404, body="not found")
+            return
+        content_type = "text/plain"
+        if source.suffix == ".html":
+            content_type = "text/html"
+        elif source.suffix == ".css":
+            content_type = "text/css"
+        elif source.suffix == ".js":
+            content_type = "text/javascript"
+        route.fulfill(
+            status=200,
+            content_type=content_type,
+            body=source.read_text(encoding="utf-8"),
+        )
+
+    page.route("http://prototype.test/feature/**", serve_feature)
+    page.goto(
+        "http://prototype.test/feature/ai-task-runner-ui-prototype.html",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("window.TaskUi && document.querySelector('#newTask')")
+
+
+def _computed_style(page, selector: str, properties: list[str]) -> dict[str, str]:
+    return page.locator(selector).evaluate(
+        """(node, properties) => {
+            const style = getComputedStyle(node);
+            return Object.fromEntries(properties.map((property) => [property, style[property]]));
+        }""",
+        properties,
+    )
+
+
+def _assert_feature_computed_style_parity(
+    feature_page,
+    feature_selector: str,
+    production_page,
+    production_selector: str,
+    properties: list[str],
+) -> None:
+    feature = _computed_style(feature_page, feature_selector, properties)
+    production = _computed_style(production_page, production_selector, properties)
+    assert production == feature, (
+        f"Computed style drift for {production_selector} vs {feature_selector}: "
+        f"production={production!r}, feature={feature!r}"
+    )
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> None:
+    """Compare the rendered production Task surfaces against the real feature prototype.
+
+    Static selector mapping catches obvious CSS drift but cannot model cascade,
+    specificity, inherited values, or browser layout. This regression loads both
+    implementations in Chromium and compares their final computed geometry.
+    """
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    feature_root = Path(__file__).resolve().parents[2] / "feature"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        mixed = root / "runner" / "assets" / "workflows" / "mixed.yaml"
+        mixed.write_text(
+            "stages:\n"
+            "  planning:\n"
+            "    type: plan\n"
+            "  validate_file:\n"
+            "    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "  validate_ai:\n"
+            "    type: ai_validator\n"
+            "    validator: ai\n"
+            "flow:\n"
+            "  - planning\n"
+            "  - validate_file\n"
+            "  - validate_ai\n",
+            encoding="utf-8",
+        )
+        state.tasks._workflow_requirements = state._task_workflow_requirements
+        state.task_drafts._workflow_requirements = state._task_workflow_requirements
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            context = browser.new_context(
+                viewport={"width": 1440, "height": 900},
+                color_scheme="light",
+            )
+            feature_page = context.new_page()
+            production_page = context.new_page()
+            feature_page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            production_page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+
+            _load_feature_prototype(feature_page, feature_root)
+
+            production_page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(production_page, html)
+            production_page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
+                };"""
+            )
+            for stylesheet in sorted((static_root / "css").glob("*.css")):
+                production_page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_scripts(production_page, static_root)
+            _boot_main_ui(production_page)
+
+            # Open the actual prototype and production Task editors through
+            # their user-facing + New entry points.
+            feature_page.click("#newTask")
+            feature_page.locator("#createTypeMenu [data-create-type='task']").click()
+            feature_page.wait_for_function(
+                "document.querySelector('#newTaskModal')?.classList.contains('open')"
+            )
+            feature_page.select_option("#newTaskWorkflow", "mixed.yaml")
+            feature_page.wait_for_function(
+                "document.querySelector('#newTaskValidationSource .task-ai-source') !== null"
+            )
+
+            production_page.click("#tasksNewButton")
+            production_page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
+            production_page.wait_for_function(
+                "document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'"
+            )
+            production_page.select_option("#taskWorkspaceWorkflow", str(mixed))
+            production_page.wait_for_function(
+                "document.querySelector('[data-task-source-card=\"ai\"]') !== null"
+            )
+
+            style_pairs = [
+                (
+                    "#newTaskModal>.modal-body",
+                    "#taskWorkspaceBody",
+                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+                (
+                    "#newTaskModal .task-basics",
+                    ".task-workspace-basics",
+                    ["display", "gridTemplateColumns", "gap", "alignItems"],
+                ),
+                (
+                    "#newTaskModal .task-input-grid",
+                    "#taskWorkspaceInputGrid",
+                    ["display", "gridTemplateColumns", "gap", "alignItems", "marginTop"],
+                ),
+                (
+                    "#newTaskModal .task-primary-source>.source-head",
+                    "[data-task-source-card='prompt']>.task-workspace-source-head",
+                    [
+                        "display", "gridTemplateColumns", "gap", "minHeight",
+                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "marginBottom",
+                    ],
+                ),
+                (
+                    "#newTaskModal .task-primary-source .source-tabs",
+                    "[data-task-source-group='prompt']",
+                    ["display", "gridTemplateColumns", "gap", "height", "minWidth"],
+                ),
+                (
+                    "#newTaskModal .task-primary-source .task-source-mode-panel>textarea",
+                    "#taskWorkspacePrompt",
+                    ["minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "lineHeight"],
+                ),
+                (
+                    "#newTaskModal .task-ai-source .source-tabs",
+                    "[data-task-source-group='ai']",
+                    ["display", "gridTemplateColumns", "gap", "height", "minWidth"],
+                ),
+                (
+                    "#newTaskModal .task-editor-secondary",
+                    ".task-workspace-editor-secondary",
+                    ["marginTop", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+                (
+                    "#newTaskModal .task-editor-secondary .workspace-options",
+                    ".task-workspace-editor-secondary .task-workspace-workspace-options",
+                    ["display", "gridTemplateColumns", "gap"],
+                ),
+                (
+                    "#newTaskModal>.modal-foot",
+                    ".task-workspace-shell.task-editor-route .task-workspace-foot",
+                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+            ]
+            for feature_selector, production_selector, properties in style_pairs:
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    feature_selector,
+                    production_page,
+                    production_selector,
+                    properties,
+                )
+
+            feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
+            production_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
+            assert feature_shell and production_shell
+            assert abs(feature_shell["width"] - production_shell["width"]) <= 1
+
+            # Close editor and compare the empty Task List workspace rendered
+            # through the same public create menu on both implementations.
+            feature_page.click("#taskEditorBack")
+            feature_page.wait_for_function(
+                "!document.querySelector('#newTaskModal')?.classList.contains('open')"
+            )
+            feature_page.click("#newTask")
+            feature_page.locator("#createTypeMenu [data-create-type='list']").click()
+            feature_page.wait_for_function(
+                "document.querySelector('#planModal')?.classList.contains('open')"
+            )
+
+            production_page.click("#taskWorkspaceFooterBack")
+            production_page.wait_for_function(
+                "document.querySelector('#taskWorkspaceOverlay')?.hidden === true"
+            )
+            production_page.click("#tasksNewButton")
+            production_page.locator("#taskCreateMenu [data-task-create-kind='list']").click()
+            production_page.wait_for_function(
+                "document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'"
+            )
+
+            list_pairs = [
+                (
+                    "#planModal .plan-page-body",
+                    ".task-workspace-list-page",
+                    ["display", "gridTemplateColumns", "gap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+                (
+                    "#planModal .plan-main",
+                    ".task-workspace-list-main",
+                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderRadius"],
+                ),
+                (
+                    "#planModal .plan-side",
+                    ".task-workspace-list-side",
+                    ["display", "gridTemplateColumns", "gap", "alignContent"],
+                ),
+                (
+                    "#planModal .plan-side-card",
+                    ".task-workspace-list-side-card",
+                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderRadius"],
+                ),
+                (
+                    "#planModal .empty-plan-cta.large",
+                    ".task-workspace-empty-list-cta",
+                    ["display", "minHeight", "gap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "flexDirection"],
+                ),
+                (
+                    "#planModal .plan-page-foot",
+                    ".task-workspace-shell.task-list-route .task-workspace-foot",
+                    ["display", "justifyContent", "gap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+                ),
+            ]
+            for feature_selector, production_selector, properties in list_pairs:
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    feature_selector,
+                    production_page,
+                    production_selector,
+                    properties,
+                )
+
+            feature_list_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
+            production_list_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
+            assert feature_list_shell and production_list_shell
+            assert abs(feature_list_shell["width"] - production_list_shell["width"]) <= 1
+            browser.close()
