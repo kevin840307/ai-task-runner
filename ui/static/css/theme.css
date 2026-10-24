@@ -200,6 +200,12 @@ html[data-appearance] .file-choice-button {
   border-color: var(--line);
 }
 html[data-appearance] button:hover:not(:disabled):not(.primary) { border-color: var(--accent); }
+/* Prototype Task List theme cascade keeps the empty-list CTA border neutral on hover.
+   Scope through the mounted Task workspace so this outranks the generic themed button hover. */
+html[data-appearance] #taskWorkspaceBody .task-workspace-empty-list-cta:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--line);
+}
 
 /* Task Editor upload actions intentionally keep the prototype accent treatment.
    This semantic exception must outrank the generic themed button normalization. */
