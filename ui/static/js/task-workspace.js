@@ -83,7 +83,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           return;
         }
         if (action === "info") {
-          void handleBack();
+          showTaskListItemInfo(context.index);
           return;
         }
         if (action === "workflow") {
@@ -139,7 +139,33 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         hideTaskContextMenu();
         return;
       }
-      if (!overlay || overlay.hidden || event.key !== "Escape") return;
+      if (!overlay || overlay.hidden) return;
+      if (event.key === "Tab" && !document.querySelector(".ui-dialog-card")) {
+        const shell = byId("taskWorkspaceShell");
+        const focusable = shell
+          ? [...shell.querySelectorAll('button:not([disabled]):not([hidden]),input:not([disabled]):not([hidden]),textarea:not([disabled]):not([hidden]),select:not([disabled]):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])')]
+              .filter((node) => node.offsetParent !== null)
+          : [];
+        if (!focusable.length) {
+          event.preventDefault();
+          shell?.focus?.({ preventScroll: true });
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !shell.contains(active))) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+        if (!event.shiftKey && (active === last || !shell.contains(active))) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+      }
+      if (event.key !== "Escape") return;
       if (!overlay.contains(event.target)) return;
       const projectDropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
       if (projectDropdown) {
@@ -844,6 +870,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (state?.kind === "task" && !taskItemEditPolicy(index, items[index]).restructure) return;
     items.splice(index, 1);
     state.index = Math.min(state.index, items.length - 1);
+    if (Number.isInteger(state?.listInfoIndex)) {
+      if (state.listInfoIndex === index) state.listInfoIndex = null;
+      else if (state.listInfoIndex > index) state.listInfoIndex -= 1;
+    }
+    if (Number.isInteger(state?.selectedListIndex)) {
+      if (!items.length) state.selectedListIndex = null;
+      else if (state.selectedListIndex === index) state.selectedListIndex = Math.min(index, items.length - 1);
+      else if (state.selectedListIndex > index) state.selectedListIndex -= 1;
+    }
     touchEditor();
     render();
   }
@@ -1166,6 +1201,56 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
   }
 
+  function showTaskListItemInfo(index) {
+    if (!state || state.kind !== "task" || state.route !== "list") return;
+    const items = Array.isArray(state.editDraft?.items)
+      ? state.editDraft.items
+      : (Array.isArray(state.task?.items) ? state.task.items : []);
+    const next = Number(index);
+    if (!Number.isInteger(next) || next < 0 || next >= items.length) return;
+    state.selectedListIndex = next;
+    state.listInfoIndex = next;
+    render();
+  }
+
+  function taskListInspector(task, items) {
+    const index = Number(state?.listInfoIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= items.length) return null;
+    const item = items[index];
+    const policy = taskEditPolicy(task);
+    const itemId = String(item?.item_id || "");
+    const itemPolicy = Array.isArray(policy.items)
+      ? (itemId
+        ? policy.items.find((row) => String(row?.item_id || "") === itemId)
+        : policy.items[index])
+      : null;
+    const workflow = workflowMeta(String(item?.workflow || ""));
+    const prompt = item?.goal_file
+      ? "File · " + String(item.goal_file)
+      : (String(item?.prompt || "").trim() ? "Write" : "—");
+    const ai = !workflow?.has_ai_validator
+      ? "—"
+      : String(item?.ai_validator_prompt || "").trim()
+        ? "Custom text"
+        : String(item?.ai_validator_prompt_file || "").trim()
+          ? "File · " + String(item.ai_validator_prompt_file)
+          : "Workflow default";
+    const workspaceValue = String(item?.workspace || "auto").toLowerCase();
+    const workspace = workspaceValue === "worktree"
+      ? "WORKTREE"
+      : (workspaceValue === "main" ? "Main" : "Auto");
+    return {
+      index,
+      item,
+      status: String(itemPolicy?.state || "future").replace(/^./, (value) => value.toUpperCase()),
+      prompt,
+      ai,
+      workspace,
+      branch: String(item?.branch || "—"),
+      path: String(item?.execution_root || item?.executionRoot || "—"),
+    };
+  }
+
   function listTitleControl() {
     const draft = editorDraft();
     const wrap = document.createElement("label");
@@ -1481,7 +1566,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const info = document.createElement("section");
     info.className = "task-workspace-list-side-card";
     const infoTitle = document.createElement("h3");
-    infoTitle.textContent = tr("task.list_info", "List info");
+    const inspector = state.kind === "task" ? taskListInspector(durableTask || {}, items) : null;
+    infoTitle.textContent = inspector ? tr("task.item_info", "Task info") : tr("task.list_info", "List info");
+    info.classList.toggle("info-active", Boolean(inspector));
     const kv = document.createElement("div");
     kv.className = "task-workspace-list-kv";
     if (state.kind === "draft") {
@@ -1489,6 +1576,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       listInfoRow(kv, tr("task.project", "Project"), listDraftProjectControl());
       listInfoRow(kv, tr("task.items_title", "Tasks"), String(items.length));
       listInfoRow(kv, tr("task.state_label", "State"), tr("task.not_created", "Not created"));
+    } else if (inspector) {
+      listInfoRow(kv, tr("task.item_label", "Task"), String(inspector.item.title || "Task " + String(inspector.index + 1)));
+      listInfoRow(kv, tr("task.status_label", "Status"), inspector.status);
+      listInfoRow(kv, tr("task.project", "Project"), String(inspector.item.project || "—"));
+      listInfoRow(kv, tr("task.workflow", "Workflow"), String(inspector.item.workflow || "—"));
+      listInfoRow(kv, tr("task.prompt_source", "Prompt"), inspector.prompt);
+      listInfoRow(kv, tr("task.ai_validation", "AI validation"), inspector.ai);
+      listInfoRow(kv, tr("task.workspace", "Workspace"), inspector.workspace);
+      listInfoRow(kv, tr("task.branch", "Branch"), inspector.branch);
+      listInfoRow(kv, tr("task.path", "Path"), inspector.path);
     } else {
       const task = durableTask || {};
       const policy = taskEditPolicy(task);
