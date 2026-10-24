@@ -1251,7 +1251,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function taskListInspector(task, items) {
-    const index = Number(state?.listInfoIndex);
+    const index = state?.listInfoIndex;
     if (!Number.isInteger(index) || index < 0 || index >= items.length) return null;
     const item = items[index];
     const policy = taskEditPolicy(task);
