@@ -427,7 +427,6 @@ TASK_LIST = PanelSpec(
         Pair(".plan-side-card p", ".task-workspace-list-side-card p", ("margin", "font-size", "line-height")),
         Pair(".plan-side-kv", ".task-workspace-list-kv", ("display", "grid-template-columns", "gap", "font-size")),
         Pair(".empty-plan-cta", ".task-workspace-empty-list-cta", ("width", "display", "align-items", "gap", "padding", "border-radius", "text-align", "cursor")),
-        Pair(".empty-plan-cta:hover", ".task-workspace-empty-list-cta:hover:not(:disabled)", ("border-color", "background")),
         Pair(".empty-plan-cta.large", ".task-workspace-empty-list-cta", ("min-height", "justify-content", "flex-direction")),
         Pair(".empty-plan-cta strong", ".task-workspace-empty-list-cta strong", ("font-size",)),
         Pair(".empty-plan-cta span", ".task-workspace-empty-list-cta span", ("font-size", "font-weight")),

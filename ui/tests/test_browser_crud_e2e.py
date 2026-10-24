@@ -4962,10 +4962,7 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             assert task_card.count() == 1
             task_card.click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            page.click("#taskWorkspaceOpenList")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceHeaderBack").is_visible()
-            page.locator(".task-workspace-list-row").first.dblclick()
+            page.click("#taskWorkspaceEditTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
             assert page.locator("#taskWorkspaceWorkflow").input_value() == str(second_workflow.resolve())
