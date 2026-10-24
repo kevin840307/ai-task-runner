@@ -2308,11 +2308,25 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
 
-            # Feature parity: drag is the primary order gesture; Alt+Arrow is
-            # the keyboard equivalent and old arrow buttons are not rendered.
+            # Feature parity: Task List Draft rows expose the same pointer,
+            # keyboard and explicit ↑/↓ reorder paths as the prototype.
             assert page.locator(".task-workspace-list-row").first.get_attribute("draggable") == "true"
-            assert page.locator(".task-workspace-list-row").get_by_title("Move up").count() == 0
-            assert page.locator(".task-workspace-list-row").get_by_title("Move down").count() == 0
+            move_up = page.locator(".task-workspace-list-row").get_by_title("Move up")
+            move_down = page.locator(".task-workspace-list-row").get_by_title("Move down")
+            assert move_up.count() == 3
+            assert move_down.count() == 3
+            assert move_up.nth(0).is_disabled()
+            assert move_up.nth(1).is_enabled()
+            assert move_down.nth(1).is_enabled()
+            assert move_down.nth(2).is_disabled()
+            move_up.nth(1).click()
+            page.wait_for_function(
+                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"
+            )
+            page.locator(".task-workspace-list-row").first.get_by_title("Move down").click()
+            page.wait_for_function(
+                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('First list child')"
+            )
             page.locator(".task-workspace-list-row").first.drag_to(page.locator(".task-workspace-list-row").nth(2))
             page.wait_for_function(
                 "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"

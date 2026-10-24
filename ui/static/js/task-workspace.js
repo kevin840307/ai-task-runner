@@ -1129,6 +1129,24 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           };
           actions.appendChild(more);
         } else {
+          const moveUp = document.createElement("button");
+          moveUp.type = "button";
+          moveUp.className = "task-workspace-row-up";
+          moveUp.textContent = "↑";
+          moveUp.title = tr("task.move_up", "Move up");
+          moveUp.setAttribute("aria-label", tr("task.move_up", "Move up"));
+          moveUp.disabled = index === 0 || policy.restructure === false;
+          moveUp.onclick = () => moveItem(index, -1);
+
+          const moveDown = document.createElement("button");
+          moveDown.type = "button";
+          moveDown.className = "task-workspace-row-down";
+          moveDown.textContent = "↓";
+          moveDown.title = tr("task.move_down", "Move down");
+          moveDown.setAttribute("aria-label", tr("task.move_down", "Move down"));
+          moveDown.disabled = index === values.length - 1 || policy.restructure === false;
+          moveDown.onclick = () => moveItem(index, 1);
+
           const edit = document.createElement("button");
           edit.type = "button";
           edit.className = "task-workspace-row-edit";
@@ -1146,7 +1164,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
           remove.title = remove.disabled && policy.reason ? String(policy.reason) : tr("task.remove", "Remove");
           remove.onclick = () => removeItem(index);
 
-          actions.append(edit, remove);
+          actions.append(moveUp, moveDown, edit, remove);
         }
         row.appendChild(actions);
       } else if (typeof onEdit === "function" || disabledEditReason) {
