@@ -168,6 +168,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable
 }
 .task-workspace-foot{
+  position:relative;width:100%;z-index:3;
   height:55px;min-height:55px;max-height:55px;
   align-items:center;flex-wrap:nowrap;gap:7px;
   padding:10px 14px;background:var(--panel-2);overflow:hidden
@@ -605,6 +606,10 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-list-side-card h3{
   margin:0 0 8px;color:var(--text);font-size:9px;text-transform:uppercase;letter-spacing:.05em
 }
+.task-workspace-list-side-card.info-active{
+  border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-softer)
+}
+.task-workspace-list-side-card.info-active h3{color:var(--accent-dark)}
 .task-workspace-list-side-card p{margin:0 0 7px;color:var(--muted);font-size:8px;line-height:1.5}
 .task-workspace-list-kv{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 8px;font-size:8px}
 .task-workspace-list-kv>span{color:var(--muted)}
