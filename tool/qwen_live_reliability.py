@@ -5987,12 +5987,18 @@ def runner_workspace_delivery_probe(
     settings: Settings,
     root: Path,
 ) -> dict[str, object]:
-    """Cross-run the real Runner inside owned worktrees, then retain/merge delivery."""
+    """Cross-run the real Runner through explicit and Auto workspace delivery modes."""
     from workspace import MergeManager, WorkspaceManager
 
+    cases = (
+        ("main", "main", False, "main"),
+        ("worktree", "worktree", False, "worktree"),
+        ("auto_idle", "auto", False, "main"),
+        ("auto_busy", "auto", True, "worktree"),
+    )
     results: dict[str, object] = {}
-    for requested_mode in ("main", "worktree"):
-        case_name = f"runner-workspace-{requested_mode}-probe"
+    for case_key, requested_mode, main_running, expected_mode in cases:
+        case_name = f"runner-workspace-{case_key.replace('_', '-')}-probe"
         repo = _create_delivery_probe_repo(root, case_name)
         (repo / "prompt.md").write_text(
             case_prompt(PROMPT, case_name),
@@ -6014,19 +6020,20 @@ def runner_workspace_delivery_probe(
         )
         prepared = manager.prepare(
             repo,
-            task_id=f"live-runner-{requested_mode}",
+            task_id=f"live-runner-{case_key.replace('_', '-')}",
             run_number=1,
             requested_mode=requested_mode,
             execution_settings={
                 "auto_workspace_policy": "busy-worktree",
                 "allow_concurrent_main_tasks": False,
             },
-            main_running=False,
+            main_running=main_running,
         )
-        if prepared.effective_mode != requested_mode:
+        if prepared.effective_mode != expected_mode:
             raise RuntimeError(
                 "Runner/workspace delivery mode mismatch: "
-                f"requested={requested_mode}, effective={prepared.effective_mode}"
+                f"case={case_key}, requested={requested_mode}, busy={main_running}, "
+                f"expected={expected_mode}, effective={prepared.effective_mode}"
             )
         if prepared.project_root.resolve() == repo.resolve():
             raise RuntimeError("Runner/workspace delivery reused the target Project root")
@@ -6053,10 +6060,12 @@ def runner_workspace_delivery_probe(
             )
 
         result: dict[str, object] = {
+            "requested_mode": requested_mode,
+            "main_running": main_running,
             "effective_mode": prepared.effective_mode,
             "snapshot_sha": snapshot.task_snapshot_sha,
         }
-        if requested_mode == "main":
+        if prepared.effective_mode == "main":
             merged = MergeManager().merge(prepared, snapshot)
             if merged.status != "merged":
                 raise RuntimeError(
@@ -6093,10 +6102,9 @@ def runner_workspace_delivery_probe(
                 f"Runner/workspace delivery cleanup failed: {cleanup.status}"
             )
         result["cleanup"] = cleanup.status
-        results[requested_mode] = result
+        results[case_key] = result
 
     return results
-
 
 def main() -> int:
     args = arguments()
