@@ -2935,19 +2935,28 @@ def test_worktree_isolation_preflight_uses_real_git_without_touching_dirty_targe
     assert not (repo / "result.txt").exists()
 
 
-def test_merge_cross_matrix_preflight_covers_clean_advance_conflict_and_recovery(
+def test_merge_cross_matrix_preflight_covers_delivery_failure_guards_and_recovery(
     tmp_path: Path,
 ):
     result = live.merge_cross_matrix_preflight(tmp_path)
 
-    assert result == {
-        "clean": "merged",
-        "target_advance": "merged",
-        "target_advance_validation_calls": 1,
-        "conflict": "conflict",
-        "conflict_files": ["app.txt"],
-        "recovery": "merged",
-    }
+    assert result["clean"] == "merged"
+    assert result["target_advance"] == "merged"
+    assert result["target_advance_validation_calls"] == 1
+    assert result["source_fail"] == "source_fail"
+    assert result["source_fail_real_failure"] is True
+    assert result["technical_error"] == "technical_error"
+    assert result["technical_error_real_failure"] is False
+    assert result["target_history"] == "waiting_target_history"
+    assert result["target_history_real_failure"] is False
+    assert result["idempotent"] == "merged"
+    assert result["idempotent_head"]
+    assert result["conflict"] == "conflict"
+    assert result["conflict_files"] == ["app.txt"]
+    assert result["recovery"] == "merged"
+
+    assert not (tmp_path / "merge-source-fail-preflight" / "task-side.txt").exists()
+    assert not (tmp_path / "merge-technical-error-preflight" / "task-side.txt").exists()
     recovered = tmp_path / "merge-conflict-recovery-preflight" / "app.txt"
     assert recovered.read_text(encoding="utf-8") == "integrated task + target\n"
 
