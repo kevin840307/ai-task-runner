@@ -887,6 +887,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (label) {
       const span = button.querySelector("span");
       if (span) span.textContent = label;
+      button.setAttribute("aria-label", label);
     }
   }
 
@@ -1500,8 +1501,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     firstHelp.textContent = tr("task.quick_use_select", "Click selects a task · Double-click edits it.");
     const secondHelp = document.createElement("p");
     secondHelp.textContent = durableTask
-      ? tr("task.quick_use_drag", "Drag the grip to reorder. Right-click or ⋯ for Info / Workflow / Remove.")
-      : tr("task.quick_use_drag_draft", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
+      ? tr("task.quick_use_durable", "Drag the grip to reorder. Right-click or ⋯ for Info / Workflow / Remove.")
+      : tr("task.quick_use_drag", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
 
