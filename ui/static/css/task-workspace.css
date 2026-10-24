@@ -315,7 +315,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-basics .task-workspace-field{gap:4px}
 .task-workspace-basics .task-workspace-field>span{font-size:9px}
 .task-workspace-basics .task-workspace-field input,
-.task-workspace-basics .task-workspace-field select{height:34px;min-height:34px;padding:8px;font-size:10px}
+.task-workspace-basics .task-workspace-field select{height:34px;min-height:auto;padding:8px;font-size:10px}
 .task-workspace-workflow-caps{
   display:flex;align-items:center;gap:6px;min-height:20px;margin:5px 0 0;flex-wrap:wrap
 }

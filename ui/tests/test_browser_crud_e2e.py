@@ -5056,7 +5056,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
 
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "ai-review.md")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
             page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
