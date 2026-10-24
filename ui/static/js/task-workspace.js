@@ -1438,6 +1438,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       source.aiMode = mode;
       if (mode === "default") {
+        // Final feature prototype semantics: "Default" discards custom
+        // text/file overrides instead of keeping them in a hidden cache that
+        // reappears when the user switches back to Write/File.
+        source.aiText = "";
+        source.aiFile = "";
         item.ai_validator_prompt = "";
         item.ai_validator_prompt_file = "";
       } else if (mode === "write") {
