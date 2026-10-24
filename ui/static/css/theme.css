@@ -200,6 +200,18 @@ html[data-appearance] .file-choice-button {
   border-color: var(--line);
 }
 html[data-appearance] button:hover:not(:disabled):not(.primary) { border-color: var(--accent); }
+
+/* Task Editor upload actions intentionally keep the prototype accent treatment.
+   This semantic exception must outrank the generic themed button normalization. */
+html[data-appearance] .task-workspace-shell.task-editor-route .task-workspace-upload {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--line));
+}
+html[data-appearance] .task-workspace-shell.task-editor-route .task-workspace-upload:hover:not(:disabled) {
+  background: var(--accent-softer);
+  border-color: var(--accent);
+}
 html[data-appearance] .project-nav-link:hover,
 html[data-appearance] .project-nav-link.active,
 html[data-appearance] .designer-nav-link:hover,

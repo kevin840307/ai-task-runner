@@ -11,6 +11,7 @@ FEATURE_EDITOR_JS = (ROOT / "feature" / "ui-prototype" / "task-editor.js").read_
 FEATURE_TEMPLATES = (ROOT / "feature" / "ui-prototype" / "task-ui-templates.js").read_text(encoding="utf-8")
 PROTOTYPE_HTML = (ROOT / "feature" / "ai-task-runner-ui-prototype.html").read_text(encoding="utf-8")
 PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_text(encoding="utf-8")
+PRODUCTION_THEME = (ROOT / "ui" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
 PRODUCTION_JS = (ROOT / "ui" / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
 PRODUCTION_TOKENS = (ROOT / "ui" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
 PRODUCTION_BOOTSTRAP = (ROOT / "ui" / "static" / "js" / "ui-bootstrap.js").read_text(encoding="utf-8")
@@ -136,6 +137,20 @@ def test_new_task_editor_base_geometry_matches_final_feature_cascade() -> None:
         ".task-workspace-shell.workspace-route",
         ("width", "max-width"),
     )
+
+
+def test_task_upload_theme_override_preserves_feature_accent_cascade() -> None:
+    feature = _declarations(FEATURE_CSS, "#newTaskModal .task-upload-btn")
+    production = _declarations(
+        PRODUCTION_THEME,
+        "html[data-appearance] .task-workspace-shell.task-editor-route .task-workspace-upload",
+    )
+    for prop in ("border-color", "background", "color"):
+        assert production.get(prop) == feature.get(prop), (
+            prop,
+            feature,
+            production,
+        )
 
 
 def test_new_task_source_cards_match_final_feature_cascade() -> None:
