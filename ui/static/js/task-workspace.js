@@ -3706,7 +3706,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     void loadWorkspaceOptions();
   }
 
-  function openTask(task, { returnFocus, workflows = [], prompts = [] } = {}) {
+  function openTask(task, { returnFocus, workflows = [], prompts = [], route = "info" } = {}) {
     ensureMounted();
     const value = cloneDraft(task || {});
     if (!value.task_id || !Array.isArray(value.items) || !value.items.length) {
@@ -3714,15 +3714,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return;
     }
     restoreFocus = returnFocus || document.activeElement;
-    const directList = String(value.status || "").toLowerCase() === "new";
+    const initialRoute = route === "list" ? "list" : "info";
     state = {
       kind: "task",
       task: value,
       workflows: Array.isArray(workflows) ? workflows.slice() : [],
       prompts: Array.isArray(prompts) ? prompts.slice() : [],
       sourceModes: {},
-      route: directList ? "list" : "info",
-      listReturn: directList ? "close" : "info",
+      route: initialRoute,
+      listReturn: initialRoute === "list" ? "close" : "info",
       tab: "overview",
       editDraft: null,
       editOriginal: "",

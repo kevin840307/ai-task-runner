@@ -261,7 +261,12 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
 
     button.append(top, prompt, meta, foot);
     button.addEventListener("click", () => {
-      if (!button.classList.contains("dragging")) openTask?.(task, { returnFocus: button });
+      if (!button.classList.contains("dragging")) {
+        openTask?.(task, {
+          returnFocus: button,
+          route: String(task?.status || "") === "new" ? "list" : "info",
+        });
+      }
     });
     button.addEventListener("dragstart", (event) => {
       draggedTaskId = String(task.task_id || "");
@@ -408,7 +413,10 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       progress.textContent = String(task.completed_item_count || 0) + " / " + String(taskItems(task).length);
 
       button.append(lifecycle, copy, count, runtime, project, progress);
-      button.addEventListener("click", () => openTask?.(task, { returnFocus: button }));
+      button.addEventListener("click", () => openTask?.(task, {
+        returnFocus: button,
+        route: String(task?.status || "") === "new" ? "list" : "info",
+      }));
       table.appendChild(button);
     }
     root.appendChild(table);
