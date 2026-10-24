@@ -2836,6 +2836,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function beginTaskListEdit() {
     state.listReturn = "info";
+    state.selectedListIndex = null;
+    state.listInfoIndex = null;
     if (!ensureTaskEditDraft()) {
       state.route = "list";
       render();
@@ -3390,6 +3392,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.editDraft = null;
     state.editOriginal = "";
     state.saveRequestId = "";
+    state.selectedListIndex = null;
+    state.listInfoIndex = null;
     state.listReturn = "info";
     state.route = "info";
     state.tab = "overview";
