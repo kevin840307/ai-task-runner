@@ -263,11 +263,11 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     taskContextMenu.setAttribute("role", "menu");
     taskContextMenu.innerHTML = `
       <div class="task-workspace-context-actions">
-        <button type="button" data-tasks-context-action="open"><span>Open list</span><kbd>↵</kbd></button>
-        <button type="button" data-tasks-context-action="rename"><span>Rename</span><kbd>F2</kbd></button>
-        <button type="button" data-tasks-context-action="info"><span>Info</span><kbd>i</kbd></button>
+        <button type="button" data-tasks-context-action="open" aria-label="Open list"><span>Open list</span><kbd>↵</kbd></button>
+        <button type="button" data-tasks-context-action="rename" aria-label="Rename"><span>Rename</span><kbd>F2</kbd></button>
+        <button type="button" data-tasks-context-action="info" aria-label="Info"><span>Info</span><kbd>i</kbd></button>
         <div class="task-workspace-context-separator"></div>
-        <button type="button" data-tasks-context-action="remove" class="danger-item"><span>Delete</span><kbd>Del</kbd></button>
+        <button type="button" data-tasks-context-action="remove" class="danger-item" aria-label="Delete"><span>Delete</span><kbd>Del</kbd></button>
       </div>`;
     document.body.appendChild(taskContextMenu);
     taskContextMenu.querySelectorAll("[data-tasks-context-action]").forEach((button) => {
@@ -281,8 +281,9 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       if (event.key !== "Escape" || !taskContextMenu || taskContextMenu.hidden) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      const returnFocus = taskContextReturnFocus;
       hideTaskContextMenu();
-      taskContextReturnFocus?.focus?.({ preventScroll: true });
+      returnFocus?.focus?.({ preventScroll: true });
     });
     window.addEventListener("resize", hideTaskContextMenu);
     window.addEventListener("scroll", hideTaskContextMenu, true);
