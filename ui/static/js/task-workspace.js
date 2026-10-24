@@ -631,6 +631,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     });
   }
 
+  function focusEditorTitleSoon(owner = state) {
+    window.setTimeout(() => {
+      if (state !== owner || state?.route !== "editor") return;
+      byId("taskWorkspaceItemTitle")?.focus({ preventScroll: true });
+    }, 0);
+  }
+
   async function openPromptsFromWorkspace() {
     if (typeof openPrompts !== "function") return;
     if (!(await confirmWorkspaceLeave())) return;
@@ -969,7 +976,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.editorMode = "edit";
     state.route = "editor";
     state.index = index;
+    const owner = state;
     render();
+    focusEditorTitleSoon(owner);
   }
 
   function taskMutationBlockedReason(task = state?.task) {
@@ -2934,7 +2943,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.editorReturn = "list";
     state.editorMode = "create";
     state.route = "editor";
+    const owner = state;
     render();
+    focusEditorTitleSoon(owner);
   }
 
   function addTaskListItem() {
@@ -2948,7 +2959,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.editorMode = "create";
     state.error = "";
     state.route = "editor";
+    const owner = state;
     render();
+    focusEditorTitleSoon(owner);
   }
 
   function renderDurableTaskList() {
@@ -3333,7 +3346,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.error = "";
     state.fieldErrors = {};
     state.route = "editor";
+    const owner = state;
     render();
+    focusEditorTitleSoon(owner);
   }
 
   function render() {
@@ -3828,6 +3843,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         title.focus({ preventScroll: true });
         title.select?.();
       }, 0);
+    } else {
+      focusEditorTitleSoon(newDraftState);
     }
     void loadProjectOptions();
     void loadWorkspaceOptions();
@@ -3866,8 +3883,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       projectOptions: [],
       projectOptionsLoading: false,
     };
+    const draftState = state;
     showNow();
     render();
+    if (draftState.route === "editor") focusEditorTitleSoon(draftState);
     void loadProjectOptions();
     void loadWorkspaceOptions();
   }

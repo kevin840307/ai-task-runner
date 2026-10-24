@@ -2091,6 +2091,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskCreateMenu [data-task-create-kind]").count() == 2
             page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceItemTitle'")
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create Task"
             assert page.locator("#taskWorkspaceHeaderBack").is_hidden()
             assert page.locator("#taskWorkspaceHeaderActions").is_hidden()
@@ -2277,6 +2278,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-list-row").count() == 0
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceItemTitle'")
             # The first child must inherit the workflow already resolved for
             # this Project/Chat. Catalog ordering must never change validation.
             assert page.locator("#taskWorkspaceWorkflow").input_value() == str(workflow_path)
@@ -2353,6 +2355,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 "numberLineHeight": "8px",
             }
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceItemTitle'")
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
