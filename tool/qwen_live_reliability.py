@@ -5693,7 +5693,7 @@ def _prepare_merge_probe(
 
 
 def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
-    """Exercise clean merge, target advance validation, conflict, and recovery."""
+    """Exercise clean/advanced delivery plus failure, history, and recovery cross-cases."""
     from workspace import MergeManager
 
     # 1) Clean target: direct merge, no extra validation required.
@@ -5757,7 +5757,150 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         )
     manager_advanced.cleanup(prepared_advanced)
 
-    # 3) Same-file conflict: retain source, prepare latest-target recovery, then merge recovery.
+    # 3) Validation SOURCE_FAIL is a real merge failure but must leave target pristine.
+    repo_source_fail, manager_source_fail, prepared_source_fail = _prepare_merge_probe(
+        root,
+        "merge-source-fail-preflight",
+        task_id="live-merge-source-fail",
+    )
+    (prepared_source_fail.project_root / "task-side.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_source_fail = manager_source_fail.snapshot_result(prepared_source_fail)
+    (repo_source_fail / "target-side.txt").write_text("target-side\n", encoding="utf-8")
+    _delivery_git(repo_source_fail, "add", "target-side.txt")
+    _delivery_git(repo_source_fail, "commit", "-m", "advance target")
+    source_fail_head = _delivery_git(repo_source_fail, "rev-parse", "HEAD").stdout.strip()
+    source_fail_result = MergeManager().merge(
+        prepared_source_fail,
+        snapshot_source_fail,
+        validate=lambda _project: "SOURCE_FAIL",
+    )
+    if (
+        source_fail_result.status != "source_fail"
+        or source_fail_result.verdict != "SOURCE_FAIL"
+        or not source_fail_result.real_merge_failure
+    ):
+        raise RuntimeError(
+            "SOURCE_FAIL merge preflight mismatch: "
+            f"status={source_fail_result.status} verdict={source_fail_result.verdict} "
+            f"real_failure={source_fail_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_source_fail, "rev-parse", "HEAD").stdout.strip() != source_fail_head:
+        raise RuntimeError("SOURCE_FAIL merge mutated target HEAD")
+    if (repo_source_fail / "task-side.txt").exists():
+        raise RuntimeError("SOURCE_FAIL merge leaked Task content into target Project")
+    manager_source_fail.cleanup(prepared_source_fail)
+
+    # 4) Validation technical error is retryable and must not count as a real merge failure.
+    repo_technical, manager_technical, prepared_technical = _prepare_merge_probe(
+        root,
+        "merge-technical-error-preflight",
+        task_id="live-merge-technical-error",
+    )
+    (prepared_technical.project_root / "task-side.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_technical = manager_technical.snapshot_result(prepared_technical)
+    (repo_technical / "target-side.txt").write_text("target-side\n", encoding="utf-8")
+    _delivery_git(repo_technical, "add", "target-side.txt")
+    _delivery_git(repo_technical, "commit", "-m", "advance target")
+    technical_head = _delivery_git(repo_technical, "rev-parse", "HEAD").stdout.strip()
+
+    def technical_validator(_project: Path) -> str:
+        raise RuntimeError("injected validator outage")
+
+    technical_result = MergeManager().merge(
+        prepared_technical,
+        snapshot_technical,
+        validate=technical_validator,
+    )
+    if (
+        technical_result.status != "technical_error"
+        or technical_result.verdict != "TECHNICAL_ERROR"
+        or technical_result.real_merge_failure
+        or "injected validator outage" not in technical_result.detail
+    ):
+        raise RuntimeError(
+            "Technical-error merge preflight mismatch: "
+            f"status={technical_result.status} verdict={technical_result.verdict} "
+            f"real_failure={technical_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_technical, "rev-parse", "HEAD").stdout.strip() != technical_head:
+        raise RuntimeError("Technical-error merge mutated target HEAD")
+    if (repo_technical / "task-side.txt").exists():
+        raise RuntimeError("Technical-error merge leaked Task content into target Project")
+    manager_technical.cleanup(prepared_technical)
+
+    # 5) Rewritten target history must wait instead of merging unrelated histories.
+    repo_history, manager_history, prepared_history = _prepare_merge_probe(
+        root,
+        "merge-target-history-preflight",
+        task_id="live-merge-target-history",
+    )
+    (prepared_history.project_root / "history-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_history = manager_history.snapshot_result(prepared_history)
+    empty_tree = _delivery_git(repo_history, "mktree").stdout.strip()
+    rewritten = _delivery_git(
+        repo_history,
+        "commit-tree",
+        empty_tree,
+        "-m",
+        "rewritten target",
+    ).stdout.strip()
+    _delivery_git(repo_history, "reset", "--hard", rewritten)
+    history_result = MergeManager().merge(prepared_history, snapshot_history)
+    if history_result.status != "waiting_target_history" or history_result.real_merge_failure:
+        raise RuntimeError(
+            "Target-history merge preflight mismatch: "
+            f"status={history_result.status} real_failure={history_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_history, "rev-parse", "HEAD").stdout.strip() != rewritten:
+        raise RuntimeError("Target-history wait mutated rewritten target HEAD")
+    manager_history.cleanup(prepared_history)
+
+    # 6) Already-delivered source is finalized idempotently without revalidation/duplicate merge.
+    repo_idempotent, manager_idempotent, prepared_idempotent = _prepare_merge_probe(
+        root,
+        "merge-idempotent-preflight",
+        task_id="live-merge-idempotent",
+    )
+    (prepared_idempotent.project_root / "idempotent.txt").write_text(
+        "delivered-once\n", encoding="utf-8"
+    )
+    snapshot_idempotent = manager_idempotent.snapshot_result(prepared_idempotent)
+    _delivery_git(
+        repo_idempotent,
+        "merge",
+        "--no-ff",
+        prepared_idempotent.task_branch,
+        "-m",
+        "external delivery",
+    )
+    idempotent_head = _delivery_git(repo_idempotent, "rev-parse", "HEAD").stdout.strip()
+    idempotent_count = _delivery_git(
+        repo_idempotent, "rev-list", "--count", "HEAD"
+    ).stdout.strip()
+    idempotent_result = MergeManager().merge(
+        prepared_idempotent,
+        snapshot_idempotent,
+        validate=lambda _project: "SOURCE_FAIL",
+    )
+    if (
+        idempotent_result.status != "merged"
+        or idempotent_result.merged_target_head_sha != idempotent_head
+        or _delivery_git(repo_idempotent, "rev-list", "--count", "HEAD").stdout.strip()
+        != idempotent_count
+    ):
+        raise RuntimeError(
+            "Idempotent merge preflight duplicated or revalidated delivery: "
+            f"status={idempotent_result.status} merged={idempotent_result.merged_target_head_sha}"
+        )
+    manager_idempotent.cleanup(prepared_idempotent)
+
+    # 7) Same-file conflict: retain source, prepare latest-target recovery, then merge recovery.
     repo_conflict, manager_conflict, prepared_conflict = _prepare_merge_probe(
         root,
         "merge-conflict-recovery-preflight",
@@ -5827,12 +5970,18 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "clean": clean_result.status,
         "target_advance": advanced_result.status,
         "target_advance_validation_calls": len(validation_calls),
+        "source_fail": source_fail_result.status,
+        "source_fail_real_failure": source_fail_result.real_merge_failure,
+        "technical_error": technical_result.status,
+        "technical_error_real_failure": technical_result.real_merge_failure,
+        "target_history": history_result.status,
+        "target_history_real_failure": history_result.real_merge_failure,
+        "idempotent": idempotent_result.status,
+        "idempotent_head": idempotent_result.merged_target_head_sha,
         "conflict": conflict_result.status,
         "conflict_files": list(conflict_result.conflict_files),
         "recovery": recovery_result.status,
     }
-
-
 
 def runner_workspace_delivery_probe(
     settings: Settings,
