@@ -979,7 +979,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     positionTaskContextMenu(event?.clientX, event?.clientY);
   }
 
-  function renderTaskRows(items, { editable = false, itemPolicies = null, onEdit = null, disabledEditReason = "" } = {}) {
+  function renderTaskRows(items, { editable = false, itemPolicies = null, onEdit = null, disabledEditReason = "", listWorkspace = false } = {}) {
     const values = Array.isArray(items) ? items : [];
     const list = document.createElement("div");
     list.className = "task-workspace-list";
@@ -991,13 +991,18 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
     values.forEach((item, index) => {
       const row = document.createElement("article");
-      row.className = "task-workspace-list-row" + (editable ? "" : " task-workspace-info-row");
+      row.className = "task-workspace-list-row" + (editable || listWorkspace ? "" : " task-workspace-info-row");
       row.classList.toggle("selected", Number.isInteger(state?.selectedListIndex) && state.selectedListIndex === index);
       row.setAttribute("aria-selected", String(Number.isInteger(state?.selectedListIndex) && state.selectedListIndex === index));
-      row.addEventListener("click", (event) => {
-        if (event.target.closest("button")) return;
-        selectTaskListRow(index);
-      });
+      // The accepted prototype only gives durable Task List rows a single-click
+      // selection state. New Task List draft rows use double-click/Enter to edit
+      // and must not gain a production-only selected highlight on a normal click.
+      if (state?.kind === "task") {
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button")) return;
+          selectTaskListRow(index);
+        });
+      }
       const rowPolicy = Array.isArray(itemPolicies)
         ? (String(item.item_id || "")
           ? itemPolicies.find((value) => String(value?.item_id || "") === String(item.item_id || ""))
@@ -1014,14 +1019,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         row.addEventListener("contextmenu", (event) => openTaskItemContextMenu(event, index, item, policy, values));
       }
 
-      if (editable) {
+      const durableWorkspaceGrip = listWorkspace && state?.kind === "task";
+      if (editable || durableWorkspaceGrip) {
         const grip = document.createElement("span");
         grip.className = "task-workspace-drag-grip";
         grip.setAttribute("aria-hidden", "true");
         grip.textContent = state?.kind === "task" ? "⠿" : "⋮⋮";
         row.appendChild(grip);
-        row.draggable = policy.restructure !== false;
-        row.tabIndex = 0;
+        row.draggable = editable && policy.restructure !== false;
+        if (editable) row.tabIndex = 0;
         if (!row.draggable && policy.reason) row.title = String(policy.reason);
       }
 
@@ -1589,6 +1595,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         editable,
         itemPolicies: policy?.items || null,
         disabledEditReason: editable ? "" : reason,
+        listWorkspace: true,
       }));
       listHost.appendChild(createTaskListAddButton({
         enabled: canAdd,

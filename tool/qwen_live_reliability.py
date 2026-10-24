@@ -6303,6 +6303,9 @@ def runner_workspace_delivery_probe(
         ("worktree_source_fail", "worktree", False, "worktree", "source_fail"),
         ("worktree_technical_error", "worktree", False, "worktree", "technical_error"),
         ("worktree_dirty_target_wait", "worktree", False, "worktree", "dirty"),
+        ("worktree_target_history_wait", "worktree", False, "worktree", "history"),
+        ("worktree_unmanaged_target_wait", "worktree", False, "worktree", "unmanaged"),
+        ("worktree_missing_target_branch_wait", "worktree", False, "worktree", "missing_branch"),
         ("main_conflict_recovery", "main", False, "main", "conflict"),
     )
     results: dict[str, object] = {}
@@ -6423,6 +6426,39 @@ def runner_workspace_delivery_probe(
             (repo / "user-uncommitted.txt").write_text(
                 "keep user work\n", encoding="utf-8"
             )
+            result["target_head_before_delivery"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
+        elif target_mutation == "history":
+            rewritten_tree = _delivery_git(
+                repo, "rev-parse", "HEAD^{tree}"
+            ).stdout.strip()
+            rewritten = _delivery_git(
+                repo,
+                "commit-tree",
+                rewritten_tree,
+                "-m",
+                "rewrite target during Task execution",
+            ).stdout.strip()
+            _delivery_git(repo, "reset", "--hard", rewritten)
+            result["target_head_before_delivery"] = rewritten
+        elif target_mutation == "unmanaged":
+            _delivery_git(repo, "checkout", "-b", "user/other")
+            user_target = root / f"{case_name}-user-target"
+            _delivery_git(
+                repo,
+                "worktree",
+                "add",
+                str(user_target),
+                prepared.target_branch,
+            )
+            result["target_worktree"] = str(user_target.resolve())
+            result["target_head_before_delivery"] = _delivery_git(
+                user_target, "rev-parse", "HEAD"
+            ).stdout.strip()
+        elif target_mutation == "missing_branch":
+            _delivery_git(repo, "checkout", "-b", "user/other")
+            _delivery_git(repo, "branch", "-D", prepared.target_branch)
             result["target_head_before_delivery"] = _delivery_git(
                 repo, "rev-parse", "HEAD"
             ).stdout.strip()
@@ -6562,6 +6598,56 @@ def runner_workspace_delivery_probe(
             result["delivery"] = merged.status
             result["real_merge_failure"] = merged.real_merge_failure
             result["target_head_after_delivery"] = target_head
+        elif target_mutation in {"history", "unmanaged", "missing_branch"}:
+            expected_status = {
+                "history": "waiting_target_history",
+                "unmanaged": "waiting_target_workspace",
+                "missing_branch": "waiting_target_branch",
+            }[target_mutation]
+            if merged.status != expected_status or merged.real_merge_failure:
+                raise RuntimeError(
+                    "Runner/workspace target-guard cross-case mismatch: "
+                    f"case={case_key} status={merged.status} "
+                    f"real_failure={merged.real_merge_failure}"
+                )
+            if (repo / "health.txt").exists():
+                raise RuntimeError(
+                    "Runner/workspace target guard leaked Task output into target Project"
+                )
+            if retained.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace target guard mutated retained Task output"
+                )
+            if target_mutation == "history":
+                target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+                if target_head != result["target_head_before_delivery"]:
+                    raise RuntimeError(
+                        "Runner/workspace history guard mutated rewritten target HEAD"
+                    )
+                result["target_head_after_delivery"] = target_head
+            elif target_mutation == "unmanaged":
+                user_target = Path(str(result["target_worktree"]))
+                target_head = _delivery_git(user_target, "rev-parse", "HEAD").stdout.strip()
+                if target_head != result["target_head_before_delivery"]:
+                    raise RuntimeError(
+                        "Runner/workspace unmanaged-target guard mutated user worktree HEAD"
+                    )
+                if _delivery_git(user_target, "status", "--porcelain").stdout.strip():
+                    raise RuntimeError(
+                        "Runner/workspace unmanaged-target guard dirtied user worktree"
+                    )
+                result["target_head_after_delivery"] = target_head
+                _delivery_git(repo, "worktree", "remove", "--force", str(user_target))
+            else:
+                if _delivery_git(repo, "branch", "--show-current").stdout.strip() != "user/other":
+                    raise RuntimeError(
+                        "Runner/workspace missing-branch guard switched the user's checkout"
+                    )
+                result["target_head_after_delivery"] = _delivery_git(
+                    repo, "rev-parse", "HEAD"
+                ).stdout.strip()
+            result["delivery"] = merged.status
+            result["real_merge_failure"] = merged.real_merge_failure
         elif target_mutation in {"source_fail", "technical_error"}:
             expected_status = "source_fail" if target_mutation == "source_fail" else "technical_error"
             expected_verdict = "SOURCE_FAIL" if target_mutation == "source_fail" else "TECHNICAL_ERROR"

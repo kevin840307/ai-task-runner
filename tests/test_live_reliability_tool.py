@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 9
+    assert len(calls) == 12
     assert result["main"]["requested_mode"] == "main"
     assert result["main"]["effective_mode"] == "main"
     assert result["main"]["delivery"] == "merged"
@@ -3088,6 +3088,27 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert dirty["real_merge_failure"] is False
     assert dirty["target_head_after_delivery"] == dirty["target_head_before_delivery"]
 
+    history = result["worktree_target_history_wait"]
+    assert history["requested_mode"] == "worktree"
+    assert history["effective_mode"] == "worktree"
+    assert history["delivery"] == "waiting_target_history"
+    assert history["real_merge_failure"] is False
+    assert history["target_head_after_delivery"] == history["target_head_before_delivery"]
+
+    unmanaged = result["worktree_unmanaged_target_wait"]
+    assert unmanaged["requested_mode"] == "worktree"
+    assert unmanaged["effective_mode"] == "worktree"
+    assert unmanaged["delivery"] == "waiting_target_workspace"
+    assert unmanaged["real_merge_failure"] is False
+    assert unmanaged["target_head_after_delivery"] == unmanaged["target_head_before_delivery"]
+
+    missing_branch = result["worktree_missing_target_branch_wait"]
+    assert missing_branch["requested_mode"] == "worktree"
+    assert missing_branch["effective_mode"] == "worktree"
+    assert missing_branch["delivery"] == "waiting_target_branch"
+    assert missing_branch["real_merge_failure"] is False
+    assert missing_branch["target_head_after_delivery"] == missing_branch["target_head_before_delivery"]
+
     conflict = result["main_conflict_recovery"]
     assert conflict["requested_mode"] == "main"
     assert conflict["effective_mode"] == "main"
@@ -3117,6 +3138,9 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     source_fail_repo = tmp_path / "runner-workspace-worktree-source-fail-probe"
     technical_repo = tmp_path / "runner-workspace-worktree-technical-error-probe"
     dirty_repo = tmp_path / "runner-workspace-worktree-dirty-target-wait-probe"
+    history_repo = tmp_path / "runner-workspace-worktree-target-history-wait-probe"
+    unmanaged_repo = tmp_path / "runner-workspace-worktree-unmanaged-target-wait-probe"
+    missing_branch_repo = tmp_path / "runner-workspace-worktree-missing-target-branch-wait-probe"
     conflict_repo = tmp_path / "runner-workspace-main-conflict-recovery-probe"
     for repo in (
         main_repo,
@@ -3132,6 +3156,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert not (dirty_repo / "health.txt").exists()
     assert (dirty_repo / "user-uncommitted.txt").read_text(encoding="utf-8") == "keep user work\n"
+    for repo in (history_repo, unmanaged_repo, missing_branch_repo):
+        assert not (repo / "health.txt").exists()
     assert (target_advance_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (conflict_repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
 

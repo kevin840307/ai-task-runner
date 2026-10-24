@@ -1005,6 +1005,29 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.click("#taskWorkspaceClose")
             page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
 
+            completed_list_row = page.locator("#tasksListRows .tasks-list-data").filter(has_text="Completed Rerun")
+            completed_list_row.dblclick()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            completed_task_row = page.locator(".task-workspace-list-row").first
+            assert completed_task_row.locator(".task-workspace-drag-grip").inner_text() == "⠿"
+            assert completed_task_row.get_attribute("draggable") == "false"
+            completed_geometry = completed_task_row.evaluate(
+                """node => ({
+                    columns: getComputedStyle(node).gridTemplateColumns.split(' ').filter(Boolean).length,
+                    columnGap: getComputedStyle(node).columnGap,
+                    numberWidth: getComputedStyle(node.querySelector('.task-workspace-list-number')).width,
+                    numberHeight: getComputedStyle(node.querySelector('.task-workspace-list-number')).height,
+                })"""
+            )
+            assert completed_geometry == {
+                "columns": 4,
+                "columnGap": "8px",
+                "numberWidth": "28px",
+                "numberHeight": "28px",
+            }
+            page.click("#taskWorkspaceClose")
+            page.wait_for_function("document.querySelector('#taskWorkspaceOverlay')?.hidden === true")
+
             page.locator("[data-tasks-view-mode='board']").click()
 
             column_add_box = page.locator("#tasksNewColumnButton").bounding_box()
@@ -2341,6 +2364,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
+            draft_first_row = page.locator(".task-workspace-list-row").first
+            draft_first_row.click()
+            assert draft_first_row.get_attribute("aria-selected") == "false"
+            assert "selected" not in (draft_first_row.get_attribute("class") or "").split()
 
             # Feature parity: Task List Draft rows expose the same pointer,
             # keyboard and explicit ↑/↓ reorder paths as the prototype.
