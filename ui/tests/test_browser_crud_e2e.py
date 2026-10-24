@@ -5527,6 +5527,12 @@ def _computed_style(page, selector: str, properties: list[str]) -> dict[str, str
     )
 
 
+def _box(page, selector: str) -> dict[str, float]:
+    box = page.locator(selector).bounding_box()
+    assert box is not None, f"Expected visible geometry for {selector}"
+    return box
+
+
 def _assert_feature_computed_style_parity(
     feature_page,
     feature_selector: str,
@@ -5651,12 +5657,15 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 (
                     "#newTaskModal .task-project-field>label",
                     ".task-workspace-project-field>span:first-child",
-                    ["display", "alignItems", "gap", "marginBottom", "fontSize"],
+                    ["fontSize", "fontWeight", "textTransform", "letterSpacing"],
                 ),
                 (
                     "#newTaskModal .task-project-field input",
                     "#taskWorkspaceProject",
-                    ["height", "minHeight", "fontSize"],
+                    [
+                        "height", "minHeight", "fontSize",
+                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                    ],
                 ),
                 (
                     "#newTaskModal .field-help",
@@ -5703,8 +5712,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["fontSize"],
                 ),
                 (
-                    "#newTaskModal .source-note",
-                    ".task-workspace-source-note",
+                    "#newTaskModal .task-file-source .source-note",
+                    "[data-task-source-card='file'] .task-workspace-source-note",
                     ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "lineHeight"],
                 ),
                 (
@@ -5746,6 +5755,30 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     production_selector,
                     properties,
                 )
+
+            feature_basics = _box(feature_page, "#newTaskModal .task-basics")
+            production_basics = _box(production_page, ".task-workspace-basics")
+            feature_project_field = _box(feature_page, "#newTaskModal .task-project-field")
+            production_project_field = _box(production_page, ".task-workspace-project-field")
+            feature_field_offset = feature_project_field["y"] - feature_basics["y"]
+            production_field_offset = production_project_field["y"] - production_basics["y"]
+            assert abs(feature_field_offset - production_field_offset) <= 1, (
+                "Task basics top spacing drift: "
+                f"production={production_field_offset}, feature={feature_field_offset}"
+            )
+
+            feature_label = _box(feature_page, "#newTaskModal .task-project-field>label")
+            feature_control = _box(feature_page, "#newTaskModal .task-project-field .project-combobox")
+            production_label = _box(production_page, ".task-workspace-project-field>span:first-child")
+            production_control = _box(production_page, ".task-workspace-project-combobox")
+            feature_label_gap = feature_control["y"] - (feature_label["y"] + feature_label["height"])
+            production_label_gap = production_control["y"] - (
+                production_label["y"] + production_label["height"]
+            )
+            assert abs(feature_label_gap - production_label_gap) <= 1, (
+                "Task label/control spacing drift: "
+                f"production={production_label_gap}, feature={feature_label_gap}"
+            )
 
             feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
             production_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
@@ -5791,8 +5824,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["display", "gridTemplateColumns", "gap", "alignContent"],
                 ),
                 (
-                    "#planModal .plan-side-card",
-                    ".task-workspace-list-side-card",
+                    "#planModal .plan-side>.plan-side-card:first-child",
+                    ".task-workspace-list-side>.task-workspace-list-side-card:first-child",
                     ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderRadius"],
                 ),
                 (
