@@ -299,7 +299,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 /* Feature prototype parity: Task Editor is the shared 920px workspace route. */
 .task-workspace-shell.workspace-route{width:min(920px,94vw);max-width:94vw}
-.task-workspace-shell.task-editor-route .task-workspace-body{padding:12px 14px 14px}
+.task-workspace-shell.task-editor-route .task-workspace-body{padding:12px 14px 14px;scrollbar-gutter:auto}
 .task-workspace-shell.task-editor-route .task-workspace-foot{padding:9px 14px}
 
 .task-workspace-basics{
