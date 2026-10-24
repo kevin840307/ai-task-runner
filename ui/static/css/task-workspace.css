@@ -533,13 +533,13 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 
 
 /* Feature Task List Workspace: main list + List info / Quick use side rail. */
-.task-workspace-shell.task-list-route .task-workspace-body{padding:0;background:var(--bg)}
+.task-workspace-shell.task-list-route .task-workspace-body{padding:0;background:var(--bg);scrollbar-gutter:auto}
 .task-workspace-list-page{
-  min-height:100%;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;
-  padding:14px;background:var(--bg);overflow:auto
+  min-height:0;height:100%;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;
+  padding:14px;background:var(--bg);overflow:hidden
 }
 .task-workspace-list-main{
-  min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)
+  min-width:0;min-height:0;overflow:auto;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)
 }
 .task-workspace-list-intro{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -578,7 +578,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-list-state.current{background:var(--accent-soft);color:var(--accent-dark)}
 .task-workspace-list-state.completed{background:var(--success-soft);color:var(--pass)}
 
-.task-workspace-list-side{display:grid;align-content:start;gap:10px}
+.task-workspace-list-side{min-height:0;display:grid;align-content:start;gap:10px;overflow:auto}
 .task-workspace-list-side-card{
   padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel)
 }
