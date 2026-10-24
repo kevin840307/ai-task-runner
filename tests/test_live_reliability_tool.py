@@ -2949,14 +2949,37 @@ def test_merge_cross_matrix_preflight_covers_delivery_failure_guards_and_recover
     assert result["technical_error_real_failure"] is False
     assert result["target_history"] == "waiting_target_history"
     assert result["target_history_real_failure"] is False
+    assert result["dirty_target"] == "waiting_target_clean"
+    assert result["dirty_target_real_failure"] is False
+    assert result["unmanaged_target"] == "waiting_target_workspace"
+    assert result["unmanaged_target_real_failure"] is False
+    assert result["missing_target_branch"] == "waiting_target_branch"
+    assert result["missing_target_branch_real_failure"] is False
     assert result["idempotent"] == "merged"
     assert result["idempotent_head"]
     assert result["conflict"] == "conflict"
     assert result["conflict_files"] == ["app.txt"]
     assert result["recovery"] == "merged"
+    assert result["fifo_head"] == "conflict"
+    assert result["fifo_head_seq"] == 1
+    assert result["fifo_pending"] == "pending_merge"
+    assert result["fifo_pending_seq"] == 2
+    assert result["fifo_pending_retry"] == "pending_merge"
+    assert result["fifo_pending_retry_seq"] == 2
+    assert result["fifo_finalized"] == "merged"
+    assert result["fifo_delivered"] == "merged"
+    assert result["fifo_delivered_seq"] == 2
+    assert result["fifo_validation_calls"] == 1
 
     assert not (tmp_path / "merge-source-fail-preflight" / "task-side.txt").exists()
     assert not (tmp_path / "merge-technical-error-preflight" / "task-side.txt").exists()
+    assert (tmp_path / "merge-dirty-target-preflight" / "user-uncommitted.txt").read_text(
+        encoding="utf-8"
+    ) == "keep-user-work\n"
+    assert not (tmp_path / "merge-dirty-target-preflight" / "dirty-task.txt").exists()
+    assert (tmp_path / "merge-fifo-preflight" / "fifo-b.txt").read_text(
+        encoding="utf-8"
+    ) == "fifo-task-b\n"
     recovered = tmp_path / "merge-conflict-recovery-preflight" / "app.txt"
     assert recovered.read_text(encoding="utf-8") == "integrated task + target\n"
 

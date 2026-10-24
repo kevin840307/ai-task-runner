@@ -240,6 +240,16 @@ TASK_EDITOR = PanelSpec(
             ".task-workspace-task-primary-source .task-workspace-source-tabs button",
             ("width", "min-width", "height", "padding", "white-space", "overflow", "text-overflow"),
         ),
+        Pair(
+            "#newTaskModal .task-ai-source .source-tabs button",
+            ".task-workspace-task-ai-source .task-workspace-source-tabs button",
+            ("width", "min-width", "height", "padding", "white-space", "overflow", "text-overflow"),
+        ),
+        Pair(
+            "#newTaskModal .task-source-mode-panel",
+            ".task-workspace-source-mode-panel",
+            ("width", "min-width", "box-sizing", "display", "flex-direction", "gap"),
+        ),
         Pair("#newTaskModal .task-primary-source .task-source-mode-panel>textarea", ".task-workspace-task-primary-source .task-workspace-source-mode-panel>textarea", ("min-height",)),
         Pair("#newTaskModal .task-ai-source .task-source-mode-panel>textarea", ".task-workspace-task-ai-source .task-workspace-source-mode-panel>textarea", ("min-height",)),
         Pair(
@@ -286,7 +296,11 @@ TASK_LIST = PanelSpec(
         Pair(".plan-side", ".task-workspace-list-side", ("display", "gap", "align-content")),
         Pair("#planModal .plan-side", ".task-workspace-list-side", ("min-height", "overflow")),
         Pair(".plan-side-card", ".task-workspace-list-side-card", ("padding", "border-radius", "background")),
-        Pair(".plan-add-task-footer", ".task-workspace-add-task-footer", ("width", "min-height", "gap", "margin-top", "border-radius", "font-size")),
+        Pair(
+            ".plan-add-task-footer",
+            ".task-workspace-add-task-footer",
+            ("width", "min-height", "display", "align-items", "justify-content", "gap", "margin-top", "border", "border-radius", "background", "color", "font-size", "font-weight", "cursor"),
+        ),
         Pair(".plan-row-compact[draggable=\"true\"]", ".task-workspace-list-row[draggable=\"true\"]", ("cursor",)),
         Pair(".draft-plan-row", ".task-workspace-list-row[draggable=\"true\"]", ("transition",)),
         Pair(".plan-row-compact.dragging", ".task-workspace-list-row.dragging", ("opacity",)),
@@ -307,6 +321,7 @@ TASK_LIST = PanelSpec(
             ("width", "height", "margin", "display", "place-items", "line-height", "align-self"),
         ),
         Pair(".plan-intro", ".task-workspace-list-intro", ("display", "align-items", "justify-content", "gap", "margin-bottom")),
+        Pair("#planModal .plan-intro", ".task-workspace-list-intro", ("padding-bottom", "border-bottom")),
         Pair(".plan-intro strong", ".task-workspace-list-intro strong", ("display", "font-size")),
         Pair(
             ".plan-intro span:not(.pill)",
@@ -315,7 +330,11 @@ TASK_LIST = PanelSpec(
         ),
         Pair(".plan-list", ".task-workspace-list", ("display", "gap")),
         Pair(".plan-row-copy strong", ".task-workspace-list-copy strong", ("font-size",)),
-        Pair(".plan-row-copy small", ".task-workspace-list-copy small", ("margin-top", "font-size")),
+        Pair(
+            ".plan-row-copy small",
+            ".task-workspace-list-copy small",
+            ("margin-top", "font-size", "white-space", "overflow", "text-overflow", "max-width"),
+        ),
         Pair(".plan-row-actions", ".task-workspace-list-actions", ("display", "align-items", "gap")),
         Pair(
             ".plan-row-controls button",

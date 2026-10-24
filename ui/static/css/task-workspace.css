@@ -579,7 +579,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   border-radius:50%;background:var(--panel-3);color:var(--muted);font-size:8px
 }
 .task-workspace-list-copy strong{font-size:10px}
-.task-workspace-list-copy small{margin-top:2px;font-size:8px}
+.task-workspace-list-copy small{margin-top:2px;font-size:8px;max-width:56vw}
 .task-workspace-list-actions{display:flex;align-items:center;gap:4px}
 .task-workspace-list-actions button{
   height:27px;min-height:27px;min-width:27px;padding:0 7px;border:1px solid var(--line);

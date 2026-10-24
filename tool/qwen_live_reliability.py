@@ -5694,7 +5694,7 @@ def _prepare_merge_probe(
 
 def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
     """Exercise clean/advanced delivery plus failure, history, and recovery cross-cases."""
-    from workspace import MergeManager
+    from workspace import MergeManager, WorkspaceManager
 
     # 1) Clean target: direct merge, no extra validation required.
     repo_clean, manager_clean, prepared_clean = _prepare_merge_probe(
@@ -5863,7 +5863,95 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         raise RuntimeError("Target-history wait mutated rewritten target HEAD")
     manager_history.cleanup(prepared_history)
 
-    # 6) Already-delivered source is finalized idempotently without revalidation/duplicate merge.
+    # 6) Dirty captured target must wait without stashing/resetting user work.
+    repo_dirty, manager_dirty, prepared_dirty = _prepare_merge_probe(
+        root,
+        "merge-dirty-target-preflight",
+        task_id="live-merge-dirty-target",
+    )
+    (prepared_dirty.project_root / "dirty-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_dirty = manager_dirty.snapshot_result(prepared_dirty)
+    dirty_head = _delivery_git(repo_dirty, "rev-parse", "HEAD").stdout.strip()
+    (repo_dirty / "user-uncommitted.txt").write_text(
+        "keep-user-work\n", encoding="utf-8"
+    )
+    dirty_result = MergeManager().merge(prepared_dirty, snapshot_dirty)
+    if dirty_result.status != "waiting_target_clean" or dirty_result.real_merge_failure:
+        raise RuntimeError(
+            "Dirty-target merge preflight mismatch: "
+            f"status={dirty_result.status} real_failure={dirty_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_dirty, "rev-parse", "HEAD").stdout.strip() != dirty_head:
+        raise RuntimeError("Dirty-target wait mutated target HEAD")
+    if (repo_dirty / "user-uncommitted.txt").read_text(encoding="utf-8") != "keep-user-work\n":
+        raise RuntimeError("Dirty-target wait mutated uncommitted user work")
+    if (repo_dirty / "dirty-task.txt").exists():
+        raise RuntimeError("Dirty-target wait leaked Task content into target Project")
+    manager_dirty.cleanup(prepared_dirty)
+
+    # 7) Captured target checked out in an unmanaged user worktree must wait.
+    repo_unmanaged, manager_unmanaged, prepared_unmanaged = _prepare_merge_probe(
+        root,
+        "merge-unmanaged-target-preflight",
+        task_id="live-merge-unmanaged-target",
+    )
+    (prepared_unmanaged.project_root / "unmanaged-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_unmanaged = manager_unmanaged.snapshot_result(prepared_unmanaged)
+    _delivery_git(repo_unmanaged, "checkout", "-b", "user/other")
+    user_target = root / "merge-unmanaged-target-user-worktree"
+    _delivery_git(
+        repo_unmanaged,
+        "worktree",
+        "add",
+        str(user_target),
+        prepared_unmanaged.target_branch,
+    )
+    unmanaged_head = _delivery_git(user_target, "rev-parse", "HEAD").stdout.strip()
+    unmanaged_result = MergeManager().merge(prepared_unmanaged, snapshot_unmanaged)
+    if (
+        unmanaged_result.status != "waiting_target_workspace"
+        or unmanaged_result.real_merge_failure
+        or unmanaged_result.target_worktree != user_target.resolve()
+    ):
+        raise RuntimeError(
+            "Unmanaged-target merge preflight mismatch: "
+            f"status={unmanaged_result.status} target={unmanaged_result.target_worktree} "
+            f"real_failure={unmanaged_result.real_merge_failure}"
+        )
+    if _delivery_git(user_target, "rev-parse", "HEAD").stdout.strip() != unmanaged_head:
+        raise RuntimeError("Unmanaged-target wait mutated user worktree HEAD")
+    if _delivery_git(user_target, "status", "--porcelain").stdout.strip():
+        raise RuntimeError("Unmanaged-target wait dirtied user worktree")
+    _delivery_git(repo_unmanaged, "worktree", "remove", "--force", str(user_target))
+    manager_unmanaged.cleanup(prepared_unmanaged)
+
+    # 8) Deleted captured target branch must wait instead of guessing a replacement.
+    repo_branch, manager_branch, prepared_branch = _prepare_merge_probe(
+        root,
+        "merge-missing-target-branch-preflight",
+        task_id="live-merge-missing-target-branch",
+    )
+    (prepared_branch.project_root / "branch-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_branch = manager_branch.snapshot_result(prepared_branch)
+    _delivery_git(repo_branch, "checkout", "-b", "user/other")
+    _delivery_git(repo_branch, "branch", "-D", prepared_branch.target_branch)
+    branch_result = MergeManager().merge(prepared_branch, snapshot_branch)
+    if branch_result.status != "waiting_target_branch" or branch_result.real_merge_failure:
+        raise RuntimeError(
+            "Missing-target-branch merge preflight mismatch: "
+            f"status={branch_result.status} real_failure={branch_result.real_merge_failure}"
+        )
+    if _delivery_git(repo_branch, "branch", "--show-current").stdout.strip() != "user/other":
+        raise RuntimeError("Missing-target-branch wait switched the user's checkout")
+    manager_branch.cleanup(prepared_branch)
+
+    # 9) Already-delivered source is finalized idempotently without revalidation/duplicate merge.
     repo_idempotent, manager_idempotent, prepared_idempotent = _prepare_merge_probe(
         root,
         "merge-idempotent-preflight",
@@ -5902,7 +5990,7 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         )
     manager_idempotent.cleanup(prepared_idempotent)
 
-    # 7) Same-file conflict: retain source, prepare latest-target recovery, then merge recovery.
+    # 10) Same-file conflict: retain source, prepare latest-target recovery, then merge recovery.
     repo_conflict, manager_conflict, prepared_conflict = _prepare_merge_probe(
         root,
         "merge-conflict-recovery-preflight",
@@ -5968,6 +6056,129 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
 
     manager_conflict.cleanup(recovery)
     manager_conflict.cleanup(prepared_conflict)
+
+    # 11) Durable FIFO must prevent a later Main Task from overtaking a blocked head.
+    repo_fifo = _create_delivery_probe_repo(root, "merge-fifo-preflight")
+    fifo_manager = WorkspaceManager(worktree_root=root / "merge-fifo-preflight-worktrees")
+    fifo_settings = {
+        "auto_workspace_policy": "busy-worktree",
+        "allow_concurrent_main_tasks": False,
+    }
+    prepared_fifo_a = fifo_manager.prepare(
+        repo_fifo,
+        task_id="live-merge-fifo-a",
+        run_number=1,
+        requested_mode="main",
+        execution_settings=fifo_settings,
+        main_running=False,
+    )
+    prepared_fifo_b = fifo_manager.prepare(
+        repo_fifo,
+        task_id="live-merge-fifo-b",
+        run_number=1,
+        requested_mode="main",
+        execution_settings=fifo_settings,
+        main_running=False,
+    )
+    (prepared_fifo_a.project_root / "app.txt").write_text(
+        "fifo-task-a\n", encoding="utf-8"
+    )
+    snapshot_fifo_a = fifo_manager.snapshot_result(prepared_fifo_a)
+    (prepared_fifo_b.project_root / "fifo-b.txt").write_text(
+        "fifo-task-b\n", encoding="utf-8"
+    )
+    snapshot_fifo_b = fifo_manager.snapshot_result(prepared_fifo_b)
+    (repo_fifo / "app.txt").write_text("fifo-target\n", encoding="utf-8")
+    _delivery_git(repo_fifo, "add", "app.txt")
+    _delivery_git(repo_fifo, "commit", "-m", "block FIFO queue head")
+    fifo_merge = MergeManager()
+    fifo_head = fifo_merge.merge(
+        prepared_fifo_a,
+        snapshot_fifo_a,
+        validate=lambda _project: "PASS",
+    )
+    fifo_pending = fifo_merge.merge(
+        prepared_fifo_b,
+        snapshot_fifo_b,
+        validate=lambda _project: "PASS",
+    )
+    fifo_pending_retry = MergeManager().merge(
+        prepared_fifo_b,
+        snapshot_fifo_b,
+        validate=lambda _project: "PASS",
+    )
+    if fifo_head.status != "conflict" or fifo_head.merge_queue_seq != 1:
+        raise RuntimeError(
+            "FIFO merge head did not retain the queue: "
+            f"status={fifo_head.status} seq={fifo_head.merge_queue_seq}"
+        )
+    if (
+        fifo_pending.status != "pending_merge"
+        or fifo_pending.merge_queue_seq != 2
+        or fifo_pending_retry.status != "pending_merge"
+        or fifo_pending_retry.merge_queue_seq != 2
+    ):
+        raise RuntimeError(
+            "FIFO merge follower overtook/resequenced the queue: "
+            f"first={fifo_pending.status}/{fifo_pending.merge_queue_seq} "
+            f"retry={fifo_pending_retry.status}/{fifo_pending_retry.merge_queue_seq}"
+        )
+    if (repo_fifo / "fifo-b.txt").exists():
+        raise RuntimeError("FIFO pending follower leaked into target Project")
+    _delivery_git(
+        repo_fifo,
+        "merge",
+        "--no-ff",
+        "-s",
+        "ours",
+        prepared_fifo_a.task_branch,
+        "-m",
+        "external FIFO head delivery",
+    )
+    fifo_finalized = fifo_merge.merge(
+        prepared_fifo_a,
+        snapshot_fifo_a,
+        validate=lambda _project: "SOURCE_FAIL",
+    )
+    fifo_validation_calls = 0
+
+    def validate_fifo(project: Path) -> str:
+        nonlocal fifo_validation_calls
+        fifo_validation_calls += 1
+        return (
+            "PASS"
+            if (project / "fifo-b.txt").read_text(encoding="utf-8") == "fifo-task-b\n"
+            else "SOURCE_FAIL"
+        )
+
+    fifo_delivered = MergeManager().merge(
+        prepared_fifo_b,
+        snapshot_fifo_b,
+        validate=validate_fifo,
+    )
+    if fifo_finalized.status != "merged" or fifo_finalized.merge_queue_seq != 1:
+        raise RuntimeError(
+            "FIFO merge head did not finalize idempotently: "
+            f"status={fifo_finalized.status} seq={fifo_finalized.merge_queue_seq}"
+        )
+    if (
+        fifo_delivered.status != "merged"
+        or fifo_delivered.merge_queue_seq != 2
+        or not fifo_delivered.validation_required
+        or fifo_delivered.verdict != "PASS"
+        or fifo_validation_calls != 1
+    ):
+        raise RuntimeError(
+            "FIFO merge follower did not deliver after head completion: "
+            f"status={fifo_delivered.status} seq={fifo_delivered.merge_queue_seq} "
+            f"validation={fifo_delivered.validation_required} "
+            f"verdict={fifo_delivered.verdict} calls={fifo_validation_calls}"
+        )
+    if (repo_fifo / "fifo-b.txt").read_text(encoding="utf-8") != "fifo-task-b\n":
+        raise RuntimeError("FIFO merge follower result missing after delivery")
+    fifo_manager.cleanup(prepared_fifo_b)
+    fifo_manager.cleanup(prepared_fifo_a)
+
     return {
         "clean": clean_result.status,
         "target_advance": advanced_result.status,
@@ -5978,11 +6189,27 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "technical_error_real_failure": technical_result.real_merge_failure,
         "target_history": history_result.status,
         "target_history_real_failure": history_result.real_merge_failure,
+        "dirty_target": dirty_result.status,
+        "dirty_target_real_failure": dirty_result.real_merge_failure,
+        "unmanaged_target": unmanaged_result.status,
+        "unmanaged_target_real_failure": unmanaged_result.real_merge_failure,
+        "missing_target_branch": branch_result.status,
+        "missing_target_branch_real_failure": branch_result.real_merge_failure,
         "idempotent": idempotent_result.status,
         "idempotent_head": idempotent_result.merged_target_head_sha,
         "conflict": conflict_result.status,
         "conflict_files": list(conflict_result.conflict_files),
         "recovery": recovery_result.status,
+        "fifo_head": fifo_head.status,
+        "fifo_head_seq": fifo_head.merge_queue_seq,
+        "fifo_pending": fifo_pending.status,
+        "fifo_pending_seq": fifo_pending.merge_queue_seq,
+        "fifo_pending_retry": fifo_pending_retry.status,
+        "fifo_pending_retry_seq": fifo_pending_retry.merge_queue_seq,
+        "fifo_finalized": fifo_finalized.status,
+        "fifo_delivered": fifo_delivered.status,
+        "fifo_delivered_seq": fifo_delivered.merge_queue_seq,
+        "fifo_validation_calls": fifo_validation_calls,
     }
 
 def runner_workspace_delivery_probe(
