@@ -484,14 +484,29 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
         ("grid-template-columns", "gap", "padding"),
     )
     _same(
+        "#planModal .plan-page-body",
+        ".task-workspace-list-page",
+        ("min-height", "height", "overflow"),
+    )
+    _same(
         ".plan-main",
         ".task-workspace-list-main",
         ("padding", "border-radius"),
     )
     _same(
+        "#planModal .plan-main",
+        ".task-workspace-list-main",
+        ("min-height", "overflow"),
+    )
+    _same(
         ".plan-side",
         ".task-workspace-list-side",
         ("display", "gap", "align-content"),
+    )
+    _same(
+        "#planModal .plan-side",
+        ".task-workspace-list-side",
+        ("min-height", "overflow"),
     )
     _same(
         ".plan-side-card",
