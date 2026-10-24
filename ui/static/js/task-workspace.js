@@ -1048,7 +1048,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       if (editable) {
         row.addEventListener("dblclick", (event) => {
           if (event.target.closest("button")) return;
-          selectTaskListRow(index);
+          if (state?.kind === "task") selectTaskListRow(index);
           if (policy.editable !== false) editItem(index);
         });
         row.addEventListener("keydown", (event) => {

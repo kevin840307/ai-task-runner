@@ -2368,6 +2368,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             draft_first_row.click()
             assert draft_first_row.get_attribute("aria-selected") == "false"
             assert "selected" not in (draft_first_row.get_attribute("class") or "").split()
+            draft_first_row.dblclick()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            draft_first_row = page.locator(".task-workspace-list-row").first
+            assert draft_first_row.get_attribute("aria-selected") == "false"
+            assert "selected" not in (draft_first_row.get_attribute("class") or "").split()
 
             # Feature parity: Task List Draft rows expose the same pointer,
             # keyboard and explicit ↑/↓ reorder paths as the prototype.
