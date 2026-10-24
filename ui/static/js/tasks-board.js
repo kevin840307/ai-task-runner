@@ -558,7 +558,9 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     root.appendChild(table);
   }
   function render() {
-    hideTaskContextMenu();
+    // Background polling re-renders Board/List rows. Keep an explicitly opened
+    // context menu stable across that refresh; pointer/keyboard/scroll/resize
+    // dismissal owns closing it, matching the accepted prototype behavior.
     renderFilter();
     renderRunningState();
     const board = byId("tasksBoardColumns");
