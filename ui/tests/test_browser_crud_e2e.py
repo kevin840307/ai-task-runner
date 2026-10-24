@@ -4781,8 +4781,10 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("#taskWorkspaceWorkspace").input_value() == "worktree"
             assert page.locator("#taskWorkspaceWorkspaceAvailability").get_attribute("class").find("worktree-active") >= 0
             assert "WORKTREE" in page.locator("#taskWorkspaceWorkspaceAvailability strong").inner_text()
+            assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
             page.locator("[data-workspace-option='auto']").click()
             assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
+            assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
 
             def assert_inside_drawer(selector: str) -> dict:
                 shell = page.locator("#taskWorkspaceShell").bounding_box()
@@ -4905,6 +4907,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             ):
                 page.locator(f"[data-task-source-group='prompt'] [data-task-source-mode='{mode}']").click()
                 page.wait_for_function("(selector) => document.querySelector(selector) !== null", arg=control)
+                assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
                 prompt_card_widths.append(assert_inside_drawer("[data-task-source-card='prompt']")["width"])
                 shell_now = page.locator("#taskWorkspaceShell").bounding_box()
                 assert shell_now
@@ -4983,6 +4986,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     }""",
                     arg=[mode, control],
                 )
+                assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
                 ai_card_widths.append(assert_inside_drawer("[data-task-source-card='ai']")["width"])
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 if mode == "write":
@@ -5778,6 +5782,34 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             assert abs(feature_label_gap - production_label_gap) <= 1, (
                 "Task label/control spacing drift: "
                 f"production={production_label_gap}, feature={feature_label_gap}"
+            )
+
+            # File-mode AI validator input is especially sensitive to the
+            # generic input cascade. Compare the actual browser-computed style
+            # against the prototype instead of relying on selector mapping.
+            feature_page.click("#taskAiOverride")
+            feature_page.wait_for_function("document.querySelector('#taskAiModeSelect') !== null")
+            feature_page.select_option("#taskAiModeSelect", "file")
+            feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
+            production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#taskAiFile",
+                production_page,
+                "#taskWorkspaceAiValidatorPrompt",
+                [
+                    "height", "minWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                    "borderTopWidth", "borderTopStyle", "borderRadius",
+                    "backgroundColor", "color", "fontSize",
+                ],
+            )
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#taskAiFile.closest('.pathrow')",
+                production_page,
+                "#taskWorkspaceAiValidatorPrompt.closest('.task-workspace-path-row')",
+                ["display", "gap", "alignItems"],
             )
 
             feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
