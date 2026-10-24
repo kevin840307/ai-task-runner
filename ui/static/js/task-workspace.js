@@ -67,7 +67,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         <div class="task-workspace-context-separator"></div>
         <button type="button" data-task-context-action="remove" class="danger-item"><span>Remove</span><kbd>Del</kbd></button>
       </div>`;
-    document.body.appendChild(taskContextMenu);
+    // Keep the prototype menu z-index, but mount it inside the production
+    // Drawer overlay stacking context. The production overlay intentionally
+    // sits above Project Chat, so a body-level z-index:320 menu would render
+    // underneath it and become non-interactive.
+    overlay.appendChild(taskContextMenu);
     taskContextMenu.querySelectorAll("[data-task-context-action]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.disabled || !taskContextState) return;

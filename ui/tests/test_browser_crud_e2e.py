@@ -2475,6 +2475,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             durable_rows.first.locator(".task-workspace-row-more").click()
             context_menu = page.locator("#taskWorkspaceContextMenu")
             assert context_menu.is_visible()
+            assert context_menu.evaluate("(node) => node.parentElement?.id") == "taskWorkspaceOverlay"
             assert context_menu.locator("[data-task-context-action='edit']").get_attribute("aria-label") == "Edit"
             assert context_menu.get_by_role("button", name="Edit", exact=True).is_enabled()
             assert context_menu.get_by_role("button", name="Info", exact=True).is_enabled()
