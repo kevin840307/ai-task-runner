@@ -37,6 +37,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
             <strong id="taskWorkspaceTitle">Edit Task</strong>
             <span id="taskWorkspaceMeta"></span>
           </div>
+          <button id="taskWorkspaceRenameList" class="task-workspace-title-edit" type="button" title="Rename list" aria-label="Rename list" hidden>✎</button>
           <div id="taskWorkspaceHeaderActions" class="task-workspace-header-actions" hidden>
             <button id="taskWorkspaceHeaderOpenWorkflow" class="ghost" type="button" hidden>Open Workflow</button>
             <button id="taskWorkspaceHeaderAddTask" type="button">+ Add task</button>
@@ -110,6 +111,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceClose").addEventListener("click", () => void requestClose());
     byId("taskWorkspaceExpand").addEventListener("click", () => setWorkspaceExpanded(!byId("taskWorkspaceShell").classList.contains("expanded")));
     byId("taskWorkspaceHeaderBack").addEventListener("click", () => void handleBack());
+    byId("taskWorkspaceRenameList").addEventListener("click", beginTaskListRename);
+    byId("taskWorkspaceTitle").addEventListener("keydown", (event) => {
+      if (!event.currentTarget.isContentEditable || event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      finishTaskListRename(false);
+    });
+    byId("taskWorkspaceTitle").addEventListener("blur", (event) => {
+      if (event.currentTarget.isContentEditable) finishTaskListRename(false);
+    });
     byId("taskWorkspaceFooterInfo").addEventListener("click", () => void showTaskInfoFromList());
     byId("taskWorkspaceFooterBack").addEventListener("click", () => void handleBack());
     byId("taskWorkspaceSave").addEventListener("click", () => void saveWorkspace());
@@ -169,6 +180,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       if (event.key !== "Escape") return;
       if (!overlay.contains(event.target)) return;
+      const title = byId("taskWorkspaceTitle");
+      if (title?.isContentEditable) {
+        event.preventDefault();
+        event.stopPropagation();
+        finishTaskListRename(true);
+        return;
+      }
       const projectDropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
       if (projectDropdown) {
         event.preventDefault();
@@ -1590,12 +1608,26 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       listInfoRow(kv, tr("task.path", "Path"), inspector.path);
     } else {
       const task = durableTask || {};
-      const policy = taskEditPolicy(task);
-      if (editable && policy.can_rename) listInfoRow(kv, tr("task.list_label", "List"), listTitleControl());
-      else listInfoRow(kv, tr("task.list_label", "List"), String(task.title || ""));
-      listInfoRow(kv, tr("task.status_label", "Status"), String(task.status || "new").toUpperCase());
-      listInfoRow(kv, tr("task.runtime_label", "Runtime"), String(task.run?.phase || (task.status === "closed" ? "Completed" : "Idle")).replaceAll("_", " "));
-      listInfoRow(kv, tr("task.progress_label", "Progress"), String(task.completed_item_count || 0) + " / " + String(items.length));
+      const status = String(task.status || "new");
+      const statusLabel = status ? status.charAt(0).toUpperCase() + status.slice(1) : "New";
+      const runtimeRaw = String(task.run?.phase || (status === "closed" ? "done" : "idle")).replaceAll("_", " ");
+      const runtimeLabels = {
+        running: "Running",
+        recover: "Recovering",
+        stopped: "Stopped",
+        done: "Completed",
+        idle: "Idle",
+        failed: "Failed",
+        attention: "Needs Attention",
+      };
+      const completed = Math.max(0, Number(task.completed_item_count || 0));
+      const current = items.length ? Math.min(completed, items.length - 1) + 1 : 0;
+      listInfoRow(kv, tr("task.list_label", "List"), String(state.editDraft?.title || task.title || ""));
+      listInfoRow(kv, tr("task.status_label", "Status"), statusLabel);
+      listInfoRow(kv, tr("task.runtime_label", "Runtime"), runtimeLabels[runtimeRaw] || runtimeRaw);
+      listInfoRow(kv, tr("task.items_title", "Tasks"), String(items.length));
+      listInfoRow(kv, tr("task.progress_label", "Progress"), String(completed) + " / " + String(items.length));
+      listInfoRow(kv, tr("task.current_label", "Current"), items.length ? "Task " + String(current) : "—");
     }
     info.append(infoTitle, kv, createTaskListTools({ editable, canYaml, reason }));
 
@@ -2741,6 +2773,50 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return true;
   }
 
+  let taskListRenameOriginal = "";
+
+  function finishTaskListRename(cancel = false) {
+    const title = byId("taskWorkspaceTitle");
+    if (!title?.isContentEditable) return;
+    const draft = state?.editDraft;
+    const original = taskListRenameOriginal || String(draft?.title || state?.task?.title || "");
+    const next = cancel ? original : String(title.textContent || "").trim();
+    title.contentEditable = "false";
+    title.classList.remove("editing");
+    taskListRenameOriginal = "";
+    if (!draft || cancel || !next) {
+      title.textContent = original;
+      return;
+    }
+    if (next !== String(draft.title || "")) {
+      draft.title = next;
+      touchEditor();
+      const listValue = byId("taskWorkspaceBody")?.querySelector(
+        ".task-workspace-list-side-card:not(.info-active) .task-workspace-list-kv strong"
+      );
+      if (listValue) listValue.textContent = next;
+    }
+    title.textContent = String(draft.title || next);
+  }
+
+  function beginTaskListRename() {
+    if (state?.kind !== "task" || state.route !== "list") return;
+    const policy = taskEditPolicy(state.task);
+    if (!policy.can_rename || !ensureTaskEditDraft()) return;
+    const title = byId("taskWorkspaceTitle");
+    if (!title) return;
+    taskListRenameOriginal = String(state.editDraft?.title || state.task?.title || "");
+    title.textContent = taskListRenameOriginal;
+    title.contentEditable = "true";
+    title.classList.add("editing");
+    title.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
   function beginTaskListEdit() {
     state.listReturn = "info";
     if (!ensureTaskEditDraft()) {
@@ -3173,7 +3249,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     hideTaskContextMenu();
     const shell = byId("taskWorkspaceShell");
     const footerInfo = byId("taskWorkspaceFooterInfo");
+    const renameList = byId("taskWorkspaceRenameList");
     if (footerInfo) footerInfo.hidden = true;
+    if (renameList) renameList.hidden = true;
     const workspaceRoute = ["editor", "list", "yaml"].includes(String(state.route || ""));
     shell?.classList.toggle("workspace-route", workspaceRoute);
     shell?.classList.toggle("task-editor-route", state.route === "editor");
@@ -3204,15 +3282,25 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         footerInfo.hidden = !directNewList;
         footerInfo.textContent = tr("task.back_info", "Back to Info");
       }
+      if (renameList) {
+        const listPolicy = listRoute ? taskEditPolicy(state.task) : null;
+        renameList.hidden = !listRoute || !listPolicy?.can_rename;
+        renameList.disabled = !listPolicy?.can_rename;
+      }
       byId("taskWorkspaceEyebrow").textContent = yamlRoute
         ? tr("task.yaml", "TASK YAML")
         : (editorRoute ? tr("task.editor", "TASK EDITOR") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.info", "TASK INFO")));
       const taskItems = state.editDraft?.items || state.task?.items || [];
-      byId("taskWorkspaceTitle").textContent = yamlRoute
-        ? "Edit task list YAML"
-        : editorRoute
-          ? (state.editorMode === "create" ? "New task" : "Edit task")
-          : String(state.task?.title || "Task");
+      const shellTitle = byId("taskWorkspaceTitle");
+      if (!shellTitle?.isContentEditable) {
+        shellTitle.textContent = yamlRoute
+          ? "Edit task list YAML"
+          : editorRoute
+            ? (state.editorMode === "create" ? "New task" : "Edit task")
+            : listRoute
+              ? String(state.editDraft?.title || state.task?.title || "Task")
+              : String(state.task?.title || "Task");
+      }
       byId("taskWorkspaceMeta").textContent = yamlRoute
         ? String(state.task?.task_id || "") + " · " + String(state.task?.title || "")
         : editorRoute

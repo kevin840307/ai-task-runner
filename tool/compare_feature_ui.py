@@ -291,6 +291,16 @@ TASK_EDITOR = PanelSpec(
         Pair(".drawerhead", ".task-workspace-head", ("padding", "border-bottom")),
         Pair(".drawerheadtop", ".task-workspace-head", ("display", "gap", "align-items")),
         Pair(".drawerhead h2", ".task-workspace-heading strong", ("font-size", "line-height", "white-space", "overflow", "text-overflow")),
+        Pair(
+            ".plan-title-edit",
+            ".task-workspace-title-edit",
+            ("display", "place-items", "width", "height", "border", "border-radius", "background", "color", "font-size", "cursor"),
+        ),
+        Pair(
+            "#drawerTitle[contenteditable=\"true\"]",
+            "#taskWorkspaceTitle[contenteditable=\"true\"]",
+            ("max-width", "padding", "border", "border-radius", "background", "outline", "overflow", "text-overflow"),
+        ),
         Pair(".drawer-back", ".task-workspace-back", ("width", "height", "border", "border-radius", "background", "font-size", "font-weight")),
         Pair(".drawerfoot", ".task-workspace-foot", ("display", "align-items", "justify-content", "flex-wrap", "gap", "height", "min-height", "max-height", "overflow", "padding", "border-top", "background", "position", "width", "z-index")),
         Pair(".drawerfoot .btn", ".task-workspace-foot button", ("height", "min-height", "max-height", "padding-block", "line-height", "white-space")),

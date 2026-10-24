@@ -3517,6 +3517,19 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#taskWorkspaceHeaderMoveExisting").is_visible()
             assert page.locator("#taskWorkspaceHeaderYaml").is_visible()
             assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_hidden()
+            assert page.locator("#taskWorkspaceRenameList").is_visible()
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+            assert page.locator(".task-workspace-list-side-card").first.locator(
+                ".task-workspace-list-kv>span"
+            ).all_inner_texts() == ["List", "Status", "Runtime", "Tasks", "Progress", "Current"]
+            list_title_before_rename = page.locator("#taskWorkspaceTitle").inner_text()
+            page.click("#taskWorkspaceRenameList")
+            assert page.locator("#taskWorkspaceTitle").get_attribute("contenteditable") == "true"
+            page.locator("#taskWorkspaceTitle").fill("Cancelled inline rename")
+            page.keyboard.press("Escape")
+            assert page.locator("#taskWorkspaceTitle").inner_text() == list_title_before_rename
+            assert page.locator("#taskWorkspaceTitle").get_attribute("contenteditable") == "false"
+            assert page.locator("#taskWorkspaceOverlay").is_visible()
             page.locator(".task-workspace-list-row").first.click()
             assert page.locator(".task-workspace-list-row").first.get_attribute("aria-selected") == "true"
             assert "selected" in (page.locator(".task-workspace-list-row").first.get_attribute("class") or "")
