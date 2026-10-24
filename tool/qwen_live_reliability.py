@@ -5993,13 +5993,14 @@ def runner_workspace_delivery_probe(
     from workspace import MergeManager, WorkspaceManager
 
     cases = (
-        ("main", "main", False, "main"),
-        ("worktree", "worktree", False, "worktree"),
-        ("auto_idle", "auto", False, "main"),
-        ("auto_busy", "auto", True, "worktree"),
+        ("main", "main", False, "main", False),
+        ("worktree", "worktree", False, "worktree", False),
+        ("auto_idle", "auto", False, "main", False),
+        ("auto_busy", "auto", True, "worktree", False),
+        ("worktree_target_advance", "worktree", False, "worktree", True),
     )
     results: dict[str, object] = {}
-    for case_key, requested_mode, main_running, expected_mode in cases:
+    for case_key, requested_mode, main_running, expected_mode, target_advance in cases:
         case_name = f"runner-workspace-{case_key.replace('_', '-')}-probe"
         repo = _create_delivery_probe_repo(root, case_name)
         (repo / "prompt.md").write_text(
@@ -6085,7 +6086,28 @@ def runner_workspace_delivery_probe(
                 "Runner/workspace delivery leaked into the target Project before merge"
             )
 
-        merged = MergeManager().merge(prepared, snapshot)
+        validation_calls = 0
+        validate_delivery = None
+        if target_advance:
+            (repo / "target-side.txt").write_text("advanced target\n", encoding="utf-8")
+            _delivery_git(repo, "add", "target-side.txt")
+            _delivery_git(repo, "commit", "-m", "advance target during Task execution")
+
+            def validate_delivery(project: Path) -> str:
+                nonlocal validation_calls
+                validation_calls += 1
+                healthy = (
+                    (project / "health.txt").is_file()
+                    and (project / "health.txt").read_text(encoding="utf-8") == EXPECTED
+                )
+                target_preserved = (
+                    (project / "target-side.txt").is_file()
+                    and (project / "target-side.txt").read_text(encoding="utf-8")
+                    == "advanced target\n"
+                )
+                return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
+
+        merged = MergeManager().merge(prepared, snapshot, validate=validate_delivery)
         if merged.status != "merged":
             raise RuntimeError(
                 "Runner/workspace delivery failed: "
@@ -6102,6 +6124,18 @@ def runner_workspace_delivery_probe(
             )
         result["delivery"] = merged.status
         result["merged_target_head_sha"] = merged.merged_target_head_sha
+        result["validation_required"] = merged.validation_required
+        result["validation_verdict"] = merged.verdict
+        result["validation_calls"] = validation_calls
+        if target_advance:
+            if not merged.validation_required or merged.verdict != "PASS":
+                raise RuntimeError(
+                    "Runner/workspace target-advance merge skipped required validation"
+                )
+            if validation_calls != 1:
+                raise RuntimeError(
+                    "Runner/workspace target-advance merge must validate exactly once"
+                )
 
         cleanup = manager.cleanup(prepared)
         if cleanup.status not in {"cleaned", "already_cleaned"}:

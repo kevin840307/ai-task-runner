@@ -579,6 +579,32 @@ def test_new_task_list_geometry_matches_feature_reference() -> None:
     )
 
 
+def test_new_task_editor_source_note_chrome_matches_feature_reference() -> None:
+    _same(
+        ".source-note",
+        ".task-workspace-shell.task-editor-route .task-workspace-source-note",
+        ("border-radius", "background"),
+    )
+    _same(
+        "#newTaskModal .source-note",
+        ".task-workspace-shell.task-editor-route .task-workspace-source-note",
+        ("padding", "font-size", "line-height"),
+    )
+
+
+def test_task_list_effective_row_geometry_matches_feature_reference() -> None:
+    _same(
+        ".plan-row-compact .plan-row-head",
+        ".task-workspace-list-row:not(.task-workspace-info-row)",
+        ("grid-template-columns", "column-gap", "align-items"),
+    )
+    _same(
+        ".plan-row-num",
+        ".task-workspace-list-number",
+        ("width", "height", "margin", "display", "place-items", "line-height", "align-self"),
+    )
+
+
 def test_task_list_action_ownership_matches_prototype_html() -> None:
     feature_ids = {
         "planOpenWorkflow": "taskWorkspaceHeaderOpenWorkflow",

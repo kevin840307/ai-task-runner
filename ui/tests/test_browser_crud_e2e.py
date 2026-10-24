@@ -2244,6 +2244,30 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.click("#taskWorkspaceHeaderBack")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
+            task_row_geometry = page.locator(".task-workspace-list-row").first.evaluate(
+                """node => {
+                    const row = getComputedStyle(node);
+                    const number = getComputedStyle(node.querySelector('.task-workspace-list-number'));
+                    return {
+                        columnGap: row.columnGap,
+                        alignItems: row.alignItems,
+                        columns: row.gridTemplateColumns.split(' ').filter(Boolean).length,
+                        numberDisplay: number.display,
+                        numberWidth: number.width,
+                        numberHeight: number.height,
+                        numberLineHeight: number.lineHeight,
+                    };
+                }"""
+            )
+            assert task_row_geometry == {
+                "columnGap": "8px",
+                "alignItems": "center",
+                "columns": 4,
+                "numberDisplay": "grid",
+                "numberWidth": "28px",
+                "numberHeight": "28px",
+                "numberLineHeight": "8px",
+            }
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
