@@ -292,7 +292,7 @@ TASK_EDITOR = PanelSpec(
         Pair(".drawerheadtop", ".task-workspace-head", ("display", "gap", "align-items")),
         Pair(".drawer-shell-actions", ".task-workspace-header-actions", ("display", "align-items", "gap", "flex")),
         Pair(".drawer-shell-actions .btn", ".task-workspace-header-actions button", ("min-height", "height", "padding", "font-size")),
-        Pair(".btn", ".task-workspace-header-actions button", ("border", "border-radius", "background", "font-weight")),
+        Pair(".btn", ".task-workspace-header-actions button", ("border", "background", "font-weight")),
         Pair(".btn.ghost", ".task-workspace-header-actions button.ghost", ("border-color", "background", "color")),
         Pair(".btn.primary", ".task-workspace-header-actions button.primary", ("background", "border-color", "color")),
         Pair(".drawerhead h2", ".task-workspace-heading strong", ("font-size", "line-height", "white-space", "overflow", "text-overflow")),
