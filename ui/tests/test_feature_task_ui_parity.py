@@ -493,8 +493,23 @@ def test_chat_quick_mode_matches_prototype_single_mode_control() -> None:
 
 def test_new_task_list_child_back_is_owned_by_parent_route() -> None:
     assert 'state.editorReturn = "list";' in PRODUCTION_JS
-    assert 'state.route === "editor" && state.editorReturn === "list"' in PRODUCTION_JS
-    assert 'state.draft.items.length > 1' not in PRODUCTION_JS[PRODUCTION_JS.find("async function handleBack"):PRODUCTION_JS.find("function validateSelectedSourceModes")]
+    assert "function isNewTaskListChildEditor()" in PRODUCTION_JS
+    back = PRODUCTION_JS[PRODUCTION_JS.find("async function handleBack"):PRODUCTION_JS.find("function validateSelectedSourceModes")]
+    assert "if (isNewTaskListChildEditor())" in back
+    assert "restoreNewTaskListChildBaseline();" in back
+    assert "Discard Task changes?" in back
+
+
+def test_new_task_list_child_save_matches_prototype_action_ownership() -> None:
+    assert "const taskEditorSaveBeforeOverlay=document.getElementById('createTaskConfirm').onclick;" in FEATURE_WORKSPACE_JS
+    assert "if(draftSaved||itemSaved){taskEditorInitialSnapshot='';leaveTaskEditorOverlay({force:true})}" in FEATURE_WORKSPACE_JS
+    assert "if (isNewTaskListChildEditor()) return saveNewTaskListChild();" in PRODUCTION_JS
+    child_save = PRODUCTION_JS[PRODUCTION_JS.find("async function saveNewTaskListChild"):PRODUCTION_JS.find("async function saveDraft")]
+    assert 'api("/api/tasks/validate-draft"' in child_save
+    assert 'api("/api/tasks/create"' not in child_save
+    assert 'tr("task.create_child", "Create task")' in PRODUCTION_JS
+    assert 'tr("task.save_changes", "Save changes")' in PRODUCTION_JS
+    assert 'tr("task.back_list_draft", "Back to Task List Draft")' in PRODUCTION_JS
 
 
 

@@ -429,11 +429,40 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       && draftSignature(state.editDraft) !== state.editOriginal;
   }
 
+  function isNewTaskListDraft() {
+    return !!(isDraftState() && state.createOnSave && state.creationKind === "list");
+  }
+
+  function isNewTaskListChildEditor() {
+    return !!(isNewTaskListDraft() && state.route === "editor" && state.editorReturn === "list");
+  }
+
+  function captureNewTaskListChildBaseline() {
+    if (!isNewTaskListDraft()) return;
+    state.draftChildOriginalDraft = cloneDraft(state.draft);
+    state.draftChildOriginalSourceModes = cloneDraft(state.sourceModes || {});
+  }
+
+  function clearNewTaskListChildBaseline() {
+    if (!state) return;
+    state.draftChildOriginalDraft = null;
+    state.draftChildOriginalSourceModes = null;
+    state.draftEditorOriginal = "";
+  }
+
+  function restoreNewTaskListChildBaseline() {
+    if (!isNewTaskListDraft() || !state.draftChildOriginalDraft) return;
+    state.draft = cloneDraft(state.draftChildOriginalDraft);
+    state.sourceModes = cloneDraft(state.draftChildOriginalSourceModes || {});
+    state.index = Math.max(0, Math.min(state.index || 0, state.draft.items.length - 1));
+    clearNewTaskListChildBaseline();
+  }
+
   function draftChildEditorDirty() {
     return !!(
       isDraftState()
       && state.route === "editor"
-      && state.draft.items.length > 1
+      && (isNewTaskListChildEditor() || state.draft.items.length > 1)
       && state.draftEditorOriginal
       && draftSignature(state.draft) !== state.draftEditorOriginal
     );
@@ -461,7 +490,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       danger: true,
     });
     if (!discardChild) return false;
-    if (state.draftEditorOriginal !== state.original) {
+    const parentSignature = isNewTaskListChildEditor() && state.draftChildOriginalDraft
+      ? draftSignature(state.draftChildOriginalDraft)
+      : state.draftEditorOriginal;
+    if (parentSignature !== state.original) {
       const discardParent = await confirmDialog?.({
         title: "Discard TaskDraft changes?",
         message: "Your unsaved TaskDraft edits will be lost.",
@@ -663,6 +695,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.index = index;
       if (state.route === "list") {
         if (isDraftState()) {
+          if (isNewTaskListDraft()) captureNewTaskListChildBaseline();
           state.draftEditorOriginal = draftSignature(state.draft);
           state.editorReturn = "list";
         }
@@ -926,6 +959,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       beginTaskEdit(index, "list");
       return;
     }
+    if (isNewTaskListDraft()) captureNewTaskListChildBaseline();
     state.draftEditorOriginal = draftSignature(state.draft);
     state.editorReturn = "list";
     state.editorMode = "edit";
@@ -2878,6 +2912,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (!isDraftState()) return;
     const first = state.draft.items[0] || {};
     const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
+    if (isNewTaskListDraft()) captureNewTaskListChildBaseline();
     state.draft.items.push(blankItem(state.project, workflow));
     state.index = state.draft.items.length - 1;
     state.error = "";
@@ -3379,6 +3414,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const creating = !!state.createOnSave;
     const rootCreateTask = creating && state.creationKind === "task" && state.route === "editor";
     const rootCreateList = creating && state.creationKind === "list" && listRoute;
+    const rootCreateListChild = creating && state.creationKind === "list" && state.route === "editor" && state.editorReturn === "list";
     if (back) back.hidden = rootCreateTask || rootCreateList;
     if (save) save.hidden = false;
     byId("taskWorkspaceEyebrow").textContent = yamlRoute ? tr("task.yaml", "TASK YAML") : (listRoute ? tr("task.list", "TASK LIST") : tr("task.editor", "TASK EDITOR"));
@@ -3393,20 +3429,28 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         ? "Draft · not created yet"
         : listRoute
           ? count + " ordered task" + (count === 1 ? "" : "s")
-          : rootCreateTask
-            ? "New Task"
-            : "Task " + (state.index + 1) + " of " + count;
+          : rootCreateListChild
+            ? (state.editorMode === "edit"
+              ? "DRAFT-LIST · Task " + (state.index + 1) + " of " + count
+              : "DRAFT-LIST · New child task")
+            : rootCreateTask
+              ? "New Task"
+              : "Task " + (state.index + 1) + " of " + count;
     byId("taskWorkspaceFooterBack").textContent = yamlRoute
       ? tr("task.back_list", "Back to Task List")
-      : (listRoute
-        ? (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))
-        : (count > 1 ? tr("task.back_list", "Back to Task List") : (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))));
-    byId("taskWorkspaceSave").hidden = rootCreateList || (!yamlRoute && !listRoute && count > 1);
+      : rootCreateListChild
+        ? tr("task.back_list_draft", "Back to Task List Draft")
+        : (listRoute
+          ? (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))
+          : (count > 1 ? tr("task.back_list", "Back to Task List") : (creating ? tr("task.cancel", "Cancel") : tr("task.back_chat", "Back to Chat"))));
+    byId("taskWorkspaceSave").hidden = rootCreateList || (!yamlRoute && !listRoute && count > 1 && !rootCreateListChild);
     byId("taskWorkspaceSave").textContent = yamlRoute
       ? "Apply YAML"
-      : creating
-        ? (listRoute ? tr("task.create_list", "Create Task List") : tr("task.create", "Create Task"))
-        : tr("task.save_draft", "Save draft");
+      : rootCreateListChild
+        ? (state.editorMode === "edit" ? tr("task.save_changes", "Save changes") : tr("task.create_child", "Create task"))
+        : creating
+          ? (listRoute ? tr("task.create_list", "Create Task List") : tr("task.create", "Create Task"))
+          : tr("task.save_draft", "Save draft");
     byId("taskWorkspaceSave").disabled = Boolean(listRoute && creating && count === 0);
     if (yamlRoute) renderYaml(); else if (listRoute) renderList(); else renderEditor();
   }
@@ -3479,6 +3523,23 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       closeNow();
       return;
     }
+    if (isNewTaskListChildEditor()) {
+      if (draftChildEditorDirty()) {
+        const ok = await confirmDialog?.({
+          title: "Discard Task changes?",
+          message: "Your unsaved Task edits will be lost.",
+          confirmLabel: "Discard",
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      restoreNewTaskListChildBaseline();
+      state.route = "list";
+      state.error = "";
+      state.fieldErrors = {};
+      render();
+      return;
+    }
     if (state.route === "editor" && state.editorReturn === "list") {
       state.draftEditorOriginal = "";
       state.route = "list";
@@ -3521,6 +3582,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.fieldErrors = { [fieldErrorKey(field, index)]: message };
       if (state.route === "list") {
         if (isDraftState()) {
+          if (isNewTaskListDraft()) captureNewTaskListChildBaseline();
           state.draftEditorOriginal = draftSignature(state.draft);
           state.editorReturn = "list";
         }
@@ -3536,6 +3598,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   async function saveWorkspace() {
     if (state?.route === "yaml") return applyYaml();
     if (state?.kind === "task") return saveTaskEdit();
+    if (isNewTaskListChildEditor()) return saveNewTaskListChild();
     return saveDraft();
   }
 
@@ -3578,6 +3641,37 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       render();
     } catch (error) {
       state.error = String(error?.message || "Task save failed");
+      mapFieldError(state.error);
+      render();
+      showError?.(error.message, "Save Task failed");
+    } finally {
+      if (button && document.contains(button)) {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+      }
+    }
+  }
+
+  async function saveNewTaskListChild() {
+    if (!isNewTaskListChildEditor()) return;
+    if (!validateSelectedSourceModes()) return;
+    const button = byId("taskWorkspaceSave");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    await pendingUploadActions;
+    try {
+      const data = await api("/api/tasks/validate-draft", {
+        method: "POST",
+        body: JSON.stringify({ project: state.project, draft: state.draft }),
+      });
+      state.draft = cloneDraft(data.draft || data);
+      clearNewTaskListChildBaseline();
+      state.route = "list";
+      state.error = "";
+      state.fieldErrors = {};
+      render();
+    } catch (error) {
+      state.error = String(error?.message || "Task validation failed");
       mapFieldError(state.error);
       render();
       showError?.(error.message, "Save Task failed");
@@ -3698,6 +3792,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       error: "",
       fieldErrors: {},
       draftEditorOriginal: "",
+      draftChildOriginalDraft: null,
+      draftChildOriginalSourceModes: null,
       yamlText: "",
       yamlOriginal: "",
       yamlReturn: "list",

@@ -2272,9 +2272,16 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-list-row").count() == 0
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create task"
+            assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Task List Draft"
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 0
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
-            page.click("#taskWorkspaceHeaderBack")
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 1
             assert page.locator("#taskWorkspaceHeaderCreateList").is_enabled()
@@ -2288,7 +2295,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "First list child")
             page.fill("#taskWorkspacePrompt", "First list prompt")
-            page.click("#taskWorkspaceHeaderBack")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create task"
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 1
             page.click("#taskWorkspaceAddTask")
@@ -2296,7 +2304,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.fill("#taskWorkspaceItemTitle", "Second list child")
             page.fill("#taskWorkspacePrompt", "Second list prompt")
             page.select_option("#taskWorkspaceWorkflow", str(workflow_path))
-            page.click("#taskWorkspaceHeaderBack")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create task"
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceAddTask")
@@ -2304,7 +2313,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.fill("#taskWorkspaceItemTitle", "Third list child")
             page.fill("#taskWorkspacePrompt", "Third list prompt")
             page.select_option("#taskWorkspaceWorkflow", str(workflow_path))
-            page.click("#taskWorkspaceHeaderBack")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Create task"
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
             assert page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").count() == 1
@@ -2366,7 +2376,57 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 assert page.locator("#taskWorkspaceWorkflow").input_value() == mixed_workflow
 
             page.fill("#taskWorkspaceItemTitle", "First list child")
-            page.click("#taskWorkspaceHeaderBack")
+            assert page.locator("#taskWorkspaceSave").inner_text() == "Save changes"
+
+            # Prototype ownership: child Save validates the child and stays in
+            # the child Editor on field errors; parent Create List is not used
+            # as a substitute for saving an item.
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.getAttribute('aria-invalid') === 'true'")
+            assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
+            assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
+
+            with page.expect_file_chooser() as chooser:
+                page.locator("[data-task-upload-field='validator']").click()
+            chooser.value.set_files(str(validator_upload))
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.value.includes('.ai-task-runner')")
+            staged_validator = page.locator("#taskWorkspaceValidator").input_value()
+            assert state.task_uploads.staged_exists(root, staged_validator) is True
+            validator_hint = page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint")
+            assert validator_hint.is_visible()
+            assert "Uploaded · validator-upload.py" in validator_hint.inner_text()
+            assert "Managed target path is shown above now" in validator_hint.inner_text()
+            manual_validator = str(state.repo_root / "validate.py")
+            page.fill("#taskWorkspaceValidator", manual_validator)
+            assert page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint").count() == 0
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.getAttribute('aria-invalid') === 'true'")
+            assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt file is required", exact=False).is_visible()
+            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
+
+            with page.expect_file_chooser() as chooser:
+                page.locator("[data-task-upload-field='ai_validator_prompt_file']").click()
+            chooser.value.set_files(str(ai_upload))
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.value.includes('.ai-task-runner')")
+            managed_ai_prompt = page.locator("#taskWorkspaceAiValidatorPrompt").input_value()
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+            ai_upload_hint = page.locator("[data-task-source-card='ai'] .task-workspace-file-upload-hint")
+            assert ai_upload_hint.is_visible()
+            assert "Uploaded · ai-upload.md" in ai_upload_hint.inner_text()
+
+            # File -> Write -> File is non-destructive; only Default discards
+            # the staged custom AI file.
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='write']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPromptText') !== null")
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == managed_ai_prompt
+            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
+
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
             draft_first_row = page.locator(".task-workspace-list-row").first
@@ -2434,61 +2494,9 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
 
             page.fill("#taskWorkspaceDraftTitle", "Chat browser list")
 
-            # Backend validation must route the error back to the exact field
-            # without dropping the user's prompt/title.
-            page.click("#taskWorkspaceHeaderCreateList")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
-            assert page.locator("#taskWorkspaceValidator").get_attribute("aria-invalid") == "true"
-            assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
-            assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
-
-            with page.expect_file_chooser() as chooser:
-                page.locator("[data-task-upload-field='validator']").click()
-            chooser.value.set_files(str(validator_upload))
-            page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.value.includes('.ai-task-runner')")
-            staged_validator = page.locator("#taskWorkspaceValidator").input_value()
-            assert state.task_uploads.staged_exists(root, staged_validator) is True
-            validator_hint = page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint")
-            assert validator_hint.is_visible()
-            assert "Uploaded · validator-upload.py" in validator_hint.inner_text()
-            assert "Managed target path is shown above now" in validator_hint.inner_text()
-            manual_validator = str(state.repo_root / "validate.py")
-            page.fill("#taskWorkspaceValidator", manual_validator)
-            assert page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint").count() == 0
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
-            page.click("#taskWorkspaceHeaderBack")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-
-            page.click("#taskWorkspaceHeaderCreateList")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").get_attribute("aria-invalid") == "true"
-            assert page.locator(".task-workspace-field-error").get_by_text("AI Validator Prompt file is required", exact=False).is_visible()
-            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
-
-            with page.expect_file_chooser() as chooser:
-                page.locator("[data-task-upload-field='ai_validator_prompt_file']").click()
-            chooser.value.set_files(str(ai_upload))
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt')?.value.includes('.ai-task-runner')")
-            managed_ai_prompt = page.locator("#taskWorkspaceAiValidatorPrompt").input_value()
-            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
-            ai_upload_hint = page.locator("[data-task-source-card='ai'] .task-workspace-file-upload-hint")
-            assert ai_upload_hint.is_visible()
-            assert "Uploaded · ai-upload.md" in ai_upload_hint.inner_text()
-
-            # Feature parity: File -> Write/Asset is non-destructive. A staged
-            # custom file must remain usable when the user switches back; only
-            # choosing Default discards the custom AI file.
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='write']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPromptText') !== null")
-            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == managed_ai_prompt
-            assert state.task_uploads.staged_exists(root, managed_ai_prompt) is True
-
-            page.click("#taskWorkspaceHeaderBack")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            # Child validation already succeeded through the prototype-owned
+            # Save changes action. Parent Create List should now only create the
+            # durable Task List, not act as an implicit child save.
             assert page.locator("#taskWorkspaceDraftTitle").input_value() == "Chat browser list"
 
             # Double activation must still produce exactly one durable Task.
@@ -6390,6 +6398,31 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     production_selector,
                     properties,
                 )
+
+            feature_page.locator("#planModal .empty-plan-cta.large").click()
+            production_page.locator(".task-workspace-empty-list-cta").click()
+            feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'New task'")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert feature_page.locator("#createTaskConfirm").inner_text() == "Create task"
+            assert production_page.locator("#taskWorkspaceSave").inner_text() == "Create task"
+            assert production_page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Task List Draft"
+            feature_page.click("#taskEditorBack")
+            production_page.click("#taskWorkspaceHeaderBack")
+            feature_page.wait_for_function("document.querySelector('#planModal')?.classList.contains('open') && !document.querySelector('#planModal')?.classList.contains('subview-open')")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert feature_page.locator("#planFormList [data-draft-row]").count() == 0
+            assert production_page.locator(".task-workspace-list-row").count() == 0
+
+            feature_page.locator("#planModal .empty-plan-cta.large").click()
+            production_page.locator(".task-workspace-empty-list-cta").click()
+            feature_page.fill("#newTaskTitle", "Parity child")
+            feature_page.fill("#newTaskModal .task-primary-source .task-source-mode-panel>textarea", "Parity child prompt")
+            production_page.fill("#taskWorkspaceItemTitle", "Parity child")
+            production_page.fill("#taskWorkspacePrompt", "Parity child prompt")
+            feature_page.click("#createTaskConfirm")
+            production_page.click("#taskWorkspaceSave")
+            feature_page.wait_for_function("document.querySelectorAll('#planFormList [data-draft-row]').length === 1")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST' && document.querySelectorAll('.task-workspace-list-row').length === 1")
 
             feature_list_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
             production_list_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
