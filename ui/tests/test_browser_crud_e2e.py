@@ -5787,9 +5787,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # File-mode AI validator input is especially sensitive to the
             # generic input cascade. Compare the actual browser-computed style
             # against the prototype instead of relying on selector mapping.
-            feature_page.click("#taskAiOverride")
-            feature_page.wait_for_function("document.querySelector('#taskAiModeSelect') !== null")
-            feature_page.select_option("#taskAiModeSelect", "file")
+            feature_page.locator("[data-task-ai-mode][data-source-value='file']").click()
             feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
             production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
