@@ -191,6 +191,11 @@ def test_new_task_source_cards_match_final_feature_cascade() -> None:
         ("border-color", "background", "color"),
     )
     _same(
+        ".mini-btn",
+        ".task-workspace-upload",
+        ("height", "padding", "border-radius", "font-size", "font-weight"),
+    )
+    _same(
         ".workspace-selector-wrap",
         ".task-workspace-workspace-selector",
         ("margin-top", "padding", "border-radius", "background"),
