@@ -2269,9 +2269,17 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 const input = document.querySelector('#taskWorkspaceDraftTitle');
                 return input.selectionStart === 0 && input.selectionEnd === input.value.length;
             }""")
+            # Let the prior Drawer close RAF and async option loads settle.
+            # Focus must remain owned by the new Task List, not jump back to
+            # the + New anchor from the previous surface.
+            page.wait_for_timeout(120)
+            assert page.evaluate("document.activeElement?.id === 'taskWorkspaceDraftTitle'")
             assert page.locator(".task-workspace-list-row").count() == 0
             page.click("#taskWorkspaceAddTask")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            # The first child must inherit the workflow already resolved for
+            # this Project/Chat. Catalog ordering must never change validation.
+            assert page.locator("#taskWorkspaceWorkflow").input_value() == str(workflow_path)
             assert page.locator("#taskWorkspaceSave").inner_text() == "Create task"
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Task List Draft"
             page.click("#taskWorkspaceHeaderBack")

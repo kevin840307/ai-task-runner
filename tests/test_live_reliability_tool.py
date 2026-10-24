@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 12
+    assert len(calls) == 14
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3115,6 +3115,21 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert missing_branch["real_merge_failure"] is False
     assert missing_branch["target_head_after_delivery"] == missing_branch["target_head_before_delivery"]
 
+    main_busy = result["main_busy_concurrent"]
+    assert main_busy["requested_mode"] == "main"
+    assert main_busy["main_running"] is True
+    assert main_busy["allow_concurrent_main_tasks"] is True
+    assert main_busy["effective_mode"] == "main"
+    assert main_busy["delivery"] == "merged"
+
+    auto_main_busy = result["auto_always_main_busy_concurrent"]
+    assert auto_main_busy["requested_mode"] == "auto"
+    assert auto_main_busy["main_running"] is True
+    assert auto_main_busy["auto_workspace_policy"] == "always-main"
+    assert auto_main_busy["allow_concurrent_main_tasks"] is True
+    assert auto_main_busy["effective_mode"] == "main"
+    assert auto_main_busy["delivery"] == "merged"
+
     conflict = result["main_conflict_recovery"]
     assert conflict["requested_mode"] == "main"
     assert conflict["effective_mode"] == "main"
@@ -3132,6 +3147,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "auto_idle",
         "auto_busy",
         "worktree_target_advance",
+        "main_busy_concurrent",
+        "auto_always_main_busy_concurrent",
         "main_conflict_recovery",
     ):
         assert result[case_key]["merged_target_head_sha"]
@@ -3149,13 +3166,17 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     history_repo = tmp_path / "rw-09"
     unmanaged_repo = tmp_path / "rw-10"
     missing_branch_repo = tmp_path / "rw-11"
-    conflict_repo = tmp_path / "rw-12"
+    main_busy_repo = tmp_path / "rw-12"
+    auto_main_busy_repo = tmp_path / "rw-13"
+    conflict_repo = tmp_path / "rw-14"
     for repo in (
         main_repo,
         worktree_repo,
         auto_idle_repo,
         auto_busy_repo,
         target_advance_repo,
+        main_busy_repo,
+        auto_main_busy_repo,
         conflict_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED

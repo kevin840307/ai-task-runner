@@ -6305,11 +6305,29 @@ def runner_workspace_delivery_probe(
         ("worktree_dirty_target_wait", "worktree", False, "worktree", "dirty"),
         ("worktree_target_history_wait", "worktree", False, "worktree", "history"),
         ("worktree_unmanaged_target_wait", "worktree", False, "worktree", "unmanaged"),
-        ("worktree_missing_target_branch_wait", "worktree", False, "worktree", "missing_branch"),
-        ("main_conflict_recovery", "main", False, "main", "conflict"),
+        ("worktree_missing_target_branch_wait", "worktree", False, "worktree", "missing_branch", "busy-worktree", False),
+        ("main_busy_concurrent", "main", True, "main", "none", "busy-worktree", True),
+        ("auto_always_main_busy_concurrent", "auto", True, "main", "none", "always-main", True),
+        ("main_conflict_recovery", "main", False, "main", "conflict", "busy-worktree", False),
+    )
+    # case: key, requested mode, main busy, effective mode, target mutation,
+    # Auto policy, allow concurrent Main. The last two cases explicitly cross
+    # the concurrency settings into the real WorkspaceManager + MergeManager
+    # delivery path instead of testing the resolver in isolation.
+    cases = tuple(
+        row if len(row) == 7 else (*row, "busy-worktree", False)
+        for row in cases
     )
     results: dict[str, object] = {}
-    for case_index, (case_key, requested_mode, main_running, expected_mode, target_mutation) in enumerate(cases, start=1):
+    for case_index, (
+        case_key,
+        requested_mode,
+        main_running,
+        expected_mode,
+        target_mutation,
+        auto_policy,
+        allow_concurrent_main_tasks,
+    ) in enumerate(cases, start=1):
         case_label = f"runner-workspace-{case_key.replace('_', '-')}-probe"
         # Keep physical Git/worktree names deliberately short. Windows Git expands
         # worktree metadata under .git/worktrees; descriptive case names repeated in
@@ -6341,8 +6359,8 @@ def runner_workspace_delivery_probe(
             run_number=1,
             requested_mode=requested_mode,
             execution_settings={
-                "auto_workspace_policy": "busy-worktree",
-                "allow_concurrent_main_tasks": False,
+                "auto_workspace_policy": auto_policy,
+                "allow_concurrent_main_tasks": allow_concurrent_main_tasks,
             },
             main_running=main_running,
         )
@@ -6379,6 +6397,8 @@ def runner_workspace_delivery_probe(
         result: dict[str, object] = {
             "requested_mode": requested_mode,
             "main_running": main_running,
+            "auto_workspace_policy": auto_policy,
+            "allow_concurrent_main_tasks": allow_concurrent_main_tasks,
             "effective_mode": prepared.effective_mode,
             "snapshot_sha": snapshot.task_snapshot_sha,
         }

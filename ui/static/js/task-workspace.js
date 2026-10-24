@@ -623,6 +623,10 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state = null;
     restoreFocus = null;
     requestAnimationFrame(() => {
+      // A close can be followed immediately by opening another Task surface.
+      // Never let the stale close callback steal focus from the newly opened
+      // prototype-style Task Editor / Task List.
+      if (state || !overlay?.hidden) return;
       if (focus && document.contains(focus) && typeof focus.focus === "function") focus.focus();
     });
   }
@@ -2911,7 +2915,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function addDraftListItem() {
     if (!isDraftState()) return;
     const first = state.draft.items[0] || {};
-    const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
+    // Empty Task List creation has no first item to inherit from. Preserve the
+    // Project/Chat workflow resolved at + New time instead of silently taking
+    // the first catalog row (which may have different validator requirements).
+    const workflow = String(
+      first.workflow
+      || state.defaultWorkflow
+      || state.workflows?.[0]?.path
+      || state.workflows?.[0]?.id
+      || ""
+    );
     if (isNewTaskListDraft()) captureNewTaskListChildBaseline();
     state.draft.items.push(blankItem(state.project, workflow));
     state.index = state.draft.items.length - 1;
@@ -3779,6 +3792,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       draft,
       original: draftSignature(draft),
       workflows: rows,
+      defaultWorkflow,
       prompts: Array.isArray(prompts) ? prompts.slice() : [],
       sourceModes: {},
       onSave: null,
