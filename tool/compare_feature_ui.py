@@ -249,8 +249,11 @@ TASK_LIST = PanelSpec(
     "ui/static/css/task-workspace.css",
     (
         Pair(".plan-page-body", ".task-workspace-list-page", ("grid-template-columns", "gap", "padding")),
+        Pair("#planModal .plan-page-body", ".task-workspace-list-page", ("min-height", "height", "overflow")),
         Pair(".plan-main", ".task-workspace-list-main", ("padding", "border-radius")),
+        Pair("#planModal .plan-main", ".task-workspace-list-main", ("min-height", "overflow")),
         Pair(".plan-side", ".task-workspace-list-side", ("display", "gap", "align-content")),
+        Pair("#planModal .plan-side", ".task-workspace-list-side", ("min-height", "overflow")),
         Pair(".plan-side-card", ".task-workspace-list-side-card", ("padding", "border-radius", "background")),
         Pair(".plan-add-task-footer", ".task-workspace-add-task-footer", ("width", "min-height", "gap", "margin-top", "border-radius", "font-size")),
         Pair(".plan-row-compact[draggable=\"true\"]", ".task-workspace-list-row[draggable=\"true\"]", ("cursor",)),
