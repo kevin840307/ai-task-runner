@@ -2463,6 +2463,15 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             list_geometry = task_workspace_geometry(workspace_route=True)
             assert page.locator("#taskWorkspaceFooterBack").inner_text() == "Back to Info"
             assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).justifyContent") == "flex-end"
+            assert page.locator(".task-workspace-foot").evaluate("(node) => getComputedStyle(node).position") == "relative"
+
+            # Prototype Drawer owns keyboard focus. Tab from the last visible
+            # footer control wraps to Back; Shift+Tab wraps back to Save.
+            page.locator("#taskWorkspaceSave").focus()
+            page.keyboard.press("Tab")
+            assert page.evaluate("document.activeElement?.id") == "taskWorkspaceHeaderBack"
+            page.keyboard.press("Shift+Tab")
+            assert page.evaluate("document.activeElement?.id") == "taskWorkspaceSave"
 
             # Final prototype contract: durable rows collapse Edit/Remove into
             # one ⋯ action and expose the same action set on right-click.
@@ -2481,9 +2490,28 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert context_menu.get_by_role("button", name="Info", exact=True).is_enabled()
             assert context_menu.get_by_role("button", name="Open Workflow", exact=True).is_enabled()
             assert context_menu.get_by_role("button", name="Remove", exact=True).is_enabled()
+
+            # Prototype Info is an inline inspector, not "Back to Task Info".
+            context_menu.get_by_role("button", name="Info", exact=True).click()
+            assert context_menu.is_hidden()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            inspector = page.locator(".task-workspace-list-side-card.info-active")
+            assert inspector.is_visible()
+            assert inspector.locator("h3").inner_text() == "Task info"
+            inspector_labels = inspector.locator(".task-workspace-list-kv>span").all_inner_texts()
+            assert inspector_labels == [
+                "Task", "Status", "Project", "Workflow", "Prompt",
+                "AI validation", "Workspace", "Branch", "Path",
+            ]
+            assert page.locator(".task-workspace-list-row.selected").count() == 1
+
+            # Escape only dismisses the context menu; the shared Drawer remains.
+            durable_rows.first.locator(".task-workspace-row-more").click()
+            assert context_menu.is_visible()
             page.keyboard.press("Escape")
             assert context_menu.is_hidden()
             assert page.locator("#taskWorkspaceOverlay").is_visible()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
             durable_rows.nth(1).click(button="right")
             assert context_menu.is_visible()
             context_menu.get_by_role("button", name="Edit", exact=True).click()
