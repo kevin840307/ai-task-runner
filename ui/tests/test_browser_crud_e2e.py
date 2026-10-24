@@ -5649,13 +5649,13 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["display", "gridTemplateColumns", "gap", "alignItems", "marginTop"],
                 ),
                 (
-                    "#newTaskModal .task-basics label",
-                    ".task-workspace-basics .task-workspace-field>label",
+                    "#newTaskModal .task-project-field>label",
+                    ".task-workspace-project-field>span:first-child",
                     ["display", "alignItems", "gap", "marginBottom", "fontSize"],
                 ),
                 (
-                    "#newTaskModal .task-basics input",
-                    ".task-workspace-basics #taskWorkspaceProject",
+                    "#newTaskModal .task-project-field input",
+                    "#taskWorkspaceProject",
                     ["height", "minHeight", "fontSize"],
                 ),
                 (
@@ -5718,18 +5718,18 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ["display", "gridTemplateColumns", "gap"],
                 ),
                 (
-                    "#newTaskModal .task-editor-secondary .workspace-option",
-                    ".task-workspace-editor-secondary .task-workspace-workspace-option",
+                    "#newTaskModal .task-editor-secondary .workspace-option:first-child",
+                    ".task-workspace-editor-secondary [data-workspace-option='auto']",
                     ["minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
                 ),
                 (
-                    "#newTaskModal .task-editor-secondary .workspace-option small",
-                    ".task-workspace-editor-secondary .task-workspace-workspace-option small",
+                    "#newTaskModal .task-editor-secondary .workspace-option:first-child small",
+                    ".task-workspace-editor-secondary [data-workspace-option='auto'] small",
                     ["marginTop", "fontSize", "lineHeight"],
                 ),
                 (
-                    "#newTaskModal .task-editor-secondary .workspace-option .workspace-status",
-                    ".task-workspace-editor-secondary .task-workspace-workspace-status",
+                    "#newTaskModal .task-editor-secondary .workspace-option:first-child .workspace-status",
+                    ".task-workspace-editor-secondary [data-workspace-option='auto'] .task-workspace-workspace-status",
                     ["marginTop", "fontSize"],
                 ),
                 (
