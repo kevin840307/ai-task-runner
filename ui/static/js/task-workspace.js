@@ -127,7 +127,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     byId("taskWorkspaceHeaderOpenWorkflow").addEventListener("click", () => {
       if (state?.route !== "list" || state.kind !== "task") return;
       const items = Array.isArray(state.editDraft?.items) ? state.editDraft.items : (Array.isArray(state.task?.items) ? state.task.items : []);
-      const item = items[Number(state.selectedListIndex)];
+      const item = Number.isInteger(state.selectedListIndex) ? items[state.selectedListIndex] : null;
       const workflow = String(item?.workflow || "").trim();
       if (!workflow) return;
       void openWorkflow?.({ workflow, project: String(item?.project || state.task?.project || "") });
@@ -512,7 +512,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (durableList) {
       const policy = taskEditPolicy(state.task);
       const items = Array.isArray(state.editDraft?.items) ? state.editDraft.items : (Array.isArray(state.task?.items) ? state.task.items : []);
-      const selected = items[Number(state.selectedListIndex)];
+      const selected = Number.isInteger(state.selectedListIndex) ? items[state.selectedListIndex] : null;
       const selectedWorkflow = String(selected?.workflow || "").trim();
       if (openWorkflowButton) {
         openWorkflowButton.hidden = !selectedWorkflow;

@@ -51,6 +51,13 @@ def test_task_panels_have_no_prototype_geometry_or_motion_drift() -> None:
     assert drift == [], "\n".join(drift)
 
 
+
+
+def test_task_list_selection_never_coerces_null_to_first_row() -> None:
+    # null means no row selected. JavaScript Number(null) is 0, so selection
+    # lookups must guard the index before reading items[].
+    assert "items[Number(state.selectedListIndex)]" not in PRODUCTION_JS
+    assert "Number.isInteger(state.selectedListIndex) ? items[state.selectedListIndex] : null" in PRODUCTION_JS
 def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() -> None:
     # Tasks Board/List owns the New -> Task List shortcut. Generic openTask
     # remains Info-first so create-from-draft and other entry points do not drift.
