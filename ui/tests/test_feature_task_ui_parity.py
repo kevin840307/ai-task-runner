@@ -99,6 +99,13 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert "const width = 250;" in PRODUCTION_JS
     assert "const height = 112;" in PRODUCTION_JS
     assert "const w=205,h=220;" in FEATURE_WORKSPACE_JS
+
+    # Leaving a durable child Task editor through Back must guard only changes
+    # made in that child editor, matching the prototype taskEditor snapshot.
+    assert "if(!force&&typeof taskEditorHasChanges==='function'&&taskEditorHasChanges())" in FEATURE_WORKSPACE_JS
+    assert "function durableTaskEditorDirty()" in PRODUCTION_JS
+    assert "captureDurableTaskEditorBaseline();" in PRODUCTION_JS
+    assert "restoreDurableTaskEditorBaseline();" in PRODUCTION_JS
     assert "const width = 205;" in PRODUCTION_JS
     assert "const height = 220;" in PRODUCTION_JS
 
