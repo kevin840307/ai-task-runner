@@ -7,7 +7,7 @@
 .tasks-board-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
 .tasks-board-toolbar-left,.tasks-board-toolbar-right{display:flex;align-items:center;gap:8px;min-width:0}
 .tasks-board-search{width:min(320px,32vw);min-height:34px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--input-bg,var(--panel));color:var(--text);padding:7px 9px}
-.tasks-view-toggle{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}
+.tasks-view-toggle{display:flex;padding:3px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel-2)}
 .tasks-view-toggle button{min-height:28px;padding:4px 9px;border:0;background:transparent;color:var(--muted);box-shadow:none;font-size:10px;font-weight:800}
 .tasks-view-toggle button.active{background:var(--panel);color:var(--accent);box-shadow:var(--shadow-sm)}
 .tasks-project-filter{position:relative}
@@ -42,7 +42,7 @@
 #tasksBoardView .title-block>p{display:none}
 .tasks-title-line{gap:12px}
 .tasks-title-line .tasks-project-trigger,.tasks-project-trigger{display:flex;align-items:center;gap:7px;height:34px;min-height:34px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--muted);font-size:8px;font-weight:850;letter-spacing:.04em;text-transform:uppercase;transition:background .14s,border-color .14s,color .14s}
-.tasks-project-trigger .stateful-content{display:inline-block;width:190px;max-width:190px;overflow:hidden;color:var(--text);font-size:10px;letter-spacing:0;text-overflow:ellipsis;text-transform:none;white-space:nowrap}
+.tasks-project-trigger .stateful-content{display:inline-block;width:145px;overflow:hidden;color:var(--text);font-size:10px;letter-spacing:0;text-overflow:ellipsis;text-transform:none;white-space:nowrap}
 .tasks-project-chevron{width:7px;height:7px;margin:0 2px 3px 3px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .14s ease,margin .14s ease}
 .tasks-project-trigger[aria-expanded="true"] .tasks-project-chevron{margin-top:5px;margin-bottom:0;transform:rotate(225deg)}
 .tasks-project-trigger:hover,.tasks-project-trigger[aria-expanded="true"]{border-color:color-mix(in srgb,var(--accent) 44%,var(--line));background:var(--accent-soft);color:var(--accent-dark)}
@@ -70,8 +70,8 @@
 .tasks-board-column-head{min-height:44px;padding:0 12px}
 .tasks-board-column-head strong{font-size:12px}
 .tasks-board-dropzone{min-height:140px;padding:9px;gap:8px}
-.tasks-board-card{padding:10px;border-radius:10px;background:var(--panel);box-shadow:var(--shadow-sm);transition:transform .12s,border-color .12s,box-shadow .12s}
-.tasks-board-card:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 30%,var(--line));background:var(--panel);box-shadow:0 8px 18px color-mix(in srgb,var(--text) 7%,transparent)}
+.tasks-board-card{padding:10px;border-radius:10px;background:var(--panel);box-shadow:0 1px 2px rgba(15,23,42,.04);transition:.12s}
+.tasks-board-card:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--panel);box-shadow:0 8px 18px color-mix(in srgb,var(--text) 8%,transparent)}
 
 @media(max-width:760px){
 #tasksBoardView{grid-template-rows:auto auto minmax(0,1fr)}
@@ -91,7 +91,6 @@
 @media (min-width:761px) and (max-width:900px){
   #tasksBoardView>.header{gap:8px}
   .tasks-title-line{gap:8px}
-  .tasks-project-trigger .stateful-content{width:110px;max-width:110px}
 }
 
 
@@ -136,7 +135,7 @@
 .tasks-board-card{cursor:grab}
 .tasks-board-card.dragging{opacity:.45}
 .tasks-board-card-top{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.tasks-board-card-handle{flex:0 0 auto;color:var(--muted);font-size:11px;line-height:1.35}
+.tasks-board-card-handle{flex:0 0 auto;color:#a3adba;font-size:11px;line-height:1.35}
 .tasks-board-card-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:850;line-height:1.35}
 .tasks-board-runtime{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:var(--panel-3);color:var(--muted);font-size:7.5px;font-weight:900;text-transform:capitalize}
 .tasks-board-runtime.ongoing{background:var(--info-soft);color:var(--run)}
