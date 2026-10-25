@@ -550,6 +550,58 @@ TASK_LIST = PanelSpec(
             ("background", "color"),
         ),
         Pair(
+            ".modal-overlay",
+            ".task-workspace-move-overlay",
+            ("position", "inset", "padding", "background", "backdrop-filter"),
+        ),
+        Pair(".modal-overlay.open", ".task-workspace-move-overlay", ("display",)),
+        Pair(
+            ".modal-card",
+            ".task-workspace-move-existing",
+            ("width", "max-height", "overflow", "border", "border-radius", "background", "color", "box-shadow"),
+        ),
+        Pair(
+            ".modal-head",
+            ".task-workspace-move-head",
+            ("display", "align-items", "justify-content", "gap", "padding", "border-bottom"),
+        ),
+        Pair(".modal-head h2", ".task-workspace-move-head h2", ("margin", "font-size")),
+        Pair(".modal-head p", ".task-workspace-move-head p", ("margin", "color", "font-size")),
+        Pair(".close", ".task-workspace-move-close", ("width", "height", "flex", "border", "background", "color", "font-size")),
+        Pair(".modal-body", ".task-workspace-move-body", ("padding",)),
+        Pair(
+            ".move-task-note",
+            ".task-workspace-move-note",
+            ("display", "gap", "margin-bottom", "padding", "border", "border-radius", "background"),
+        ),
+        Pair(".move-task-note strong", ".task-workspace-move-note strong", ("font-size", "color")),
+        Pair(".move-task-note span", ".task-workspace-move-note span", ("font-size", "color")),
+        Pair(
+            ".modal-foot",
+            ".task-workspace-move-actions",
+            ("display", "justify-content", "gap", "padding", "border-top"),
+        ),
+        Pair(
+            "html[data-appearance] .modal-foot",
+            "html[data-appearance] .task-workspace-move-actions",
+            ("background", "color", "border-color"),
+        ),
+        Pair(
+            ".btn",
+            ".task-workspace-move-actions button",
+            ("min-height", "padding", "border", "border-radius", "background", "font-size", "font-weight"),
+        ),
+        Pair(
+            ".btn.primary",
+            ".task-workspace-move-actions button.primary",
+            ("background", "border-color", "color"),
+        ),
+        Pair(
+            ".btn:disabled",
+            ".task-workspace-move-actions button:disabled",
+            ("opacity", "cursor", "pointer-events"),
+        ),
+        Pair(
             ".existing-task-picker",
             ".task-workspace-move-options",
             ("display", "gap"),
