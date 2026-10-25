@@ -411,11 +411,11 @@ TASK_LIST = PanelSpec(
             ("display", "margin-top", "color", "font-size"),
         ),
         Pair(".plan-list", ".task-workspace-list", ("display", "gap")),
-        Pair(".plan-row-copy strong", ".task-workspace-list-copy strong", ("font-size",)),
+        Pair(".plan-row-copy strong", ".task-workspace-list-copy strong", ("display", "font-size")),
         Pair(
             ".plan-row-copy small",
             ".task-workspace-list-copy small",
-            ("margin-top", "font-size", "white-space", "overflow", "text-overflow", "max-width"),
+            ("display", "margin-top", "color", "font-size", "white-space", "overflow", "text-overflow", "max-width"),
         ),
         Pair(".plan-row-actions", ".task-workspace-list-actions", ("display", "align-items", "gap")),
         Pair(

@@ -2342,6 +2342,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                         numberWidth: number.width,
                         numberHeight: number.height,
                         numberLineHeight: number.lineHeight,
+                        titleDisplay: getComputedStyle(node.querySelector('.task-workspace-list-copy strong')).display,
+                        titleSize: getComputedStyle(node.querySelector('.task-workspace-list-copy strong')).fontSize,
+                        metaDisplay: getComputedStyle(node.querySelector('.task-workspace-list-copy small')).display,
+                        metaSize: getComputedStyle(node.querySelector('.task-workspace-list-copy small')).fontSize,
                     };
                 }"""
             )
@@ -2353,7 +2357,26 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 "numberWidth": "28px",
                 "numberHeight": "28px",
                 "numberLineHeight": "8px",
+                "titleDisplay": "block",
+                "titleSize": "10px",
+                "metaDisplay": "block",
+                "metaSize": "8px",
             }
+
+            # Prototype ownership: a normal click on a New Task List Draft row
+            # does not select or enter the editor; double-click edits it and
+            # Back returns to the same Task List Draft route.
+            draft_first_row = page.locator(".task-workspace-list-row").first
+            draft_first_row.click()
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            assert draft_first_row.get_attribute("aria-selected") == "false"
+            assert "selected" not in (draft_first_row.get_attribute("class") or "").split()
+            draft_first_row.dblclick()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            assert page.locator("#taskWorkspaceItemTitle").input_value() == "First list child"
+            page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-edit").click()
             page.wait_for_function("document.activeElement?.id === 'taskWorkspaceItemTitle'")
             page.fill("#taskWorkspaceItemTitle", "First list child")

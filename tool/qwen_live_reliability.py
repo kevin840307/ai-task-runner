@@ -6311,6 +6311,8 @@ def runner_workspace_delivery_probe(
         ("main_conflict_recovery", "main", False, "main", "conflict", "busy-worktree", False),
         ("auto_always_main_idle", "auto", False, "main", "none", "always-main", False),
         ("auto_always_worktree_idle", "auto", False, "worktree", "none", "always-worktree", False),
+        ("main_idempotent_external_delivery", "main", False, "main", "idempotent", "busy-worktree", False),
+        ("worktree_active_operation_wait", "worktree", False, "worktree", "active_operation", "busy-worktree", False),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real
@@ -6496,6 +6498,33 @@ def runner_workspace_delivery_probe(
             result["target_conflict_head_sha"] = _delivery_git(
                 repo, "rev-parse", "HEAD"
             ).stdout.strip()
+        elif target_mutation == "idempotent":
+            _delivery_git(
+                repo,
+                "merge",
+                "--no-ff",
+                prepared.task_branch,
+                "-m",
+                "external Runner delivery",
+            )
+            result["target_head_before_delivery"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
+            result["target_commit_count_before_delivery"] = _delivery_git(
+                repo, "rev-list", "--count", "HEAD"
+            ).stdout.strip()
+        elif target_mutation == "active_operation":
+            external_branch = f"external/operation-{case_index:02d}"
+            target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+            _delivery_git(repo, "checkout", "-b", external_branch)
+            (repo / "external-operation.txt").write_text(
+                "foreign merge operation\n", encoding="utf-8"
+            )
+            _delivery_git(repo, "add", "external-operation.txt")
+            _delivery_git(repo, "commit", "-m", "prepare foreign merge operation")
+            _delivery_git(repo, "checkout", prepared.target_branch)
+            _delivery_git(repo, "merge", "--no-ff", "--no-commit", external_branch)
+            result["target_head_before_delivery"] = target_head
 
         merge_manager = MergeManager()
         merged = merge_manager.merge(prepared, snapshot, validate=validate_delivery)
@@ -6596,6 +6625,55 @@ def runner_workspace_delivery_probe(
                     f"{recovery_cleanup.status}"
                 )
             result["recovery_cleanup"] = recovery_cleanup.status
+        elif target_mutation == "idempotent":
+            target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+            target_count = _delivery_git(repo, "rev-list", "--count", "HEAD").stdout.strip()
+            if (
+                merged.status != "merged"
+                or merged.real_merge_failure
+                or target_head != result["target_head_before_delivery"]
+                or target_count != result["target_commit_count_before_delivery"]
+            ):
+                raise RuntimeError(
+                    "Runner/workspace idempotent delivery duplicated or rewrote target history: "
+                    f"status={merged.status} real_failure={merged.real_merge_failure} "
+                    f"head={target_head} count={target_count}"
+                )
+            target = repo / "health.txt"
+            if not target.is_file() or target.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError("Runner/workspace idempotent delivery lost the Task result")
+            result["delivery"] = merged.status
+            result["real_merge_failure"] = merged.real_merge_failure
+            result["target_head_after_delivery"] = target_head
+            result["target_commit_count_after_delivery"] = target_count
+            result["merged_target_head_sha"] = merged.merged_target_head_sha
+        elif target_mutation == "active_operation":
+            target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
+            merge_head = _delivery_git(
+                repo, "rev-parse", "-q", "--verify", "MERGE_HEAD"
+            ).stdout.strip()
+            if (
+                merged.status != "waiting_target_workspace"
+                or merged.real_merge_failure
+                or "active Git operation" not in merged.detail
+                or target_head != result["target_head_before_delivery"]
+                or not merge_head
+            ):
+                raise RuntimeError(
+                    "Runner/workspace active-operation guard mismatch: "
+                    f"status={merged.status} detail={merged.detail!r} "
+                    f"real_failure={merged.real_merge_failure}"
+                )
+            if (repo / "health.txt").exists():
+                raise RuntimeError("Runner/workspace active-operation wait leaked Task output")
+            if retained.read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError("Runner/workspace active-operation wait mutated retained Task output")
+            result["delivery"] = merged.status
+            result["real_merge_failure"] = merged.real_merge_failure
+            result["target_head_after_delivery"] = target_head
+            result["active_operation_detail"] = merged.detail
+            result["active_operation_merge_head"] = merge_head
+            _delivery_git(repo, "merge", "--abort")
         elif target_mutation == "dirty":
             target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
             if merged.status != "waiting_target_clean" or merged.real_merge_failure:

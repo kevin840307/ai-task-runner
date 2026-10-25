@@ -744,6 +744,16 @@ def test_task_list_effective_row_geometry_matches_feature_reference() -> None:
         ".task-workspace-list-number",
         ("width", "height", "margin", "display", "place-items", "line-height", "align-self"),
     )
+    _same(
+        ".plan-row-copy strong",
+        ".task-workspace-list-copy strong",
+        ("display", "font-size"),
+    )
+    _same(
+        ".plan-row-copy small",
+        ".task-workspace-list-copy small",
+        ("display", "margin-top", "color", "font-size", "white-space", "overflow", "text-overflow", "max-width"),
+    )
 
 
 def test_task_list_context_menu_matches_feature_reference() -> None:
