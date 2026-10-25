@@ -726,7 +726,9 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 
 
-/* Final prototype ownership: Task List actions live in the drawer header, not List info. */
+/* Final prototype ownership: Task List actions live in the drawer header, not List info.
+   Add Task itself stays in the stable List footer, matching #planAddTask in the prototype. */
+#taskWorkspaceHeaderAddTask{display:none!important}
 .task-workspace-list-tools-wrap[hidden]{display:none!important}
 .task-workspace-shell.workspace-route #taskWorkspaceEyebrow{display:none}
 .task-workspace-shell.workspace-route .task-workspace-heading{gap:5px}

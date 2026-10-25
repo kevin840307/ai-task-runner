@@ -385,6 +385,7 @@ TASK_EDITOR = PanelSpec(
         Pair(".drawerheadtop", ".task-workspace-head", ("display", "gap", "align-items", "min-width")),
         Pair(".drawer-shell-actions", ".task-workspace-header-actions", ("display", "align-items", "gap", "flex")),
         Pair(".drawer-shell-actions .btn", ".task-workspace-header-actions button", ("min-height", "height", "padding", "font-size")),
+        Pair("#planAddTask", "#taskWorkspaceHeaderAddTask", ("display",)),
         Pair(".btn", ".task-workspace-header-actions button", ("border", "background", "font-weight")),
         Pair(".btn.ghost", ".task-workspace-header-actions button.ghost", ("border-color", "background", "color")),
         Pair(".btn.primary", ".task-workspace-header-actions button.primary", ("background", "border-color", "color")),

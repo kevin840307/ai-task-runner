@@ -3693,7 +3693,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             page.click("#taskWorkspaceOpenList")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
-            assert page.locator("#taskWorkspaceHeaderAddTask").is_visible()
+            # Prototype final ownership: header + Add task is hidden; the
+            # stable List footer is the one primary Add task entry.
+            assert page.locator("#taskWorkspaceHeaderAddTask").is_hidden()
+            assert page.locator("#taskWorkspaceAddTask").is_visible()
             assert page.locator("#taskWorkspaceHeaderMoveExisting").is_visible()
             assert page.locator("#taskWorkspaceHeaderYaml").is_visible()
             assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_hidden()

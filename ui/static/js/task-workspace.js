@@ -569,12 +569,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         openWorkflowButton.disabled = !selectedWorkflow;
         openWorkflowButton.textContent = tr("task.open_workflow", "Open Workflow");
       }
-      if (add) {
-        add.hidden = false;
-        add.textContent = tr("task.add_label", "+ Add task");
-        add.disabled = !policy.can_add_item;
-        add.title = add.disabled ? String(policy.reason || "") : "";
-      }
+      // Prototype ownership: Add Task is the stable footer action. Keep the
+      // legacy header button hidden so there is only one primary add target.
       if (move) {
         move.hidden = false;
         const dirty = isDirty();
