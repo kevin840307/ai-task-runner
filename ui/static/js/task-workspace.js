@@ -170,26 +170,34 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         return;
       }
       if (!overlay || overlay.hidden) return;
+      const moveOverlay = overlay.querySelector(".task-workspace-move-overlay");
+      if (event.key === "Escape" && moveOverlay && state?.moveExistingOpen) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeMoveExistingChooser();
+        return;
+      }
       if (event.key === "Tab" && !document.querySelector(".ui-dialog-card")) {
         const shell = byId("taskWorkspaceShell");
-        const focusable = shell
-          ? [...shell.querySelectorAll('button:not([disabled]):not([hidden]),input:not([disabled]):not([hidden]),textarea:not([disabled]):not([hidden]),select:not([disabled]):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])')]
+        const focusScope = moveOverlay || shell;
+        const focusable = focusScope
+          ? [...focusScope.querySelectorAll('button:not([disabled]):not([hidden]),input:not([disabled]):not([hidden]),textarea:not([disabled]):not([hidden]),select:not([disabled]):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])')]
               .filter((node) => node.offsetParent !== null)
           : [];
         if (!focusable.length) {
           event.preventDefault();
-          shell?.focus?.({ preventScroll: true });
+          focusScope?.focus?.({ preventScroll: true });
           return;
         }
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
         const active = document.activeElement;
-        if (event.shiftKey && (active === first || !shell.contains(active))) {
+        if (event.shiftKey && (active === first || !focusScope.contains(active))) {
           event.preventDefault();
           last.focus();
           return;
         }
-        if (!event.shiftKey && (active === last || !shell.contains(active))) {
+        if (!event.shiftKey && (active === last || !focusScope.contains(active))) {
           event.preventDefault();
           first.focus();
           return;
@@ -1453,18 +1461,29 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
   }
 
-  function toggleMoveExisting() {
-    if (state?.kind !== "task" || !state.task) return;
-    if (isDirty()) return;
-    state.moveExistingOpen = !state.moveExistingOpen;
+  function closeMoveExistingChooser({ restoreFocus = true } = {}) {
+    if (!state || state.moveExistingBusy) return;
+    state.moveExistingOpen = false;
     state.moveExistingSelected = "";
     state.moveExistingRequestId = "";
     state.moveExistingError = "";
-    if (state.moveExistingOpen) {
-      void loadMoveExistingCandidates();
-    } else {
-      render();
+    render();
+    if (restoreFocus) {
+      requestAnimationFrame(() => byId("taskWorkspaceHeaderMoveExisting")?.focus?.({ preventScroll: true }));
     }
+  }
+
+  function toggleMoveExisting() {
+    if (state?.kind !== "task" || !state.task || isDirty()) return;
+    if (state.moveExistingOpen) {
+      closeMoveExistingChooser();
+      return;
+    }
+    state.moveExistingOpen = true;
+    state.moveExistingSelected = "";
+    state.moveExistingRequestId = "";
+    state.moveExistingError = "";
+    void loadMoveExistingCandidates();
   }
 
   async function moveExistingSelected() {
@@ -1514,16 +1533,48 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   }
 
   function createMoveExistingChooser() {
-    const chooser = document.createElement("div");
+    const modal = document.createElement("div");
+    modal.className = "task-workspace-move-overlay";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "taskWorkspaceMoveTitle");
+    modal.tabIndex = -1;
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal && !state?.moveExistingBusy) closeMoveExistingChooser();
+    });
+
+    const chooser = document.createElement("section");
     chooser.className = "task-workspace-move-existing";
+
+    const head = document.createElement("header");
+    head.className = "task-workspace-move-head";
+    const headCopy = document.createElement("div");
+    const title = document.createElement("h2");
+    title.id = "taskWorkspaceMoveTitle";
+    title.textContent = tr("task.move_existing_title", "Move existing Task");
+    const subtitle = document.createElement("p");
+    subtitle.textContent = tr("task.move_existing_subtitle", "Move an unused New + Idle Task into this Task List.");
+    headCopy.append(title, subtitle);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "task-workspace-move-close";
+    close.setAttribute("aria-label", tr("task.close", "Close"));
+    close.textContent = "×";
+    close.disabled = !!state.moveExistingBusy;
+    close.onclick = () => closeMoveExistingChooser();
+    head.append(headCopy, close);
+    chooser.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "task-workspace-move-body";
     const note = document.createElement("div");
     note.className = "task-workspace-move-note";
     const strong = document.createElement("strong");
-    strong.textContent = tr("task.move_existing", "Move existing");
+    strong.textContent = tr("task.move_existing_rule", "Only unused New tasks can be moved.");
     const span = document.createElement("span");
-    span.textContent = tr("task.move_existing_help", "Only standalone New Tasks can be moved. Their Board identity is retired.");
+    span.textContent = tr("task.move_existing_help", "The original Board card is retired and its Task ID is kept as origin metadata.");
     note.append(strong, span);
-    chooser.appendChild(note);
+    body.appendChild(note);
 
     const list = document.createElement("div");
     list.className = "task-workspace-move-options";
@@ -1552,11 +1603,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         option.classList.toggle("selected", String(task.task_id || "") === String(state.moveExistingSelected || ""));
         option.dataset.moveExistingTaskId = String(task.task_id || "");
         const copy = document.createElement("div");
-        const title = document.createElement("strong");
-        title.textContent = String(task.title || task.task_id || "Task");
+        const optionTitle = document.createElement("strong");
+        optionTitle.textContent = String(task.title || task.task_id || "Task");
         const meta = document.createElement("small");
-        meta.textContent = [String(task.task_id || ""), String(task.items?.[0]?.workflow || "")].filter(Boolean).join(" · ");
-        copy.append(title, meta);
+        meta.textContent = [
+          String(task.task_id || ""),
+          String(task.project || ""),
+          String(task.items?.[0]?.workflow || ""),
+        ].filter(Boolean).join(" · ");
+        copy.append(optionTitle, meta);
         const status = document.createElement("span");
         status.textContent = "New";
         option.append(copy, status);
@@ -1568,21 +1623,16 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         list.appendChild(option);
       }
     }
-    chooser.appendChild(list);
+    body.appendChild(list);
+    chooser.appendChild(body);
 
-    const actions = document.createElement("div");
+    const actions = document.createElement("footer");
     actions.className = "task-workspace-move-actions";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.textContent = tr("task.cancel", "Cancel");
     cancel.disabled = !!state.moveExistingBusy;
-    cancel.onclick = () => {
-      state.moveExistingOpen = false;
-      state.moveExistingSelected = "";
-      state.moveExistingRequestId = "";
-      state.moveExistingError = "";
-      render();
-    };
+    cancel.onclick = () => closeMoveExistingChooser();
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.className = "primary";
@@ -1591,17 +1641,15 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     confirm.onclick = () => void moveExistingSelected();
     actions.append(cancel, confirm);
     chooser.appendChild(actions);
-    return chooser;
+
+    modal.appendChild(chooser);
+    return modal;
   }
 
   function createTaskListTools() {
     const wrap = document.createElement("div");
     wrap.className = "task-workspace-list-tools-wrap";
-    if (state?.kind === "task" && state.moveExistingOpen) {
-      wrap.appendChild(createMoveExistingChooser());
-    } else {
-      wrap.hidden = true;
-    }
+    wrap.hidden = true;
     return wrap;
   }
 
@@ -3006,6 +3054,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       reason: blockedReason || policy.reason || "",
       durableTask: task,
     }));
+    if (state.moveExistingOpen) overlay.appendChild(createMoveExistingChooser());
 
     if (policy.restart_required) {
       const note = document.createElement("p");
@@ -3380,6 +3429,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function render() {
     if (!state || !overlay) return;
     hideTaskContextMenu();
+    overlay.querySelector(".task-workspace-move-overlay")?.remove();
     const shell = byId("taskWorkspaceShell");
     const footerInfo = byId("taskWorkspaceFooterInfo");
     const renameList = byId("taskWorkspaceRenameList");
