@@ -32,6 +32,8 @@ html[data-theme="teal"][data-appearance="light"] {
   --shadow-sm: 0 1px 2px rgba(32,40,35,.06);
   --shadow-md: 0 10px 28px rgba(32,40,35,.08);
   --shadow-popover: 0 18px 45px rgba(32,40,35,.16);
+  --shadow-pop: var(--shadow-popover);
+  --r-md: var(--radius-md);
 }
 
 html[data-theme="blue"][data-appearance="light"] {
