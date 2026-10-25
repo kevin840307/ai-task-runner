@@ -60,7 +60,7 @@ def _load_main_ui_document(page, html: str) -> None:
 def _install_main_ui_styles(page, static_root: Path) -> None:
     """Install CSS in the same cascade order as production styles.css."""
     manifest = (static_root / "styles.css").read_text(encoding="utf-8")
-    imports = re.findall(r'@import\\s+url\\(["\\\']?([^)"\\\']+)["\\\']?\\)\\s*;', manifest)
+    imports = re.findall(r'@import url\("([^"]+)"\);', manifest)
     assert imports, "styles.css must own the production stylesheet order"
     for href in imports:
         relative = href[2:] if href.startswith("./") else href
