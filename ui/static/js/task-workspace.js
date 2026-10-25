@@ -489,6 +489,40 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     );
   }
 
+  function clearDurableTaskEditorBaseline() {
+    if (!state) return;
+    state.taskEditorOriginalDraft = null;
+    state.taskEditorOriginalSourceModes = null;
+  }
+
+  function captureDurableTaskEditorBaseline() {
+    if (state?.kind !== "task" || !state.editDraft) return;
+    state.taskEditorOriginalDraft = cloneDraft(state.editDraft);
+    state.taskEditorOriginalSourceModes = cloneDraft(state.sourceModes || {});
+  }
+
+  function durableTaskEditorDirty() {
+    if (
+      state?.kind !== "task"
+      || state.route !== "editor"
+      || state.editorReturn !== "list"
+      || !state.taskEditorOriginalDraft
+      || !state.editDraft
+    ) return false;
+    return (
+      draftSignature(state.editDraft) !== draftSignature(state.taskEditorOriginalDraft)
+      || JSON.stringify(state.sourceModes || {}) !== JSON.stringify(state.taskEditorOriginalSourceModes || {})
+    );
+  }
+
+  function restoreDurableTaskEditorBaseline() {
+    if (state?.kind !== "task" || !state.taskEditorOriginalDraft) return;
+    state.editDraft = cloneDraft(state.taskEditorOriginalDraft);
+    state.sourceModes = cloneDraft(state.taskEditorOriginalSourceModes || {});
+    state.index = Math.max(0, Math.min(state.index || 0, state.editDraft.items.length - 1));
+    clearDurableTaskEditorBaseline();
+  }
+
   async function confirmDiscardIfDirty() {
     if (!isDirty()) return true;
     const durable = state?.kind === "task";
@@ -3424,6 +3458,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     state.route = "editor";
     const owner = state;
     render();
+    if (state.editorReturn === "list") captureDurableTaskEditorBaseline();
+    else clearDurableTaskEditorBaseline();
     focusEditorTitleSoon(owner);
   }
 
@@ -3596,8 +3632,21 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (state.kind === "task") {
       if (state.route === "editor") {
         if (state.editorReturn === "list") {
+          if (durableTaskEditorDirty()) {
+            const discard = await confirmDialog?.({
+              title: "Discard Task changes?",
+              message: "Your unsaved Task edits will be lost.",
+              confirmLabel: "Discard",
+              danger: true,
+            });
+            if (!discard) return;
+            restoreDurableTaskEditorBaseline();
+          } else {
+            clearDurableTaskEditorBaseline();
+          }
           state.route = "list";
           state.error = "";
+          state.fieldErrors = {};
           render();
           return;
         }
@@ -3735,6 +3784,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       state.sourceModes = {};
       state.editDraft = null;
       state.editOriginal = "";
+      clearDurableTaskEditorBaseline();
       state.saveRequestId = "";
       state.route = returnRoute === "list" && state.task.items.length > 1 ? "list" : "info";
       if (state.route === "list" && taskEditPolicy(state.task).editable) {
