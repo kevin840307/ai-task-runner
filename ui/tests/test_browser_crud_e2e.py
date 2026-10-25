@@ -994,7 +994,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
                 })"""
             )
             assert project_summary_style["width"] == "145px"
-            assert project_summary_style["maxWidth"] == "none"
+            assert project_summary_style["maxWidth"] == "190px"
             assert page.locator(".tasks-view-toggle").evaluate(
                 "(node) => getComputedStyle(node).display"
             ) == "flex"
