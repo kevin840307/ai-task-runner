@@ -984,6 +984,31 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
 
+            # Final prototype Tasks-page geometry/motion: the Project summary is
+            # deliberately narrow so the header never drifts, and Board cards
+            # use the same all-property 120ms transition + handle tone.
+            project_summary_style = page.locator("#tasksProjectFilterSummary").evaluate(
+                """node => ({
+                    width: getComputedStyle(node).width,
+                    maxWidth: getComputedStyle(node).maxWidth,
+                })"""
+            )
+            assert project_summary_style["width"] == "145px"
+            assert project_summary_style["maxWidth"] == "none"
+            assert page.locator(".tasks-view-toggle").evaluate(
+                "(node) => getComputedStyle(node).display"
+            ) == "flex"
+            first_board_card = page.locator(".tasks-board-card").first
+            assert first_board_card.evaluate(
+                "(node) => getComputedStyle(node).transitionProperty"
+            ) == "all"
+            assert first_board_card.evaluate(
+                "(node) => getComputedStyle(node).transitionDuration"
+            ) == "0.12s"
+            assert first_board_card.locator(".tasks-board-card-handle").evaluate(
+                "(node) => getComputedStyle(node).color"
+            ) == "rgb(163, 173, 186)"
+
             assert page.locator("#tasksRunningCount").inner_text() == "1 Running"
             page.click("#tasksRunningFilterButton")
             assert page.locator("#tasksRunningFilterButton").get_attribute("aria-pressed") == "true"
