@@ -186,7 +186,20 @@
 .tasks-board-runtime.recover{background:var(--warning-soft);color:var(--warn)}
 .tasks-board-card-prompt{margin:7px 0 9px!important}
 .tasks-board-tag{padding:2px 6px;border-radius:6px;font-size:8px;font-weight:850}
-.tasks-board-tag.worktree{background:var(--warning-soft);color:var(--warn)}
+.tasks-board-tag.worktree{
+  background:color-mix(in srgb,var(--warn) 16%,var(--panel));color:var(--warn);
+  border:1px solid color-mix(in srgb,var(--warn) 50%,var(--line))
+}
+.tasks-board-card.worktree-card{
+  border-color:color-mix(in srgb,var(--warn) 70%,var(--line));
+  background:color-mix(in srgb,var(--warn) 7%,var(--panel));
+  box-shadow:inset 3px 0 0 var(--warn),var(--shadow-sm)
+}
+.tasks-board-card.worktree-card:hover{
+  border-color:var(--warn);
+  background:color-mix(in srgb,var(--warn) 7%,var(--panel));
+  box-shadow:inset 3px 0 0 var(--warn),var(--shadow-md)
+}
 .tasks-board-card-foot{margin-top:9px;padding-top:8px}
 .tasks-board-progress{display:flex;align-items:center;gap:6px}
 .tasks-board-progress-bar{display:block;width:48px;height:4px;overflow:hidden;border-radius:999px;background:var(--panel-3)}
@@ -205,6 +218,10 @@
   background:var(--panel-2);color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;cursor:default
 }
 .tasks-list-data:hover{background:var(--panel-2);border-color:var(--line)}
+.tasks-list-row.worktree-row{
+  background:color-mix(in srgb,var(--warn) 6%,var(--panel));
+  box-shadow:inset 3px 0 0 var(--warn)
+}
 .tasks-list-status{min-width:0;padding:3px 7px;border-radius:999px;background:var(--panel-3);font-size:8px;letter-spacing:.03em}
 .tasks-list-copy{display:block}
 .tasks-list-copy strong{display:block;font-size:10px}
