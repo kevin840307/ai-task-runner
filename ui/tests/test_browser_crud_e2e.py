@@ -6641,8 +6641,20 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ".app",
                     production_page,
                     "body",
-                    ["gridTemplateColumns", "transitionDuration"],
+                    ["gridTemplateColumns"],
                 )
+                feature_transition = _computed_style(
+                    feature_page,
+                    ".app",
+                    ["transitionProperty"],
+                )["transitionProperty"]
+                production_transition = _computed_style(
+                    production_page,
+                    "body",
+                    ["transitionProperty"],
+                )["transitionProperty"]
+                assert "grid-template-columns" not in feature_transition
+                assert "grid-template-columns" not in production_transition
                 _assert_feature_computed_style_parity(
                     feature_page,
                     "#planFormList [data-draft-row='0'] .plan-row-actions",
