@@ -330,7 +330,7 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
   function taskCard(task) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "tasks-board-card";
+    button.className = "tasks-board-card" + (taskUsesWorktree(task) ? " worktree-card" : "");
     button.dataset.taskId = String(task.task_id || "");
     button.draggable = true;
 
@@ -529,7 +529,7 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     for (const task of rows) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "tasks-list-row tasks-list-data";
+      button.className = "tasks-list-row tasks-list-data" + (taskUsesWorktree(task) ? " worktree-row" : "");
 
       const lifecycle = document.createElement("span");
       lifecycle.className = "tasks-list-status";
