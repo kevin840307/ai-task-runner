@@ -592,6 +592,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px
 }
 .task-workspace-list-actions button:hover:not(:disabled){border-color:var(--line-strong);color:var(--text)}
+.task-workspace-list-actions button:disabled{opacity:.35;cursor:not-allowed}
 .task-workspace-list-actions .task-workspace-row-more{
   min-width:30px;font-size:14px;letter-spacing:1px;color:var(--muted)
 }
