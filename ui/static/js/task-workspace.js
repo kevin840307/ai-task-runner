@@ -594,6 +594,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       // legacy header button hidden so there is only one primary add target.
       if (move) {
         move.hidden = false;
+        move.textContent = tr("task.move_existing", "Move existing");
         const dirty = isDirty();
         move.disabled = !policy.can_add_item || dirty;
         move.title = dirty ? "Save Task List changes before moving an existing Task" : (move.disabled ? String(policy.reason || "") : "");
