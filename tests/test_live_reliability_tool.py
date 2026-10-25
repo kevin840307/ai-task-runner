@@ -3198,6 +3198,17 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert auto_busy_concurrent["effective_mode"] == "worktree"
     assert auto_busy_concurrent["delivery"] == "merged"
 
+    blocked_main = result["main_busy_blocked"]
+    assert blocked_main["requested_mode"] == "main"
+    assert blocked_main["main_running"] is True
+    assert blocked_main["auto_workspace_policy"] == "busy-worktree"
+    assert blocked_main["allow_concurrent_main_tasks"] is False
+    assert blocked_main["delivery"] == "blocked"
+    assert "busy" in blocked_main["detail"].lower()
+    assert blocked_main["target_head_after_delivery"] == blocked_main["target_head_before_delivery"]
+    assert not (tmp_path / "rw-wt-22").exists()
+    assert not (tmp_path / "rw-22" / "health.txt").exists()
+
     for case_key in (
         "main",
         "worktree",
