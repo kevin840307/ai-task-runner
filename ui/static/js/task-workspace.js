@@ -1637,7 +1637,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const introText = document.createElement("span");
     introText.textContent = durableTask && String(durableTask.status || "") === "paused"
       ? tr("task.paused_order_desc", "Paused · completed items are locked; current changes require restart.")
-      : tr("task.order_desc", "Tasks run top-to-bottom inside this Task List.");
+      : tr("task.order_desc", "Tasks run from top to bottom inside this Task List.");
     introCopy.append(introTitle, introText);
     const statePill = document.createElement("span");
     statePill.className = "task-workspace-list-state-pill";
@@ -1726,22 +1726,22 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     helpTitle.textContent = tr("task.quick_use", "Quick use");
     const firstHelp = document.createElement("p");
     const clickHelp = document.createElement("strong");
-    clickHelp.textContent = tr("task.click", "Click");
+    clickHelp.textContent = tr("task.quick_use_click", "Click");
     const doubleClickHelp = document.createElement("strong");
-    doubleClickHelp.textContent = tr("task.double_click", "Double-click");
+    doubleClickHelp.textContent = tr("task.quick_use_double_click", "Double-click");
     firstHelp.append(
       clickHelp,
-      document.createTextNode(" " + tr("task.selects_task", "selects a task") + " · "),
+      document.createTextNode(tr("task.quick_use_after_click", " selects a task · ")),
       doubleClickHelp,
-      document.createTextNode(" " + tr("task.edits_it", "edits it") + "."),
+      document.createTextNode(tr("task.quick_use_after_double_click", " edits it.")),
     );
     const secondHelp = document.createElement("p");
     const moreHelp = document.createElement("strong");
     moreHelp.textContent = "⋯";
     secondHelp.append(
-      document.createTextNode(tr("task.quick_use_drag_prefix", "Drag the grip to reorder. Right-click or") + " "),
+      document.createTextNode(tr("task.quick_use_before_more", "Drag the grip to reorder. Right-click or ")),
       moreHelp,
-      document.createTextNode(" " + tr("task.quick_use_actions", "for Info / Workflow / Remove.")),
+      document.createTextNode(tr("task.quick_use_after_more", " for Info / Workflow / Remove.")),
     );
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
