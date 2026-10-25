@@ -422,6 +422,13 @@ def test_new_task_responsive_geometry_matches_feature_reference() -> None:
     )
 
 
+def test_project_combobox_matches_prototype_selection_and_close_contract() -> None:
+    assert 'option.className = "task-workspace-project-dropdown-option" + (rowPath === String(project.value || "").trim() ? " selected" : "")' in PRODUCTION_JS
+    assert 'if (!event.target.closest?.(".task-workspace-project-combobox")) closeOpenProjectDropdown();' in PRODUCTION_JS
+    assert 'if (activeId === "taskWorkspaceProject" && !projectDropdownWasOpen) next.dataset.suppressOpenOnFocus = "true";' in PRODUCTION_JS
+    assert 'closeOpenProjectDropdown({ focusInput: true })' in PRODUCTION_JS
+
+
 def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     # task-editor.js intentionally reassigns renderNewTaskSources. The last
     # assignment is canonical: Prompt=3 tabs, AI=4 tabs, File Validator=Required.
