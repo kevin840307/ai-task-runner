@@ -1000,6 +1000,18 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             ) == "flex"
             first_board_card = page.locator(".tasks-board-card").first
             assert first_board_card.evaluate(
+                "(node) => getComputedStyle(node).display"
+            ) == "block"
+            assert "worktree-card" in (first_board_card.get_attribute("class") or "")
+            assert "inset" in first_board_card.evaluate(
+                "(node) => getComputedStyle(node).boxShadow"
+            )
+            worktree_tag = first_board_card.locator(".tasks-board-tag.worktree")
+            assert worktree_tag.is_visible()
+            assert worktree_tag.evaluate(
+                "(node) => getComputedStyle(node).borderTopStyle"
+            ) == "solid"
+            assert first_board_card.evaluate(
                 "(node) => getComputedStyle(node).transitionProperty"
             ) == "all"
             assert first_board_card.evaluate(
@@ -1027,6 +1039,10 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
                 "STATUS\nNAME\nTASKS\nRUNTIME\nPROJECT\nPROGRESS"
             ]
             first_list_row = page.locator("#tasksListRows .tasks-list-data").first
+            assert "worktree-row" in (first_list_row.get_attribute("class") or "")
+            assert "inset" in first_list_row.evaluate(
+                "(node) => getComputedStyle(node).boxShadow"
+            )
             assert first_list_row.locator(".tasks-list-count").count() == 1
             assert first_list_row.locator(".tasks-list-project").count() == 1
             assert first_list_row.locator(".tasks-list-runtime").count() == 1
