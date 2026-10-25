@@ -311,7 +311,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-workflow-field{grid-column:2!important}
 .task-workspace-title-field{grid-column:3!important}
 .task-workspace-field-label{display:flex;align-items:center;gap:5px}
-.task-workspace-field-optional{color:var(--muted);font-size:8px;font-style:normal;font-weight:650}
+.task-workspace-field-optional{margin-left:5px;color:var(--muted);font-size:8px;font-style:normal;font-weight:650}
 .task-workspace-basics .task-workspace-field{gap:4px}
 .task-workspace-basics .task-workspace-field>span{font-size:9px}
 .task-workspace-basics .task-workspace-field input,
