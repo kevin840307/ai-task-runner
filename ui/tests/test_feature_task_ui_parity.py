@@ -69,6 +69,8 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert 'route: String(task?.status || "") === "new" ? "list" : "info"' in PRODUCTION_TASKS_BOARD_JS
     assert 'button.title = String(task?.status || "") === "new" ? "Open Task list" : "Open Task info"' in PRODUCTION_TASKS_BOARD_JS
     assert 'button.addEventListener("dblclick", () => openTask?.(task, {' in PRODUCTION_TASKS_BOARD_JS
+    assert 'button.className = "tasks-board-card" + (taskUsesWorktree(task) ? " worktree-card" : "");' in PRODUCTION_TASKS_BOARD_JS
+    assert 'button.className = "tasks-list-row tasks-list-data" + (taskUsesWorktree(task) ? " worktree-row" : "");' in PRODUCTION_TASKS_BOARD_JS
     assert 'r.ondblclick=()=>openPlanDialog(r.dataset.taskrow)' in FEATURE_WORKSPACE_JS
     assert "card.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
     assert "r.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
