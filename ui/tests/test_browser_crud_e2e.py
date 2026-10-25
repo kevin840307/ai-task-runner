@@ -57,6 +57,16 @@ def _load_main_ui_document(page, html: str) -> None:
     page.goto("http://local.test/", wait_until="domcontentloaded")
 
 
+def _install_main_ui_styles(page, static_root: Path) -> None:
+    """Install CSS in the same cascade order as production styles.css."""
+    manifest = (static_root / "styles.css").read_text(encoding="utf-8")
+    imports = re.findall(r'@import\\s+url\\(["\\\']?([^)"\\\']+)["\\\']?\\)\\s*;', manifest)
+    assert imports, "styles.css must own the production stylesheet order"
+    for href in imports:
+        relative = href[2:] if href.startswith("./") else href
+        page.add_style_tag(path=str(static_root / relative))
+
+
 def _install_main_ui_scripts(page, static_root: Path) -> None:
     # app.js is a real ES module. Route the module graph through the same HTTP
     # origin as the document instead of injecting app.js as a classic script.
@@ -967,8 +977,7 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -1313,8 +1322,7 @@ def test_workspace_result_merge_chat_uses_new_session_and_autosizes_prompt() -> 
                     };
                 };"""
             )
-            for style in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(style))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -1447,8 +1455,7 @@ def test_completed_runtime_rerun_requires_confirmation() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -1522,8 +1529,7 @@ def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -1658,8 +1664,7 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
                         return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                     };"""
                 )
-                for css in sorted((static_root / "css").glob("*.css")):
-                    page.add_style_tag(path=str(css))
+                _install_main_ui_styles(page, static_root)
                 _install_main_ui_scripts(page, static_root)
                 _boot_main_ui(page, expected_project)
 
@@ -1809,8 +1814,7 @@ def test_reload_core_task_and_project_entrypoints_have_zero_page_errors() -> Non
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page, expected_project)
 
@@ -1922,8 +1926,7 @@ def test_project_chat_delete_cleans_transient_state_and_is_project_scoped() -> N
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page, expected_project="Second Project")
 
@@ -2080,8 +2083,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -2764,8 +2766,7 @@ def test_task_info_explains_non_new_edit_and_delete_block() -> None:
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -2961,8 +2962,7 @@ def test_task_info_tabs_render_canonical_runtime_output_and_history() -> None:
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -3075,8 +3075,7 @@ def test_paused_task_locks_completed_child_and_restarts_edited_current() -> None
                     };
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -3215,8 +3214,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -4022,8 +4020,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.click("#promptNav")
@@ -4087,8 +4084,7 @@ def test_project_chat_goal_uses_one_backend_create_run_action() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.locator("#projectList .project-root").first.click()
@@ -4200,8 +4196,7 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page, expected_project)
 
@@ -4653,8 +4648,7 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page, expected_project)
 
@@ -4825,8 +4819,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.click("#workflowNav")
@@ -4893,8 +4886,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.wait_for_function("document.querySelector('#workflowSelectedLabel')?.textContent === 'ralphy_ai_validate.yaml'")
@@ -4966,8 +4958,7 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page, "Fixture Project")
 
@@ -5071,8 +5062,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     };
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -5555,8 +5545,7 @@ def test_task_validation_options_follow_builtin_workflow_capabilities() -> None:
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -5764,8 +5753,7 @@ def test_workspace_options_follow_backend_resolver_and_merge_failure_count_is_ta
                     };
                 };"""
             )
-            for css in sorted((static_root / "css").glob("*.css")):
-                page.add_style_tag(path=str(css))
+            _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
@@ -6007,8 +5995,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     return {ok: response.status >= 200 && response.status < 300, status: response.status, json: async () => response.data};
                 };"""
             )
-            for stylesheet in sorted((static_root / "css").glob("*.css")):
-                production_page.add_style_tag(path=str(stylesheet))
+            _install_main_ui_styles(production_page, static_root)
             _install_main_ui_scripts(production_page, static_root)
             _boot_main_ui(production_page)
 

@@ -207,16 +207,22 @@ body {
 }
 #workflowPicker { width: auto; max-width: min(520px, 60vw); }
 
-@media (max-width: 720px) {
-  body { grid-template-columns: 190px minmax(0, 1fr); height: 100dvh !important; min-height: 0 !important; }
+@media (max-width: 900px) {
+  body { grid-template-columns: 205px minmax(0, 1fr); height: 100dvh !important; min-height: 0 !important; }
   .projects { display: flex !important; max-height: none !important; }
+}
+
+@media (max-width: 720px) {
   .options-panel { grid-template-columns: 1fr; }
   .header { align-items: flex-start; }
   .runtime-actions { flex-wrap: wrap; justify-content: flex-end; }
   #workflowPicker { max-width: 100%; }
 }
+@media (max-width: 620px) {
+  body { grid-template-columns: 155px minmax(0, 1fr); }
+}
+
 @media (max-width: 520px) {
-  body { grid-template-columns: 150px minmax(0, 1fr); }
   .projects { padding: 10px 8px; }
   .brand { font-size: 12px; }
   .new-project-button { min-height: 38px; }
