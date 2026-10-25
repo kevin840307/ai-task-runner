@@ -119,13 +119,17 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
     for (const row of rows) {
       const id = projectId(row);
       if (!id) continue;
-      const label = document.createElement("label");
-      label.className = "tasks-project-option";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = selected.has(id);
-      input.addEventListener("change", () => {
-        if (input.checked) selected.add(id); else selected.delete(id);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tasks-project-option" + (selected.has(id) ? " selected" : "");
+      button.dataset.taskProjectFilter = id;
+      const check = document.createElement("span");
+      check.className = "tasks-project-check";
+      check.textContent = "✓";
+      check.setAttribute("aria-hidden", "true");
+      button.setAttribute("aria-pressed", String(selected.has(id)));
+      button.addEventListener("click", () => {
+        if (selected.has(id)) selected.delete(id); else selected.add(id);
         saveSelection();
         renderFilter();
         void refresh();
@@ -136,8 +140,8 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       const small = document.createElement("small");
       small.textContent = [String(row.path || ""), String(row.branch || "main")].filter(Boolean).join(" · ");
       copy.append(strong, small);
-      label.append(input, copy);
-      options.appendChild(label);
+      button.append(check, copy);
+      options.appendChild(button);
     }
     const chosen = rows.filter((row) => selected.has(projectId(row)));
     const boardCount = tasks.filter(taskMatchesProjects).length;
