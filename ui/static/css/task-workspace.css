@@ -467,7 +467,8 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-project-toggle{
   display:grid;place-items:center;width:34px;height:34px;padding:0;
   border:1px solid var(--line);border-radius:0 7px 7px 0;
-  background:var(--input-bg);color:var(--muted);box-shadow:none
+  background:var(--input-bg);color:var(--muted);box-shadow:none;cursor:pointer;
+  transition:background .14s,border-color .14s,color .14s
 }
 .task-workspace-project-toggle:hover:not(:disabled),
 .task-workspace-project-toggle[aria-expanded="true"]{
@@ -482,19 +483,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   margin-top:4px;transform:rotate(225deg)
 }
 .task-workspace-project-dropdown{
-  position:absolute;z-index:620;top:calc(100% + 5px);left:0;right:0;max-height:230px;overflow:auto;
+  position:absolute;z-index:320;top:calc(100% + 5px);left:0;right:0;max-height:230px;overflow:auto;
   padding:4px;border:1px solid var(--line);border-radius:9px;background:var(--popover-bg,var(--panel));box-shadow:var(--shadow-popover)
 }
 .task-workspace-project-dropdown[hidden]{display:none}
 .task-workspace-project-dropdown-option{
-  display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text)
+  display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text);cursor:pointer
 }
-.task-workspace-project-dropdown-option:hover{background:var(--accent-soft)}
+.task-workspace-project-dropdown-option:hover,.task-workspace-project-dropdown-option.selected{background:var(--accent-soft)}
 .task-workspace-project-dropdown-option strong{display:block;font-size:9px}
 .task-workspace-project-dropdown-option small{
   display:block;margin-top:2px;overflow:hidden;color:var(--muted);font-size:7.5px;text-overflow:ellipsis;white-space:nowrap
 }
-.task-workspace-project-dropdown-empty{padding:10px;color:var(--muted);font-size:8px;text-align:center}
+.task-workspace-project-dropdown-empty{padding:9px;color:var(--muted);font-size:8px}
 .task-workspace-field-help{display:block;margin-top:3px;color:var(--muted);font-size:7px;line-height:1.3}
 
 
