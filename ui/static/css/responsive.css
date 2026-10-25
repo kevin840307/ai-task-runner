@@ -126,13 +126,22 @@ body.details-collapsed .panel { display: none !important; }
 }
 
 @media (max-width: 760px) {
+  /* Match the accepted prototype App shell instead of stacking Projects above
+     the Workspace. The stacked legacy layout leaves absolutely-positioned
+     Task views under the Projects rail, so visible controls can become
+     unclickable. */
   body,
+  body.details-collapsed {
+    grid-template-columns: 205px minmax(0, 1fr);
+    height: 100vh;
+    min-height: 0;
+  }
+
   body.projects-collapsed,
-  body.details-collapsed,
   body.projects-collapsed.details-collapsed {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: 100vh;
+    height: 100vh;
+    min-height: 0;
   }
 
   .projects,
@@ -142,7 +151,9 @@ body.details-collapsed .panel { display: none !important; }
   }
 
   .projects {
-    max-height: min(48vh, 405px);
+    max-height: none;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
   }
 
   body.projects-collapsed .projects { display: none; }
@@ -179,6 +190,12 @@ body.details-collapsed .panel { display: none !important; }
   }
 
   .composer-shortcut { display: none; }
+}
+
+@media (max-width: 620px) {
+  body:not(.projects-collapsed) {
+    grid-template-columns: 155px minmax(0, 1fr);
+  }
 }
 
 /* V20 collapsed Run Center uses one polished launcher instead of vertical tabs. */

@@ -2480,25 +2480,16 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert draft_first_row.get_attribute("aria-selected") == "false"
             assert "selected" not in (draft_first_row.get_attribute("class") or "").split()
 
-            # Feature parity: Task List Draft rows expose the same pointer,
-            # keyboard and explicit ↑/↓ reorder paths as the prototype.
+            # Feature parity: Draft reorder is drag-first, with Alt+Arrow as
+            # the keyboard path. Prototype keeps the legacy ↑/↓ nodes only as
+            # hidden compatibility markup.
             assert page.locator(".task-workspace-list-row").first.get_attribute("draggable") == "true"
             move_up = page.locator(".task-workspace-list-row").get_by_title("Move up")
             move_down = page.locator(".task-workspace-list-row").get_by_title("Move down")
             assert move_up.count() == 3
             assert move_down.count() == 3
-            assert move_up.nth(0).is_disabled()
-            assert move_up.nth(1).is_enabled()
-            assert move_down.nth(1).is_enabled()
-            assert move_down.nth(2).is_disabled()
-            move_up.nth(1).click()
-            page.wait_for_function(
-                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"
-            )
-            page.locator(".task-workspace-list-row").first.get_by_title("Move down").click()
-            page.wait_for_function(
-                "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('First list child')"
-            )
+            assert all(move_up.nth(i).is_hidden() for i in range(3))
+            assert all(move_down.nth(i).is_hidden() for i in range(3))
             page.locator(".task-workspace-list-row").first.drag_to(page.locator(".task-workspace-list-row").nth(2))
             page.wait_for_function(
                 "() => document.querySelectorAll('.task-workspace-list-row')[0]?.textContent.includes('Second list child')"
@@ -6653,11 +6644,18 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # identical below the side-rail breakpoint. Legacy production CSS
             # used to move actions into explicit grid columns and shrink header
             # buttons at 760/620px, shifting click targets away from prototype.
-            for narrow_width in (740, 620):
+            for narrow_width in (740, 620, 520):
                 feature_page.set_viewport_size({"width": narrow_width, "height": 900})
                 production_page.set_viewport_size({"width": narrow_width, "height": 900})
                 feature_page.wait_for_timeout(50)
                 production_page.wait_for_timeout(50)
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    ".app",
+                    production_page,
+                    "body",
+                    ["gridTemplateColumns"],
+                )
                 _assert_feature_computed_style_parity(
                     feature_page,
                     "#planFormList [data-draft-row='0'] .plan-row-actions",
