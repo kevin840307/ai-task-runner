@@ -1757,11 +1757,13 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             assert second_option.locator(".tasks-project-check").evaluate(
                 "(node) => getComputedStyle(node).display"
             ) == "grid"
-            assert second_option.get_attribute("aria-pressed") == "false"
-            assert root_option.get_attribute("aria-pressed") == "true"
+            assert second_option.get_attribute("aria-pressed") == "true"
+            assert root_option.get_attribute("aria-pressed") == "false"
             assert " · main" in second_option.locator("small").inner_text()
             second_option.click()
-            root_option.click()
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'No Project'")
+            assert page.locator(".tasks-project-option").filter(has_text="Second Project").get_attribute("aria-pressed") == "false"
+            page.locator(".tasks-project-option").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
             assert page.locator(".tasks-project-option").filter(has_text="Second Project").get_attribute("aria-pressed") == "true"
             assert page.locator(".tasks-project-option").filter(has_text="Fixture Project").get_attribute("aria-pressed") == "false"
@@ -3640,7 +3642,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             assert durable_editor_fields == chat_editor_fields
             page.fill("#taskWorkspacePrompt", "Durably edited browser item one")
+            page.click("#taskWorkspaceSave")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert page.locator(".task-workspace-list-row").count() == 2
+
+            # Prototype create-item ownership: a provisional child belongs to
+            # the child editor until Save. Back guards dirty input and Discard
+            # removes that provisional child instead of silently keeping it.
+            page.click("#taskWorkspaceAddTask")
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.fill("#taskWorkspaceItemTitle", "Discarded browser child")
+            page.fill("#taskWorkspacePrompt", "Discard this child prompt")
             page.click("#taskWorkspaceHeaderBack")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') !== null")
+            page.locator("[data-dialog-ok]").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 2
 
@@ -3648,7 +3663,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             page.fill("#taskWorkspaceItemTitle", "Added browser child")
             page.fill("#taskWorkspacePrompt", "Added child prompt")
-            page.click("#taskWorkspaceHeaderBack")
+            page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             assert page.locator(".task-workspace-list-row").count() == 3
             page.locator(".task-workspace-list-row").nth(2).focus()
