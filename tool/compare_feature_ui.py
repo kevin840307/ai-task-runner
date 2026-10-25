@@ -714,6 +714,26 @@ BOARD = PanelSpec(
             ("border-color", "box-shadow"),
         ),
         Pair(".taskcard.dragging", ".tasks-board-card.dragging", ("opacity",)),
+        Pair(
+            "html[data-appearance] .taskcard.worktree-card",
+            ".tasks-board-card.worktree-card",
+            ("border-color", "background", "box-shadow"),
+        ),
+        Pair(
+            "html[data-appearance] .taskcard.worktree-card:hover",
+            ".tasks-board-card.worktree-card:hover",
+            ("border-color", "box-shadow"),
+        ),
+        Pair(
+            "html[data-appearance] .worktree-highlight",
+            ".tasks-board-tag.worktree",
+            ("background", "color", "border-color"),
+        ),
+        Pair(
+            "html[data-appearance] .taskrow.worktree-row",
+            ".tasks-list-row.worktree-row",
+            ("background", "box-shadow"),
+        ),
         Pair(".handle", ".tasks-board-card-handle", ("color", "font-size", "letter-spacing", "user-select")),
         Pair(".tasktitle", ".tasks-board-card-title", ("font-size", "font-weight", "line-height")),
         Pair(".cardmeta", ".tasks-board-card-meta", ("display", "align-items", "gap", "flex-wrap")),
