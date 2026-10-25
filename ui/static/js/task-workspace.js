@@ -22,6 +22,22 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   const tr = (key, fallback) => window.I18n?.t?.(key, fallback) ?? fallback;
   const trf = (key, values, fallback) => window.I18n?.format?.(key, values, fallback) ?? fallback;
 
+  function closeOpenProjectDropdown({ focusInput = false } = {}) {
+    if (!overlay) return false;
+    const dropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
+    if (!dropdown) return false;
+    dropdown.hidden = true;
+    overlay.querySelector(".task-workspace-project-toggle")?.setAttribute("aria-expanded", "false");
+    if (focusInput) {
+      const input = overlay.querySelector("#taskWorkspaceProject");
+      if (input) {
+        if (document.activeElement !== input) input.dataset.suppressOpenOnFocus = "true";
+        input.focus({ preventScroll: true });
+      }
+    }
+    return true;
+  }
+
   function ensureMounted() {
     if (overlay) return overlay;
     overlay = document.createElement("div");
@@ -106,6 +122,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     window.addEventListener("resize", hideTaskContextMenu);
     window.addEventListener("scroll", hideTaskContextMenu, true);
     overlay.addEventListener("mousedown", (event) => {
+      if (!event.target.closest?.(".task-workspace-project-combobox")) closeOpenProjectDropdown();
       if (event.target === overlay) void requestClose();
     });
     byId("taskWorkspaceClose").addEventListener("click", () => void requestClose());
@@ -187,16 +204,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         finishTaskListRename(true);
         return;
       }
-      const projectDropdown = overlay.querySelector(".task-workspace-project-dropdown:not([hidden])");
-      if (projectDropdown) {
+      if (closeOpenProjectDropdown({ focusInput: true })) {
         event.preventDefault();
         event.stopPropagation();
-        projectDropdown.hidden = true;
-        const toggle = overlay.querySelector(".task-workspace-project-toggle");
-        toggle?.setAttribute("aria-expanded", "false");
-        const projectInput = overlay.querySelector("#taskWorkspaceProject");
-        if (projectInput) projectInput.dataset.suppressOpenOnFocus = "true";
-        projectInput?.focus({ preventScroll: true });
         return;
       }
       event.preventDefault();
@@ -217,6 +227,8 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
   function renderPreservingActiveControl() {
     const active = document.activeElement;
     const activeId = active && typeof active.id === "string" ? active.id : "";
+    const projectDropdownWasOpen = activeId === "taskWorkspaceProject"
+      && Boolean(overlay?.querySelector(".task-workspace-project-dropdown:not([hidden])"));
     const selection = activeId && typeof active?.selectionStart === "number" && typeof active?.selectionEnd === "number"
       ? { start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection || "none" }
       : null;
@@ -224,6 +236,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (!activeId) return;
     const next = byId(activeId);
     if (!next || typeof next.focus !== "function") return;
+    if (activeId === "taskWorkspaceProject" && !projectDropdownWasOpen) next.dataset.suppressOpenOnFocus = "true";
     next.focus({ preventScroll: true });
     if (selection && typeof next.setSelectionRange === "function") {
       try {
@@ -2009,8 +2022,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       for (const row of filtered) {
         const option = document.createElement("button");
+        const rowPath = String(row.path || "");
         option.type = "button";
-        option.className = "task-workspace-project-dropdown-option";
+        option.className = "task-workspace-project-dropdown-option" + (rowPath === String(project.value || "").trim() ? " selected" : "");
         const strong = document.createElement("strong");
         strong.textContent = String(row.name || row.path || "Project");
         const small = document.createElement("small");
@@ -2018,10 +2032,12 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         option.append(strong, small);
         option.addEventListener("mousedown", (event) => event.preventDefault());
         option.addEventListener("click", () => {
-          applyProject(String(row.path || ""));
-          projectDropdown.hidden = true;
-          projectToggle.setAttribute("aria-expanded", "false");
-          project.focus();
+          applyProject(rowPath);
+          setProjectDropdownOpen(false);
+          if (document.activeElement !== project) {
+            project.dataset.suppressOpenOnFocus = "true";
+            project.focus({ preventScroll: true });
+          }
         });
         projectDropdown.appendChild(option);
       }
