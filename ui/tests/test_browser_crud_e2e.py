@@ -2105,6 +2105,22 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator(".task-workspace-project-toggle").click()
             assert page.locator(".task-workspace-project-dropdown").is_visible()
             assert page.locator(".task-workspace-project-dropdown-option").count() >= 1
+            first_project_option = page.locator(".task-workspace-project-dropdown-option").first
+            selected_project_path = first_project_option.locator("small").inner_text()
+            first_project_option.click()
+            page.wait_for_timeout(80)
+            assert page.locator("#taskWorkspaceProject").input_value() == selected_project_path
+            assert page.locator(".task-workspace-project-dropdown").is_hidden()
+            assert page.locator(".task-workspace-project-toggle").get_attribute("aria-expanded") == "false"
+
+            page.locator(".task-workspace-project-toggle").click()
+            assert page.locator(".task-workspace-project-dropdown").is_visible()
+            assert page.locator(".task-workspace-project-dropdown-option.selected").count() == 1
+            page.click("#taskWorkspaceItemTitle")
+            assert page.locator(".task-workspace-project-dropdown").is_hidden()
+
+            page.locator(".task-workspace-project-toggle").click()
+            assert page.locator(".task-workspace-project-dropdown").is_visible()
             page.keyboard.press("Escape")
             assert page.locator(".task-workspace-project-dropdown").is_hidden()
             assert page.locator("#taskWorkspaceOverlay").is_visible()
