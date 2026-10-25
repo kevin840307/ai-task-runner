@@ -2699,6 +2699,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.keyboard.press("Escape")
             assert page.locator(".task-workspace-move-overlay").count() == 0
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceHeaderMoveExisting'")
             assert page.locator("#taskWorkspaceHeaderMoveExisting").evaluate("(node) => document.activeElement === node")
 
             page.click("#taskWorkspaceHeaderMoveExisting")
