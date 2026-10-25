@@ -18,7 +18,7 @@
 .tasks-project-menu-head>div{display:inline-flex;gap:4px}.tasks-project-menu-head button{min-height:26px;padding:3px 6px;font-size:9px}
 .tasks-project-options{display:grid;gap:3px;max-height:260px;overflow:auto}
 .tasks-project-option{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:7px;border-radius:var(--radius-md);cursor:pointer}
-.tasks-project-option:hover{background:var(--panel-2)}.tasks-project-option span{min-width:0;display:grid;gap:1px}.tasks-project-option strong,.tasks-project-option small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tasks-project-option strong{font-size:10px}.tasks-project-option small{color:var(--muted);font-size:8px}
+.tasks-project-option:hover{background:var(--panel-2)}.tasks-project-option>span:not(.tasks-project-check){min-width:0;display:grid;gap:1px}.tasks-project-option strong,.tasks-project-option small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tasks-project-option strong{font-size:10px}.tasks-project-option small{color:var(--muted);font-size:8px}
 .tasks-board-content{min-height:0;overflow:auto;padding:14px}
 .tasks-board-columns{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:10px;min-width:940px;min-height:100%}
 .tasks-board-column{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--panel)}
@@ -57,7 +57,7 @@
 .tasks-project-option:hover{background:var(--accent-softer)}
 .tasks-project-check{display:grid;place-items:center;width:16px;height:16px;border:1px solid var(--line-strong);border-radius:5px;background:var(--input-bg);color:transparent;font-size:10px;font-weight:950}
 .tasks-project-option.selected .tasks-project-check{border-color:var(--accent);background:var(--accent);color:#fff}
-.tasks-project-option span{display:block}
+.tasks-project-option>span:not(.tasks-project-check){display:block}
 .tasks-project-option strong{display:block;font-size:9px}
 .tasks-project-option small{display:block;margin-top:2px;font-size:7.5px}
 .tasks-board-toolbar{min-height:54px;padding:8px 18px;background:var(--panel-2)}
