@@ -96,6 +96,13 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert "const width = 205;" in PRODUCTION_JS
     assert "const height = 220;" in PRODUCTION_JS
 
+def test_task_workspace_child_surfaces_own_escape_like_prototype() -> None:
+    assert "e.stopImmediatePropagation();hideTaskContextMenu();" in FEATURE_WORKSPACE_JS
+    assert "e.stopImmediatePropagation();setProjectDropdownOpen(false)" in FEATURE_WORKSPACE_JS
+    assert PRODUCTION_JS.count("event.stopImmediatePropagation();") >= 2
+    assert 'if (state?.kind === "task") state.selectedListIndex = next;' in PRODUCTION_JS
+
+
 def test_first_paint_loader_matches_feature_prototype_contract() -> None:
     feature_loader = _declarations(FEATURE_CSS, ".app-bootstrap-loader")
     production_loader = _declarations(PRODUCTION_TOKENS, ".app-bootstrap-loader")
