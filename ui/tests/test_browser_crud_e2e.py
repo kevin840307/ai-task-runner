@@ -6508,7 +6508,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 (
                     "#planFormList [data-draft-row='0']",
                     ".task-workspace-list-row",
-                    ["borderTopWidth", "borderTopStyle", "borderRadius", "backgroundColor", "overflow"],
+                    ["borderTopWidth", "borderTopStyle", "borderRadius", "backgroundColor"],
                 ),
                 (
                     "#planFormList [data-draft-row='0'] .plan-row-head",

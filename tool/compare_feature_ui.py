@@ -153,6 +153,28 @@ TASK_EDITOR = PanelSpec(
         Pair(".create-type-menu small", ".task-create-menu button small", ("display", "margin-top", "color", "font-size", "line-height")),
         Pair("#newTaskModal>.modal-body", ".task-workspace-shell.task-editor-route .task-workspace-body", ("padding",)),
         Pair("#newTaskModal .task-basics", ".task-workspace-basics", ("grid-template-columns", "gap", "align-items")),
+        Pair("#newTaskModal .field-help", ".task-workspace-field-help", ("margin-top", "font-size", "line-height")),
+        Pair("#newTaskModal #newTaskWorkflowCaps", ".task-workspace-workflow-caps", ("min-height", "margin")),
+        Pair(
+            "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-empty)",
+            ".task-workspace-input-grid.has-no-validation",
+            ("grid-template-columns",),
+        ),
+        Pair(
+            "#newTaskModal #newTaskValidationSource .validation-empty",
+            ".task-workspace-validation-empty",
+            ("display",),
+        ),
+        Pair(
+            "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2))",
+            ".task-workspace-input-grid.has-mixed-validation",
+            ("grid-template-columns",),
+        ),
+        Pair(
+            "#newTaskModal .task-input-grid:has(#newTaskValidationSource .validation-stack .source-card:nth-child(2)) #newTaskValidationSource .validation-stack",
+            ".task-workspace-input-grid.has-mixed-validation .task-workspace-validation-stack",
+            ("grid-template-columns", "align-items"),
+        ),
         Pair(".field", ".task-workspace-basics>.task-workspace-field", ("margin-top",)),
         Pair("#newTaskModal .task-basics label", ".task-workspace-basics .task-workspace-field>span", ("margin-bottom",)),
         Pair(".field label", ".task-workspace-basics .task-workspace-field>span", ("font-size", "font-weight", "text-transform", "letter-spacing")),
