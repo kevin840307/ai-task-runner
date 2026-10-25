@@ -3579,6 +3579,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".task-workspace-list-row").count() == 3
             page.locator(".task-workspace-list-row").nth(2).focus()
             page.keyboard.press("Alt+ArrowUp")
+            assert page.locator(".task-workspace-list-row.selected").count() == 1
+            assert "Added browser child" in page.locator(".task-workspace-list-row.selected").inner_text()
+            assert page.locator(".task-workspace-list-row").nth(1).get_attribute("aria-selected") == "true"
             page.locator(".task-workspace-list-row").nth(2).locator(".task-workspace-row-more").click()
             page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Remove", exact=True).click()
             assert page.locator(".task-workspace-list-row").count() == 2
