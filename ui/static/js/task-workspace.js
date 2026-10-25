@@ -1725,11 +1725,24 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     const helpTitle = document.createElement("h3");
     helpTitle.textContent = tr("task.quick_use", "Quick use");
     const firstHelp = document.createElement("p");
-    firstHelp.textContent = tr("task.quick_use_select", "Click selects a task · Double-click edits it.");
+    const clickHelp = document.createElement("strong");
+    clickHelp.textContent = tr("task.click", "Click");
+    const doubleClickHelp = document.createElement("strong");
+    doubleClickHelp.textContent = tr("task.double_click", "Double-click");
+    firstHelp.append(
+      clickHelp,
+      document.createTextNode(" " + tr("task.selects_task", "selects a task") + " · "),
+      doubleClickHelp,
+      document.createTextNode(" " + tr("task.edits_it", "edits it") + "."),
+    );
     const secondHelp = document.createElement("p");
-    secondHelp.textContent = durableTask
-      ? tr("task.quick_use_durable", "Drag the grip to reorder. Right-click or ⋯ for Info / Workflow / Remove.")
-      : tr("task.quick_use_drag", "Drag the grip to reorder. Edit / Remove stay on the selected row.");
+    const moreHelp = document.createElement("strong");
+    moreHelp.textContent = "⋯";
+    secondHelp.append(
+      document.createTextNode(tr("task.quick_use_drag_prefix", "Drag the grip to reorder. Right-click or") + " "),
+      moreHelp,
+      document.createTextNode(" " + tr("task.quick_use_actions", "for Info / Workflow / Remove.")),
+    );
     help.append(helpTitle, firstHelp, secondHelp);
     aside.append(info, help);
 

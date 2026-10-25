@@ -756,6 +756,12 @@ def test_task_list_effective_row_geometry_matches_feature_reference() -> None:
     )
 
 
+def test_task_list_quick_use_card_matches_feature_reference() -> None:
+    _same(".workspace-help-card", ".task-workspace-list-help", ("background",))
+    _same(".workspace-help-card p", ".task-workspace-list-help p", ("line-height",))
+    _same(".workspace-help-card strong", ".task-workspace-list-help strong", ("color",))
+
+
 def test_task_list_context_menu_matches_feature_reference() -> None:
     _same(
         ".task-context-menu",

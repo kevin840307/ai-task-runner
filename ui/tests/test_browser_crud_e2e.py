@@ -2240,6 +2240,10 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 "spanSize": "8px",
             }
             assert page.locator(".task-workspace-list-side-card").count() == 2
+            quick_use = page.locator(".task-workspace-list-help")
+            assert quick_use.locator("strong").all_inner_texts() == ["Click", "Double-click", "⋯"]
+            assert "Click selects a task · Double-click edits it." in quick_use.inner_text()
+            assert "Drag the grip to reorder. Right-click or ⋯ for Info / Workflow / Remove." in quick_use.inner_text()
             assert page.locator(".task-workspace-list-tools button").count() == 0
             list_columns = page.locator(".task-workspace-list-page").evaluate("(node) => getComputedStyle(node).gridTemplateColumns")
             assert list_columns.endswith("260px")

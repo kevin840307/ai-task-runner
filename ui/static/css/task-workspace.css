@@ -611,6 +611,9 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 .task-workspace-list-side-card.info-active h3{color:var(--accent-dark)}
 .task-workspace-list-side-card p{margin:0 0 7px;color:var(--muted);font-size:8px;line-height:1.5}
+.task-workspace-list-help{background:var(--panel-2)!important}
+.task-workspace-list-help p{line-height:1.5}
+.task-workspace-list-help strong{color:var(--text)}
 .task-workspace-list-kv{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 8px;font-size:8px}
 .task-workspace-list-kv>span{color:var(--muted)}
 .task-workspace-list-kv>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
