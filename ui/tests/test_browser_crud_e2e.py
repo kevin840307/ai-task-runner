@@ -6514,7 +6514,13 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     "#planFormList [data-draft-row='0'] .plan-row-head",
                     ".task-workspace-list-row",
                     [
-                        "display", "gridTemplateColumns", "columnGap", "alignItems",
+                        # Do not compare resolved grid track pixels here. The
+                        # prototype Draft markup still nests its drag grip inside
+                        # the number and then hides that nested grip, even though
+                        # its final CSS declares the intended four-column layout.
+                        # compare_feature_ui.py locks that declaration exactly;
+                        # browser parity owns only equivalent rendered geometry.
+                        "display", "columnGap", "alignItems",
                         "minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
                     ],
                 ),
