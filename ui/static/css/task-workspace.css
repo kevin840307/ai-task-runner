@@ -700,8 +700,8 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   border-radius:9px;background:var(--warning-soft)
 }
 .task-workspace-move-note strong{font-size:9px;color:var(--warn)}
-.task-workspace-move-note span{font-size:8px;color:var(--text);line-height:1.4}
-.task-workspace-move-options{display:grid;gap:6px;max-height:210px;overflow:auto}
+.task-workspace-move-note span{font-size:8px;color:var(--text)}
+.task-workspace-move-options{display:grid;gap:6px}
 .task-workspace-move-option{
   display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
   width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);text-align:left
@@ -714,7 +714,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-move-option strong{display:block;font-size:10px}
 .task-workspace-move-option small{display:block;margin-top:2px;color:var(--muted);font-size:8px}
 .task-workspace-move-option>span{color:var(--accent-dark);font-size:8px;font-weight:900}
-.task-workspace-move-empty{padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:8px;text-align:center}
+.task-workspace-move-empty{display:grid;place-items:center;min-height:180px;padding:28px;text-align:center;color:var(--muted);font-size:10px}
 .task-workspace-move-empty.danger{color:var(--fail)}
 .task-workspace-move-actions{
   display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;
