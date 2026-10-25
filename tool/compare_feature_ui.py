@@ -607,6 +607,11 @@ TASK_LIST = PanelSpec(
             ("display", "gap"),
         ),
         Pair(
+            ".empty-panel",
+            ".task-workspace-move-empty",
+            ("display", "place-items", "min-height", "padding", "text-align", "color", "font-size"),
+        ),
+        Pair(
             ".existing-task-option",
             ".task-workspace-move-option",
             ("display", "grid-template-columns", "gap", "align-items", "padding", "border", "border-radius", "background", "text-align", "color"),
