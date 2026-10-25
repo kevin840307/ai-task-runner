@@ -109,6 +109,7 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert "function durableTaskEditorDirty()" in PRODUCTION_JS
     assert "captureDurableTaskEditorBaseline();" in PRODUCTION_JS
     assert "restoreDurableTaskEditorBaseline();" in PRODUCTION_JS
+    assert "Prototype creates a child only when the child editor is saved" in PRODUCTION_JS
     assert "const width = 205;" in PRODUCTION_JS
     assert "const height = 220;" in PRODUCTION_JS
 
