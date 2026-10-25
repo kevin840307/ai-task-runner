@@ -6641,7 +6641,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ".app",
                     production_page,
                     "body",
-                    ["gridTemplateColumns"],
+                    ["gridTemplateColumns", "transitionDuration"],
                 )
                 _assert_feature_computed_style_parity(
                     feature_page,

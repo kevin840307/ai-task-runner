@@ -212,7 +212,12 @@ body {
 #workflowPicker { width: auto; max-width: min(520px, 60vw); }
 
 @media (max-width: 900px) {
-  body { grid-template-columns: 205px minmax(0, 1fr); height: 100dvh !important; min-height: 0 !important; }
+  body {
+    grid-template-columns: 205px minmax(0, 1fr);
+    height: 100dvh !important;
+    min-height: 0 !important;
+    transition: none;
+  }
   .projects { display: flex !important; max-height: none !important; }
 }
 
