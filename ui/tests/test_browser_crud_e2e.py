@@ -1008,6 +1008,11 @@ def test_task_lifecycle_reset_and_rerun_require_confirmation() -> None:
             assert first_board_card.locator(".tasks-board-card-handle").evaluate(
                 "(node) => getComputedStyle(node).color"
             ) == "rgb(163, 173, 186)"
+            page.set_viewport_size({"width": 820, "height": 800})
+            assert page.locator("#tasksProjectFilterSummary").evaluate(
+                "(node) => getComputedStyle(node).width"
+            ) == "145px"
+            page.set_viewport_size({"width": 1280, "height": 800})
 
             assert page.locator("#tasksRunningCount").inner_text() == "1 Running"
             page.click("#tasksRunningFilterButton")
