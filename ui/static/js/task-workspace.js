@@ -3059,6 +3059,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
   function addTaskListItem() {
     if (!ensureTaskEditDraft() || !taskEditPolicy().can_add_item) return;
+    // Prototype creates a child only when the child editor is saved. Keep a
+    // pre-create baseline so Back/Close can discard the provisional child.
+    captureDurableTaskEditorBaseline();
     const first = state.editDraft.items[0] || {};
     const workflow = String(first.workflow || state.workflows?.[0]?.path || state.workflows?.[0]?.id || "");
     state.editDraft.items.push(blankItem(state.task?.project || "", workflow));
