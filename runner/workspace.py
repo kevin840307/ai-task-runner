@@ -429,5 +429,23 @@ def _atomic_write_projects(projects_file: Path, items: list[dict]) -> None:
         json.dumps(items, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    os.replace(temporary, projects_file)
+    # Windows can transiently reject replace when another process (for example
+    # an indexer or virus scanner) briefly opens the destination without delete
+    # sharing. Keep the write atomic, but retry that sharing violation instead
+    # of silently dropping a best-effort UI registration.
+    deadline = time.monotonic() + 2.0
+    try:
+        while True:
+            try:
+                os.replace(temporary, projects_file)
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 

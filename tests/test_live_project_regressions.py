@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from project_registry import project_file_lock, project_path_key
+from runner.workspace import register_ui_project
 from ui.server import UIServer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +84,9 @@ def test_live_cross_process_project_registration_preserves_all_projects(tmp_path
     projects = [tmp_path / f"Project{i}" for i in range(6)]
     for project in projects:
         project.mkdir()
+    # Fail explicitly on identity collisions instead of misdiagnosing them as
+    # registry lost updates on platforms with unusual filesystem metadata.
+    assert len({project_path_key(project) for project in projects}) == len(projects)
 
     code = (
         "from pathlib import Path; "
@@ -106,6 +111,66 @@ def test_live_cross_process_project_registration_preserves_all_projects(tmp_path
     by_path = {os.path.normcase(os.path.abspath(row["path"])): row["name"] for row in rows}
     for index, project in enumerate(projects):
         assert by_path[os.path.normcase(os.path.abspath(str(project)))] == f"Live {index}"
+
+
+def test_live_project_registry_lock_recovers_after_holder_process_exits(tmp_path: Path) -> None:
+    """A crashed lock holder must not leave a stale project-registry lock."""
+    repo = tmp_path / "runner-repo"
+    _make_ui_repo(repo)
+    projects_file = repo / "ui" / "data" / "projects.json"
+    code = (
+        "from pathlib import Path; "
+        "from project_registry import project_file_lock; "
+        "import os, sys; "
+        "lock = project_file_lock(Path(sys.argv[1])); "
+        "lock.__enter__(); "
+        "os._exit(0)"
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(projects_file)],
+        cwd=ROOT,
+        env=env,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0
+
+    project = tmp_path / "AfterCrash"
+    project.mkdir()
+    register_ui_project(project, project_name="After Crash", repo_root=repo)
+    rows = json.loads(projects_file.read_text(encoding="utf-8"))
+    assert rows == [{"name": "After Crash", "path": str(project.resolve())}]
+
+
+def test_project_registry_atomic_replace_retries_transient_sharing_violation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transient Windows-style sharing violation must not drop registration."""
+    import runner.workspace as workspace
+
+    repo = tmp_path / "runner-repo"
+    _make_ui_repo(repo)
+    project = tmp_path / "RetryProject"
+    project.mkdir()
+    real_replace = workspace.os.replace
+    calls = 0
+
+    def flaky_replace(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise PermissionError("simulated Windows sharing violation")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(workspace.os, "replace", flaky_replace)
+    register_ui_project(project, project_name="Retry Project", repo_root=repo)
+
+    assert calls == 2
+    rows = json.loads((repo / "ui" / "data" / "projects.json").read_text(encoding="utf-8"))
+    assert rows == [{"name": "Retry Project", "path": str(project.resolve())}]
 
 
 def test_live_cli_project_name_plumbing_registers_display_name(tmp_path: Path) -> None:

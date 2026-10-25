@@ -5,7 +5,9 @@ share path identity and registry locking without crossing architecture boundarie
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import tempfile
 import time
 import threading
 from contextlib import contextmanager
@@ -13,7 +15,6 @@ from pathlib import Path
 
 LOCK_TIMEOUT_SECONDS = 5.0
 LOCK_POLL_SECONDS = 0.05
-STALE_LOCK_SECONDS = 60.0
 _IN_PROCESS_LOCK = threading.RLock()
 
 
@@ -36,45 +37,73 @@ def project_path_key(path: str | Path) -> str:
     return path_key(path)
 
 
+def _project_lock_path(projects_file: Path) -> Path:
+    """Return a stable machine-local lock path without dirtying the repository."""
+    identity = os.path.normcase(os.path.abspath(str(projects_file)))
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+    root = Path(tempfile.gettempdir()) / "ai-task-runner-project-locks"
+    root.mkdir(parents=True, exist_ok=True)
+    return root / f"{digest}.lock"
+
+
+def _try_os_file_lock(handle: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(handle, 0, os.SEEK_SET)
+        msvcrt.locking(handle, msvcrt.LK_NBLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _release_os_file_lock(handle: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(handle, 0, os.SEEK_SET)
+        msvcrt.locking(handle, msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 @contextmanager
 def project_file_lock(projects_file: Path):
-    """Thread-safe and cross-process lock for project registry read-modify-write."""
-    # Threads in one UI/CLI process should not contend through the filesystem.
-    # The file lock remains authoritative across separate UI/CLI processes.
+    """Thread-safe and kernel-backed cross-process project registry lock."""
+    # Keep one stable sidecar outside the repository. A kernel lock is released
+    # automatically when a process exits, so a crashed UI/Runner cannot leave a
+    # stale sentinel that blocks later registrations. The in-process RLock also
+    # keeps threads from needlessly contending through the OS lock.
     with _IN_PROCESS_LOCK:
-        lock = projects_file.with_suffix(projects_file.suffix + ".lock")
-        deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
-        handle: int | None = None
-        while handle is None:
-            try:
-                handle = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                _remove_stale_lock(lock)
-                if time.monotonic() >= deadline:
-                    raise OSError(f"timed out waiting for UI project lock: {lock}")
-                time.sleep(LOCK_POLL_SECONDS)
+        lock = _project_lock_path(projects_file)
+        handle = os.open(str(lock), os.O_CREAT | os.O_RDWR, 0o600)
+        acquired = False
         try:
-            os.write(handle, f"{os.getpid()}\n".encode("ascii"))
+            # msvcrt.locking() operates on a byte range. Initializing one byte is
+            # harmless if two first-time openers race; both still contend on byte 0.
+            if os.fstat(handle).st_size == 0:
+                os.write(handle, b"\0")
+            deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+            while not acquired:
+                try:
+                    _try_os_file_lock(handle)
+                    acquired = True
+                except OSError as error:
+                    if time.monotonic() >= deadline:
+                        raise OSError(
+                            f"timed out waiting for UI project lock: {lock}"
+                        ) from error
+                    time.sleep(LOCK_POLL_SECONDS)
             yield
         finally:
+            if acquired:
+                _release_os_file_lock(handle)
             os.close(handle)
-            try:
-                lock.unlink()
-            except FileNotFoundError:
-                pass
-
-
-def _remove_stale_lock(lock: Path) -> None:
-    try:
-        age = time.time() - lock.stat().st_mtime
-    except OSError:
-        return
-    if age <= STALE_LOCK_SECONDS:
-        return
-    try:
-        lock.unlink()
-    except OSError:
-        pass
 
 
 __all__ = ["path_key", "project_file_lock", "project_path_key"]
