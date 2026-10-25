@@ -99,8 +99,12 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
 def test_task_workspace_child_surfaces_own_escape_like_prototype() -> None:
     assert "e.stopImmediatePropagation();hideTaskContextMenu();" in FEATURE_WORKSPACE_JS
     assert "e.stopImmediatePropagation();setProjectDropdownOpen(false)" in FEATURE_WORKSPACE_JS
-    assert PRODUCTION_JS.count("event.stopImmediatePropagation();") >= 2
+    assert PRODUCTION_JS.count("event.stopImmediatePropagation();") >= 3
     assert 'if (state?.kind === "task") state.selectedListIndex = next;' in PRODUCTION_JS
+    assert 'modal.className = "task-workspace-move-overlay";' in PRODUCTION_JS
+    assert 'overlay.appendChild(createMoveExistingChooser())' in PRODUCTION_JS
+    assert 'wrap.appendChild(createMoveExistingChooser())' not in PRODUCTION_JS
+    assert "--shadow-pop: var(--shadow-popover);" in PRODUCTION_THEME
 
 
 def test_first_paint_loader_matches_feature_prototype_contract() -> None:
