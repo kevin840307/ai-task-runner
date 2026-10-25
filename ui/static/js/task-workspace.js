@@ -165,7 +165,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && taskContextMenu && !taskContextMenu.hidden) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         hideTaskContextMenu();
         return;
       }
@@ -206,7 +206,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       }
       if (closeOpenProjectDropdown({ focusInput: true })) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         return;
       }
       event.preventDefault();
@@ -949,6 +949,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     const [item] = items.splice(index, 1);
     items.splice(next, 0, item);
+    if (state?.kind === "task") state.selectedListIndex = next;
     touchEditor();
     render();
   }
