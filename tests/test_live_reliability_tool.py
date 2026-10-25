@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 21
+    assert len(calls) == 22
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3198,6 +3198,14 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert auto_busy_concurrent["effective_mode"] == "worktree"
     assert auto_busy_concurrent["delivery"] == "merged"
 
+    auto_worktree_busy = result["auto_always_worktree_busy"]
+    assert auto_worktree_busy["requested_mode"] == "auto"
+    assert auto_worktree_busy["main_running"] is True
+    assert auto_worktree_busy["auto_workspace_policy"] == "always-worktree"
+    assert auto_worktree_busy["allow_concurrent_main_tasks"] is False
+    assert auto_worktree_busy["effective_mode"] == "worktree"
+    assert auto_worktree_busy["delivery"] == "merged"
+
     blocked_main = result["main_busy_blocked"]
     assert blocked_main["requested_mode"] == "main"
     assert blocked_main["main_running"] is True
@@ -3206,8 +3214,22 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert blocked_main["delivery"] == "blocked"
     assert "busy" in blocked_main["detail"].lower()
     assert blocked_main["target_head_after_delivery"] == blocked_main["target_head_before_delivery"]
-    assert not (tmp_path / "rw-wt-22").exists()
-    assert not (tmp_path / "rw-22" / "health.txt").exists()
+    assert not (tmp_path / "rw-wt-23").exists()
+    assert not (tmp_path / "rw-23" / "health.txt").exists()
+
+    blocked_auto_main = result["auto_always_main_busy_blocked"]
+    assert blocked_auto_main["requested_mode"] == "auto"
+    assert blocked_auto_main["main_running"] is True
+    assert blocked_auto_main["auto_workspace_policy"] == "always-main"
+    assert blocked_auto_main["allow_concurrent_main_tasks"] is False
+    assert blocked_auto_main["delivery"] == "blocked"
+    assert "busy" in blocked_auto_main["detail"].lower()
+    assert (
+        blocked_auto_main["target_head_after_delivery"]
+        == blocked_auto_main["target_head_before_delivery"]
+    )
+    assert not (tmp_path / "rw-wt-24").exists()
+    assert not (tmp_path / "rw-24" / "health.txt").exists()
 
     for case_key in (
         "main",
@@ -3224,6 +3246,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "main_target_advance",
         "auto_busy_target_advance",
         "auto_busy_concurrent",
+        "auto_always_worktree_busy",
     ):
         assert result[case_key]["merged_target_head_sha"]
 
@@ -3250,6 +3273,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     main_advance_repo = tmp_path / "rw-19"
     auto_busy_advance_repo = tmp_path / "rw-20"
     auto_busy_concurrent_repo = tmp_path / "rw-21"
+    auto_always_worktree_busy_repo = tmp_path / "rw-22"
     for repo in (
         main_repo,
         worktree_repo,
@@ -3265,6 +3289,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         main_advance_repo,
         auto_busy_advance_repo,
         auto_busy_concurrent_repo,
+        auto_always_worktree_busy_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     for repo in (source_fail_repo, technical_repo):
