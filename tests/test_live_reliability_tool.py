@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 20
+    assert len(calls) == 21
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3190,6 +3190,14 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert auto_busy_advance["validation_verdict"] == "PASS"
     assert auto_busy_advance["validation_calls"] == 1
 
+    auto_busy_concurrent = result["auto_busy_concurrent"]
+    assert auto_busy_concurrent["requested_mode"] == "auto"
+    assert auto_busy_concurrent["main_running"] is True
+    assert auto_busy_concurrent["auto_workspace_policy"] == "busy-worktree"
+    assert auto_busy_concurrent["allow_concurrent_main_tasks"] is True
+    assert auto_busy_concurrent["effective_mode"] == "worktree"
+    assert auto_busy_concurrent["delivery"] == "merged"
+
     for case_key in (
         "main",
         "worktree",
@@ -3204,6 +3212,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "main_idempotent_external_delivery",
         "main_target_advance",
         "auto_busy_target_advance",
+        "auto_busy_concurrent",
     ):
         assert result[case_key]["merged_target_head_sha"]
 
@@ -3229,6 +3238,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     active_operation_repo = tmp_path / "rw-18"
     main_advance_repo = tmp_path / "rw-19"
     auto_busy_advance_repo = tmp_path / "rw-20"
+    auto_busy_concurrent_repo = tmp_path / "rw-21"
     for repo in (
         main_repo,
         worktree_repo,
@@ -3243,6 +3253,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         idempotent_repo,
         main_advance_repo,
         auto_busy_advance_repo,
+        auto_busy_concurrent_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     for repo in (source_fail_repo, technical_repo):
