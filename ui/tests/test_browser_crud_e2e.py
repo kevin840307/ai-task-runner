@@ -2659,6 +2659,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
                 }))"""
             )
             assert context_menu.is_visible()
+            assert context_menu.evaluate("(node) => getComputedStyle(node).boxShadow") != "none"
             context_box = context_menu.bounding_box()
             assert context_box
             assert context_box["x"] <= 1440 - 205 - 8 + 1
@@ -2686,6 +2687,20 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             # Feature parity: Move existing is a secondary chooser. Moving the
             # standalone New Task appends its item and retires its Board identity.
             assert page.locator("#taskWorkspaceHeaderMoveExisting").is_enabled()
+            page.click("#taskWorkspaceHeaderMoveExisting")
+            page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
+            move_overlay = page.locator(".task-workspace-move-overlay")
+            assert move_overlay.is_visible()
+            assert page.locator("#taskWorkspaceMoveTitle").inner_text() == "Move existing Task"
+            assert "Move an unused New + Idle Task into this Task List." in move_overlay.inner_text()
+            assert "Only unused New tasks can be moved." in move_overlay.inner_text()
+            move_dialog_box = page.locator(".task-workspace-move-existing").bounding_box()
+            assert move_dialog_box and abs(move_dialog_box["width"] - 620) <= 1
+            page.keyboard.press("Escape")
+            assert page.locator(".task-workspace-move-overlay").count() == 0
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            assert page.locator("#taskWorkspaceHeaderMoveExisting").evaluate("(node) => document.activeElement === node")
+
             page.click("#taskWorkspaceHeaderMoveExisting")
             page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
             move_option = page.locator(".task-workspace-move-option").first
