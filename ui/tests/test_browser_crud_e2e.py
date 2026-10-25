@@ -1731,6 +1731,7 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             page.click("#tasksProjectFilterButton")
             second_option = page.locator(".tasks-project-option").filter(has_text="Second Project")
             root_option = page.locator(".tasks-project-option").filter(has_text="Fixture Project")
+            assert " · main" in second_option.locator("small").inner_text()
             second_option.locator("input").check()
             root_option.locator("input").uncheck()
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
@@ -1748,28 +1749,28 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
 
             page.click("#tasksProjectFilterButton")
             page.locator(".tasks-project-option").filter(has_text="Third Project").locator("input").check()
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 selected'")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 Projects · 1 Tasks'")
             reload_ui("Second Project")
             page.click("#chatNav")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 selected'")
-            assert_reload_state("2 selected", board_geometry)
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 Projects · 1 Tasks'")
+            assert_reload_state("2 Projects · 1 Tasks", board_geometry)
 
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterAll")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All Projects · 1 Tasks'")
             reload_ui("Second Project")
             page.click("#chatNav")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
-            assert_reload_state("All", board_geometry)
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All Projects · 1 Tasks'")
+            assert_reload_state("All Projects · 1 Tasks", board_geometry)
 
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterClear")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'None'")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'No Project'")
             assert page.locator("#tasksBoardNew .tasks-board-card").count() == 0
             reload_ui("Second Project")
             page.click("#chatNav")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'None'")
-            assert_reload_state("None", board_geometry)
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'No Project'")
+            assert_reload_state("No Project", board_geometry)
             assert page.locator("#tasksBoardNew .tasks-board-card").count() == 0
             assert errors == []
             browser.close()
@@ -3678,7 +3679,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
             assert page.locator("#tasksBoardNewCount").inner_text() == "1"
-            assert page.locator("#tasksProjectFilterSummary").inner_text() in {"All", "Fixture Project"}
+            assert page.locator("#tasksProjectFilterSummary").inner_text() == "Fixture Project"
 
             # Prototype parity: Board cards and List rows expose the same
             # list-level right-click menu.
@@ -5026,7 +5027,7 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             page.click("#tasksProjectFilterButton")
             page.click("#tasksProjectFilterAll")
-            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'All'")
+            page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent.startsWith('All Projects · ')")
             page.keyboard.press("Escape")
             page.wait_for_function("document.querySelector('#tasksProjectFilterMenu')?.hidden === true")
             task_card = page.locator("#tasksBoardNew .tasks-board-card").filter(has_text="Second catalog task")
