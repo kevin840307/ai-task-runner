@@ -3039,7 +3039,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 18
+    assert len(calls) == 20
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3173,6 +3173,23 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert active_operation["active_operation_merge_head"]
     assert "active Git operation" in active_operation["active_operation_detail"]
 
+    main_advance = result["main_target_advance"]
+    assert main_advance["requested_mode"] == "main"
+    assert main_advance["effective_mode"] == "main"
+    assert main_advance["delivery"] == "merged"
+    assert main_advance["validation_required"] is True
+    assert main_advance["validation_verdict"] == "PASS"
+    assert main_advance["validation_calls"] == 1
+
+    auto_busy_advance = result["auto_busy_target_advance"]
+    assert auto_busy_advance["requested_mode"] == "auto"
+    assert auto_busy_advance["main_running"] is True
+    assert auto_busy_advance["effective_mode"] == "worktree"
+    assert auto_busy_advance["delivery"] == "merged"
+    assert auto_busy_advance["validation_required"] is True
+    assert auto_busy_advance["validation_verdict"] == "PASS"
+    assert auto_busy_advance["validation_calls"] == 1
+
     for case_key in (
         "main",
         "worktree",
@@ -3185,6 +3202,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "auto_always_main_idle",
         "auto_always_worktree_idle",
         "main_idempotent_external_delivery",
+        "main_target_advance",
+        "auto_busy_target_advance",
     ):
         assert result[case_key]["merged_target_head_sha"]
 
@@ -3208,6 +3227,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     auto_always_worktree_repo = tmp_path / "rw-16"
     idempotent_repo = tmp_path / "rw-17"
     active_operation_repo = tmp_path / "rw-18"
+    main_advance_repo = tmp_path / "rw-19"
+    auto_busy_advance_repo = tmp_path / "rw-20"
     for repo in (
         main_repo,
         worktree_repo,
@@ -3220,6 +3241,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         auto_always_main_repo,
         auto_always_worktree_repo,
         idempotent_repo,
+        main_advance_repo,
+        auto_busy_advance_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     for repo in (source_fail_repo, technical_repo):
@@ -3230,7 +3253,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     for repo in (history_repo, unmanaged_repo, missing_branch_repo, active_operation_repo):
         assert not (repo / "health.txt").exists()
     assert not (active_operation_repo / "external-operation.txt").exists()
-    assert (target_advance_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
+    for repo in (target_advance_repo, main_advance_repo, auto_busy_advance_repo):
+        assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (conflict_repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
 
 

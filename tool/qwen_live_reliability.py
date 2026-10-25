@@ -6313,6 +6313,8 @@ def runner_workspace_delivery_probe(
         ("auto_always_worktree_idle", "auto", False, "worktree", "none", "always-worktree", False),
         ("main_idempotent_external_delivery", "main", False, "main", "idempotent", "busy-worktree", False),
         ("worktree_active_operation_wait", "worktree", False, "worktree", "active_operation", "busy-worktree", False),
+        ("main_target_advance", "main", False, "main", "advance", "busy-worktree", False),
+        ("auto_busy_target_advance", "auto", True, "worktree", "advance", "busy-worktree", False),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real

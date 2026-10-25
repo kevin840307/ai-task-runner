@@ -5012,6 +5012,7 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
         ({"width": 820, "height": 900}, "dark"),
         ({"width": 620, "height": 900}, "light"),
         ({"width": 620, "height": 900}, "dark"),
+        ({"width": 520, "height": 900}, "light"),
     ],
 )
 def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_scheme) -> None:
@@ -5250,6 +5251,19 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                 if mode == "file":
                     page.fill(control, str(root / "goal.md"))
                     assert_inside_drawer("[data-task-source-card='prompt'] .task-workspace-upload")
+                    path_geometry = page.locator(
+                        "[data-task-source-card='prompt'] .task-workspace-path-row"
+                    ).evaluate(
+                        """node => {
+                            const style = getComputedStyle(node);
+                            return {
+                                columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
+                                gap: style.gap,
+                                alignItems: style.alignItems,
+                            };
+                        }"""
+                    )
+                    assert path_geometry == {"columns": 2, "gap": "6px", "alignItems": "center"}
                 elif mode == "asset":
                     assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
                     page.select_option(control, str(prompt_asset))
@@ -6615,4 +6629,33 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             assert feature_narrow_shell and production_narrow_shell
             assert abs(feature_narrow_shell["width"] - production_narrow_shell["width"]) <= 1
             assert abs(production_narrow_shell["width"] - 880) <= 1
+
+            # The accepted prototype keeps Task List rows/actions structurally
+            # identical below the side-rail breakpoint. Legacy production CSS
+            # used to move actions into explicit grid columns and shrink header
+            # buttons at 760/620px, shifting click targets away from prototype.
+            for narrow_width in (740, 620):
+                feature_page.set_viewport_size({"width": narrow_width, "height": 900})
+                production_page.set_viewport_size({"width": narrow_width, "height": 900})
+                feature_page.wait_for_timeout(50)
+                production_page.wait_for_timeout(50)
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    "#planFormList [data-draft-row='0'] .plan-row-actions",
+                    production_page,
+                    ".task-workspace-list-actions",
+                    ["gridColumnStart", "gridColumnEnd", "justifyContent", "flexWrap"],
+                )
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    "#cancelTaskListDraft",
+                    production_page,
+                    "#taskWorkspaceHeaderCancel",
+                    ["height", "minHeight", "paddingLeft", "paddingRight", "fontSize"],
+                )
+                feature_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
+                production_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
+                assert feature_shell and production_shell
+                assert abs(feature_shell["width"] - production_shell["width"]) <= 1
+                assert abs(production_shell["width"] - narrow_width) <= 1
             browser.close()
