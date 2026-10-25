@@ -6292,7 +6292,7 @@ def runner_workspace_delivery_probe(
     root: Path,
 ) -> dict[str, object]:
     """Cross-run the real Runner through explicit and Auto workspace delivery modes."""
-    from workspace import MergeManager, WorkspaceManager
+    from workspace import MergeManager, WorkspaceBlockedError, WorkspaceManager
 
     cases = (
         ("main", "main", False, "main", "none"),
@@ -6834,6 +6834,48 @@ def runner_workspace_delivery_probe(
             )
         result["cleanup"] = cleanup.status
         results[case_key] = result
+
+    # Cross the real WorkspaceManager blocked path too. A busy Main request
+    # with concurrent Main execution disabled must fail before any Runner,
+    # branch, or owned worktree side effect is created.
+    blocked_repo = _create_delivery_probe_repo(root, "rw-22")
+    blocked_head = _delivery_git(blocked_repo, "rev-parse", "HEAD").stdout.strip()
+    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-22")
+    try:
+        blocked_manager.prepare(
+            blocked_repo,
+            task_id="lr-22",
+            run_number=1,
+            requested_mode="main",
+            execution_settings={
+                "auto_workspace_policy": "busy-worktree",
+                "allow_concurrent_main_tasks": False,
+            },
+            main_running=True,
+        )
+    except WorkspaceBlockedError as error:
+        detail = str(error)
+    else:
+        raise RuntimeError("Runner/workspace busy Main guard unexpectedly allowed execution")
+    blocked_head_after = _delivery_git(blocked_repo, "rev-parse", "HEAD").stdout.strip()
+    if blocked_head_after != blocked_head:
+        raise RuntimeError("Runner/workspace busy Main guard mutated target HEAD")
+    if _delivery_git(blocked_repo, "status", "--porcelain").stdout.strip():
+        raise RuntimeError("Runner/workspace busy Main guard dirtied target Project")
+    if (root / "rw-wt-22").exists():
+        raise RuntimeError("Runner/workspace busy Main guard created an owned worktree")
+    if "busy" not in detail.lower():
+        raise RuntimeError(f"Runner/workspace busy Main guard lost diagnostics: {detail!r}")
+    results["main_busy_blocked"] = {
+        "requested_mode": "main",
+        "main_running": True,
+        "auto_workspace_policy": "busy-worktree",
+        "allow_concurrent_main_tasks": False,
+        "delivery": "blocked",
+        "detail": detail,
+        "target_head_before_delivery": blocked_head,
+        "target_head_after_delivery": blocked_head_after,
+    }
 
     return results
 
