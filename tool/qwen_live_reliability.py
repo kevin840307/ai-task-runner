@@ -6315,6 +6315,7 @@ def runner_workspace_delivery_probe(
         ("worktree_active_operation_wait", "worktree", False, "worktree", "active_operation", "busy-worktree", False),
         ("main_target_advance", "main", False, "main", "advance", "busy-worktree", False),
         ("auto_busy_target_advance", "auto", True, "worktree", "advance", "busy-worktree", False),
+        ("auto_busy_concurrent", "auto", True, "worktree", "none", "busy-worktree", True),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real
@@ -7066,7 +7067,7 @@ def main() -> int:
             )
             print_probe_pass(
                 "runner-workspace-delivery",
-                "real Runner × Worktree target-advance + Main conflict/recovery merge cross probe",
+                "real Runner × Auto/Main/Worktree policy + target-advance + conflict/recovery merge cross probe",
             )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
