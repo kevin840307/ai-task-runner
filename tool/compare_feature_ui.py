@@ -536,6 +536,26 @@ TASK_LIST = PanelSpec(
             ("height", "min-width", "padding", "border", "border-radius", "background", "color", "font-size"),
         ),
         Pair(
+            ".plan-row-controls .row-more",
+            ".task-workspace-list-actions .task-workspace-row-more",
+            ("min-width", "font-size", "letter-spacing", "color"),
+        ),
+        Pair(
+            ".existing-task-picker",
+            ".task-workspace-move-options",
+            ("display", "gap"),
+        ),
+        Pair(
+            ".existing-task-option",
+            ".task-workspace-move-option",
+            ("display", "grid-template-columns", "gap", "align-items", "padding", "border", "border-radius", "background", "text-align", "color"),
+        ),
+        Pair(".existing-task-option:hover", ".task-workspace-move-option:hover", ("border-color", "background")),
+        Pair(".existing-task-option strong", ".task-workspace-move-option strong", ("display", "font-size")),
+        Pair(".existing-task-option small", ".task-workspace-move-option small", ("display", "margin-top", "color", "font-size")),
+        Pair(".existing-task-option span", ".task-workspace-move-option>span", ("font-size", "font-weight", "color")),
+        Pair(".existing-task-option.selected", ".task-workspace-move-option.selected", ("border-color", "background", "box-shadow")),
+        Pair(
             "html[data-appearance] #planModal .plan-row-controls button",
             "html[data-appearance] #taskWorkspaceBody .task-workspace-list-actions button",
             ("background", "color"),
