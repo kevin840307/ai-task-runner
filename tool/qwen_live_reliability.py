@@ -6316,6 +6316,7 @@ def runner_workspace_delivery_probe(
         ("main_target_advance", "main", False, "main", "advance", "busy-worktree", False),
         ("auto_busy_target_advance", "auto", True, "worktree", "advance", "busy-worktree", False),
         ("auto_busy_concurrent", "auto", True, "worktree", "none", "busy-worktree", True),
+        ("auto_always_worktree_busy", "auto", True, "worktree", "none", "always-worktree", False),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real
@@ -6838,13 +6839,13 @@ def runner_workspace_delivery_probe(
     # Cross the real WorkspaceManager blocked path too. A busy Main request
     # with concurrent Main execution disabled must fail before any Runner,
     # branch, or owned worktree side effect is created.
-    blocked_repo = _create_delivery_probe_repo(root, "rw-22")
+    blocked_repo = _create_delivery_probe_repo(root, "rw-23")
     blocked_head = _delivery_git(blocked_repo, "rev-parse", "HEAD").stdout.strip()
-    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-22")
+    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-23")
     try:
         blocked_manager.prepare(
             blocked_repo,
-            task_id="lr-22",
+            task_id="lr-23",
             run_number=1,
             requested_mode="main",
             execution_settings={
@@ -6862,7 +6863,7 @@ def runner_workspace_delivery_probe(
         raise RuntimeError("Runner/workspace busy Main guard mutated target HEAD")
     if _delivery_git(blocked_repo, "status", "--porcelain").stdout.strip():
         raise RuntimeError("Runner/workspace busy Main guard dirtied target Project")
-    if (root / "rw-wt-22").exists():
+    if (root / "rw-wt-23").exists():
         raise RuntimeError("Runner/workspace busy Main guard created an owned worktree")
     if "busy" not in detail.lower():
         raise RuntimeError(f"Runner/workspace busy Main guard lost diagnostics: {detail!r}")
@@ -6875,6 +6876,63 @@ def runner_workspace_delivery_probe(
         "detail": detail,
         "target_head_before_delivery": blocked_head,
         "target_head_after_delivery": blocked_head_after,
+    }
+
+    # Cross Auto + always-main through the same production busy-Main guard.
+    # Auto must resolve to Main first, then refuse to launch because concurrent
+    # Main execution is disabled. No Runner/worktree/target side effect is allowed.
+    auto_blocked_repo = _create_delivery_probe_repo(root, "rw-24")
+    auto_blocked_head = _delivery_git(
+        auto_blocked_repo, "rev-parse", "HEAD"
+    ).stdout.strip()
+    auto_blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-24")
+    try:
+        auto_blocked_manager.prepare(
+            auto_blocked_repo,
+            task_id="lr-24",
+            run_number=1,
+            requested_mode="auto",
+            execution_settings={
+                "auto_workspace_policy": "always-main",
+                "allow_concurrent_main_tasks": False,
+            },
+            main_running=True,
+        )
+    except WorkspaceBlockedError as error:
+        auto_detail = str(error)
+    else:
+        raise RuntimeError(
+            "Runner/workspace Auto always-main busy guard unexpectedly allowed execution"
+        )
+    auto_blocked_head_after = _delivery_git(
+        auto_blocked_repo, "rev-parse", "HEAD"
+    ).stdout.strip()
+    if auto_blocked_head_after != auto_blocked_head:
+        raise RuntimeError(
+            "Runner/workspace Auto always-main busy guard mutated target HEAD"
+        )
+    if _delivery_git(auto_blocked_repo, "status", "--porcelain").stdout.strip():
+        raise RuntimeError(
+            "Runner/workspace Auto always-main busy guard dirtied target Project"
+        )
+    if (root / "rw-wt-24").exists():
+        raise RuntimeError(
+            "Runner/workspace Auto always-main busy guard created an owned worktree"
+        )
+    if "busy" not in auto_detail.lower():
+        raise RuntimeError(
+            "Runner/workspace Auto always-main busy guard lost diagnostics: "
+            f"{auto_detail!r}"
+        )
+    results["auto_always_main_busy_blocked"] = {
+        "requested_mode": "auto",
+        "main_running": True,
+        "auto_workspace_policy": "always-main",
+        "allow_concurrent_main_tasks": False,
+        "delivery": "blocked",
+        "detail": auto_detail,
+        "target_head_before_delivery": auto_blocked_head,
+        "target_head_after_delivery": auto_blocked_head_after,
     }
 
     return results
