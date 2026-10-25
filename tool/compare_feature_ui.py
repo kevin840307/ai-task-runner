@@ -462,6 +462,10 @@ TASK_LIST = PanelSpec(
         Pair(".plan-add-task-footer:disabled", ".task-workspace-add-task-footer:disabled", ("cursor", "opacity")),
         Pair(".plan-row-compact[draggable=\"true\"]", ".task-workspace-list-row[draggable=\"true\"]", ("cursor",)),
         Pair(".draft-plan-row", ".task-workspace-list-row[draggable=\"true\"]", ("transition",)),
+        Pair(".draft-plan-row:hover", ".task-workspace-list-row[draggable=\"true\"]:hover", ("border-color",)),
+        Pair(".draft-plan-row:focus-visible", ".task-workspace-list-row:focus-visible", ("outline", "outline-offset")),
+        Pair(".draft-row-controls .danger-item", ".task-workspace-list-actions .danger-item", ("color",)),
+        Pair(".draft-row-controls button:disabled", ".task-workspace-list-actions button:disabled", ("opacity", "cursor")),
         Pair(".plan-row-compact.dragging", ".task-workspace-list-row.dragging", ("opacity",)),
         Pair(".plan-row-compact.drag-over", ".task-workspace-list-row.drag-over", ("outline", "outline-offset")),
         Pair(".plan-row-compact.current", ".task-workspace-list-row.current", ("border-color", "background")),
@@ -539,6 +543,11 @@ TASK_LIST = PanelSpec(
             ".plan-row-controls .row-more",
             ".task-workspace-list-actions .task-workspace-row-more",
             ("min-width", "font-size", "letter-spacing", "color"),
+        ),
+        Pair(
+            ".plan-row-controls .row-more:hover",
+            ".task-workspace-list-actions .task-workspace-row-more:hover:not(:disabled)",
+            ("background", "color"),
         ),
         Pair(
             ".existing-task-picker",
