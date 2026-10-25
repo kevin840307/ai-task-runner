@@ -592,6 +592,12 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px
 }
 .task-workspace-list-actions button:hover:not(:disabled){border-color:var(--line-strong);color:var(--text)}
+.task-workspace-list-actions .task-workspace-row-more{
+  min-width:30px;font-size:14px;letter-spacing:1px;color:var(--muted)
+}
+.task-workspace-list-actions .task-workspace-row-more:hover:not(:disabled){
+  background:var(--accent-soft);color:var(--text)
+}
 .task-workspace-list-chip,.task-workspace-list-state{
   padding:3px 6px;border-radius:999px;font-size:7px;font-weight:850
 }
@@ -676,19 +682,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 .task-workspace-move-note strong{font-size:9px;color:var(--warn)}
 .task-workspace-move-note span{font-size:8px;color:var(--text);line-height:1.4}
-.task-workspace-move-options{display:grid;gap:5px;max-height:210px;overflow:auto}
+.task-workspace-move-options{display:grid;gap:6px;max-height:210px;overflow:auto}
 .task-workspace-move-option{
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;
-  width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);text-align:left
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
+  width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);text-align:left
 }
-.task-workspace-move-option:hover{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));background:var(--accent-soft)}
+.task-workspace-move-option:hover{border-color:var(--accent);background:var(--accent-softer)}
 .task-workspace-move-option.selected{
   border-color:var(--accent);background:var(--accent-softer);
   box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 7%,transparent)
 }
-.task-workspace-move-option strong{display:block;font-size:8.5px}
-.task-workspace-move-option small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px}
-.task-workspace-move-option>span{color:var(--muted);font-size:8px;font-weight:850}
+.task-workspace-move-option strong{display:block;font-size:10px}
+.task-workspace-move-option small{display:block;margin-top:2px;color:var(--muted);font-size:8px}
+.task-workspace-move-option>span{color:var(--accent-dark);font-size:8px;font-weight:900}
 .task-workspace-move-empty{padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:8px;text-align:center}
 .task-workspace-move-empty.danger{color:var(--fail)}
 .task-workspace-move-actions{display:flex;justify-content:flex-end;gap:5px}
