@@ -7167,7 +7167,7 @@ def main() -> int:
             )
             print_probe_pass(
                 "runner-workspace-delivery",
-                "real Runner × Auto/Main/Worktree policy + target-advance + conflict/recovery merge cross probe",
+                "real Runner × Auto/Main/Worktree policy + busy-block guards + target-advance + conflict/recovery merge cross probe",
             )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
