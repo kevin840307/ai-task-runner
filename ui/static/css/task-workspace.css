@@ -428,8 +428,11 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-editor-secondary .task-workspace-workspace-preview{margin-top:6px;padding:6px 8px;font-size:7.4px;line-height:1.4}
 
 @media(max-width:900px){
-  .task-workspace-shell,.task-workspace-shell.expanded,.task-workspace-shell.workspace-route{
+  .task-workspace-shell,.task-workspace-shell.expanded{
     width:100vw;max-width:100vw
+  }
+  .task-workspace-shell.workspace-route{
+    width:100vw!important;max-width:100vw!important
   }
   .task-workspace-expand{display:none}
 }
