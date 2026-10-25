@@ -3,7 +3,6 @@ html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  scrollbar-gutter: stable;
 }
 body {
   width: 100%;
@@ -12,6 +11,10 @@ body {
   min-height: 0 !important;
   grid-template-columns: var(--rail-left) minmax(0, 1fr);
   overflow: hidden !important;
+  /* Root prototype gutter reduces the App grid's layout width, but fixed
+     Task overlays still span the full viewport. Body-scoped gutter reproduces
+     that behavior with production's html{overflow:hidden}. */
+  scrollbar-gutter: stable;
 }
 [hidden] { display: none !important; }
 
