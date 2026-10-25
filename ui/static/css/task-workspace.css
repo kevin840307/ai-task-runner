@@ -749,8 +749,8 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   background:var(--accent-softer)!important;
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)
 }
-html[data-appearance] .task-workspace-list-actions button,
-html[data-appearance] .task-workspace-list-actions button:hover:not(:disabled){
+html[data-appearance] #taskWorkspaceBody .task-workspace-list-actions button,
+html[data-appearance] #taskWorkspaceBody .task-workspace-list-actions button:hover:not(:disabled){
   background:var(--panel-3);color:var(--muted)
 }
 html[data-appearance] .task-workspace-list-row.current,

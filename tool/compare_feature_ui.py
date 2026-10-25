@@ -447,12 +447,12 @@ TASK_LIST = PanelSpec(
         ),
         Pair(
             "html[data-appearance] #planModal .plan-row-controls button",
-            "html[data-appearance] .task-workspace-list-actions button",
+            "html[data-appearance] #taskWorkspaceBody .task-workspace-list-actions button",
             ("background", "color"),
         ),
         Pair(
             "html[data-appearance] #planModal .plan-row-controls button:hover:not(:disabled)",
-            "html[data-appearance] .task-workspace-list-actions button:hover:not(:disabled)",
+            "html[data-appearance] #taskWorkspaceBody .task-workspace-list-actions button:hover:not(:disabled)",
             ("background", "color"),
         ),
         Pair(".plan-side-card h3", ".task-workspace-list-side-card h3", ("margin", "font-size", "text-transform", "letter-spacing")),
