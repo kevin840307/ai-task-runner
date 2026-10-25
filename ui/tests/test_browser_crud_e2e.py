@@ -3790,6 +3790,22 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#taskWorkspaceHeaderOpenWorkflow").is_visible()
             page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").click()
             page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Edit", exact=True).click()
+            original_child_prompt = page.locator("#taskWorkspacePrompt").input_value()
+            page.fill("#taskWorkspacePrompt", "Back should guard dirty child edits")
+            page.click("#taskWorkspaceFooterBack")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') !== null")
+            assert page.locator(".ui-dialog-card").get_by_text("unsaved Task edits", exact=False).is_visible()
+            page.keyboard.press("Escape")
+            page.wait_for_function("document.querySelector('.ui-dialog-card') === null")
+            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK EDITOR"
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Back should guard dirty child edits"
+            page.click("#taskWorkspaceFooterBack")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.locator(".task-workspace-list-row").first.locator(".task-workspace-row-more").click()
+            page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Edit", exact=True).click()
+            assert page.locator("#taskWorkspacePrompt").input_value() == original_child_prompt
+
             page.fill("#taskWorkspacePrompt", "Escape top-layer dirty prompt")
             page.locator("#taskWorkspacePrompt").focus()
             page.keyboard.press("Escape")
