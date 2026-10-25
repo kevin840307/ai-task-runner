@@ -673,12 +673,30 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 }
 
 
-/* Feature secondary Move existing chooser; small inline surface, never a second large editor. */
+/* Feature secondary Move existing chooser: the accepted prototype opens a small modal. */
 .task-workspace-list-tools-wrap{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
 .task-workspace-list-tools-wrap .task-workspace-list-tools{margin:0;padding:0;border:0;flex-wrap:wrap}
-.task-workspace-move-existing{display:grid;gap:7px;margin-top:8px}
+.task-workspace-move-overlay{
+  position:fixed;inset:0;z-index:720;display:grid;place-items:center;padding:20px;
+  background:rgba(14,23,38,.30);backdrop-filter:blur(2px)
+}
+.task-workspace-move-existing{
+  width:min(620px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);
+  border-radius:14px;background:var(--panel);color:var(--text);box-shadow:var(--shadow-pop)
+}
+.task-workspace-move-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:14px 16px;border-bottom:1px solid var(--line)
+}
+.task-workspace-move-head h2{margin:0;font-size:14px}
+.task-workspace-move-head p{margin:4px 0 0;color:var(--muted);font-size:9px}
+.task-workspace-move-close{
+  width:30px;height:30px;flex:0 0 30px;border:0;background:transparent;color:var(--muted);font-size:22px
+}
+.task-workspace-move-body{padding:14px 16px}
 .task-workspace-move-note{
-  display:grid;gap:3px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--warn) 42%,var(--line));
+  display:grid;gap:3px;margin-bottom:9px;padding:9px 10px;
+  border:1px solid color-mix(in srgb,var(--warn) 42%,var(--line));
   border-radius:9px;background:var(--warning-soft)
 }
 .task-workspace-move-note strong{font-size:9px;color:var(--warn)}
@@ -698,13 +716,19 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-move-option>span{color:var(--accent-dark);font-size:8px;font-weight:900}
 .task-workspace-move-empty{padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:8px;text-align:center}
 .task-workspace-move-empty.danger{color:var(--fail)}
-.task-workspace-move-actions{display:flex;justify-content:flex-end;gap:5px}
-.task-workspace-move-actions button{
-  min-height:28px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);
-  color:var(--text);font-size:8px;font-weight:850
+.task-workspace-move-actions{
+  display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;
+  border-top:1px solid var(--line);background:var(--panel-2)
 }
-.task-workspace-move-actions button.primary{border-color:var(--accent);background:var(--accent);color:var(--on-accent,#fff)}
-
+.task-workspace-move-actions button{
+  min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:var(--r-md);
+  background:var(--panel);font-size:11px;font-weight:800
+}
+.task-workspace-move-actions button:hover:not(:disabled){border-color:var(--accent)}
+.task-workspace-move-actions button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.task-workspace-move-actions button.primary:hover:not(:disabled){background:var(--accent-dark)}
+.task-workspace-move-actions button:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+html[data-appearance] .task-workspace-move-actions{background:var(--panel-2);color:var(--text);border-color:var(--line)}
 
 /* Feature drawer header action group: List owns actions in the shared shell. */
 .task-workspace-head{
