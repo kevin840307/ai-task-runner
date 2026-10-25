@@ -690,6 +690,11 @@ BOARD = PanelSpec(
             ".tasks-project-trigger .stateful-content",
             ("display", "width", "overflow", "text-overflow", "white-space"),
         ),
+        Pair(
+            ".tasks-project-trigger strong",
+            ".tasks-title-line .tasks-project-trigger strong",
+            ("max-width", "overflow", "text-overflow", "white-space"),
+        ),
         Pair(".toggle", ".tasks-view-toggle", ("display", "padding", "border", "border-radius", "background")),
         Pair(".toggle", ".tasks-view-toggle", ("padding", "border", "border-radius", "background")),
         Pair(".toggle button", ".tasks-view-toggle button", ("height", "padding", "border-radius", "background", "color", "font-size", "font-weight")),
