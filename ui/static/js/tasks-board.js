@@ -134,13 +134,20 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       const strong = document.createElement("strong");
       strong.textContent = String(row.name || row.path);
       const small = document.createElement("small");
-      small.textContent = String(row.path || "");
+      small.textContent = [String(row.path || ""), String(row.branch || "main")].filter(Boolean).join(" · ");
       copy.append(strong, small);
       label.append(input, copy);
       options.appendChild(label);
     }
     const chosen = rows.filter((row) => selected.has(projectId(row)));
-    summary.textContent = !chosen.length ? "None" : chosen.length === rows.length ? "All" : chosen.length === 1 ? String(chosen[0].name || "1 selected") : chosen.length + " selected";
+    const boardCount = tasks.filter(taskMatchesProjects).length;
+    summary.textContent = !chosen.length
+      ? "No Project"
+      : chosen.length === 1
+        ? String(chosen[0].name || chosen[0].path || "Project")
+        : chosen.length === rows.length && rows.length > 1
+          ? "All Projects · " + boardCount + " Tasks"
+          : chosen.length + " Projects · " + boardCount + " Tasks";
   }
 
   function taskItems(task) {
