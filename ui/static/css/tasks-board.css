@@ -187,8 +187,8 @@
 .tasks-board-card-prompt{margin:7px 0 9px!important}
 .tasks-board-tag{padding:2px 6px;border-radius:6px;font-size:8px;font-weight:850}
 .tasks-board-tag.worktree{
-  background:color-mix(in srgb,var(--warn) 16%,var(--panel));color:var(--warn);
-  border:1px solid color-mix(in srgb,var(--warn) 50%,var(--line))
+  background:color-mix(in srgb,var(--warn) 16%,var(--panel))!important;color:var(--warn)!important;
+  border:1px solid var(--line);border-color:color-mix(in srgb,var(--warn) 50%,var(--line))
 }
 .tasks-board-card.worktree-card{
   border-color:color-mix(in srgb,var(--warn) 70%,var(--line));
