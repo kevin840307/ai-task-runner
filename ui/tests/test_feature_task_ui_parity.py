@@ -528,12 +528,24 @@ def test_task_workspace_dynamic_copy_is_language_owned() -> None:
         "task.project_placeholder",
         "task.workspace_recommended",
         "task.prompt_placeholder",
-        "task.quick_use_drag",
         "task.move_existing",
         "task.workspace_result",
+        "task.quick_use_click",
+        "task.quick_use_after_click",
+        "task.quick_use_double_click",
+        "task.quick_use_after_double_click",
+        "task.quick_use_before_more",
+        "task.quick_use_after_more",
     ):
         assert f'"{key}"' in i18n
         assert f'tr("{key}"' in PRODUCTION_JS or f'trf("{key}"' in PRODUCTION_JS
+
+    # The final prototype Quick use card uses emphasized inline fragments.
+    # Legacy one-string keys may remain for compatibility, but production must
+    # render through the split localized fragments so punctuation/spacing and
+    # bold emphasis survive language changes.
+    assert 'tr("task.quick_use_drag"' not in PRODUCTION_JS
+    assert 'tr("task.quick_use_durable"' not in PRODUCTION_JS
 
     assert "syncCreateMenuCopy();" in PRODUCTION_JS
     assert 'project.placeholder = "Select a project or type a path"' not in PRODUCTION_JS

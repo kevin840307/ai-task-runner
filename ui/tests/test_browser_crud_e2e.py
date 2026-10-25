@@ -6481,6 +6481,17 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'New task'")
             production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
             assert production_page.locator("#taskWorkspaceWorkflow").input_value() == str(default_workflow)
+
+            # Earlier in this test the prototype Editor is intentionally switched
+            # to mixed.yaml to compare Validator + AI controls. The prototype
+            # remembers that selection for the next child editor, while production
+            # correctly restores the Project's saved default Workflow. Select the
+            # prototype's no-file-validator default explicitly so this fixture is
+            # testing List-row parity instead of failing child validation.
+            feature_page.select_option("#newTaskWorkflow", "ralphy_ai_validate.yaml")
+            feature_page.wait_for_function(
+                "!document.querySelector('#newTaskValidationSource .task-file-source')"
+            )
             feature_page.fill("#newTaskTitle", "Parity child")
             feature_page.fill("#newTaskModal .task-primary-source .task-source-mode-panel>textarea", "Parity child prompt")
             production_page.fill("#taskWorkspaceItemTitle", "Parity child")
@@ -6489,6 +6500,82 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             production_page.click("#taskWorkspaceSave")
             feature_page.wait_for_function("document.querySelectorAll('#planFormList [data-draft-row]').length === 1")
             production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST' && document.querySelectorAll('.task-workspace-list-row').length === 1")
+
+            # Compare the final rendered row after both implementations have
+            # actually created a child. This catches cascade/specificity drift
+            # that selector-level tests cannot see.
+            row_pairs = [
+                (
+                    "#planFormList [data-draft-row='0']",
+                    ".task-workspace-list-row",
+                    ["borderTopWidth", "borderTopStyle", "borderRadius", "backgroundColor", "overflow"],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] .plan-row-head",
+                    ".task-workspace-list-row",
+                    [
+                        "display", "gridTemplateColumns", "columnGap", "alignItems",
+                        "minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                    ],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] .plan-row-num",
+                    ".task-workspace-list-number",
+                    ["display", "width", "height", "marginLeft", "marginRight", "lineHeight", "alignSelf"],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] .plan-row-copy strong",
+                    ".task-workspace-list-copy strong",
+                    ["display", "fontSize"],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] .plan-row-copy small",
+                    ".task-workspace-list-copy small",
+                    ["display", "marginTop", "color", "fontSize", "whiteSpace", "overflow", "textOverflow"],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] .plan-row-actions",
+                    ".task-workspace-list-actions",
+                    ["display", "alignItems", "gap"],
+                ),
+                (
+                    "#planFormList [data-draft-row='0'] [data-draft-edit='0']",
+                    ".task-workspace-list-row .task-workspace-row-edit",
+                    [
+                        "height", "minWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+                        "borderTopWidth", "borderTopStyle", "borderRadius",
+                        "backgroundColor", "color", "fontSize",
+                    ],
+                ),
+            ]
+            for feature_selector, production_selector, properties in row_pairs:
+                _assert_feature_computed_style_parity(
+                    feature_page,
+                    feature_selector,
+                    production_page,
+                    production_selector,
+                    properties,
+                )
+
+            # Behavior parity for the same row: a plain click leaves a New List
+            # Draft in the List route; double-click opens the child Editor; Back
+            # returns to that same Draft without adding/removing a row.
+            feature_row = feature_page.locator("#planFormList [data-draft-row='0']")
+            production_row = production_page.locator(".task-workspace-list-row").first
+            feature_row.click()
+            production_row.click()
+            assert feature_page.locator("#planModal").get_attribute("class").find("subview-open") == -1
+            assert production_page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
+            feature_row.dblclick()
+            production_row.dblclick()
+            feature_page.wait_for_function("document.querySelector('#taskFormTitle')?.textContent === 'Edit task'")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            feature_page.click("#taskEditorBack")
+            production_page.click("#taskWorkspaceHeaderBack")
+            feature_page.wait_for_function("document.querySelector('#planModal')?.classList.contains('open') && !document.querySelector('#planModal')?.classList.contains('subview-open')")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            assert feature_page.locator("#planFormList [data-draft-row]").count() == 1
+            assert production_page.locator(".task-workspace-list-row").count() == 1
 
             feature_list_shell = feature_page.locator("#taskOverlay .drawer").bounding_box()
             production_list_shell = production_page.locator("#taskWorkspaceShell").bounding_box()
