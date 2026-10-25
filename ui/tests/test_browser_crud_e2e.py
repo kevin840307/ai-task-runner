@@ -1754,6 +1754,9 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             root_option = page.locator(".tasks-project-option").filter(has_text="Fixture Project")
             assert second_option.evaluate("(node) => node.tagName") == "BUTTON"
             assert second_option.locator(".tasks-project-check").inner_text() == "✓"
+            assert second_option.locator(".tasks-project-check").evaluate(
+                "(node) => getComputedStyle(node).display"
+            ) == "grid"
             assert second_option.get_attribute("aria-pressed") == "false"
             assert root_option.get_attribute("aria-pressed") == "true"
             assert " · main" in second_option.locator("small").inner_text()
