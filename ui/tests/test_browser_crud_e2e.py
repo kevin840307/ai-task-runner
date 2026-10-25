@@ -6582,6 +6582,22 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # returns to that same Draft without adding/removing a row.
             feature_row = feature_page.locator("#planFormList [data-draft-row='0']")
             production_row = production_page.locator(".task-workspace-list-row").first
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planFormList [data-draft-up='0']",
+                production_page,
+                ".task-workspace-list-row .task-workspace-row-up",
+                ["display"],
+            )
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#planFormList [data-draft-down='0']",
+                production_page,
+                ".task-workspace-list-row .task-workspace-row-down",
+                ["display"],
+            )
+            assert production_row.locator(".task-workspace-row-up").is_hidden()
+            assert production_row.locator(".task-workspace-row-down").is_hidden()
             feature_row.click()
             production_row.click()
             assert feature_page.locator("#planModal").get_attribute("class").find("subview-open") == -1

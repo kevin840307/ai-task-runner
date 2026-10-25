@@ -510,6 +510,16 @@ TASK_LIST = PanelSpec(
         ),
         Pair(".plan-row-actions", ".task-workspace-list-actions", ("display", "align-items", "gap")),
         Pair(
+            "#planFormList [data-draft-up]",
+            ".task-workspace-list-row .task-workspace-row-up",
+            ("display",),
+        ),
+        Pair(
+            "#planFormList [data-draft-down]",
+            ".task-workspace-list-row .task-workspace-row-down",
+            ("display",),
+        ),
+        Pair(
             ".plan-row-controls button",
             ".task-workspace-list-actions button",
             ("height", "min-width", "padding", "border", "border-radius", "background", "color", "font-size"),

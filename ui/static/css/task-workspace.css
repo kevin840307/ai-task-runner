@@ -584,6 +584,8 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-list-copy strong{display:block;font-size:10px}
 .task-workspace-list-copy small{display:block;margin-top:2px;font-size:8px;max-width:56vw}
 .task-workspace-list-actions{display:flex;align-items:center;gap:4px}
+.task-workspace-list-row .task-workspace-row-up,
+.task-workspace-list-row .task-workspace-row-down{display:none!important}
 .task-workspace-list-actions button{
   height:27px;min-height:27px;min-width:27px;padding:0 7px;border:1px solid var(--line);
   border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:8px
