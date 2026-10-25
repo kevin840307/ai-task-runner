@@ -1752,10 +1752,16 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             page.click("#tasksProjectFilterButton")
             second_option = page.locator(".tasks-project-option").filter(has_text="Second Project")
             root_option = page.locator(".tasks-project-option").filter(has_text="Fixture Project")
+            assert second_option.evaluate("(node) => node.tagName") == "BUTTON"
+            assert second_option.locator(".tasks-project-check").inner_text() == "✓"
+            assert second_option.get_attribute("aria-pressed") == "false"
+            assert root_option.get_attribute("aria-pressed") == "true"
             assert " · main" in second_option.locator("small").inner_text()
-            second_option.locator("input").check()
-            root_option.locator("input").uncheck()
+            second_option.click()
+            root_option.click()
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
+            assert page.locator(".tasks-project-option").filter(has_text="Second Project").get_attribute("aria-pressed") == "true"
+            assert page.locator(".tasks-project-option").filter(has_text="Fixture Project").get_attribute("aria-pressed") == "false"
             page.wait_for_function("document.querySelectorAll('#tasksBoardNew .tasks-board-card').length === 1")
             assert page.locator("#tasksBoardNew .tasks-board-card").get_by_text("Cross-project parent").is_visible()
             assert page.locator("#projectChatName").inner_text() == "Second Project"
@@ -1769,7 +1775,9 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             assert_reload_state("Second Project", board_geometry)
 
             page.click("#tasksProjectFilterButton")
-            page.locator(".tasks-project-option").filter(has_text="Third Project").locator("input").check()
+            third_option = page.locator(".tasks-project-option").filter(has_text="Third Project")
+            third_option.focus()
+            page.keyboard.press("Enter")
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === '2 Projects · 1 Tasks'")
             reload_ui("Second Project")
             page.click("#chatNav")
