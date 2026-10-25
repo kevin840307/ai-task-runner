@@ -71,6 +71,10 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert 'button.addEventListener("dblclick", () => openTask?.(task, {' in PRODUCTION_TASKS_BOARD_JS
     assert 'button.className = "tasks-board-card" + (taskUsesWorktree(task) ? " worktree-card" : "");' in PRODUCTION_TASKS_BOARD_JS
     assert 'button.className = "tasks-list-row tasks-list-data" + (taskUsesWorktree(task) ? " worktree-row" : "");' in PRODUCTION_TASKS_BOARD_JS
+    assert '"No Project"' in PRODUCTION_TASKS_BOARD_JS
+    assert '"All Projects · " + boardCount + " Tasks"' in PRODUCTION_TASKS_BOARD_JS
+    assert 'chosen.length + " Projects · " + boardCount + " Tasks"' in PRODUCTION_TASKS_BOARD_JS
+    assert 'String(row.branch || "main")' in PRODUCTION_TASKS_BOARD_JS
     assert 'r.ondblclick=()=>openPlanDialog(r.dataset.taskrow)' in FEATURE_WORKSPACE_JS
     assert "card.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
     assert "r.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
