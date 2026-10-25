@@ -101,9 +101,13 @@ def project_file_lock(projects_file: Path):
                     time.sleep(LOCK_POLL_SECONDS)
             yield
         finally:
-            if acquired:
-                _release_os_file_lock(handle)
-            os.close(handle)
+            try:
+                if acquired:
+                    _release_os_file_lock(handle)
+            finally:
+                # Closing the handle is the final kernel-level release even if
+                # an explicit unlock reports an OS error during teardown.
+                os.close(handle)
 
 
 __all__ = ["path_key", "project_file_lock", "project_path_key"]

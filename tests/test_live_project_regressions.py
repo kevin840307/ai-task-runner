@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from project_registry import project_file_lock, project_path_key
+from project_registry import project_path_key
 from runner.workspace import register_ui_project
 from ui.server import UIServer
 
