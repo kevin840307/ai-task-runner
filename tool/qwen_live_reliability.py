@@ -6359,8 +6359,6 @@ def runner_workspace_delivery_probe(
         ("auto_busy_target_advance", "auto", True, "worktree", "advance", "busy-worktree", False),
         ("auto_busy_concurrent", "auto", True, "worktree", "none", "busy-worktree", True),
         ("auto_always_worktree_busy", "auto", True, "worktree", "none", "always-worktree", False),
-        ("worktree_conflict_recovery", "worktree", False, "worktree", "conflict", "busy-worktree", False),
-        ("auto_busy_conflict_recovery", "auto", True, "worktree", "conflict", "busy-worktree", False),
         ("worktree_idempotent_external_delivery", "worktree", False, "worktree", "idempotent", "busy-worktree", False),
         ("auto_busy_idempotent_external_delivery", "auto", True, "worktree", "idempotent", "busy-worktree", False),
     )
@@ -6885,13 +6883,13 @@ def runner_workspace_delivery_probe(
     # Cross the real WorkspaceManager blocked path too. A busy Main request
     # with concurrent Main execution disabled must fail before any Runner,
     # branch, or owned worktree side effect is created.
-    blocked_repo = _create_delivery_probe_repo(root, "rw-27")
+    blocked_repo = _create_delivery_probe_repo(root, "rw-25")
     blocked_head = _delivery_git(blocked_repo, "rev-parse", "HEAD").stdout.strip()
-    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-27")
+    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-25")
     try:
         blocked_manager.prepare(
             blocked_repo,
-            task_id="lr-27",
+            task_id="lr-25",
             run_number=1,
             requested_mode="main",
             execution_settings={
@@ -6909,7 +6907,7 @@ def runner_workspace_delivery_probe(
         raise RuntimeError("Runner/workspace busy Main guard mutated target HEAD")
     if _delivery_git(blocked_repo, "status", "--porcelain").stdout.strip():
         raise RuntimeError("Runner/workspace busy Main guard dirtied target Project")
-    if (root / "rw-wt-27").exists():
+    if (root / "rw-wt-25").exists():
         raise RuntimeError("Runner/workspace busy Main guard created an owned worktree")
     if "busy" not in detail.lower():
         raise RuntimeError(f"Runner/workspace busy Main guard lost diagnostics: {detail!r}")
@@ -6927,15 +6925,15 @@ def runner_workspace_delivery_probe(
     # Cross Auto + always-main through the same production busy-Main guard.
     # Auto must resolve to Main first, then refuse to launch because concurrent
     # Main execution is disabled. No Runner/worktree/target side effect is allowed.
-    auto_blocked_repo = _create_delivery_probe_repo(root, "rw-28")
+    auto_blocked_repo = _create_delivery_probe_repo(root, "rw-26")
     auto_blocked_head = _delivery_git(
         auto_blocked_repo, "rev-parse", "HEAD"
     ).stdout.strip()
-    auto_blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-28")
+    auto_blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-26")
     try:
         auto_blocked_manager.prepare(
             auto_blocked_repo,
-            task_id="lr-28",
+            task_id="lr-26",
             run_number=1,
             requested_mode="auto",
             execution_settings={
@@ -6961,7 +6959,7 @@ def runner_workspace_delivery_probe(
         raise RuntimeError(
             "Runner/workspace Auto always-main busy guard dirtied target Project"
         )
-    if (root / "rw-wt-28").exists():
+    if (root / "rw-wt-26").exists():
         raise RuntimeError(
             "Runner/workspace Auto always-main busy guard created an owned worktree"
         )

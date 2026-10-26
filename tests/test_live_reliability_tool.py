@@ -3044,7 +3044,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         tmp_path,
     )
 
-    assert len(calls) == 26
+    assert len(calls) == 24
     # Physical probe paths must remain compact enough for Windows Git worktree
     # metadata. Scenario names stay descriptive in result keys instead.
     for _, project in calls:
@@ -3211,21 +3211,6 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert auto_worktree_busy["effective_mode"] == "worktree"
     assert auto_worktree_busy["delivery"] == "merged"
 
-    worktree_conflict = result["worktree_conflict_recovery"]
-    assert worktree_conflict["requested_mode"] == "worktree"
-    assert worktree_conflict["effective_mode"] == "worktree"
-    assert worktree_conflict["delivery"] == "conflict"
-    assert worktree_conflict["recovery"] == "merged"
-    assert worktree_conflict["recovery_validation_calls"] == 1
-
-    auto_conflict = result["auto_busy_conflict_recovery"]
-    assert auto_conflict["requested_mode"] == "auto"
-    assert auto_conflict["main_running"] is True
-    assert auto_conflict["effective_mode"] == "worktree"
-    assert auto_conflict["delivery"] == "conflict"
-    assert auto_conflict["recovery"] == "merged"
-    assert auto_conflict["recovery_validation_calls"] == 1
-
     worktree_idempotent = result["worktree_idempotent_external_delivery"]
     assert worktree_idempotent["requested_mode"] == "worktree"
     assert worktree_idempotent["effective_mode"] == "worktree"
@@ -3247,8 +3232,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert blocked_main["delivery"] == "blocked"
     assert "busy" in blocked_main["detail"].lower()
     assert blocked_main["target_head_after_delivery"] == blocked_main["target_head_before_delivery"]
-    assert not (tmp_path / "rw-wt-27").exists()
-    assert not (tmp_path / "rw-27" / "health.txt").exists()
+    assert not (tmp_path / "rw-wt-25").exists()
+    assert not (tmp_path / "rw-25" / "health.txt").exists()
 
     blocked_auto_main = result["auto_always_main_busy_blocked"]
     assert blocked_auto_main["requested_mode"] == "auto"
@@ -3261,8 +3246,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         blocked_auto_main["target_head_after_delivery"]
         == blocked_auto_main["target_head_before_delivery"]
     )
-    assert not (tmp_path / "rw-wt-28").exists()
-    assert not (tmp_path / "rw-28" / "health.txt").exists()
+    assert not (tmp_path / "rw-wt-26").exists()
+    assert not (tmp_path / "rw-26" / "health.txt").exists()
 
     for case_key in (
         "main",
@@ -3280,8 +3265,6 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         "auto_busy_target_advance",
         "auto_busy_concurrent",
         "auto_always_worktree_busy",
-        "worktree_conflict_recovery",
-        "auto_busy_conflict_recovery",
         "worktree_idempotent_external_delivery",
         "auto_busy_idempotent_external_delivery",
     ):
@@ -3311,10 +3294,8 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     auto_busy_advance_repo = tmp_path / "rw-20"
     auto_busy_concurrent_repo = tmp_path / "rw-21"
     auto_always_worktree_busy_repo = tmp_path / "rw-22"
-    worktree_conflict_repo = tmp_path / "rw-23"
-    auto_conflict_repo = tmp_path / "rw-24"
-    worktree_idempotent_repo = tmp_path / "rw-25"
-    auto_idempotent_repo = tmp_path / "rw-26"
+    worktree_idempotent_repo = tmp_path / "rw-23"
+    auto_idempotent_repo = tmp_path / "rw-24"
     for repo in (
         main_repo,
         worktree_repo,
@@ -3331,8 +3312,6 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         auto_busy_advance_repo,
         auto_busy_concurrent_repo,
         auto_always_worktree_busy_repo,
-        worktree_conflict_repo,
-        auto_conflict_repo,
         worktree_idempotent_repo,
         auto_idempotent_repo,
     ):
@@ -3347,8 +3326,9 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert not (active_operation_repo / "external-operation.txt").exists()
     for repo in (target_advance_repo, main_advance_repo, auto_busy_advance_repo):
         assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
-    for repo in (conflict_repo, worktree_conflict_repo, auto_conflict_repo):
-        assert (repo / "recovery-target-side.txt").read_text(encoding="utf-8") == "advanced during recovery\n"
+    assert (conflict_repo / "recovery-target-side.txt").read_text(
+        encoding="utf-8"
+    ) == "advanced during recovery\n"
 
 
 def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():

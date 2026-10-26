@@ -586,7 +586,7 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".tasks-column-add" in tasks
     assert "width:30px" in chat
     assert "height:30px" in chat
-    assert "width: min(330px, calc(100vw - 20px))" in chat
+    assert "width: min(330px,calc(100vw - 20px))" in chat
     assert "max-width: 900px" in chat
     assert ".projects .brand::before{display:none!important;content:none!important}" in projects
     assert "background:linear-gradient(to bottom,transparent,var(--bg) 25px,var(--bg) 100%)!important" in theme
