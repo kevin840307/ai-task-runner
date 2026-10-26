@@ -673,6 +673,7 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
       menu.hidden = !menu.hidden;
       trigger.setAttribute("aria-expanded", String(!menu.hidden));
     });
+    menu?.addEventListener("click", (event) => event.stopPropagation());
     byId("tasksProjectFilterAll")?.addEventListener("click", () => {
       selected = new Set(projects().map(projectId).filter(Boolean));
       saveSelection(); renderFilter(); void refresh();
