@@ -475,6 +475,16 @@ TASK_EDITOR = PanelSpec(
         ),
         Pair(".workspace-option", ".task-workspace-workspace-option", ("min-height", "padding", "border-radius", "background")),
         Pair(".workspace-option:hover", ".task-workspace-workspace-option:hover:not(.disabled)", ("border-color",)),
+        Pair(
+            "html[data-appearance] .workspace-option.selected",
+            ".task-workspace-workspace-option.selected",
+            ("border-color", "box-shadow"),
+        ),
+        Pair(
+            "html[data-appearance] .workspace-preview.worktree-active",
+            ".task-workspace-workspace-preview.worktree-active",
+            ("background", "border-color", "color"),
+        ),
         Pair(".overlay", ".task-workspace-overlay", ("position", "inset", "overflow", "background", "backdrop-filter")),
         Pair(
             ".drawer",
