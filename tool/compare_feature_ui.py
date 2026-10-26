@@ -229,6 +229,8 @@ TASK_EDITOR = PanelSpec(
         Pair(".project-dropdown[hidden]", ".task-workspace-project-dropdown[hidden]", ("display",)),
         Pair(".project-dropdown-option:hover", ".task-workspace-project-dropdown-option:hover", ("background",)),
         Pair(".project-dropdown-option.selected", ".task-workspace-project-dropdown-option.selected", ("background",)),
+        Pair("html[data-appearance] #planModal .project-dropdown-option:hover", "html[data-appearance] .task-workspace-project-dropdown-option:hover", ("background",)),
+        Pair("html[data-appearance] #planModal .project-dropdown-option.selected", "html[data-appearance] .task-workspace-project-dropdown-option.selected", ("background",)),
         Pair(".project-dropdown-option strong", ".task-workspace-project-dropdown-option strong", ("display", "font-size")),
         Pair(".project-dropdown-option small", ".task-workspace-project-dropdown-option small", ("display", "margin-top", "color", "font-size", "white-space", "overflow", "text-overflow")),
         Pair(".project-dropdown-empty", ".task-workspace-project-dropdown-empty", ("padding", "color", "font-size")),
