@@ -3660,7 +3660,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.fill("#taskWorkspacePrompt", "Durably edited browser item one")
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
+            page.wait_for_function(
+                "document.querySelector('#taskWorkspaceSave')?.getAttribute('aria-busy') !== 'true'"
+            )
             assert page.locator(".task-workspace-list-row").count() == 2
+            assert (
+                state.tasks.list(state.repo_root)["tasks"][0]["items"][0]["prompt"]
+                == "Durably edited browser item one"
+            )
 
             # Prototype create-item ownership: a provisional child belongs to
             # the child editor until Save. Back guards dirty input and Discard
@@ -3691,6 +3698,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.locator("#taskWorkspaceContextMenu").get_by_role("button", name="Remove", exact=True).click()
             assert page.locator(".task-workspace-list-row").count() == 2
             page.click("#taskWorkspaceSave")
+            page.wait_for_function(
+                "document.querySelector('#taskWorkspaceSave')?.getAttribute('aria-busy') !== 'true'"
+            )
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK LIST'")
             durable_items = state.tasks.list(state.repo_root)["tasks"][0]["items"]
             assert durable_items[0]["prompt"] == "Durably edited browser item one"
