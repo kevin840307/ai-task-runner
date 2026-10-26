@@ -3730,10 +3730,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#tasksBoardNewCount").inner_text() == "1"
             assert page.locator("#tasksProjectFilterSummary").inner_text() == "Fixture Project"
 
-            # Prototype parity: Board cards and List rows expose the same
-            # list-level right-click menu.
+            # Prototype parity: opening a Task context menu owns the top menu
+            # layer and dismisses the + New create menu first.
             board_card = page.locator("#tasksBoardNew .tasks-board-card").first
+            page.click("#tasksNewButton")
+            page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             board_card.click(button="right")
+            assert page.locator("#taskCreateMenu").is_hidden()
             board_menu = page.locator("#tasksBoardContextMenu")
             assert board_menu.is_visible()
             assert board_menu.get_by_role("button").all_inner_texts() == [
