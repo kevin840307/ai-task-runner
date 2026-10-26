@@ -6426,6 +6426,28 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             assert feature_page.locator("#taskAiFile").input_value() == ""
             assert production_page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
 
+            # Prompt source tabs preserve each alternate source independently.
+            feature_page.locator("[data-task-goal-mode][data-source-value='inline']").click()
+            production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
+            feature_page.fill("#taskPromptInline", "Prompt text retained across modes")
+            production_page.fill("#taskWorkspacePrompt", "Prompt text retained across modes")
+            feature_page.locator("[data-task-goal-mode][data-source-value='file']").click()
+            production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='file']").click()
+            feature_page.wait_for_function("document.querySelector('#taskGoalFile') !== null")
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceGoalFile') !== null")
+            feature_page.fill("#taskGoalFile", "prompts/manual-review.md")
+            production_page.fill("#taskWorkspaceGoalFile", "prompts/manual-review.md")
+            feature_page.locator("[data-task-goal-mode][data-source-value='inline']").click()
+            production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
+            assert feature_page.locator("#taskPromptInline").input_value() == "Prompt text retained across modes"
+            assert production_page.locator("#taskWorkspacePrompt").input_value() == "Prompt text retained across modes"
+            feature_page.locator("[data-task-goal-mode][data-source-value='file']").click()
+            production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='file']").click()
+            assert feature_page.locator("#taskGoalFile").input_value() == "prompts/manual-review.md"
+            assert production_page.locator("#taskWorkspaceGoalFile").input_value() == "prompts/manual-review.md"
+            assert feature_page.evaluate("document.activeElement?.id !== 'newTaskTitle'")
+            assert production_page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
+
             # Click the visible option cards, matching actual user interaction.
             # The prototype radio is intentionally covered by its label content,
             # so direct input.check() bypasses the surface we are comparing.
