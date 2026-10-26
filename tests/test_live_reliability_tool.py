@@ -3091,6 +3091,12 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert technical["validation_calls"] == 1
     assert technical["real_merge_failure"] is False
     assert technical["target_head_after_delivery"] == technical["target_head_before_delivery"]
+    assert technical["retry_delivery"] == "merged"
+    assert technical["retry_validation_required"] is True
+    assert technical["retry_validation_verdict"] == "PASS"
+    assert technical["retry_validation_calls"] == 1
+    assert technical["retry_merged_target_head_sha"]
+    assert technical["target_head_after_retry"] != technical["target_head_before_delivery"]
 
     dirty = result["worktree_dirty_target_wait"]
     assert dirty["requested_mode"] == "worktree"
@@ -3098,6 +3104,10 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert dirty["delivery"] == "waiting_target_clean"
     assert dirty["real_merge_failure"] is False
     assert dirty["target_head_after_delivery"] == dirty["target_head_before_delivery"]
+    assert dirty["retry_delivery"] == "merged"
+    assert dirty["retry_real_merge_failure"] is False
+    assert dirty["retry_merged_target_head_sha"]
+    assert dirty["target_head_after_retry"] != dirty["target_head_before_delivery"]
 
     history = result["worktree_target_history_wait"]
     assert history["requested_mode"] == "worktree"

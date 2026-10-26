@@ -262,7 +262,7 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;
   clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important
 }
-.task-workspace-workspace-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.task-workspace-workspace-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .task-workspace-workspace-option{
   position:relative;display:block;min-height:72px;padding:9px;border:1px solid var(--line);
   border-radius:9px;background:var(--panel);cursor:pointer
@@ -495,7 +495,7 @@ html[data-appearance] .task-workspace-workspace-option.worktree-option.selected{
 .task-workspace-project-dropdown-option{
   display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text);cursor:pointer
 }
-.task-workspace-project-dropdown-option:hover,.task-workspace-project-dropdown-option.selected{background:var(--accent-soft)}
+.task-workspace-project-dropdown-option:hover,.task-workspace-project-dropdown-option.selected{background:#eef7f5}
 .task-workspace-project-dropdown-option strong{display:block;font-size:9px}
 .task-workspace-project-dropdown-option small{
   display:block;margin-top:2px;overflow:hidden;color:var(--muted);font-size:7.5px;text-overflow:ellipsis;white-space:nowrap

@@ -6751,6 +6751,27 @@ def runner_workspace_delivery_probe(
             result["delivery"] = merged.status
             result["real_merge_failure"] = merged.real_merge_failure
             result["target_head_after_delivery"] = target_head
+
+            # The Runner already completed and the durable snapshot is retained.
+            # Once user work is cleared, retry only delivery with the same snapshot;
+            # never run the agent/Runner again for a transient target-cleanliness wait.
+            (repo / "user-uncommitted.txt").unlink()
+            dirty_retry = merge_manager.merge(prepared, snapshot)
+            if dirty_retry.status != "merged" or dirty_retry.real_merge_failure:
+                raise RuntimeError(
+                    "Runner/workspace dirty-target retry did not deliver retained snapshot: "
+                    f"status={dirty_retry.status} real_failure={dirty_retry.real_merge_failure}"
+                )
+            if (repo / "health.txt").read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace dirty-target retry did not publish retained Task output"
+                )
+            result["retry_delivery"] = dirty_retry.status
+            result["retry_real_merge_failure"] = dirty_retry.real_merge_failure
+            result["retry_merged_target_head_sha"] = dirty_retry.merged_target_head_sha
+            result["target_head_after_retry"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
         elif target_mutation in {"history", "unmanaged", "missing_branch"}:
             expected_status = {
                 "history": "waiting_target_history",
@@ -6842,6 +6863,53 @@ def runner_workspace_delivery_probe(
             result["validation_calls"] = validation_calls
             result["real_merge_failure"] = merged.real_merge_failure
             result["target_head_after_delivery"] = target_head
+
+            if target_mutation == "technical_error":
+                retry_validation_calls = 0
+
+                def validate_retry(project: Path) -> str:
+                    nonlocal retry_validation_calls
+                    retry_validation_calls += 1
+                    healthy = (
+                        (project / "health.txt").is_file()
+                        and (project / "health.txt").read_text(encoding="utf-8") == EXPECTED
+                    )
+                    target_preserved = (
+                        (project / "target-side.txt").is_file()
+                        and (project / "target-side.txt").read_text(encoding="utf-8")
+                        == "advanced target\n"
+                    )
+                    return "PASS" if healthy and target_preserved else "SOURCE_FAIL"
+
+                technical_retry = merge_manager.merge(
+                    prepared,
+                    snapshot,
+                    validate=validate_retry,
+                )
+                if (
+                    technical_retry.status != "merged"
+                    or not technical_retry.validation_required
+                    or technical_retry.verdict != "PASS"
+                    or retry_validation_calls != 1
+                ):
+                    raise RuntimeError(
+                        "Runner/workspace technical-error retry did not deliver retained snapshot: "
+                        f"status={technical_retry.status} "
+                        f"validation={technical_retry.validation_required} "
+                        f"verdict={technical_retry.verdict} calls={retry_validation_calls}"
+                    )
+                if (repo / "health.txt").read_text(encoding="utf-8") != EXPECTED:
+                    raise RuntimeError(
+                        "Runner/workspace technical-error retry did not publish retained Task output"
+                    )
+                result["retry_delivery"] = technical_retry.status
+                result["retry_validation_required"] = technical_retry.validation_required
+                result["retry_validation_verdict"] = technical_retry.verdict
+                result["retry_validation_calls"] = retry_validation_calls
+                result["retry_merged_target_head_sha"] = technical_retry.merged_target_head_sha
+                result["target_head_after_retry"] = _delivery_git(
+                    repo, "rev-parse", "HEAD"
+                ).stdout.strip()
         else:
             if merged.status != "merged":
                 raise RuntimeError(

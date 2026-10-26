@@ -6221,6 +6221,43 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 "document.querySelector('[data-task-source-card=\"ai\"]') !== null"
             )
 
+            # Interactive state parity was previously missing from the geometry gate.
+            # Compare actual browser-computed selected Workspace and Project-menu
+            # states against the accepted prototype.
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#newTaskModal .task-editor-secondary .workspace-option.selected",
+                production_page,
+                ".task-workspace-editor-secondary [data-workspace-option='auto'].selected",
+                ["borderColor", "backgroundColor", "boxShadow", "opacity", "cursor"],
+            )
+
+            if feature_page.locator("#projectDropdown").is_hidden():
+                feature_page.locator("#projectDropdownToggle").click()
+            feature_page.wait_for_function("!document.querySelector('#projectDropdown')?.hidden")
+            if production_page.locator(".task-workspace-project-dropdown").is_hidden():
+                production_page.locator(".task-workspace-project-toggle").click()
+            production_page.wait_for_function(
+                "!document.querySelector('.task-workspace-project-dropdown')?.hidden"
+            )
+            feature_project_choice = feature_page.locator("#projectDropdown .project-dropdown-option").first
+            production_project_choice = production_page.locator(
+                ".task-workspace-project-dropdown .task-workspace-project-dropdown-option"
+            ).first
+            feature_project_choice.hover()
+            production_project_choice.hover()
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#projectDropdown .project-dropdown-option:first-child",
+                production_page,
+                ".task-workspace-project-dropdown .task-workspace-project-dropdown-option:first-child",
+                ["backgroundColor", "borderRadius", "color"],
+            )
+            feature_page.keyboard.press("Escape")
+            production_page.keyboard.press("Escape")
+            assert feature_page.locator("#projectDropdown").is_hidden()
+            assert production_page.locator(".task-workspace-project-dropdown").is_hidden()
+
             style_pairs = [
                 (
                     "#newTaskModal>.modal-body",
