@@ -78,6 +78,8 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert 'button.className = "tasks-project-option" + (selected.has(id) ? " selected" : "");' in PRODUCTION_TASKS_BOARD_JS
     assert 'button.setAttribute("aria-pressed", String(selected.has(id)));' in PRODUCTION_TASKS_BOARD_JS
     assert 'check.className = "tasks-project-check";' in PRODUCTION_TASKS_BOARD_JS
+    assert "tasksProjectFilterMenu.addEventListener('click',e=>e.stopPropagation())" in FEATURE_TASKS_PAGE_JS
+    assert 'menu?.addEventListener("click", (event) => event.stopPropagation());' in PRODUCTION_TASKS_BOARD_JS
     assert 'r.ondblclick=()=>openPlanDialog(r.dataset.taskrow)' in FEATURE_WORKSPACE_JS
     assert "card.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
     assert "r.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
