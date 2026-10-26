@@ -526,6 +526,7 @@ tasksBoard = createTasksBoardController({
   getProjects: () => state.projects,
   getCurrentProject: () => state.project,
   openCreateMenu: (anchor) => openTaskCreateMenuFromAnchor(anchor),
+  closeCreateMenu: () => taskWorkspace.closeCreateMenu(),
   confirmDialog,
   showToast,
   showError: showActionError,
