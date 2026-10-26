@@ -4065,5 +4065,5 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     if (state && overlay && !overlay.hidden) render();
   });
 
-  return { openDraft, openTask, openNew, openCreateMenu, close: requestClose };
+  return { openDraft, openTask, openNew, openCreateMenu, closeCreateMenu, close: requestClose };
 }
