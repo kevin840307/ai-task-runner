@@ -537,7 +537,8 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
 .task-workspace-workspace-preview strong{display:block;color:var(--accent-dark);font-size:8px}
 .task-workspace-workspace-preview span{display:block;margin-top:2px}
 .task-workspace-workspace-preview.worktree-active{
-  border:1px solid color-mix(in srgb,var(--warn) 55%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--panel));
+  border:1px solid var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,var(--line));
+  background:color-mix(in srgb,var(--warn) 10%,var(--panel));
   color:var(--text);box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 10%,transparent)
 }
 .task-workspace-workspace-preview.worktree-active strong{color:var(--warn);letter-spacing:.04em}
