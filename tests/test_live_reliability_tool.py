@@ -3326,11 +3326,12 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
         auto_idempotent_repo,
     ):
         assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
-    for repo in (source_fail_repo, technical_repo):
-        assert not (repo / "health.txt").exists()
-        assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
-    assert not (dirty_repo / "health.txt").exists()
-    assert (dirty_repo / "user-uncommitted.txt").read_text(encoding="utf-8") == "keep user work\n"
+    assert not (source_fail_repo / "health.txt").exists()
+    assert (source_fail_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert (technical_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert (technical_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
+    assert (dirty_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert not (dirty_repo / "user-uncommitted.txt").exists()
     for repo in (history_repo, unmanaged_repo, missing_branch_repo, active_operation_repo):
         assert not (repo / "health.txt").exists()
     assert not (active_operation_repo / "external-operation.txt").exists()
