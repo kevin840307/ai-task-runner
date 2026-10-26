@@ -496,8 +496,8 @@ html[data-appearance] .task-workspace-workspace-option.worktree-option.selected{
   display:block;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;text-align:left;color:var(--text);cursor:pointer
 }
 .task-workspace-project-dropdown-option:hover,.task-workspace-project-dropdown-option.selected{background:#eef7f5}
-html[data-appearance] .task-workspace-project-dropdown-option:hover,
-html[data-appearance] .task-workspace-project-dropdown-option.selected{background:var(--accent-soft)}
+html[data-appearance] #taskWorkspaceBody .task-workspace-project-dropdown-option:hover,
+html[data-appearance] #taskWorkspaceBody .task-workspace-project-dropdown-option.selected{background:var(--accent-soft)}
 .task-workspace-project-dropdown-option strong{display:block;font-size:9px}
 .task-workspace-project-dropdown-option small{
   display:block;margin-top:2px;overflow:hidden;color:var(--muted);font-size:7.5px;text-overflow:ellipsis;white-space:nowrap
