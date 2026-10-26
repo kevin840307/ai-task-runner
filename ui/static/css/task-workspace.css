@@ -280,6 +280,11 @@ body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
   box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 12%,transparent)
 }
 .task-workspace-workspace-option.worktree-option.selected .task-workspace-workspace-status{color:var(--warn)}
+html[data-appearance] .task-workspace-workspace-option.worktree-option.selected{
+  background:color-mix(in srgb,var(--warn) 10%,var(--panel));
+  border-color:var(--warn);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 14%,transparent)
+}
 .task-workspace-workspace-preview{
   display:block;margin-top:6px;padding:6px 8px;border-radius:8px;background:var(--accent-softer);
   color:var(--muted);font-size:7.5px;line-height:1.4
