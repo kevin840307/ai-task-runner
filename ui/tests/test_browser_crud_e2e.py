@@ -6257,8 +6257,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # The prototype's global Escape handlers are order-sensitive inside the
             # full fixture, so Escape is covered separately by production behavior
             # tests instead of being used as parity-test cleanup here.
-            feature_page.locator("#newTaskModal .modal-head h2").click()
-            production_page.locator(".task-workspace-head h2").click()
+            feature_page.locator("#newTaskTitle").click()
+            production_page.locator(".task-workspace-title-field input").click()
             feature_page.wait_for_function("document.querySelector('#projectDropdown')?.hidden")
             production_page.wait_for_function(
                 "document.querySelector('.task-workspace-project-dropdown')?.hidden"
