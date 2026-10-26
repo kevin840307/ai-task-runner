@@ -83,6 +83,8 @@ def test_task_click_routing_reorder_and_popover_bounds_match_feature_contract() 
     assert 'r.ondblclick=()=>openPlanDialog(r.dataset.taskrow)' in FEATURE_WORKSPACE_JS
     assert "card.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
     assert "r.oncontextmenu=e=>" in FEATURE_WORKSPACE_JS
+    assert "e.preventDefault();e.stopPropagation();hideCreateTypeMenu();" in FEATURE_WORKSPACE_JS
+    assert "closeCreateMenu?.();" in PRODUCTION_TASKS_BOARD_JS
     assert PRODUCTION_TASKS_BOARD_JS.count('button.addEventListener("contextmenu"') == 2
     for label in ("Open list", "Rename", "Info", "Delete"):
         assert label in PRODUCTION_TASKS_BOARD_JS
