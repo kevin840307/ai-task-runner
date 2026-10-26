@@ -485,6 +485,11 @@ TASK_EDITOR = PanelSpec(
             ".task-workspace-workspace-preview.worktree-active",
             ("background", "border-color", "color"),
         ),
+        Pair(
+            "html[data-appearance] #taskOverlay .workspace-option.worktree-option.selected",
+            "html[data-appearance] .task-workspace-workspace-option.worktree-option.selected",
+            ("background", "border-color", "box-shadow"),
+        ),
         Pair(".overlay", ".task-workspace-overlay", ("position", "inset", "overflow", "background", "backdrop-filter")),
         Pair(
             ".drawer",
