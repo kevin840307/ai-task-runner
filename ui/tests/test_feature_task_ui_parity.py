@@ -16,6 +16,7 @@ PRODUCTION_CSS = (ROOT / "ui" / "static" / "css" / "task-workspace.css").read_te
 PRODUCTION_THEME = (ROOT / "ui" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
 PRODUCTION_JS = (ROOT / "ui" / "static" / "js" / "task-workspace.js").read_text(encoding="utf-8")
 PRODUCTION_TASKS_BOARD_JS = (ROOT / "ui" / "static" / "js" / "tasks-board.js").read_text(encoding="utf-8")
+PRODUCTION_PROJECT_CHAT_JS = (ROOT / "ui" / "static" / "js" / "project-chat.js").read_text(encoding="utf-8")
 PRODUCTION_TOKENS = (ROOT / "ui" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
 PRODUCTION_BOOTSTRAP = (ROOT / "ui" / "static" / "js" / "ui-bootstrap.js").read_text(encoding="utf-8")
 PRODUCTION_APP = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
@@ -46,11 +47,28 @@ def _same(
 
 def test_task_panels_have_no_prototype_geometry_or_motion_drift() -> None:
     drift = []
-    for panel in ("task-editor", "task-list", "board"):
+    for panel in ("task-editor", "task-list", "board", "chat-settings"):
         drift.extend(compare_panel(panel, root=ROOT))
     assert drift == [], "\n".join(drift)
 
 
+def test_project_chat_settings_structure_and_dismissal_match_feature_contract() -> None:
+    assert PROTOTYPE_HTML.count('class="composer-settings-row"') == 4
+    assert 'id="projectChatAskCapability"' not in PRODUCTION_HTML
+    assert 'id="projectChatAskDescription"' not in PRODUCTION_HTML
+    assert (
+        '<span data-i18n="chat.settings_shared">PROJECT</span>'
+        '<strong data-i18n="chat.settings_title">Run settings</strong>'
+    ) in PRODUCTION_HTML
+
+    toggle = PRODUCTION_PROJECT_CHAT_JS[
+        PRODUCTION_PROJECT_CHAT_JS.index("function toggleSettingsPopover"):
+        PRODUCTION_PROJECT_CHAT_JS.index("function queuePreferenceAction")
+    ]
+    assert "panelHideSuggestions();" in toggle
+    assert 'window.addEventListener("resize", closeSettingsPopover);' in PRODUCTION_PROJECT_CHAT_JS
+    assert 'window.addEventListener("scroll", closeSettingsPopover, true);' in PRODUCTION_PROJECT_CHAT_JS
+    assert 'event.key === "Escape"' in PRODUCTION_PROJECT_CHAT_JS
 
 
 def test_task_list_selection_never_coerces_null_to_first_row() -> None:

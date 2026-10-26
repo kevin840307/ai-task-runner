@@ -293,6 +293,7 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     if (!panel || !button || !project) return;
     const opening = panel.hidden;
     if (!opening) return closeSettingsPopover();
+    panelHideSuggestions();
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
     renderSettingsControls();
@@ -1696,7 +1697,12 @@ export function createProjectChatController({ api, inputDialog, confirmDialog, s
     const button = byId("projectChatSettingsButton");
     if (panel && !panel.hidden && !panel.contains(event.target) && !button?.contains(event.target)) closeSettingsPopover();
   });
-  window.addEventListener("resize", positionSettingsPopover);
+  document.addEventListener("keydown", (event) => {
+    const panel = byId("projectChatSettingsPopover");
+    if (event.key === "Escape" && panel && !panel.hidden) closeSettingsPopover();
+  });
+  window.addEventListener("resize", closeSettingsPopover);
+  window.addEventListener("scroll", closeSettingsPopover, true);
   byId("projectChatSendButton")?.addEventListener("click", () => void sendMessage());
   byId("projectChatStopButton")?.addEventListener("click", () => void cancelTurn());
   byId("projectChatInput")?.addEventListener("input", (event) => {

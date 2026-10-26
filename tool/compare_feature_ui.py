@@ -862,7 +862,28 @@ BOARD = PanelSpec(
     ),
 )
 
-PANELS = {"task-editor": TASK_EDITOR, "task-list": TASK_LIST, "board": BOARD}
+CHAT_SETTINGS = PanelSpec(
+    "ui/static/css/project-chat.css",
+    (
+        Pair(".composer-settings-popover", ".project-chat-settings-popover", ("position", "z-index", "width", "overflow", "border", "border-radius", "background", "color", "box-shadow")),
+        Pair(".composer-settings-head", ".project-chat-settings-head", ("display", "align-items", "justify-content", "gap", "padding", "border-bottom", "background")),
+        Pair(".composer-settings-head>div", ".project-chat-settings-head>div", ("display", "gap")),
+        Pair(".composer-settings-head span", ".project-chat-settings-head span", ("color", "font-size", "font-weight", "letter-spacing")),
+        Pair(".composer-settings-head strong", ".project-chat-settings-head strong", ("font-size",)),
+        Pair(".composer-settings-head button", ".project-chat-settings-head button", ("width", "height", "border", "border-radius", "background", "color", "font-size")),
+        Pair(".composer-settings-head button:hover", ".project-chat-settings-head button:hover", ("background", "color")),
+        Pair(".composer-settings-body", ".project-chat-settings-body", ("display", "gap", "padding")),
+        Pair(".composer-settings-row", ".project-chat-settings-body label", ("display", "grid-template-columns", "gap", "align-items", "padding", "border-radius", "background", "color")),
+        Pair(".composer-settings-row:hover", ".project-chat-settings-body label:hover", ("background",)),
+        Pair(".composer-settings-row>span", ".project-chat-settings-body label > span", ("min-width",)),
+        Pair(".composer-settings-row strong", ".project-chat-settings-body label strong", ("display", "font-size")),
+        Pair(".composer-settings-row small", ".project-chat-settings-body label small", ("display", "margin-top", "color", "font-size", "line-height")),
+        Pair(".composer-settings-row select", ".project-chat-settings-body select", ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size", "font-weight", "outline")),
+        Pair(".composer-settings-row select:focus", ".project-chat-settings-body select:focus", ("border-color", "box-shadow")),
+    ),
+)
+
+PANELS = {"task-editor": TASK_EDITOR, "task-list": TASK_LIST, "board": BOARD, "chat-settings": CHAT_SETTINGS}
 
 
 def compare_panel(panel: str, *, root: Path = ROOT) -> list[str]:

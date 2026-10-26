@@ -3498,13 +3498,16 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             assert abs(chat_geometry["bodyWidth"] - chat_geometry["conversationWidth"]) <= 1
             assert abs(chat_geometry["bodyHeight"] - chat_geometry["conversationHeight"]) <= 1
+            page.fill("#projectChatInput", "/bt")
+            page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
             page.click("#projectChatSettingsButton")
             page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             assert page.locator("#projectChatSettingsPopover").is_visible()
+            assert page.locator("#projectChatSuggest").is_hidden()
             assert page.locator("#projectChatModeSelect").count() == 0
+            assert page.locator("#projectChatAskCapability").count() == 0
             page.select_option("#projectChatAgentSelect", "opencode")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
-            page.wait_for_function("document.querySelector('#projectChatAskCapability')?.textContent === 'Native'")
             page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
             page.wait_for_function("document.querySelector('#projectChatReasoningSelect')?.querySelector('option[value=\"deep\"]') !== null")
             page.select_option("#projectChatReasoningSelect", "deep")
@@ -3518,16 +3521,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             # Agent switch clears the previous Agent's model ID and loads only legal native options.
             page.select_option("#projectChatAgentSelect", "qwen")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'qwen'")
-            page.wait_for_function("document.querySelector('#projectChatAskCapability')?.textContent === 'Unavailable'")
             page.wait_for_function("document.querySelector('#projectChatModelSelect')?.value === ''")
             assert page.locator("#projectChatModelSelect option[value='openai/gpt-5.2']").count() == 0
             assert page.locator("#projectChatModelSelect option[value='qwen/model-a']").count() == 1
+            page.click("#projectChatInput")
+            assert page.locator("#projectChatSettingsPopover").is_hidden()
+            page.fill("#projectChatInput", "")
             page.fill("#projectChatInput", "/bt")
             page.wait_for_function("!document.querySelector('#projectChatSuggest')?.hidden")
             assert page.locator("#projectChatSuggestList .project-chat-suggest-token").get_by_text("/btw").is_visible()
             page.keyboard.press("Escape")
 
             # Restore OpenCode for the remaining Project/session-scoping flow.
+            page.click("#projectChatSettingsButton")
+            page.wait_for_function("!document.querySelector('#projectChatSettingsPopover')?.hidden")
             page.select_option("#projectChatAgentSelect", "opencode")
             page.wait_for_function("document.querySelector('#projectChatAgentSelect')?.value === 'opencode'")
             page.select_option("#projectChatModelSelect", "openai/gpt-5.2")
@@ -3536,6 +3543,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.select_option("#projectChatModeQuick", "read")
             page.wait_for_function("document.querySelector('#projectChatModeQuick')?.value === 'read'")
             assert page.locator("#projectChatSettingsPopover").is_visible()
+            page.keyboard.press("Escape")
+            assert page.locator("#projectChatSettingsPopover").is_hidden()
+            page.click("#projectChatSettingsButton")
+            assert page.locator("#projectChatSettingsPopover").is_visible()
+            page.evaluate("window.dispatchEvent(new Event('scroll'))")
+            assert page.locator("#projectChatSettingsPopover").is_hidden()
+            page.click("#projectChatSettingsButton")
             page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatSettingsPopover").is_hidden()
 
@@ -4560,8 +4574,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "輸入訊息給此專案…"
             assert page.locator(".project-chat-mode-quick > span").inner_text() == "模式"
             page.click("#projectChatSettingsButton")
-            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["工作流程", "Agent", "Model", "推理", "Ask"]
-            assert page.locator("#projectChatAskCapability").inner_text() in {"原生支援", "不支援"}
+            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["Workflow", "Agent", "Model", "推理程度"]
+            assert page.locator("#projectChatAskCapability").count() == 0
             page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatNewTaskButton").inner_text() == "新增任務"
             assert page.locator("#projectChatSendButton").inner_text() == "加入佇列"
@@ -4582,8 +4596,8 @@ def test_global_settings_and_project_chat_composer_browser_contract() -> None:
             assert page.locator("#projectChatInput").get_attribute("placeholder") == "Message this Project…"
             assert page.locator(".project-chat-mode-quick > span").inner_text() == "MODE"
             page.click("#projectChatSettingsButton")
-            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["Workflow", "Agent", "Model", "Reasoning", "Ask"]
-            assert page.locator("#projectChatAskCapability").inner_text() in {"Native", "Unavailable"}
+            assert page.locator("#projectChatSettingsPopover .project-chat-settings-body > label strong").all_inner_texts() == ["Workflow", "Agent", "Model", "Reasoning"]
+            assert page.locator("#projectChatAskCapability").count() == 0
             page.click("#projectChatSettingsClose")
             assert page.locator("#projectChatNewTaskButton").inner_text() == "New Task"
             assert page.locator("#projectChatSendButton").inner_text() == "Queue"

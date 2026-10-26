@@ -5830,6 +5830,35 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         raise RuntimeError("Technical-error merge mutated target HEAD")
     if (repo_technical / "task-side.txt").exists():
         raise RuntimeError("Technical-error merge leaked Task content into target Project")
+
+    technical_retry_calls = 0
+
+    def validate_technical_retry(project: Path) -> str:
+        nonlocal technical_retry_calls
+        technical_retry_calls += 1
+        healthy = (
+            (project / "task-side.txt").read_text(encoding="utf-8") == "task-side\n"
+            and (project / "target-side.txt").read_text(encoding="utf-8") == "target-side\n"
+        )
+        return "PASS" if healthy else "SOURCE_FAIL"
+
+    technical_retry_result = MergeManager().merge(
+        prepared_technical,
+        snapshot_technical,
+        validate=validate_technical_retry,
+    )
+    if (
+        technical_retry_result.status != "merged"
+        or technical_retry_result.verdict != "PASS"
+        or technical_retry_calls != 1
+    ):
+        raise RuntimeError(
+            "Technical-error retry did not close successfully: "
+            f"status={technical_retry_result.status} verdict={technical_retry_result.verdict} "
+            f"calls={technical_retry_calls}"
+        )
+    if (repo_technical / "task-side.txt").read_text(encoding="utf-8") != "task-side\n":
+        raise RuntimeError("Technical-error retry did not publish Task content")
     manager_technical.cleanup(prepared_technical)
 
     # 5) Rewritten target history must wait instead of merging unrelated histories.
@@ -5889,6 +5918,16 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         raise RuntimeError("Dirty-target wait mutated uncommitted user work")
     if (repo_dirty / "dirty-task.txt").exists():
         raise RuntimeError("Dirty-target wait leaked Task content into target Project")
+
+    (repo_dirty / "user-uncommitted.txt").unlink()
+    dirty_retry_result = MergeManager().merge(prepared_dirty, snapshot_dirty)
+    if dirty_retry_result.status != "merged" or dirty_retry_result.real_merge_failure:
+        raise RuntimeError(
+            "Dirty-target retry did not deliver after target became clean: "
+            f"status={dirty_retry_result.status} real_failure={dirty_retry_result.real_merge_failure}"
+        )
+    if (repo_dirty / "dirty-task.txt").read_text(encoding="utf-8") != "task-side\n":
+        raise RuntimeError("Dirty-target retry did not publish Task content")
     manager_dirty.cleanup(prepared_dirty)
 
     # 7) Captured target checked out in an unmanaged user worktree must wait.
@@ -6257,10 +6296,13 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "source_fail_real_failure": source_fail_result.real_merge_failure,
         "technical_error": technical_result.status,
         "technical_error_real_failure": technical_result.real_merge_failure,
+        "technical_error_retry": technical_retry_result.status,
+        "technical_error_retry_calls": technical_retry_calls,
         "target_history": history_result.status,
         "target_history_real_failure": history_result.real_merge_failure,
         "dirty_target": dirty_result.status,
         "dirty_target_real_failure": dirty_result.real_merge_failure,
+        "dirty_target_retry": dirty_retry_result.status,
         "unmanaged_target": unmanaged_result.status,
         "unmanaged_target_real_failure": unmanaged_result.real_merge_failure,
         "missing_target_branch": branch_result.status,
@@ -6317,6 +6359,10 @@ def runner_workspace_delivery_probe(
         ("auto_busy_target_advance", "auto", True, "worktree", "advance", "busy-worktree", False),
         ("auto_busy_concurrent", "auto", True, "worktree", "none", "busy-worktree", True),
         ("auto_always_worktree_busy", "auto", True, "worktree", "none", "always-worktree", False),
+        ("worktree_conflict_recovery", "worktree", False, "worktree", "conflict", "busy-worktree", False),
+        ("auto_busy_conflict_recovery", "auto", True, "worktree", "conflict", "busy-worktree", False),
+        ("worktree_idempotent_external_delivery", "worktree", False, "worktree", "idempotent", "busy-worktree", False),
+        ("auto_busy_idempotent_external_delivery", "auto", True, "worktree", "idempotent", "busy-worktree", False),
     )
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real
@@ -6839,13 +6885,13 @@ def runner_workspace_delivery_probe(
     # Cross the real WorkspaceManager blocked path too. A busy Main request
     # with concurrent Main execution disabled must fail before any Runner,
     # branch, or owned worktree side effect is created.
-    blocked_repo = _create_delivery_probe_repo(root, "rw-23")
+    blocked_repo = _create_delivery_probe_repo(root, "rw-27")
     blocked_head = _delivery_git(blocked_repo, "rev-parse", "HEAD").stdout.strip()
-    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-23")
+    blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-27")
     try:
         blocked_manager.prepare(
             blocked_repo,
-            task_id="lr-23",
+            task_id="lr-27",
             run_number=1,
             requested_mode="main",
             execution_settings={
@@ -6863,7 +6909,7 @@ def runner_workspace_delivery_probe(
         raise RuntimeError("Runner/workspace busy Main guard mutated target HEAD")
     if _delivery_git(blocked_repo, "status", "--porcelain").stdout.strip():
         raise RuntimeError("Runner/workspace busy Main guard dirtied target Project")
-    if (root / "rw-wt-23").exists():
+    if (root / "rw-wt-27").exists():
         raise RuntimeError("Runner/workspace busy Main guard created an owned worktree")
     if "busy" not in detail.lower():
         raise RuntimeError(f"Runner/workspace busy Main guard lost diagnostics: {detail!r}")
@@ -6881,15 +6927,15 @@ def runner_workspace_delivery_probe(
     # Cross Auto + always-main through the same production busy-Main guard.
     # Auto must resolve to Main first, then refuse to launch because concurrent
     # Main execution is disabled. No Runner/worktree/target side effect is allowed.
-    auto_blocked_repo = _create_delivery_probe_repo(root, "rw-24")
+    auto_blocked_repo = _create_delivery_probe_repo(root, "rw-28")
     auto_blocked_head = _delivery_git(
         auto_blocked_repo, "rev-parse", "HEAD"
     ).stdout.strip()
-    auto_blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-24")
+    auto_blocked_manager = WorkspaceManager(worktree_root=root / "rw-wt-28")
     try:
         auto_blocked_manager.prepare(
             auto_blocked_repo,
-            task_id="lr-24",
+            task_id="lr-28",
             run_number=1,
             requested_mode="auto",
             execution_settings={
@@ -6915,7 +6961,7 @@ def runner_workspace_delivery_probe(
         raise RuntimeError(
             "Runner/workspace Auto always-main busy guard dirtied target Project"
         )
-    if (root / "rw-wt-24").exists():
+    if (root / "rw-wt-28").exists():
         raise RuntimeError(
             "Runner/workspace Auto always-main busy guard created an owned worktree"
         )
