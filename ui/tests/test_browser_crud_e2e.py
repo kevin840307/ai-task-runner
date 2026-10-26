@@ -6253,8 +6253,16 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 ".task-workspace-project-dropdown .task-workspace-project-dropdown-option:first-child",
                 ["backgroundColor", "borderRadius", "color"],
             )
-            feature_page.keyboard.press("Escape")
-            production_page.keyboard.press("Escape")
+            # Close through the same outside-click behavior on both surfaces.
+            # The prototype's global Escape handlers are order-sensitive inside the
+            # full fixture, so Escape is covered separately by production behavior
+            # tests instead of being used as parity-test cleanup here.
+            feature_page.locator("#newTaskModal .modal-head h2").click()
+            production_page.locator(".task-workspace-head h2").click()
+            feature_page.wait_for_function("document.querySelector('#projectDropdown')?.hidden")
+            production_page.wait_for_function(
+                "document.querySelector('.task-workspace-project-dropdown')?.hidden"
+            )
             assert feature_page.locator("#projectDropdown").is_hidden()
             assert production_page.locator(".task-workspace-project-dropdown").is_hidden()
 
