@@ -6432,6 +6432,20 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             production_page.wait_for_function("document.querySelector('[data-workspace-option=\"worktree\"] input')?.checked === true")
             assert "selected" in (feature_page.locator("#newTaskWorkspace .workspace-option.worktree-option").get_attribute("class") or "")
             assert "selected" in (production_page.locator("[data-workspace-option='worktree']").get_attribute("class") or "")
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#newTaskWorkspace .workspace-option.worktree-option.selected",
+                production_page,
+                "[data-workspace-option='worktree'].selected",
+                ["borderTopColor", "backgroundColor", "boxShadow"],
+            )
+            _assert_feature_computed_style_parity(
+                feature_page,
+                "#newTaskWorkspace .workspace-preview.worktree-active",
+                production_page,
+                ".task-workspace-workspace-preview.worktree-active",
+                ["borderTopColor", "backgroundColor", "color", "boxShadow"],
+            )
             assert feature_page.evaluate("document.activeElement?.id !== 'newTaskTitle'")
             assert production_page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
 
