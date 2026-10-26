@@ -567,7 +567,7 @@
   gap:12px;padding:10px 11px;
   background:linear-gradient(180deg,var(--panel),var(--panel-2))
 }
-.project-chat-settings-head>div{gap:2px}
+.project-chat-settings-head > div{gap:2px}
 .project-chat-settings-head span{color:var(--muted);font-size:6.8px;font-weight:950;letter-spacing:.08em}
 .project-chat-settings-head strong{font-size:10px}
 .project-chat-settings-head button{

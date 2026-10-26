@@ -867,7 +867,7 @@ CHAT_SETTINGS = PanelSpec(
     (
         Pair(".composer-settings-popover", ".project-chat-settings-popover", ("position", "z-index", "width", "overflow", "border", "border-radius", "background", "color", "box-shadow")),
         Pair(".composer-settings-head", ".project-chat-settings-head", ("display", "align-items", "justify-content", "gap", "padding", "border-bottom", "background")),
-        Pair(".composer-settings-head>div", ".project-chat-settings-head>div", ("display", "gap")),
+        Pair(".composer-settings-head>div", ".project-chat-settings-head > div", ("display", "gap")),
         Pair(".composer-settings-head span", ".project-chat-settings-head span", ("color", "font-size", "font-weight", "letter-spacing")),
         Pair(".composer-settings-head strong", ".project-chat-settings-head strong", ("font-size",)),
         Pair(".composer-settings-head button", ".project-chat-settings-head button", ("width", "height", "border", "border-radius", "background", "color", "font-size")),
