@@ -1762,6 +1762,8 @@ def test_tasks_board_project_filter_is_local_and_parent_matches_child_project() 
             assert " · main" in second_option.locator("small").inner_text()
             second_option.click()
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'No Project'")
+            assert page.locator("#tasksProjectFilterMenu").is_visible()
+            assert page.locator("#tasksProjectFilterButton").get_attribute("aria-expanded") == "true"
             assert page.locator(".tasks-project-option").filter(has_text="Second Project").get_attribute("aria-pressed") == "false"
             page.locator(".tasks-project-option").filter(has_text="Second Project").click()
             page.wait_for_function("document.querySelector('#tasksProjectFilterSummary')?.textContent === 'Second Project'")
