@@ -6,7 +6,7 @@ function pathKey(value) {
   return (/^[A-Za-z]:\//.test(text) || text.startsWith("//")) ? text.toLowerCase() : text;
 }
 
-export function createTasksBoardController({ api, openTask, openCreateMenu, getProjects, getCurrentProject, confirmDialog, showToast, showError }) {
+export function createTasksBoardController({ api, openTask, openCreateMenu, closeCreateMenu, getProjects, getCurrentProject, confirmDialog, showToast, showError }) {
   let selected = new Set();
   let initialized = false;
   let tasks = [];
@@ -314,6 +314,7 @@ export function createTasksBoardController({ api, openTask, openCreateMenu, getP
   function openTaskContextMenu(event, task, returnFocus) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    closeCreateMenu?.();
     const menu = ensureTaskContextMenu();
     taskContextTask = task;
     taskContextReturnFocus = returnFocus || null;
