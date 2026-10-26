@@ -865,6 +865,9 @@ BOARD = PanelSpec(
 CHAT_SETTINGS = PanelSpec(
     "ui/static/css/project-chat.css",
     (
+        Pair(".composer-settings-trigger", ".project-chat-settings-button", ("display", "place-items", "width", "height", "padding", "border", "border-radius", "background", "color", "font-size", "line-height")),
+        Pair(".composer-settings-trigger:hover", ".project-chat-settings-button:hover", ("border-color", "background", "color", "box-shadow")),
+        Pair(".composer-settings-trigger[aria-expanded=\"true\"]", ".project-chat-settings-button[aria-expanded=\"true\"]", ("border-color", "background", "color", "box-shadow")),
         Pair(".composer-settings-popover", ".project-chat-settings-popover", ("position", "z-index", "width", "overflow", "border", "border-radius", "background", "color", "box-shadow")),
         Pair(".composer-settings-head", ".project-chat-settings-head", ("display", "align-items", "justify-content", "gap", "padding", "border-bottom", "background")),
         Pair(".composer-settings-head>div", ".project-chat-settings-head > div", ("display", "gap")),
@@ -880,6 +883,13 @@ CHAT_SETTINGS = PanelSpec(
         Pair(".composer-settings-row small", ".project-chat-settings-body label small", ("display", "margin-top", "color", "font-size", "line-height")),
         Pair(".composer-settings-row select", ".project-chat-settings-body select", ("width", "height", "padding", "border", "border-radius", "background", "color", "font-size", "font-weight", "outline")),
         Pair(".composer-settings-row select:focus", ".project-chat-settings-body select:focus", ("border-color", "box-shadow")),
+        Pair(
+            ".composer-settings-row",
+            ".project-chat-settings-body label",
+            ("grid-template-columns",),
+            feature_media="max-width:980px",
+            production_media="max-width:980px",
+        ),
     ),
 )
 
