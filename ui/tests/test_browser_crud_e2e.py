@@ -2758,6 +2758,21 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert "Only unused New tasks can be moved." in move_overlay.inner_text()
             move_dialog_box = page.locator(".task-workspace-move-existing").bounding_box()
             assert move_dialog_box and abs(move_dialog_box["width"] - 620) <= 1
+
+            # All three close operations are user-visible controls and must
+            # converge on the same chooser cleanup + focus restoration.
+            page.locator(".task-workspace-move-close").click()
+            assert page.locator(".task-workspace-move-overlay").count() == 0
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceHeaderMoveExisting'")
+
+            page.click("#taskWorkspaceHeaderMoveExisting")
+            page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
+            page.get_by_role("button", name="Cancel", exact=True).click()
+            assert page.locator(".task-workspace-move-overlay").count() == 0
+            page.wait_for_function("document.activeElement?.id === 'taskWorkspaceHeaderMoveExisting'")
+
+            page.click("#taskWorkspaceHeaderMoveExisting")
+            page.wait_for_function("document.querySelectorAll('.task-workspace-move-option').length === 1")
             page.keyboard.press("Escape")
             assert page.locator(".task-workspace-move-overlay").count() == 0
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK LIST"
