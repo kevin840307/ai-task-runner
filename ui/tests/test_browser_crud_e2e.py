@@ -7051,6 +7051,18 @@ def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
 
             page.click("#backendDropdownButton")
             assert page.locator("#backendDropdownMenu").is_visible()
+            page.locator("#backendDropdownMenu .backend-dropdown-option").filter(
+                has_text="opencode"
+            ).click()
+            page.wait_for_function(
+                "() => document.querySelector('#backend')?.value === 'opencode' "
+                "&& document.querySelector('#backendSelectedLabel')?.textContent === 'opencode'"
+            )
+            assert page.locator("#backendDropdownMenu").is_hidden()
+
+            # The picker button still owns explicit open/close toggling.
+            page.click("#backendDropdownButton")
+            assert page.locator("#backendDropdownMenu").is_visible()
             page.click("#backendDropdownButton")
             assert page.locator("#backendDropdownMenu").is_hidden()
 
