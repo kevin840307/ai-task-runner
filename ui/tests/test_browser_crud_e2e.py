@@ -6931,6 +6931,11 @@ def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
             "flow: [planning, validate_file, validate_ai]\n",
             encoding="utf-8",
         )
+        validator_path = root / "selected_validator.py"
+        ai_prompt_path = root / "selected_ai_validator.md"
+        validator_path.write_text("print('validator')\n", encoding="utf-8")
+        ai_prompt_path.write_text("Validate {{ goal }}\n", encoding="utf-8")
+
         for title, request_id in (
             ("Coverage Alpha", "coverage-alpha-create"),
             ("Coverage Beta", "coverage-beta-create"),
@@ -6945,16 +6950,12 @@ def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
                         "workflow": str(workflow),
                         "project": str(root),
                         "workspace": "auto",
+                        "validator": str(validator_path),
                     }],
                 },
                 request_id=request_id,
                 project_id=project_id,
             )
-
-        validator_path = root / "selected_validator.py"
-        ai_prompt_path = root / "selected_ai_validator.md"
-        validator_path.write_text("print('validator')\n", encoding="utf-8")
-        ai_prompt_path.write_text("Validate {{ goal }}\n", encoding="utf-8")
         base_bridge = _bridge_for(state)
 
         def bridge(method: str, url: str, body_json: str):
@@ -7266,17 +7267,14 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             page.fill("#importAssetName", "explode.md")
             page.fill("#importAssetContent", "Bad import content")
             page.click("#importAssetConfirm")
-            page.wait_for_function("document.querySelector('#errorDetailsButton')?.hidden === false")
-            page.click("#errorDetailsButton")
-            assert page.locator("#errorDetailsBackdrop").is_visible()
-            assert "Detailed diagnostic" in page.locator("#errorDetailsContent").inner_text()
-            page.click("#errorDetailsCopy")
-            page.wait_for_function("() => window.__copiedText?.includes('Detailed diagnostic')")
-            page.click("#errorDetailsOk")
-            assert page.locator("#errorDetailsBackdrop").is_hidden()
-            page.click("#errorDetailsButton")
-            page.click("#errorDetailsClose")
-            assert page.locator("#errorDetailsBackdrop").is_hidden()
+            page.wait_for_function(
+                "() => document.querySelector('#importAssetHint')?.textContent.includes('Detailed diagnostic')"
+            )
+            assert "Import exploded on line one" in page.locator("#importAssetHint").inner_text()
+            assert "Detailed diagnostic on line two" in page.locator("#importAssetHint").inner_text()
+            assert page.locator("#importAssetHint").evaluate(
+                "(node) => node.classList.contains('error')"
+            )
             page.click("#importAssetCancel")
             page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard import')")
             page.click("[data-dialog-ok]")
@@ -7652,9 +7650,13 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.click("#generateWorkflowConfirm")
             page.wait_for_function("!document.querySelector('#generateWorkflowReady')?.hidden")
 
+            page.click("#generateWorkflowEditYaml")
+            assert page.locator("#generateDraftYamlPanel").is_visible()
+            assert page.locator("#generateWorkflowPreview").is_focused()
+            page.click("#generateDraftVisualTab")
+            assert page.locator("#generateDraftVisualPanel").is_visible()
             page.click("#generateDraftYamlTab")
             assert page.locator("#generateDraftYamlPanel").is_visible()
-            page.click("#generateWorkflowEditYaml")
             assert page.locator("#generateWorkflowPreview").is_focused()
             page.fill(
                 "#generateWorkflowPreview",
