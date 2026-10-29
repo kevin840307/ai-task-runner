@@ -335,10 +335,17 @@ flow:
                 assert warning_problem.count() == 1
                 assert page.locator(".workflow-problem.error").count() == 0
                 warning_problem.click()
-                page.wait_for_function(
-                    "() => document.querySelector('.react-flow__node[data-id=\"ai_stage\"]')"
-                    "?.classList.contains('selected') === true"
-                )
+
+                # Problem navigation owns the editor's semantic selected Stage,
+                # not React Flow's internal node.selected flag. Exercise the
+                # user-facing keyboard contract that consumes that selection.
+                page.keyboard.press("Enter")
+                page.locator(".stage-editor-backdrop").wait_for(state="attached")
+                assert page.locator(".stage-editor-backdrop").get_by_text(
+                    "ai_stage", exact=True
+                ).count() >= 1
+                page.locator(".modal-close-button").click()
+
                 page.get_by_role("button", name="Dismiss Workflow problems").click()
                 page.locator(".workflow-problems").wait_for(state="detached")
                 page.wait_for_function("document.querySelector('.studio-header .saved-badge') !== null")
