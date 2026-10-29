@@ -2165,6 +2165,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("#taskWorkspaceProject").is_editable() is True
             assert page.locator(".task-workspace-project-toggle").is_enabled()
             page.locator(".task-workspace-project-toggle").click()
+            page.locator(".task-workspace-project-dropdown").wait_for(state="visible")
             assert page.locator(".task-workspace-project-dropdown").is_visible()
             assert page.locator(".task-workspace-project-dropdown-option").count() >= 1
             first_project_option = page.locator(".task-workspace-project-dropdown-option").first
@@ -2176,12 +2177,14 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator(".task-workspace-project-toggle").get_attribute("aria-expanded") == "false"
 
             page.locator(".task-workspace-project-toggle").click()
+            page.locator(".task-workspace-project-dropdown").wait_for(state="visible")
             assert page.locator(".task-workspace-project-dropdown").is_visible()
             assert page.locator(".task-workspace-project-dropdown-option.selected").count() == 1
             page.click("#taskWorkspaceItemTitle")
             assert page.locator(".task-workspace-project-dropdown").is_hidden()
 
             page.locator(".task-workspace-project-toggle").click()
+            page.locator(".task-workspace-project-dropdown").wait_for(state="visible")
             assert page.locator(".task-workspace-project-dropdown").is_visible()
             page.keyboard.press("Escape")
             assert page.locator(".task-workspace-project-dropdown").is_hidden()
@@ -4919,7 +4922,13 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
             assert_chat_preferences(old_project_preferences)
 
-            # Workflow is a visible Project Chat preference, not read-only display.
+            # Workflow is a visible Project Chat preference inside Run settings.
+            page.click("#projectChatSettingsButton")
+            page.locator("#projectChatSettingsPopover").wait_for(state="visible")
+            page.wait_for_function(
+                "(value) => Array.from(document.querySelectorAll('#projectChatWorkflowSelect option')).some((node) => node.value === value)",
+                arg=str(project_only_workflow),
+            )
             page.select_option("#projectChatWorkflowSelect", str(project_only_workflow))
             page.wait_for_function(
                 "(value) => document.querySelector('#projectChatWorkflowSelect')?.value === value",
@@ -4932,6 +4941,8 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
                 arg=workflow,
             )
             assert state.project_preferences.get(root)["workflow"] == workflow
+            page.click("#projectChatSettingsClose")
+            page.locator("#projectChatSettingsPopover").wait_for(state="hidden")
 
             page.locator("#projectList .project-root").filter(has_text=added_project.name).click()
             page.wait_for_function(
@@ -7383,7 +7394,7 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             created_item = next(
                 item
                 for item in state.studio_files(root)["workflows"]
-                if item["name"] == "coverage_created_workflow.workflow.yaml"
+                if "coverage_created_workflow" in item["name"]
             )
             navigation = parse_qs(urlparse(page.url).query)
             assert navigation["id"] == [created_item["id"]]
