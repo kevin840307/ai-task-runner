@@ -6286,6 +6286,16 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
     if not merge_head:
         raise RuntimeError("Active-operation guard aborted a foreign merge")
     _delivery_git(repo_active, "merge", "--abort")
+    active_retry = MergeManager().merge(prepared_active, snapshot_active)
+    if active_retry.status != "merged" or active_retry.real_merge_failure:
+        raise RuntimeError(
+            "Active-operation retry did not deliver the retained snapshot: "
+            f"status={active_retry.status} real_failure={active_retry.real_merge_failure}"
+        )
+    if (repo_active / "active-task.txt").read_text(encoding="utf-8") != "task-side\n":
+        raise RuntimeError("Active-operation retry did not publish Task content")
+    if (repo_active / "external-operation.txt").exists():
+        raise RuntimeError("Active-operation retry published foreign merge content")
     manager_active.cleanup(prepared_active)
 
     return {
@@ -6327,6 +6337,9 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "active_operation": active_result.status,
         "active_operation_real_failure": active_result.real_merge_failure,
         "active_operation_detail": active_result.detail,
+        "active_operation_retry": active_retry.status,
+        "active_operation_retry_real_failure": active_retry.real_merge_failure,
+        "active_operation_retry_snapshot_sha": snapshot_active.task_snapshot_sha,
     }
 
 def runner_workspace_delivery_probe(
