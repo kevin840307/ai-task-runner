@@ -3014,6 +3014,89 @@ def test_delivery_preflights_are_ordered_before_real_qwen_resume_probe():
 
 
 
+@pytest.mark.parametrize(
+    ("requested_mode", "expected_mode"),
+    (("main", "main"), ("worktree", "worktree")),
+)
+def test_real_runner_fake_qwen_crosses_workspace_snapshot_and_merge(
+    tmp_path: Path,
+    requested_mode: str,
+    expected_mode: str,
+):
+    """Real Runner CLI + deterministic fake Qwen + real Git delivery boundary."""
+    from workspace import MergeManager, WorkspaceManager
+
+    config = replace(
+        settings(tmp_path),
+        command=_fake_qwen_command(tmp_path),
+        run_timeout=45,
+        agent_timeout=15,
+        planning_timeout=15,
+    )
+    repo = live._create_delivery_probe_repo(
+        tmp_path,
+        f"real-{requested_mode}",
+    )
+    (repo / "prompt.md").write_text(
+        live.case_prompt(live.PROMPT, f"real-{requested_mode}-delivery"),
+        encoding="utf-8",
+    )
+    (repo / "validation.py").write_text(live.VALIDATOR, encoding="utf-8")
+    (repo / ".ai-task-runner.yaml").write_text(live.POLICY, encoding="utf-8")
+    live._delivery_git(
+        repo,
+        "add",
+        "prompt.md",
+        "validation.py",
+        ".ai-task-runner.yaml",
+    )
+    live._delivery_git(repo, "commit", "-m", "add real Runner delivery fixture")
+
+    manager = WorkspaceManager(worktree_root=tmp_path / f"real-wt-{requested_mode}")
+    prepared = manager.prepare(
+        repo,
+        task_id=f"real-{requested_mode}",
+        run_number=1,
+        requested_mode=requested_mode,
+        execution_settings={
+            "auto_workspace_policy": "busy-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    try:
+        assert prepared.effective_mode == expected_mode
+        assert prepared.project_root.resolve() != repo.resolve()
+
+        code = live.run_command(
+            live.runner_command(config, prepared.project_root),
+            live.console_log(prepared.project_root, "console.jsonl"),
+            config.run_timeout,
+        )
+        live.assert_completed(prepared.project_root, code)
+        assert not (repo / "health.txt").exists()
+        assert (prepared.project_root / "health.txt").read_text(
+            encoding="utf-8"
+        ) == live.EXPECTED
+
+        snapshot = manager.snapshot_result(
+            prepared,
+            excluded_paths=(prepared.project_root / ".ai-task-runner",),
+        )
+        assert snapshot.no_changes is False
+        assert snapshot.task_snapshot_sha
+
+        merged = MergeManager().merge(prepared, snapshot)
+        assert merged.status == "merged"
+        assert merged.real_merge_failure is False
+        assert merged.merged_target_head_sha
+        assert (repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+        assert live.read_state(prepared.project_root)["completed"] is True
+    finally:
+        cleanup = manager.cleanup(prepared)
+        assert cleanup.status in {"cleaned", "already_cleaned"}
+
+
 def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_mock_agent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
