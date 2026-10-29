@@ -32,6 +32,7 @@ from runner.agent import (
     sandbox_supported,
     split_command,
 )
+import runner.agent.backend as backend_module
 from runner.agent.backend import BACKENDS
 from runner.agent.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.agent.qwen import QwenBackend, ensure_qwen_rules
@@ -57,6 +58,44 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     protected_names = {path.name for path in protected}
     assert {"ai_task_runner.py", "runner"} == protected_names
     assert next(path for path in protected if path.name == "runner").is_dir()
+
+
+
+def test_register_backend_public_extension_surface_is_validated_and_constructible(
+    tmp_path, monkeypatch
+):
+    class RegisteredBackend(BaseBackend):
+        name = "registered-test"
+        default_command = "registered-test"
+
+        def build_command(self, prompt, session_id):
+            return [self.base_command[0], prompt, session_id]
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    # Isolate the process-global registry so this public extension test cannot
+    # change backend_names() expectations in other tests.
+    backend_module._ensure_builtins()
+    monkeypatch.setattr(backend_module, "BACKENDS", dict(backend_module.BACKENDS))
+
+    backend_module.register_backend(RegisteredBackend.name, RegisteredBackend)
+
+    assert RegisteredBackend.name in backend_module.backend_names()
+    created = backend_module.create_backend(
+        RegisteredBackend.name,
+        sys.executable,
+        tmp_path,
+        [],
+    )
+    assert isinstance(created, RegisteredBackend)
+
+    with pytest.raises(ValueError, match="duplicate backend registration"):
+        backend_module.register_backend(RegisteredBackend.name, RegisteredBackend)
+    with pytest.raises(ValueError, match="non-empty string"):
+        backend_module.register_backend("", RegisteredBackend)
+    with pytest.raises(ValueError, match="must extend BaseBackend"):
+        backend_module.register_backend("not-a-backend", object)
 
 
 def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatch):
