@@ -104,6 +104,42 @@ def test_all_static_html_controls_have_test_traceability() -> None:
     )
 
 
+def test_all_static_html_controls_have_browser_behavioral_traceability() -> None:
+    """Every production form control must be owned by an executable browser test.
+
+    Static/parity references remain useful design contracts, but they are not
+    sufficient evidence for a clickable/interactive control. This gate keeps
+    every button/input/select/textarea tied to one of the Chromium suites.
+    """
+    html = HTML.read_text(encoding="utf-8")
+    browser_tests = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BROWSER,
+            DESIGNER,
+            ROOT / "ui" / "tests" / "test_uncovered_modal_actions_browser.py",
+        )
+    )
+    control_ids = re.findall(
+        r"""<(?:button|input|select|textarea)\b[^>]*\bid=["']([^"']+)["']""",
+        html,
+        flags=re.IGNORECASE,
+    )
+    unreferenced = [
+        element_id for element_id in control_ids
+        if re.search(
+            r"(?<![A-Za-z0-9_])" + re.escape(element_id) + r"(?![A-Za-z0-9_])",
+            browser_tests,
+        ) is None
+    ]
+    assert len(control_ids) >= 142, "Unexpected removal of application controls"
+    assert not unreferenced, (
+        "Static UI controls without Chromium behavioral ownership: "
+        f"{unreferenced}. Add a real browser interaction test; a static reference "
+        "alone is not sufficient."
+    )
+
+
 DYNAMIC_UI_SURFACES = {
     ROOT / "ui" / "static" / "js" / "task-workspace.js": (
         ("taskWorkspaceContextMenu", "taskWorkspaceContextMenu"),
