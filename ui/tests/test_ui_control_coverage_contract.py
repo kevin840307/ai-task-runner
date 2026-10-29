@@ -71,3 +71,33 @@ def test_ui_inventory_has_unique_ids_and_all_six_surfaces() -> None:
     ids = [element_id for group in ENTRYPOINTS.values() for element_id in group]
     assert len(ids) == len(set(ids)), "Ambiguous UI ownership in coverage inventory"
     assert len(ids) >= 25
+
+
+def test_all_static_html_controls_have_test_traceability() -> None:
+    """Every static button/input/select/textarea must have a named test reference.
+
+    This is a minimum evidence gate, not a substitute for behavior assertions,
+    dynamic React controls, cross-state E2E, or code/branch coverage metrics.
+    """
+    html = HTML.read_text(encoding="utf-8")
+    test_paths = (BROWSER, DESIGNER, STATIC, PARITY, UI_TEST,
+                  ROOT / "ui" / "tests" / "test_uncovered_modal_actions_browser.py")
+    tests = "\n".join(path.read_text(encoding="utf-8") for path in test_paths)
+    control_ids = re.findall(
+        r"""<(?:button|input|select|textarea)\b[^>]*\bid=["']([^"']+)["']""",
+        html,
+        flags=re.IGNORECASE,
+    )
+    assert len(control_ids) == len(set(control_ids)), "Duplicate HTML control IDs"
+    assert len(control_ids) >= 142, "Unexpected removal of application controls"
+    unreferenced = [
+        element_id for element_id in control_ids
+        if re.search(
+            r"(?<![A-Za-z0-9_])" + re.escape(element_id) + r"(?![A-Za-z0-9_])",
+            tests,
+        ) is None
+    ]
+    assert not unreferenced, (
+        "HTML controls without test references: "
+        f"{unreferenced}. Add functional browser coverage before registering the ID."
+    )
