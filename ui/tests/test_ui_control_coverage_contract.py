@@ -140,6 +140,59 @@ def test_all_static_html_controls_have_browser_behavioral_traceability() -> None
     )
 
 
+def test_all_static_buttons_have_browser_click_ownership() -> None:
+    """Every static production button must be clicked by Chromium.
+
+    Merely asserting visibility or mentioning an ID is not enough for an
+    operation control. projectModalClose is intentionally exercised through a
+    parameterized close-button loop, so its indirect click is asserted here
+    explicitly as the only non-literal click form.
+    """
+    html = HTML.read_text(encoding="utf-8")
+    browser_tests = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BROWSER,
+            DESIGNER,
+            ROOT / "ui" / "tests" / "test_uncovered_modal_actions_browser.py",
+        )
+    )
+    button_ids = re.findall(
+        r"""<button\b[^>]*\bid=["']([^"']+)["'][^>]*>""",
+        html,
+        flags=re.IGNORECASE,
+    )
+    indirect_clicks = {
+        "projectModalClose": (
+            '"#projectModalCancel", "#projectModalClose"' in browser_tests
+            and "page.click(close_button)" in browser_tests
+        ),
+    }
+    missing = []
+    for element_id in button_ids:
+        escaped = re.escape(element_id)
+        directly_clicked = (
+            re.search(
+                rf"""(?:page\.)?click\(["']#{escaped}["']""",
+                browser_tests,
+            )
+            is not None
+            or re.search(
+                rf"""locator\(["']#{escaped}["']\)\.click\(""",
+                browser_tests,
+            )
+            is not None
+        )
+        if not directly_clicked and not indirect_clicks.get(element_id, False):
+            missing.append(element_id)
+
+    assert len(button_ids) >= 102, "Unexpected removal of application buttons"
+    assert not missing, (
+        "Static buttons without an executable Chromium click: "
+        f"{missing}. Add a real browser click and behavioral assertion."
+    )
+
+
 DYNAMIC_UI_SURFACES = {
     ROOT / "ui" / "static" / "app.js": (
         ("project-menu-button", "project-menu-button"),
