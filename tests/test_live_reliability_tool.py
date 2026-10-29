@@ -2978,6 +2978,9 @@ def test_merge_cross_matrix_preflight_covers_delivery_failure_guards_and_recover
     assert result["active_operation"] == "waiting_target_workspace"
     assert result["active_operation_real_failure"] is False
     assert "active Git operation" in result["active_operation_detail"]
+    assert result["active_operation_retry"] == "merged"
+    assert result["active_operation_retry_real_failure"] is False
+    assert result["active_operation_retry_snapshot_sha"]
 
     assert not (tmp_path / "merge-source-fail-preflight" / "task-side.txt").exists()
     assert (tmp_path / "merge-technical-error-preflight" / "task-side.txt").read_text(
@@ -2990,7 +2993,12 @@ def test_merge_cross_matrix_preflight_covers_delivery_failure_guards_and_recover
     assert (tmp_path / "merge-fifo-preflight" / "fifo-b.txt").read_text(
         encoding="utf-8"
     ) == "fifo-task-b\n"
-    assert not (tmp_path / "merge-active-operation-preflight" / "active-task.txt").exists()
+    assert (tmp_path / "merge-active-operation-preflight" / "active-task.txt").read_text(
+        encoding="utf-8"
+    ) == "task-side\n"
+    assert not (
+        tmp_path / "merge-active-operation-preflight" / "external-operation.txt"
+    ).exists()
     recovered = tmp_path / "merge-conflict-recovery-preflight" / "app.txt"
     assert recovered.read_text(encoding="utf-8") == "integrated task + target\n"
 
