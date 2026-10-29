@@ -235,6 +235,11 @@ flow:
                 snap.click()
                 assert snap.get_attribute("aria-pressed") == "false"
 
+                palette_search = page.locator(".palette-search")
+                palette_search.fill("Handoff")
+                assert page.locator(".palette-item", has_text="Handoff").count() == 1
+                palette_search.fill("")
+
                 add_stage = page.locator(".palette-command-add")
                 add_stage.focus()
                 add_stage.click()
@@ -242,10 +247,19 @@ flow:
                 page.keyboard.press("Escape")
                 page.locator(".add-stage-command").wait_for(state="detached")
                 page.wait_for_function("document.activeElement?.classList.contains('palette-command-add')")
+                page.keyboard.press("/")
+                page.locator(".add-stage-command").wait_for(state="attached")
+                page.keyboard.press("Escape")
+                page.locator(".add-stage-command").wait_for(state="detached")
 
                 page.locator('.react-flow__node[data-id="review"]').dblclick()
                 assert page.get_by_text("AI profile").is_visible()
                 assert page.get_by_text("執行範圍").count() == 0
+                parameter_tabs = page.locator(".parameter-sections button")
+                assert parameter_tabs.count() >= 3
+                for index in range(parameter_tabs.count()):
+                    parameter_tabs.nth(index).click()
+                    assert parameter_tabs.nth(index).get_attribute("aria-selected") == "true"
                 page.get_by_role("tab", name="連線").click()
                 assert page.get_by_text("Semantic FAIL 上限").is_visible()
                 page.locator(".modal-close-button").click()
@@ -253,6 +267,12 @@ flow:
                 ai_palette = page.locator(".palette-item").filter(has_text="AI Stage").first
                 ai_palette.locator(".palette-quick-add").click()
                 create = page.locator(".create-stage-card")
+                create.wait_for(state="attached")
+                create.get_by_role("button", name="Cancel").click()
+                create.wait_for(state="detached")
+                assert page.locator('.react-flow__node[data-id="ai_stage"]').count() == 0
+
+                ai_palette.locator(".palette-quick-add").click()
                 create.wait_for(state="attached")
                 create.get_by_text("AI profile").locator("..").locator("select").select_option("review")
                 create.get_by_role("button", name="Create Stage").click()
@@ -1301,6 +1321,18 @@ flow:
                 modal.wait_for(state="visible")
                 page.locator('[data-inspector-tab="test"]').click()
 
+                scenario_tabs = modal.locator(".test-scenario-tabs")
+                assert scenario_tabs.locator("button").count() == 2
+                fail_scenario = scenario_tabs.locator("button.scenario-fail")
+                fail_scenario.click()
+                test_input = modal.locator(".stage-test textarea")
+                assert test_input.input_value().strip()
+                input_actions = modal.locator(".test-input-actions")
+                input_actions.locator("button").last.click()
+                assert test_input.input_value() == ""
+                input_actions.locator("button").first.click()
+                assert test_input.input_value().strip()
+
                 fallback = modal.locator("label").filter(has=page.get_by_text("Fallback Backend", exact=True)).locator("select")
                 fallback.select_option("qwen")
                 page.get_by_role("button", name="執行 Real Stage").click()
@@ -1334,11 +1366,13 @@ def test_mock_technical_error_uses_stage_probe_with_error_scenario() -> None:
             port = sock.getsockname()[1]
         server = UIServer(ROOT, "127.0.0.1", port)
         state = server.RequestHandlerClass.state
-        captured: dict[str, str] = {}
+        captured: list[dict[str, str]] = []
 
         def fake_stage_test(*args, probe_mode="", test_scenario="", **kwargs):
-            captured["probe_mode"] = probe_mode
-            captured["test_scenario"] = test_scenario
+            captured.append({
+                "probe_mode": probe_mode,
+                "test_scenario": test_scenario,
+            })
             return {
                 "ok": True,
                 "stage": "worker",
@@ -1371,14 +1405,24 @@ def test_mock_technical_error_uses_stage_probe_with_error_scenario() -> None:
                 )
                 page.locator('.react-flow__node[data-id="worker"]').dblclick()
                 page.locator('[data-inspector-tab="test"]').click()
+
+                page.get_by_role("tab", name="Agent Ping").click()
+                assert page.locator(".ping-prompt").is_visible()
+                page.locator(".test-action-row > button.primary").click()
+                page.locator(".test-result").wait_for(state="visible")
+                assert captured[-1] == {
+                    "probe_mode": "agent_ping",
+                    "test_scenario": "pass",
+                }
+
                 page.get_by_role("tab", name="Mock Technical Error").click()
                 page.locator(".test-action-row > button.primary").click()
                 page.locator(".test-result").wait_for(state="visible")
-
-                assert captured == {
+                assert captured[-1] == {
                     "probe_mode": "stage",
                     "test_scenario": "error_mock",
                 }
+                assert len(captured) == 2
                 browser.close()
         finally:
             server.shutdown()
