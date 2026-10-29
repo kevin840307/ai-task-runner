@@ -160,3 +160,94 @@ def test_chat_suggestion_error_retry_recovers_real_command_options() -> None:
             assert page.locator("#projectChatSuggestRetry").is_hidden()
             assert errors == []
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_runtime_error_details_copy_ok_and_close_are_clickable() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+        base_bridge = _bridge_for(state)
+
+        def bridge(method: str, url: str, body_json: str):
+            if method == "GET" and urlparse(url).path == "/api/environment/check":
+                return {
+                    "status": 503,
+                    "data": {
+                        "code": "environment_unavailable",
+                        "message": "Environment failed on line one\nDetailed runtime diagnostic on line two",
+                        "retryable": True,
+                    },
+                }
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: {
+                        writeText: async (text) => { window.__copiedRuntimeError = String(text); }
+                    }
+                });"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
+            page.click("#optionsButton")
+            page.wait_for_function("document.querySelector('#optionsPanel')?.hidden === false")
+            page.click("#environmentCheckButton")
+            page.wait_for_function(
+                "() => !document.querySelector('#errorDetailsButton')?.hidden"
+            )
+            assert page.locator("#errorDetailsButton").is_visible()
+            assert "Environment failed on line one" in page.locator(
+                "#environmentCheckResult"
+            ).inner_text()
+
+            page.click("#errorDetailsButton")
+            assert page.locator("#errorDetailsBackdrop").is_visible()
+            assert "Detailed runtime diagnostic on line two" in page.locator(
+                "#errorDetailsContent"
+            ).inner_text()
+            page.click("#errorDetailsCopy")
+            page.wait_for_function(
+                "() => window.__copiedRuntimeError?.includes('Detailed runtime diagnostic')"
+            )
+            page.click("#errorDetailsOk")
+            assert page.locator("#errorDetailsBackdrop").is_hidden()
+
+            page.click("#errorDetailsButton")
+            assert page.locator("#errorDetailsBackdrop").is_visible()
+            page.click("#errorDetailsClose")
+            assert page.locator("#errorDetailsBackdrop").is_hidden()
+            assert errors == []
+            browser.close()
