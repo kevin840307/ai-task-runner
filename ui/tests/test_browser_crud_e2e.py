@@ -7653,12 +7653,12 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
 
             page.click("#generateWorkflowEditYaml")
             assert page.locator("#generateDraftYamlPanel").is_visible()
-            assert page.locator("#generateWorkflowPreview").is_focused()
+            assert page.locator("#generateWorkflowPreview").evaluate("(node) => document.activeElement === node")
             page.click("#generateDraftVisualTab")
             assert page.locator("#generateDraftVisualPanel").is_visible()
             page.click("#generateDraftYamlTab")
             assert page.locator("#generateDraftYamlPanel").is_visible()
-            assert page.locator("#generateWorkflowPreview").is_focused()
+            assert page.locator("#generateWorkflowPreview").evaluate("(node) => document.activeElement === node")
             page.fill(
                 "#generateWorkflowPreview",
                 (
@@ -7675,7 +7675,7 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.click("#generateDraftPromptTab")
             assert page.locator("#generateDraftPromptPanel").is_visible()
             page.click("#generateWorkflowEditPrompt")
-            assert page.locator("#generateDraftPromptTextarea").is_focused()
+            assert page.locator("#generateDraftPromptTextarea").evaluate("(node) => document.activeElement === node")
             page.fill("#generateDraftPromptTextarea", "Edited generated prompt {{ goal }}\n")
 
             page.click("#generateDraftVisualTab")
