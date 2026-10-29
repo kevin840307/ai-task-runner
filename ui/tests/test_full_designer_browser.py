@@ -799,7 +799,8 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 # persist an explicit stop instead of silently continuing to the next Stage.
                 implicit_pass = page.locator('.react-flow__edge[data-id="execute:pass:review"]')
                 implicit_pass.dispatch_event("click")
-                page.keyboard.press("Delete")
+                # Backspace is an explicit alternate edge-delete shortcut.
+                page.keyboard.press("Backspace")
                 page.wait_for_timeout(100)
                 assert implicit_pass.count() == 0
                 _save_editor(page)
