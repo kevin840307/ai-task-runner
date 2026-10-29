@@ -32,7 +32,16 @@ jobs:
         run: python -m compileall -q runner tool ai_task_runner.py ai_task_runner_validator.py
 
       - name: Test
+        if: runner.os == 'Windows'
         run: python -m pytest -q
+
+      - name: Test + Runner branch coverage
+        if: runner.os == 'Linux'
+        run: python -m coverage run --branch --source=runner,workspace -m pytest -q
+
+      - name: Runner coverage report
+        if: runner.os == 'Linux'
+        run: python -m coverage report --show-missing
 
   studio-build:
     runs-on: ubuntu-latest
