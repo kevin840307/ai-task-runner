@@ -7699,14 +7699,16 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             assert page.locator("#generateWorkflowDestination").input_value() == "project"
             page.select_option("#generateWorkflowDestination", "global")
             page.click("#generateWorkflowSaveConfirm")
-            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
-            page.wait_for_function(
-                "document.querySelector('#studioFileName')?.textContent === 'coverage-generated.workflow.yaml'"
-            )
-            assert any(
-                item["name"] == "coverage-generated.workflow.yaml"
+            page.wait_for_url("**/workflow-studio-app/index.html?*")
+            saved_item = next(
+                item
                 for item in state.studio_files(root)["workflows"]
+                if item["name"] == "coverage-generated.workflow.yaml"
             )
+            navigation = parse_qs(urlparse(page.url).query)
+            assert navigation["id"] == [saved_item["id"]]
+            assert navigation["project"] == [str(root)]
+            assert page.get_by_text("Workflow Editor", exact=True).is_visible()
             saved = root / "runner" / "assets" / "workflows" / "coverage-generated.workflow.yaml"
             assert saved.is_file()
             assert "flow: [execute]" in saved.read_text(encoding="utf-8")
