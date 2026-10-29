@@ -7055,3 +7055,267 @@ def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
 
             assert not errors
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        created = state.studio_prompt_create("coverage_prompt", "global", None)
+        opened = state.studio_read(created["item"]["id"], None)
+        state.studio_save(
+            created["item"]["id"],
+            "Original coverage prompt {{ goal }}\n",
+            opened["hash"],
+            None,
+        )
+        import_source = root / "coverage-import.md"
+        import_source.write_text("Imported coverage prompt {{ goal }}\n", encoding="utf-8")
+        base_bridge = _bridge_for(state)
+
+        def bridge(method: str, url: str, body_json: str):
+            parsed = urlparse(url)
+            body = json.loads(body_json or "{}")
+            query = parse_qs(parsed.query)
+            if method == "GET" and parsed.path == "/api/studio/export":
+                project_value = query.get("project", [""])[0]
+                project = Path(project_value) if project_value else None
+                return {
+                    "status": 200,
+                    "data": state.studio_export(query.get("id", [""])[0], project),
+                }
+            if method == "POST" and parsed.path == "/api/studio/import":
+                if str(body.get("name", "")).strip() == "explode.md":
+                    return {
+                        "status": 400,
+                        "data": {
+                            "code": "invalid_request",
+                            "message": "Import exploded on line one\nDetailed diagnostic on line two",
+                            "retryable": False,
+                            "request_id": "",
+                        },
+                    }
+                project = Path(body["project"]) if body.get("project") else None
+                try:
+                    data = state.studio_import(
+                        body.get("kind", ""),
+                        body.get("name", ""),
+                        body.get("content", ""),
+                        body.get("destination", "global"),
+                        project,
+                    )
+                    return {"status": 200, "data": data}
+                except Exception as exc:
+                    return {
+                        "status": 400,
+                        "data": {
+                            "code": "invalid_request",
+                            "message": str(exc),
+                            "retryable": False,
+                            "request_id": "",
+                        },
+                    }
+            if method == "POST" and parsed.path == "/api/studio/validate":
+                return {
+                    "status": 200,
+                    "data": {
+                        "ok": False,
+                        "summary": "Validation failed",
+                        "output": "First validation line\nSecond validation line",
+                        "diagnostics": [],
+                    },
+                }
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 860})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            page.route(
+                "http://local.test/workflow-studio-app/**",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="text/html",
+                    body="<html><body>Workflow Editor</body></html>",
+                ),
+            )
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: { writeText: async (text) => { window.__copiedText = String(text); } }
+                });"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#promptNav")
+            page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+            row = page.locator("#studioFileList .studio-file-item").filter(
+                has_text="coverage_prompt.md"
+            )
+            assert row.count() == 1
+            row.click()
+            page.wait_for_function(
+                "document.querySelector('#studioFileName')?.textContent === 'coverage_prompt.md'"
+            )
+
+            page.fill("#studioPromptTextarea", "Unsaved local draft")
+            page.click("#reloadStudioButton")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function(
+                "() => document.querySelector('#studioPromptTextarea')?.value.includes('Original coverage prompt')"
+            )
+
+            page.click("#validateStudioButton")
+            page.wait_for_function("document.querySelector('#validationOutput')?.hidden === false")
+            page.click("#validationDetailsButton")
+            assert page.locator("#validationDetailsBackdrop").is_visible()
+            assert "Second validation line" in page.locator("#validationDetailsContent").inner_text()
+            page.click("#validationDetailsCopy")
+            page.wait_for_function(
+                "() => window.__copiedText?.includes('Second validation line')"
+            )
+            page.click("#validationDetailsOk")
+            assert page.locator("#validationDetailsBackdrop").is_hidden()
+            page.click("#validationDetailsButton")
+            page.click("#validationDetailsClose")
+            assert page.locator("#validationDetailsBackdrop").is_hidden()
+
+            page.click("#studioAssetMenuButton")
+            assert page.locator("#studioAssetMenu").is_visible()
+            page.click("#renameStudioButton")
+            page.fill(".ui-dialog-input", "coverage_renamed.md")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function(
+                "document.querySelector('#studioFileName')?.textContent === 'coverage_renamed.md'"
+            )
+
+            page.click("#studioAssetMenuButton")
+            page.click("#duplicateStudioButton")
+            assert page.locator("#duplicateAssetBackdrop").is_visible()
+            page.click("#duplicateAssetCancel")
+            assert page.locator("#duplicateAssetBackdrop").is_hidden()
+            page.click("#studioAssetMenuButton")
+            page.click("#duplicateStudioButton")
+            page.fill("#duplicateAssetName", "coverage_copy.md")
+            page.click("#duplicateAssetConfirm")
+            page.wait_for_function(
+                "document.querySelector('#studioFileName')?.textContent === 'coverage_copy.md'"
+            )
+
+            page.click("#studioAssetMenuButton")
+            with page.expect_download() as download_info:
+                page.click("#exportStudioButton")
+            download = download_info.value
+            assert download.suggested_filename == "coverage_copy.md"
+
+            page.click("#importAssetButton")
+            assert page.locator("#importAssetBackdrop").is_visible()
+            with page.expect_file_chooser() as chooser_info:
+                page.click("#importAssetChooseButton")
+            chooser_info.value.set_files(str(import_source))
+            page.wait_for_function(
+                "() => document.querySelector('#importAssetContent')?.value.includes('Imported coverage prompt')"
+            )
+            page.fill("#importAssetName", "coverage_imported.md")
+            page.click("#importAssetConfirm")
+            page.wait_for_function(
+                "document.querySelector('#studioFileName')?.textContent === 'coverage_imported.md'"
+            )
+
+            page.click("#importAssetButton")
+            page.fill("#importAssetName", "explode.md")
+            page.fill("#importAssetContent", "Bad import content")
+            page.click("#importAssetConfirm")
+            page.wait_for_function("document.querySelector('#errorDetailsButton')?.hidden === false")
+            page.click("#errorDetailsButton")
+            assert page.locator("#errorDetailsBackdrop").is_visible()
+            assert "Detailed diagnostic" in page.locator("#errorDetailsContent").inner_text()
+            page.click("#errorDetailsCopy")
+            page.wait_for_function("() => window.__copiedText?.includes('Detailed diagnostic')")
+            page.click("#errorDetailsOk")
+            assert page.locator("#errorDetailsBackdrop").is_hidden()
+            page.click("#errorDetailsButton")
+            page.click("#errorDetailsClose")
+            assert page.locator("#errorDetailsBackdrop").is_hidden()
+            page.click("#importAssetCancel")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard import')")
+            page.click("[data-dialog-ok]")
+            assert page.locator("#importAssetBackdrop").is_hidden()
+
+            page.fill("#studioSearchInput", "definitely-no-coverage-match")
+            assert page.locator("#studioSearchClear").is_visible()
+            page.click("#studioSearchClear")
+            assert page.locator("#studioSearchInput").input_value() == ""
+
+            page.click("#newWorkflowButton")
+            assert page.locator("#newPromptBackdrop").is_visible()
+            page.click("#newPromptClose")
+            assert page.locator("#newPromptBackdrop").is_hidden()
+            page.click("#newWorkflowButton")
+            page.fill("#newPromptName", "discard_me")
+            page.click("#newPromptCancel")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard new Prompt')")
+            page.click("[data-dialog-ok]")
+            assert page.locator("#newPromptBackdrop").is_hidden()
+            page.click("#newWorkflowButton")
+            page.fill("#newPromptName", "coverage_created")
+            page.click("#newPromptConfirm")
+            page.wait_for_function(
+                "document.querySelector('#studioFileName')?.textContent === 'coverage_created.md'"
+            )
+
+            page.click("#studioAssetMenuButton")
+            page.click("#deleteStudioButton")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Delete Prompt')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function(
+                "() => ![...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage_created.md'))"
+            )
+
+            page.click("#workflowNav")
+            page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
+            page.click("#newWorkflowButton")
+            assert page.locator("#newWorkflowBackdrop").is_visible()
+            page.click("#newWorkflowClose")
+            assert page.locator("#newWorkflowBackdrop").is_hidden()
+            page.click("#newWorkflowButton")
+            page.fill("#newWorkflowName", "discard_workflow")
+            page.click("#newWorkflowCancel")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard new Workflow')")
+            page.click("[data-dialog-ok]")
+            assert page.locator("#newWorkflowBackdrop").is_hidden()
+            page.click("#newWorkflowButton")
+            page.fill("#newWorkflowName", "coverage_created_workflow")
+            page.click("#newWorkflowConfirm")
+            page.wait_for_function(
+                "() => [...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage_created_workflow'))"
+            )
+
+            assert not errors
+            browser.close()
