@@ -234,6 +234,57 @@ def test_dynamic_ui_surfaces_have_test_traceability() -> None:
     )
 
 
+DYNAMIC_ID_SOURCES = (
+    ROOT / "ui" / "static" / "app.js",
+    ROOT / "ui" / "static" / "js" / "task-workspace.js",
+    ROOT / "ui" / "static" / "js" / "tasks-board.js",
+)
+
+
+def test_literal_dynamic_ui_ids_have_browser_traceability() -> None:
+    """Literal IDs created by JavaScript must be visible to Chromium tests.
+
+    Static index.html scanning cannot see controls/panels assembled at runtime.
+    Prefix-only IDs such as taskWorkspaceFieldError- are excluded because the
+    final DOM ID is data-dependent and the field behavior is covered through
+    its owning editor controls.
+    """
+    browser_tests = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BROWSER,
+            DESIGNER,
+            ROOT / "ui" / "tests" / "test_uncovered_modal_actions_browser.py",
+        )
+    )
+    dynamic_ids: list[str] = []
+    for source in DYNAMIC_ID_SOURCES:
+        production = source.read_text(encoding="utf-8")
+        dynamic_ids.extend(
+            re.findall(r"""\.id\s*=\s*["']([^"']+)["']""", production)
+        )
+    dynamic_ids = sorted(
+        {
+            element_id
+            for element_id in dynamic_ids
+            if element_id and not element_id.endswith("-")
+        }
+    )
+    missing = [
+        element_id
+        for element_id in dynamic_ids
+        if re.search(
+            r"(?<![A-Za-z0-9_])" + re.escape(element_id) + r"(?![A-Za-z0-9_])",
+            browser_tests,
+        ) is None
+    ]
+    assert len(dynamic_ids) >= 32, "Unexpected removal of runtime-created UI IDs"
+    assert not missing, (
+        "Runtime-created UI IDs without Chromium traceability: "
+        f"{missing}. Add a browser interaction/assertion for the dynamic surface."
+    )
+
+
 def _server_api_routes() -> list[str]:
     """Return every literal UI API route/prefix dispatched by Handler."""
     source = SERVER.read_text(encoding="utf-8")
