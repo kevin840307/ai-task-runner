@@ -511,8 +511,6 @@ def test_empty_state_open_project_button_opens_the_real_project_modal() -> None:
             )
             _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
-            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
-            page.click("#tasksCurrentRuntimeButton")
             page.wait_for_function("!document.querySelector('#chatView')?.hidden")
             page.wait_for_function("!document.querySelector('#emptyState')?.hidden")
             page.click("#emptyOpenProjectButton")
