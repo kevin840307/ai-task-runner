@@ -297,14 +297,18 @@ flow:
                 assert "profile: review" in original_stage_yaml
                 assert page.locator(".stage-yaml-error").count() == 0
 
-                stage_yaml.fill(original_stage_yaml.replace("profile: review", "profile: generic", 1))
+                parsed_stage_yaml = yaml.safe_load(original_stage_yaml)
+                parsed_stage_yaml["status"] = "YAML Applied Browser"
+                stage_yaml.fill(
+                    yaml.safe_dump(parsed_stage_yaml, sort_keys=False, allow_unicode=True)
+                )
                 page.get_by_role("button", name="套用 YAML", exact=True).click()
                 page.wait_for_function(
                     "() => document.querySelector('.studio-header .message')?.textContent === 'Stage YAML applied to draft'"
                 )
-                page.get_by_role("tab", name="Form", exact=True).click()
-                profile_select = page.get_by_text("AI profile", exact=True).locator("..").locator("select")
-                assert profile_select.input_value() == "generic"
+                page.locator('.react-flow__node[data-id="ai_stage"]').get_by_text(
+                    "YAML Applied Browser", exact=True
+                ).wait_for(state="visible")
 
                 page.get_by_role("tab", name="YAML").last.click()
                 stage_yaml = page.locator(".stage-yaml-panel textarea")
