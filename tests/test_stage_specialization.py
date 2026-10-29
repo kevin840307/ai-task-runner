@@ -83,3 +83,44 @@ def test_create_stage_applies_review_profile_defaults_before_runtime_constructio
     assert stage.spec.parser is not None
     assert stage.result_kind == "review"
     assert stage.backend_mode == "review"
+
+
+
+def test_ai_profile_public_helpers_are_stable_and_do_not_leak_mutable_defaults():
+    from runner.workflow.profiles import (
+        apply_ai_profile_defaults,
+        profile_defaults,
+        profile_names,
+        profile_semantics,
+        stage_profile_semantics,
+    )
+
+    assert profile_names() == ["generic", "execute", "review"]
+    assert profile_semantics("generic") == "generic"
+    assert profile_semantics("execute") == "execute"
+    assert profile_semantics("review") == "review"
+    assert profile_semantics("missing") == ""
+
+    first = profile_defaults("review")
+    first["error_policy"]["retries"] = 999
+    second = profile_defaults("review")
+    assert second["error_policy"]["retries"] == 2
+
+    assert stage_profile_semantics({"type": "base", "profile": "execute"}) == "execute"
+    assert stage_profile_semantics({"type": "command", "profile": "execute"}) == ""
+
+    definition = {
+        "name": "review",
+        "type": "base",
+        "profile": "review",
+        "mode": "write",
+    }
+    applied = apply_ai_profile_defaults(definition)
+    assert applied is definition
+    assert applied["mode"] == "write"
+    assert applied["prompt"] == "common/review.md"
+    assert applied["error_policy"] == {"retries": 2}
+
+    command = {"name": "cmd", "type": "command", "profile": "review"}
+    assert apply_ai_profile_defaults(command) is command
+    assert "prompt" not in command
