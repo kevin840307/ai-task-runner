@@ -400,6 +400,12 @@ def test_primary_runtime_controls_history_and_guidance_use_real_click_handlers()
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
 
+            # The main navigation lands on Tasks. Open the explicit current-runtime
+            # surface before interacting with the legacy/current Runner controls.
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
             page.wait_for_function(
                 "() => !document.querySelector('#sendButton')?.disabled "
                 "&& !document.querySelector('#sendButton')?.hidden"
@@ -505,6 +511,9 @@ def test_empty_state_open_project_button_opens_the_real_project_modal() -> None:
             )
             _install_main_ui_styles(page, static_root)
             _install_main_ui_scripts(page, static_root)
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
             page.wait_for_function("!document.querySelector('#emptyState')?.hidden")
             page.click("#emptyOpenProjectButton")
             page.locator("#projectModalBackdrop").wait_for(state="visible")
