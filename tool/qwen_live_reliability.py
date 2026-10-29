@@ -6342,14 +6342,9 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "active_operation_retry_snapshot_sha": snapshot_active.task_snapshot_sha,
     }
 
-def runner_workspace_delivery_probe(
-    settings: Settings,
-    root: Path,
-) -> dict[str, object]:
-    """Cross-run the real Runner through explicit and Auto workspace delivery modes."""
-    from workspace import MergeManager, WorkspaceBlockedError, WorkspaceManager
-
-    cases = (
+RUNNER_WORKSPACE_DELIVERY_CASES = tuple(
+    row if len(row) == 7 else (*row, "busy-worktree", False)
+    for row in (
         ("main", "main", False, "main", "none"),
         ("worktree", "worktree", False, "worktree", "none"),
         ("auto_idle", "auto", False, "main", "none"),
@@ -6375,14 +6370,21 @@ def runner_workspace_delivery_probe(
         ("worktree_idempotent_external_delivery", "worktree", False, "worktree", "idempotent", "busy-worktree", False),
         ("auto_busy_idempotent_external_delivery", "auto", True, "worktree", "idempotent", "busy-worktree", False),
     )
+)
+
+
+def runner_workspace_delivery_probe(
+    settings: Settings,
+    root: Path,
+) -> dict[str, object]:
+    """Cross-run the real Runner through explicit and Auto workspace delivery modes."""
+    from workspace import MergeManager, WorkspaceBlockedError, WorkspaceManager
+
     # case: key, requested mode, main busy, effective mode, target mutation,
     # Auto policy and concurrency are crossed through the real
     # WorkspaceManager + Runner + MergeManager delivery path instead of only
     # testing the resolver in isolation.
-    cases = tuple(
-        row if len(row) == 7 else (*row, "busy-worktree", False)
-        for row in cases
-    )
+    cases = RUNNER_WORKSPACE_DELIVERY_CASES
     results: dict[str, object] = {}
     for case_index, (
         case_key,
