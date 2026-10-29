@@ -52,7 +52,7 @@ def test_each_main_ui_entrypoint_is_referenced_by_a_test() -> None:
     missing_test = []
     for group, ids in ENTRYPOINTS.items():
         for element_id in ids:
-            if re.search(r'\\bid=["\\\']' + re.escape(element_id) + r'["\\\']', html) is None:
+            if ('id="' + element_id + '"') not in html and ("id='" + element_id + "'") not in html:
                 missing_html.append(f"{group}: {element_id}")
             if re.search(r'(?<![A-Za-z0-9_])' + re.escape(element_id) + r'(?![A-Za-z0-9_])', tests) is None:
                 missing_test.append(f"{group}: {element_id}")
