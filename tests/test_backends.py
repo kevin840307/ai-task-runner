@@ -27,9 +27,11 @@ from runner.agent import (
     interaction_modes,
     normalize_ask_request,
     pending_native_ask,
+    prepare_session_recovery,
     reasoning_options,
     resolve_native_ask,
     sandbox_supported,
+    should_reset_session,
     split_command,
 )
 import runner.agent.backend as backend_module
@@ -37,6 +39,67 @@ from runner.agent.backend import BACKENDS
 from runner.agent.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.agent.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
+
+
+def test_loop_detection_session_recovery_coordinates_plugin_diagnostics(monkeypatch):
+    calls = []
+
+    class Hooks:
+        def model_error(self, client, error):
+            calls.append((client, error))
+            error.diagnostics["context_compress_status"] = "done"
+
+    client = object()
+    error = BackendError(
+        "loop detection halted the run",
+        session_id="loop-session",
+        diagnostics={"loop_type": "tool_loop"},
+    )
+    monkeypatch.setattr(
+        "runner.bootstrap.current_runtime",
+        lambda: type("Runtime", (), {"hooks": Hooks()})(),
+    )
+
+    assert should_reset_session("Loop Detection halted the run") is True
+    assert should_reset_session("ordinary model error") is False
+
+    prepare_session_recovery(client, error, str(error))
+
+    assert calls == [(client, error)]
+    assert error.diagnostics["session_recovery_action"] == "compress_and_retry"
+
+
+def test_loop_detection_session_recovery_falls_back_to_stage_executor(monkeypatch):
+    class Hooks:
+        def model_error(self, _client, _error):
+            return None
+
+    error = BackendError(
+        "loop detection halted the run",
+        session_id="loop-session",
+        diagnostics={},
+    )
+    monkeypatch.setattr(
+        "runner.bootstrap.current_runtime",
+        lambda: type("Runtime", (), {"hooks": Hooks()})(),
+    )
+
+    prepare_session_recovery(object(), error, str(error))
+
+    assert error.diagnostics["session_recovery_action"] == "stage_executor_retry"
+
+
+def test_session_recovery_ignores_unrelated_model_errors(monkeypatch):
+    def fail_if_called():
+        raise AssertionError("runtime hooks must not run for unrelated errors")
+
+    monkeypatch.setattr("runner.bootstrap.current_runtime", fail_if_called)
+    error = BackendError("ordinary model error", diagnostics={})
+
+    prepare_session_recovery(object(), error, str(error))
+
+    assert "session_recovery_action" not in error.diagnostics
+
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert backend_names() == ("qwen", "opencode")
