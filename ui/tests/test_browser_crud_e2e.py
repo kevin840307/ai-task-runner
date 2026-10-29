@@ -7701,7 +7701,11 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.click("#generateWorkflowSaveConfirm")
             page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
             page.wait_for_function(
-                "() => [...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage-generated.workflow.yaml'))"
+                "document.querySelector('#studioFileName')?.textContent === 'coverage-generated.workflow.yaml'"
+            )
+            assert any(
+                item["name"] == "coverage-generated.workflow.yaml"
+                for item in state.studio_files(root)["workflows"]
             )
             saved = root / "runner" / "assets" / "workflows" / "coverage-generated.workflow.yaml"
             assert saved.is_file()
