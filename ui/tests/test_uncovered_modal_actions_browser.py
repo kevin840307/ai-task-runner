@@ -5,7 +5,7 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -518,5 +518,133 @@ def test_empty_state_open_project_button_opens_the_real_project_modal() -> None:
             assert page.locator("#projectModalBackdrop").is_visible()
             page.click("#projectModalCancel")
             page.locator("#projectModalBackdrop").wait_for(state="hidden")
+            assert errors == []
+            browser.close()
+
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_workflow_library_context_open_rename_duplicate_export_delete_actions() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        created = state.studio_workflow_create("context_actions", "global", None)
+        workflow_id = created["item"]["id"]
+        exports = []
+        base_bridge = _bridge_for(state)
+
+        def bridge(method: str, url: str, body_json: str):
+            parsed = urlparse(url)
+            if method == "GET" and parsed.path == "/api/studio/export":
+                query = parse_qs(parsed.query)
+                item_id = query.get("id", [""])[0]
+                exports.append(item_id)
+                return {
+                    "status": 200,
+                    "data": state.studio_export(item_id, None),
+                }
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820}, accept_downloads=True)
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            page.route(
+                "http://local.test/workflow-studio-app/**",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="text/html",
+                    body="<html><body>Workflow Editor</body></html>",
+                ),
+            )
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#workflowNav")
+            page.wait_for_function(
+                "document.querySelector('#workflowNav')?.classList.contains('active')"
+            )
+
+            def workflow_row(name: str):
+                return page.locator("#studioFileList .studio-file-item").filter(
+                    has_text=name
+                )
+
+            row = workflow_row("context_actions.workflow.yaml")
+            row.wait_for()
+
+            # Rename uses the right-click action and shared input dialog.
+            row.click(button="right")
+            page.click("#workflowContextRename")
+            page.locator(".ui-dialog-input").fill("context_renamed")
+            page.locator("[data-dialog-ok]").click()
+            renamed = workflow_row("context_renamed.workflow.yaml")
+            renamed.wait_for()
+            assert workflow_row("context_actions.workflow.yaml").count() == 0
+
+            # Duplicate creates an independent Workflow through the context action.
+            renamed.click(button="right")
+            page.click("#workflowContextDuplicate")
+            page.locator(".ui-dialog-input").fill("context_copy")
+            page.locator("[data-dialog-ok]").click()
+            copied = workflow_row("context_copy.workflow.yaml")
+            copied.wait_for()
+            assert copied.count() == 1
+
+            # Export must execute the real API + browser download path.
+            renamed.click(button="right")
+            with page.expect_download() as download_info:
+                page.click("#workflowContextExport")
+            download = download_info.value
+            assert download.suggested_filename == "context_renamed.workflow.yaml"
+            assert exports == [workflow_id]
+
+            # Delete is destructive: cancel keeps the asset, confirm removes it.
+            copied.click(button="right")
+            page.click("#workflowContextDelete")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-cancel]").click()
+            assert copied.count() == 1
+
+            copied.click(button="right")
+            page.click("#workflowContextDelete")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => ![...document.querySelectorAll('#studioFileList .studio-file-item')]"
+                ".some(node => node.textContent.includes('context_copy.workflow.yaml'))"
+            )
+
+            # Open is a navigation action into the real Workflow Editor route.
+            renamed = workflow_row("context_renamed.workflow.yaml")
+            renamed.click(button="right")
+            page.click("#workflowContextOpen")
+            page.wait_for_url("**/workflow-studio-app/index.html?*")
+            assert page.get_by_text("Workflow Editor", exact=True).is_visible()
             assert errors == []
             browser.close()
