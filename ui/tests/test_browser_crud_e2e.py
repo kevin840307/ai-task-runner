@@ -6909,3 +6909,149 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                 assert abs(feature_shell["width"] - production_shell["width"]) <= 1
                 assert abs(production_shell["width"] - narrow_width) <= 1
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        project_id = state.project_identity(root)["project_id"]
+        workflow = root / "runner" / "assets" / "workflows" / "mixed.yaml"
+        workflow.write_text(
+            "stages:\n"
+            "  planning:\n    type: plan\n"
+            "  validate_file:\n    type: command\n"
+            "    command: \"{python} {validator} --project-root {project_root}\"\n"
+            "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+            "flow: [planning, validate_file, validate_ai]\n",
+            encoding="utf-8",
+        )
+        for title, request_id in (
+            ("Coverage Alpha", "coverage-alpha-create"),
+            ("Coverage Beta", "coverage-beta-create"),
+        ):
+            state.tasks.create(
+                root,
+                {
+                    "title": title,
+                    "items": [{
+                        "title": title,
+                        "prompt": f"Do {title}",
+                        "workflow": str(workflow),
+                        "project": str(root),
+                        "workspace": "auto",
+                    }],
+                },
+                request_id=request_id,
+                project_id=project_id,
+            )
+
+        validator_path = root / "selected_validator.py"
+        ai_prompt_path = root / "selected_ai_validator.md"
+        validator_path.write_text("print('validator')\n", encoding="utf-8")
+        ai_prompt_path.write_text("Validate {{ goal }}\n", encoding="utf-8")
+        base_bridge = _bridge_for(state)
+
+        def bridge(method: str, url: str, body_json: str):
+            parsed = urlparse(url)
+            body = json.loads(body_json or "{}")
+            if method == "POST" and parsed.path == "/api/files/pick":
+                selected = validator_path if body.get("kind") == "python" else ai_prompt_path
+                return {"status": 200, "data": {"cancelled": False, "path": str(selected)}}
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.wait_for_function(
+                "() => document.querySelectorAll('#tasksBoardNew .tasks-board-card').length >= 2"
+            )
+
+            page.fill("#tasksBoardSearch", "Coverage Alpha")
+            page.wait_for_timeout(80)
+            assert page.locator(".tasks-board-card", has_text="Coverage Alpha").count() == 1
+            assert page.locator(".tasks-board-card", has_text="Coverage Beta").count() == 0
+            page.fill("#tasksBoardSearch", "")
+            page.wait_for_timeout(80)
+            assert page.locator(".tasks-board-card", has_text="Coverage Alpha").count() == 1
+            assert page.locator(".tasks-board-card", has_text="Coverage Beta").count() == 1
+
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
+            page.click("#tasksRuntimeBackButton")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            assert page.locator("#chatView").is_hidden()
+
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
+            page.locator("#workflowDropdownButton").click()
+            page.locator("#workflowDropdownMenu .workflow-dropdown-option").filter(
+                has_text="mixed.yaml"
+            ).click()
+            page.wait_for_function(
+                "document.querySelector('#workflowSelectedLabel')?.textContent === 'mixed.yaml'"
+            )
+            page.locator("#optionsButton").click()
+            page.wait_for_function("document.querySelector('#optionsPanel')?.hidden === false")
+            assert page.locator("#validatorPicker").is_visible()
+            assert page.locator("#aiValidatorPromptPicker").is_visible()
+
+            page.click("#backendDropdownButton")
+            assert page.locator("#backendDropdownMenu").is_visible()
+            page.click("#backendDropdownButton")
+            assert page.locator("#backendDropdownMenu").is_hidden()
+
+            page.click("#browseValidatorButton")
+            page.wait_for_function(
+                "(value) => document.querySelector('#validator')?.value === value",
+                arg=str(validator_path),
+            )
+            assert page.locator("#clearValidatorButton").is_visible()
+            page.click("#clearValidatorButton")
+            assert page.locator("#validator").input_value() == ""
+            assert page.locator("#clearValidatorButton").is_hidden()
+
+            page.click("#browseAiValidatorPromptButton")
+            page.wait_for_function(
+                "(value) => document.querySelector('#aiValidatorPrompt')?.value === value",
+                arg=str(ai_prompt_path),
+            )
+            assert page.locator("#clearAiValidatorPromptButton").is_visible()
+            page.click("#clearAiValidatorPromptButton")
+            assert page.locator("#aiValidatorPrompt").input_value() == ""
+            assert page.locator("#clearAiValidatorPromptButton").is_hidden()
+
+            assert not errors
+            browser.close()
