@@ -16,6 +16,7 @@ DESIGNER = ROOT / "ui" / "tests" / "test_full_designer_browser.py"
 STATIC = ROOT / "ui" / "tests" / "test_static_contract.py"
 PARITY = ROOT / "ui" / "tests" / "test_feature_task_ui_parity.py"
 UI_TEST = ROOT / "ui" / "tests" / "test_ui.py"
+SERVER = ROOT / "ui" / "server.py"
 
 # Every listed entrypoint must exist in production HTML and have test-level
 # references. Deliberately include distinct categories rather than inferring
@@ -161,4 +162,42 @@ def test_dynamic_ui_surfaces_have_test_traceability() -> None:
     assert not missing_test, (
         "Dynamic UI surfaces without explicit test traceability: "
         f"{missing_test}. Add a behavioral browser assertion before updating the inventory."
+    )
+
+
+def _server_api_routes() -> list[str]:
+    """Return every literal UI API route/prefix dispatched by Handler."""
+    source = SERVER.read_text(encoding="utf-8")
+    routes = set(
+        re.findall(r"""parsed\.path\s*==\s*["'](\/api\/[^"']+)["']""", source)
+    )
+    routes.update(
+        re.findall(
+            r"""parsed\.path\.startswith\(["'](\/api\/[^"']+)["']\)""",
+            source,
+        )
+    )
+    for block in re.findall(r"""parsed\.path\s+in\s+\{([^}]+)\}""", source):
+        routes.update(re.findall(r"""["'](\/api\/[^"']+)["']""", block))
+    return sorted(routes)
+
+
+def test_all_server_api_routes_have_test_traceability() -> None:
+    """A new HTTP API route must arrive with a test reference in the same change.
+
+    This is intentionally a traceability gate rather than a code-coverage claim:
+    route-specific tests still own success/error semantics, while this test makes
+    it impossible to add a Handler route and silently forget all test coverage.
+    """
+    routes = _server_api_routes()
+    tests = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "ui" / "tests").glob("test_*.py"))
+        if path.resolve() != Path(__file__).resolve()
+    )
+    assert len(routes) >= 98, "Unexpected removal of UI API routes"
+    missing = [route for route in routes if route not in tests]
+    assert not missing, (
+        "UI API routes without explicit test traceability: "
+        f"{missing}. Add a service, HTTP dispatch, or browser test for each route."
     )
