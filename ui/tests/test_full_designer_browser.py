@@ -335,8 +335,9 @@ flow:
                 assert warning_problem.count() == 1
                 assert page.locator(".workflow-problem.error").count() == 0
                 warning_problem.click()
-                assert "selected" in (
-                    page.locator('.react-flow__node[data-id="ai_stage"]').get_attribute("class") or ""
+                page.wait_for_function(
+                    "() => document.querySelector('.react-flow__node[data-id=\"ai_stage\"]')"
+                    "?.classList.contains('selected') === true"
                 )
                 page.get_by_role("button", name="Dismiss Workflow problems").click()
                 page.locator(".workflow-problems").wait_for(state="detached")
