@@ -193,6 +193,70 @@ def test_all_static_buttons_have_browser_click_ownership() -> None:
     )
 
 
+def test_all_user_editable_static_fields_have_browser_input_ownership() -> None:
+    """Visible editable form fields must be changed by Chromium tests.
+
+    Hidden native selects, readonly path mirrors, and hidden file inputs are
+    operated through their visible picker controls and are intentionally
+    excluded from direct fill/select ownership.
+    """
+    html = HTML.read_text(encoding="utf-8")
+    browser_tests = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BROWSER,
+            DESIGNER,
+            ROOT / "ui" / "tests" / "test_uncovered_modal_actions_browser.py",
+        )
+    )
+    controls = re.findall(
+        r"""<(input|select|textarea)\b([^>]*)\bid=["']([^"']+)["']([^>]*)>""",
+        html,
+        flags=re.IGNORECASE,
+    )
+    editable: list[tuple[str, str]] = []
+    for tag, before, element_id, after in controls:
+        attrs = f"{before} {after}"
+        hidden_proxy = (
+            "aria-hidden=\"true\"" in attrs
+            or " hidden" in f" {attrs}"
+            or "visually-hidden-file" in attrs
+            or re.search(r"""type=["']file["']""", attrs, flags=re.IGNORECASE)
+        )
+        if hidden_proxy or re.search(r"\breadonly\b", attrs, flags=re.IGNORECASE):
+            continue
+        editable.append((tag.lower(), element_id))
+
+    missing = []
+    for tag, element_id in editable:
+        escaped = re.escape(element_id)
+        operated = (
+            re.search(
+                rf"""(?:page\.)?fill\(\s*["']#{escaped}["']""",
+                browser_tests,
+            )
+            is not None
+            or re.search(
+                rf"""(?:page\.)?select_option\(\s*["']#{escaped}["']""",
+                browser_tests,
+            )
+            is not None
+            or re.search(
+                rf"""locator\(\s*["']#{escaped}["']\s*\)\.(?:fill|select_option|check|uncheck|press)\(""",
+                browser_tests,
+            )
+            is not None
+        )
+        if not operated:
+            missing.append(f"{tag}#{element_id}")
+
+    assert len(editable) >= 34, "Unexpected removal of visible editable fields"
+    assert not missing, (
+        "Visible editable fields without Chromium input/select ownership: "
+        f"{missing}. Add a real browser edit and behavioral assertion."
+    )
+
+
 DYNAMIC_UI_SURFACES = {
     ROOT / "ui" / "static" / "app.js": (
         ("project-menu-button", "project-menu-button"),
