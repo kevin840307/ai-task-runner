@@ -3364,6 +3364,43 @@ def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_a
     assert live.PROBE_ORDER[index + 1] == "api-502"
 
 
+def test_runner_workspace_delivery_case_matrix_covers_modes_policies_and_target_failures():
+    cases = live.RUNNER_WORKSPACE_DELIVERY_CASES
+    assert len(cases) == 24
+    keys = [row[0] for row in cases]
+    assert len(keys) == len(set(keys))
+    assert {row[1] for row in cases} == {"auto", "main", "worktree"}
+    assert {row[2] for row in cases} == {False, True}
+    assert {row[3] for row in cases} == {"main", "worktree"}
+    assert {
+        row[4] for row in cases
+    } == {
+        "none",
+        "advance",
+        "source_fail",
+        "technical_error",
+        "dirty",
+        "history",
+        "unmanaged",
+        "missing_branch",
+        "conflict",
+        "idempotent",
+        "active_operation",
+    }
+    assert {row[5] for row in cases} == {
+        "busy-worktree",
+        "always-main",
+        "always-worktree",
+    }
+    assert {row[6] for row in cases} == {False, True}
+    # Conflict recovery is intentionally a Main-Task contract. Worktree
+    # delivery failures use retained-snapshot retry or target guards instead.
+    conflict_cases = [row for row in cases if row[4] == "conflict"]
+    assert conflict_cases == [
+        ("main_conflict_recovery", "main", False, "main", "conflict", "busy-worktree", False)
+    ]
+
+
 def test_live_probe_order_runs_long_soak_last():
     assert len(live.PROBE_ORDER) == 50
     assert live.PROBE_ORDER[-1] == "soak"
