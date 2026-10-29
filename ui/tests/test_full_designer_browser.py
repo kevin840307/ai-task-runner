@@ -277,6 +277,8 @@ flow:
                 page.locator(".workflow-problems").wait_for(state="attached")
                 assert page.locator(".workflow-problem.warning", has_text="ai_stage").count() == 1
                 assert page.locator(".workflow-problem.error").count() == 0
+                page.get_by_role("button", name="Dismiss Workflow problems").click()
+                page.locator(".workflow-problems").wait_for(state="detached")
                 page.wait_for_function("document.querySelector('.studio-header .saved-badge') !== null")
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["ai_stage"]["profile"] == "review"
@@ -960,8 +962,13 @@ def test_full_designer_graph_crud_roundtrip() -> None:
 
                 # Remove PASS/FAIL references before deleting the target Stage.
                 pass_edge = page.locator('.react-flow__edge[data-id="review:pass:worker"]')
-                pass_edge.dispatch_event("click")
-                page.keyboard.press("Delete")
+                pass_edge.dispatch_event(
+                    "contextmenu",
+                    {"clientX": 640, "clientY": 420, "button": 2},
+                )
+                edge_menu = page.locator(".edge-context-menu")
+                edge_menu.wait_for(state="visible")
+                edge_menu.locator("button.danger-item").click()
                 page.wait_for_timeout(100)
                 assert pass_edge.count() == 0
 
@@ -1459,6 +1466,117 @@ flow:
                 browser.close()
         finally:
             cancelled.set()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_full_designer_stage_context_menu_actions_roundtrip() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-context-actions-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "context-actions.yaml"
+        workflow.write_text(
+            """stages:
+  worker:
+    type: command
+    command:
+      - "{python}"
+      - "-c"
+      - "print('worker')"
+flow:
+  - worker
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "context-actions.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                worker = page.locator('.react-flow__node[data-id="worker"]')
+                worker.wait_for(state="attached")
+
+                def open_menu():
+                    worker.dispatch_event(
+                        "contextmenu",
+                        {"clientX": 700, "clientY": 430, "button": 2},
+                    )
+                    menu = page.locator(".stage-context-menu:not(.edge-context-menu)")
+                    menu.wait_for(state="visible")
+                    return menu
+
+                # Stage Settings button opens the actual editor from the context menu.
+                menu = open_menu()
+                menu.locator("button").nth(0).click()
+                page.locator(".stage-editor-modal").wait_for(state="visible")
+                page.locator(".modal-close-button").click()
+
+                # Saved path action is also wired through the context menu.
+                menu = open_menu()
+                path_button = menu.locator("button").nth(1)
+                assert path_button.is_enabled()
+                path_button.click()
+                page.locator(".stage-editor-modal").wait_for(state="visible")
+                page.locator(".path-test-result").wait_for(state="visible")
+                page.locator(".modal-close-button").click()
+
+                # Copy enables Paste; Paste creates an independent command Stage.
+                menu = open_menu()
+                copy_button = menu.locator("button").nth(2)
+                assert "Ctrl+C" in copy_button.inner_text()
+                copy_button.click()
+                menu = open_menu()
+                paste_button = menu.locator("button").nth(3)
+                assert "Ctrl+V" in paste_button.inner_text()
+                assert paste_button.is_enabled()
+                paste_button.click()
+                page.locator('.react-flow__node[data-id="command"]').wait_for(state="attached")
+                assert page.locator(".unsaved-badge").is_visible()
+
+                # Duplicate creates another independent Stage through the visible button.
+                menu = open_menu()
+                menu.locator("button").nth(4).click()
+                page.locator('.react-flow__node[data-id="command_2"]').wait_for(state="attached")
+
+                # Context-menu Delete uses the guarded confirmation flow.
+                command_2 = page.locator('.react-flow__node[data-id="command_2"]')
+                command_2.dispatch_event(
+                    "contextmenu",
+                    {"clientX": 720, "clientY": 450, "button": 2},
+                )
+                delete_menu = page.locator(".stage-context-menu:not(.edge-context-menu)")
+                delete_menu.wait_for(state="visible")
+                delete_menu.locator("button.danger-item").click()
+                dialog = page.locator(".designer-confirm-dialog")
+                dialog.wait_for(state="visible")
+                dialog.locator("button.danger-confirm").click()
+                command_2.wait_for(state="detached")
+                assert page.locator('.react-flow__node[data-id="command"]').count() == 1
+                assert page.locator('.react-flow__node[data-id="worker"]').count() == 1
+                assert not errors
+                browser.close()
+        finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
