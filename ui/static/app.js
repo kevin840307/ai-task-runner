@@ -826,7 +826,9 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
-  state.view = "project-chat"; $("projectChatView").hidden = false; $("tasksBoardView").hidden = true; $("chatView").hidden = true; $("workflowView").hidden = true; projectChat.clearProject();
+  // With no Project there is no Project Chat/Task runtime to render. Keep the
+  // dedicated empty surface visible so its Open Project action is reachable.
+  state.view = "project-chat"; $("projectChatView").hidden = true; $("tasksBoardView").hidden = true; $("chatView").hidden = false; $("workflowView").hidden = true; projectChat.clearProject();
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false; syncProjectSwitcherPath();
 }
