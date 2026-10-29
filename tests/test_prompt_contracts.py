@@ -209,3 +209,28 @@ def test_plan_stage_uses_plan_wire_protocol_before_dynamic_expansion():
     assert "[RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]" not in prompt
     assert stage.result_kind == "tasks"
     assert stage.protocol_kind == "plan_tasks"
+
+
+
+def test_save_prompt_validates_jinja_and_expected_hash(tmp_path):
+    from runner.prompting import save_prompt
+    from runner.resources import read_text
+
+    prompt = tmp_path / "editable.md"
+    first_hash = save_prompt(prompt, "Hello {{ goal }}\n")
+    assert read_text(prompt) == ("Hello {{ goal }}\n", first_hash)
+
+    second_hash = save_prompt(
+        prompt,
+        "Updated {{ project.root }}\n",
+        expected_hash=first_hash,
+    )
+    assert second_hash != first_hash
+    assert prompt.read_text(encoding="utf-8") == "Updated {{ project.root }}\n"
+
+    with pytest.raises(RunnerError, match="resource changed since it was read"):
+        save_prompt(prompt, "stale write", expected_hash=first_hash)
+
+    with pytest.raises(RunnerError, match="invalid prompt template"):
+        save_prompt(prompt, "{% if goal %}missing endif")
+    assert prompt.read_text(encoding="utf-8") == "Updated {{ project.root }}\n"
