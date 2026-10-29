@@ -7334,9 +7334,19 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             assert page.locator("#newWorkflowDestination").input_value() == "project"
             page.select_option("#newWorkflowDestination", "global")
             page.click("#newWorkflowConfirm")
-            page.wait_for_function(
-                "() => [...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage_created_workflow'))"
+            # Create Workflow navigates immediately into the Workflow Editor.
+            # Waiting on the Studio list is racy because that list leaves the
+            # active document as soon as the new asset opens.
+            page.wait_for_url("**/workflow-studio-app/index.html?*")
+            created_item = next(
+                item
+                for item in state.studio_files(root)["workflows"]
+                if item["name"] == "coverage_created_workflow.workflow.yaml"
             )
+            navigation = parse_qs(urlparse(page.url).query)
+            assert navigation["id"] == [created_item["id"]]
+            assert navigation["project"] == [str(root)]
+            assert page.get_by_text("Workflow Editor", exact=True).is_visible()
 
             assert not errors
             browser.close()
