@@ -868,6 +868,15 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 page.wait_for_timeout(100)
                 assert page.locator('.react-flow__edge[data-id="review:fail:__end__"]').count() == 0
                 assert page.get_by_text("已重做上一個 Workflow 草稿修改。").is_visible()
+
+                # The alternate redo shortcut is a separate user-facing operation.
+                page.keyboard.press("Control+z")
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
+                page.keyboard.press("Control+Shift+z")
+                page.wait_for_timeout(100)
+                assert page.locator('.react-flow__edge[data-id="review:fail:__end__"]').count() == 0
+                assert page.get_by_text("已重做上一個 Workflow 草稿修改。").is_visible()
+
                 page.keyboard.press("Control+z")
                 page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
                 _save_editor(page)
