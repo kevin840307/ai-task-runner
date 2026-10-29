@@ -251,3 +251,265 @@ def test_runtime_error_details_copy_ok_and_close_are_clickable() -> None:
             assert page.locator("#errorDetailsBackdrop").is_hidden()
             assert errors == []
             browser.close()
+
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_primary_runtime_controls_history_and_guidance_use_real_click_handlers() -> None:
+    """Exercise the legacy/current-runtime surface instead of only Task-card controls."""
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+        actions: list[tuple[str, dict]] = []
+        state._browser_runtime_override = {
+            "status": "idle",
+            "view": {"label": "Ready"},
+            "actions": {
+                "run": True, "stop": False, "resume": False,
+                "reset": False, "rerun": False,
+            },
+            "running": False,
+            "completed": False,
+            "resumable": False,
+            "stale": False,
+            "has_state": False,
+            "task": "",
+            "stage": "",
+            "cli_status": "",
+            "completed_count": 0,
+            "total": 0,
+            "run_id": "",
+        }
+        base_bridge = _bridge_for(state)
+
+        def runtime(status: str) -> dict:
+            if status == "running":
+                return {
+                    "status": "running",
+                    "view": {"label": "Running"},
+                    "actions": {
+                        "run": False, "stop": True, "resume": False,
+                        "reset": False, "rerun": False,
+                    },
+                    "running": True,
+                    "completed": False,
+                    "resumable": False,
+                    "stale": False,
+                    "has_state": True,
+                    "task": "Browser runtime controls",
+                    "stage": "execute",
+                    "cli_status": "execute",
+                    "completed_count": 0,
+                    "total": 1,
+                    "run_id": "browser-runtime-controls",
+                    "started_at": 1,
+                }
+            if status == "stopped":
+                return {
+                    "status": "stopped",
+                    "view": {"label": "Stopped", "reason": "Browser stop requested"},
+                    "attention_reason": "Browser stop requested",
+                    "recommended_actions": ["resume", "reset", "open_workflow"],
+                    "actions": {
+                        "run": False, "stop": False, "resume": True,
+                        "reset": True, "rerun": False,
+                    },
+                    "running": False,
+                    "completed": False,
+                    "resumable": True,
+                    "stale": False,
+                    "has_state": True,
+                    "task": "Browser runtime controls",
+                    "stage": "execute",
+                    "cli_status": "stopped",
+                    "completed_count": 0,
+                    "total": 1,
+                    "run_id": "browser-runtime-controls",
+                    "started_at": 1,
+                }
+            return {
+                "status": "idle",
+                "view": {"label": "Ready"},
+                "actions": {
+                    "run": True, "stop": False, "resume": False,
+                    "reset": False, "rerun": False,
+                },
+                "running": False,
+                "completed": False,
+                "resumable": False,
+                "stale": False,
+                "has_state": False,
+                "task": "",
+                "stage": "",
+                "cli_status": "",
+                "completed_count": 0,
+                "total": 0,
+                "run_id": "",
+            }
+
+        def bridge(method: str, url: str, body_json: str):
+            path = urlparse(url).path
+            body = json.loads(body_json or "{}")
+            if method == "POST" and path in {
+                "/api/project/message",
+                "/api/project/stop",
+                "/api/project/resume",
+                "/api/project/reset",
+                "/api/project/history/clear",
+            }:
+                actions.append((path, body))
+                if path == "/api/project/message":
+                    state._browser_runtime_override = runtime("running")
+                elif path == "/api/project/stop":
+                    state._browser_runtime_override = runtime("stopped")
+                elif path == "/api/project/resume":
+                    state._browser_runtime_override = runtime("running")
+                elif path == "/api/project/reset":
+                    state._browser_runtime_override = runtime("idle")
+                return {"status": 200, "data": {"ok": True}}
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.wait_for_function(
+                "() => !document.querySelector('#sendButton')?.disabled "
+                "&& !document.querySelector('#sendButton')?.hidden"
+            )
+            page.fill("#messageInput", "Run the browser runtime-control check")
+            page.click("#sendButton")
+            page.wait_for_function("!document.querySelector('#stopButton')?.hidden")
+            assert actions[-1][0] == "/api/project/message"
+            assert actions[-1][1]["message"] == "Run the browser runtime-control check"
+
+            page.click("#stopButton")
+            page.wait_for_function("!document.querySelector('#resumeButton')?.hidden")
+            page.wait_for_function("!document.querySelector('#resetButton')?.hidden")
+            page.wait_for_function("!document.querySelector('#runtimeGuidanceWorkflow')?.hidden")
+            assert actions[-1][0] == "/api/project/stop"
+
+            # Guidance is an actual navigation action, not only rendered text.
+            page.click("#runtimeGuidanceWorkflow")
+            page.wait_for_function("!document.querySelector('#workflowView')?.hidden")
+            assert page.locator("#workflowView").is_visible()
+
+            # Return to the current Runtime and prove Resume -> Stop -> Reset.
+            page.click("#chatNav")
+            page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
+            page.click("#tasksCurrentRuntimeButton")
+            page.wait_for_function("!document.querySelector('#chatView')?.hidden")
+            page.click("#resumeButton")
+            page.wait_for_function("!document.querySelector('#stopButton')?.hidden")
+            assert actions[-1][0] == "/api/project/resume"
+
+            page.click("#stopButton")
+            page.wait_for_function("!document.querySelector('#resetButton')?.hidden")
+            stop_count = sum(1 for path, _ in actions if path == "/api/project/stop")
+            assert stop_count == 2
+
+            page.click("#resetButton")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-cancel]").click()
+            assert not any(path == "/api/project/reset" for path, _ in actions)
+
+            page.click("#resetButton")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => !document.querySelector('#sendButton')?.hidden "
+                "&& !document.querySelector('#sendButton')?.disabled"
+            )
+            assert actions[-1][0] == "/api/project/reset"
+
+            # Clear History also owns a destructive confirmation and backend action.
+            page.click("#clearHistoryButton")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-cancel]").click()
+            assert not any(path == "/api/project/history/clear" for path, _ in actions)
+
+            page.click("#clearHistoryButton")
+            page.locator(".ui-dialog-card").wait_for(state="visible")
+            page.locator("[data-dialog-ok]").click()
+            page.wait_for_function(
+                "() => document.querySelector('.ui-dialog-card') === null "
+                "|| document.querySelector('.ui-dialog-card')?.parentElement?.hidden"
+            )
+            assert actions[-1][0] == "/api/project/history/clear"
+            assert actions[-1][1]["reset_stopped"] is False
+            assert errors == []
+            browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_empty_state_open_project_button_opens_the_real_project_modal() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+        state._write_projects([])
+        base_bridge = _bridge_for(state)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", base_bridge)
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            page.wait_for_function("!document.querySelector('#emptyState')?.hidden")
+            page.click("#emptyOpenProjectButton")
+            page.locator("#projectModalBackdrop").wait_for(state="visible")
+            assert page.locator("#projectModalBackdrop").is_visible()
+            page.click("#projectModalCancel")
+            page.locator("#projectModalBackdrop").wait_for(state="hidden")
+            assert errors == []
+            browser.close()
