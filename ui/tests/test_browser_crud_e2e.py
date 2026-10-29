@@ -7010,6 +7010,10 @@ def test_task_board_search_runtime_back_and_validator_picker_actions() -> None:
 
             page.click("#tasksCurrentRuntimeButton")
             page.wait_for_function("!document.querySelector('#chatView')?.hidden")
+            assert page.locator("#messageInput").is_enabled()
+            page.fill("#messageInput", "Coverage runtime message")
+            assert page.locator("#messageInput").input_value() == "Coverage runtime message"
+            page.fill("#messageInput", "")
             page.click("#tasksRuntimeBackButton")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
             assert page.locator("#chatView").is_hidden()
