@@ -306,9 +306,13 @@ flow:
                 page.wait_for_function(
                     "() => document.querySelector('.studio-header .message')?.textContent === 'Stage YAML applied to draft'"
                 )
-                page.locator('.react-flow__node[data-id="ai_stage"]').get_by_text(
-                    "YAML Applied Browser", exact=True
-                ).wait_for(state="visible")
+
+                # Runtime status is Stage state but is intentionally not rendered
+                # as ordinary node text. Prove the YAML mutation through the
+                # canonical Form editor instead of waiting on nonexistent node UI.
+                page.get_by_role("tab", name="Form", exact=True).click()
+                form_inputs = page.locator(".stage-form-section").first.locator("input")
+                assert form_inputs.nth(1).input_value() == "YAML Applied Browser"
 
                 page.get_by_role("tab", name="YAML").last.click()
                 stage_yaml = page.locator(".stage-yaml-panel textarea")
