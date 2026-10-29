@@ -1405,6 +1405,8 @@ def test_mock_technical_error_uses_stage_probe_with_error_scenario() -> None:
                 )
                 page.locator('.react-flow__node[data-id="worker"]').dblclick()
                 page.locator('[data-inspector-tab="test"]').click()
+                test_modes = page.locator(".test-mode-tabs")
+                assert test_modes.get_by_role("tab").count() == 3
 
                 page.get_by_role("tab", name="Agent Ping").click()
                 assert page.locator(".ping-prompt").is_visible()
