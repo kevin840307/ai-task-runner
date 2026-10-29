@@ -4918,6 +4918,21 @@ def test_global_defaults_copy_once_new_chat_reload_and_project_rename_identity()
             page.locator("#projectList .project-root").filter(has_text="Fixture Project").click()
             page.wait_for_function("document.querySelector('#projectChatName')?.textContent === 'Fixture Project'")
             assert_chat_preferences(old_project_preferences)
+
+            # Workflow is a visible Project Chat preference, not read-only display.
+            page.select_option("#projectChatWorkflowSelect", str(project_only_workflow))
+            page.wait_for_function(
+                "(value) => document.querySelector('#projectChatWorkflowSelect')?.value === value",
+                arg=str(project_only_workflow),
+            )
+            assert state.project_preferences.get(root)["workflow"] == str(project_only_workflow)
+            page.select_option("#projectChatWorkflowSelect", workflow)
+            page.wait_for_function(
+                "(value) => document.querySelector('#projectChatWorkflowSelect')?.value === value",
+                arg=workflow,
+            )
+            assert state.project_preferences.get(root)["workflow"] == workflow
+
             page.locator("#projectList .project-root").filter(has_text=added_project.name).click()
             page.wait_for_function(
                 "(name) => document.querySelector('#projectChatName')?.textContent === name",
@@ -7395,6 +7410,7 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             "attempt": 0,
             "request": "",
             "filename": "",
+            "backend": "",
         }
 
         def draft_payload() -> dict:
@@ -7511,6 +7527,7 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
                 generator["state"] = "running"
                 generator["request"] = str(body.get("request", ""))
                 generator["filename"] = str(body.get("filename", ""))
+                generator["backend"] = str(body.get("backend", ""))
                 return {
                     "status": 200,
                     "data": {
@@ -7627,13 +7644,17 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
             assert page.locator("#generateWorkflowBackend").count() == 1
             assert page.locator("#generateWorkflowBackend option").count() >= 1
+            page.select_option("#generateWorkflowBackend", "opencode")
+            assert page.locator("#generateWorkflowBackend").input_value() == "opencode"
             page.click("#generateWorkflowConfirm")
             assert "Describe the Workflow" in page.locator("#generateWorkflowHint").inner_text()
 
             page.fill("#generateWorkflowRequest", "Cancel this coverage generation")
             page.fill("#generateWorkflowFilename", "cancel-coverage.workflow.yaml")
+            page.select_option("#generateWorkflowBackend", "opencode")
             page.click("#generateWorkflowConfirm")
             page.wait_for_function("!document.querySelector('#generateWorkflowRunning')?.hidden")
+            assert generator["backend"] == "opencode"
             page.click("#generateWorkflowStop")
             page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Cancel Workflow generation')")
             page.click("[data-dialog-ok]")
@@ -7732,6 +7753,8 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             assert page.locator("#generateWorkflowSaveBackdrop").is_hidden()
             page.click("#generateWorkflowSave")
             assert page.locator("#generateWorkflowSaveFilename").input_value() == "coverage-generated.workflow.yaml"
+            page.fill("#generateWorkflowSaveFilename", "coverage-final.workflow.yaml")
+            assert page.locator("#generateWorkflowSaveFilename").input_value() == "coverage-final.workflow.yaml"
             page.select_option("#generateWorkflowDestination", "project")
             assert page.locator("#generateWorkflowDestination").input_value() == "project"
             page.select_option("#generateWorkflowDestination", "global")
@@ -7740,13 +7763,13 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             saved_item = next(
                 item
                 for item in state.studio_files(root)["workflows"]
-                if item["name"] == "coverage-generated.workflow.yaml"
+                if item["name"] == "coverage-final.workflow.yaml"
             )
             navigation = parse_qs(urlparse(page.url).query)
             assert navigation["id"] == [saved_item["id"]]
             assert navigation["project"] == [str(root)]
             assert page.get_by_text("Workflow Editor", exact=True).is_visible()
-            saved = root / "runner" / "assets" / "workflows" / "coverage-generated.workflow.yaml"
+            saved = root / "runner" / "assets" / "workflows" / "coverage-final.workflow.yaml"
             assert saved.is_file()
             assert "flow: [execute]" in saved.read_text(encoding="utf-8")
 
