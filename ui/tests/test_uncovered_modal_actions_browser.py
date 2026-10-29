@@ -622,7 +622,12 @@ def test_workflow_library_context_open_rename_duplicate_export_delete_actions() 
                 page.click("#workflowContextExport")
             download = download_info.value
             assert download.suggested_filename == "context_renamed.workflow.yaml"
-            assert exports == [workflow_id]
+            renamed_item = next(
+                item
+                for item in state.studio_files(root)["workflows"]
+                if item["name"] == "context_renamed.workflow.yaml"
+            )
+            assert exports == [renamed_item["id"]]
 
             # Delete is destructive: cancel keeps the asset, confirm removes it.
             copied.click(button="right")
