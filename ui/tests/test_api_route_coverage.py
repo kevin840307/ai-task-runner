@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from ui.server import UIServer
+from ui.server import Handler, UIServer
 
 
 GET_INVALID_ROUTES = (
@@ -89,3 +89,24 @@ def test_post_api_route_dispatch_is_live_and_returns_structured_error(api_server
     assert payload["message"]
     assert payload["retryable"] is False
     assert payload["request_id"].startswith("route-coverage-")
+
+
+def test_project_picker_route_dispatches_without_opening_native_dialog(
+    api_server,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def fake_pick_folder(handler) -> None:
+        calls.append(True)
+        return handler._json({"cancelled": True})
+
+    monkeypatch.setattr(Handler, "_pick_folder", fake_pick_folder)
+    status, payload = _request_json(
+        f"http://127.0.0.1:{api_server.port}/api/projects/pick",
+        method="POST",
+        body={"request_id": "route-coverage-project-picker"},
+    )
+    assert status == 200
+    assert payload == {"cancelled": True}
+    assert calls == [True]
