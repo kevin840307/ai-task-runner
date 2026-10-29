@@ -6721,7 +6721,32 @@ def runner_workspace_delivery_probe(
             result["target_head_after_delivery"] = target_head
             result["active_operation_detail"] = merged.detail
             result["active_operation_merge_head"] = merge_head
+
+            # An unrelated in-progress Git operation is a transient delivery guard.
+            # Once the user/external operation is cleared, retry delivery with the
+            # exact same durable snapshot; never rerun Runner/Agent for this wait.
             _delivery_git(repo, "merge", "--abort")
+            active_retry = merge_manager.merge(prepared, snapshot)
+            if active_retry.status != "merged" or active_retry.real_merge_failure:
+                raise RuntimeError(
+                    "Runner/workspace active-operation retry did not deliver retained snapshot: "
+                    f"status={active_retry.status} real_failure={active_retry.real_merge_failure}"
+                )
+            if (repo / "health.txt").read_text(encoding="utf-8") != EXPECTED:
+                raise RuntimeError(
+                    "Runner/workspace active-operation retry did not publish retained Task output"
+                )
+            if (repo / "external-operation.txt").exists():
+                raise RuntimeError(
+                    "Runner/workspace active-operation retry accidentally published foreign operation content"
+                )
+            result["retry_delivery"] = active_retry.status
+            result["retry_real_merge_failure"] = active_retry.real_merge_failure
+            result["retry_snapshot_sha"] = snapshot.task_snapshot_sha
+            result["retry_merged_target_head_sha"] = active_retry.merged_target_head_sha
+            result["target_head_after_retry"] = _delivery_git(
+                repo, "rev-parse", "HEAD"
+            ).stdout.strip()
         elif target_mutation == "dirty":
             target_head = _delivery_git(repo, "rev-parse", "HEAD").stdout.strip()
             if merged.status != "waiting_target_clean" or merged.real_merge_failure:
@@ -6768,6 +6793,7 @@ def runner_workspace_delivery_probe(
                 )
             result["retry_delivery"] = dirty_retry.status
             result["retry_real_merge_failure"] = dirty_retry.real_merge_failure
+            result["retry_snapshot_sha"] = snapshot.task_snapshot_sha
             result["retry_merged_target_head_sha"] = dirty_retry.merged_target_head_sha
             result["target_head_after_retry"] = _delivery_git(
                 repo, "rev-parse", "HEAD"
@@ -6906,6 +6932,7 @@ def runner_workspace_delivery_probe(
                 result["retry_validation_required"] = technical_retry.validation_required
                 result["retry_validation_verdict"] = technical_retry.verdict
                 result["retry_validation_calls"] = retry_validation_calls
+                result["retry_snapshot_sha"] = snapshot.task_snapshot_sha
                 result["retry_merged_target_head_sha"] = technical_retry.merged_target_head_sha
                 result["target_head_after_retry"] = _delivery_git(
                     repo, "rev-parse", "HEAD"
