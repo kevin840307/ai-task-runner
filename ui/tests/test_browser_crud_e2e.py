@@ -7218,6 +7218,10 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             page.click("#studioAssetMenuButton")
             page.click("#duplicateStudioButton")
             assert page.locator("#duplicateAssetBackdrop").is_visible()
+            page.click("#duplicateAssetClose")
+            assert page.locator("#duplicateAssetBackdrop").is_hidden()
+            page.click("#studioAssetMenuButton")
+            page.click("#duplicateStudioButton")
             page.click("#duplicateAssetCancel")
             assert page.locator("#duplicateAssetBackdrop").is_hidden()
             page.click("#studioAssetMenuButton")
@@ -7236,9 +7240,15 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
 
             page.click("#importAssetButton")
             assert page.locator("#importAssetBackdrop").is_visible()
+            page.select_option("#importAssetDestination", "project")
+            assert page.locator("#importAssetDestination").input_value() == "project"
+            page.select_option("#importAssetDestination", "global")
             with page.expect_file_chooser() as chooser_info:
                 page.click("#importAssetChooseButton")
             chooser_info.value.set_files(str(import_source))
+            page.wait_for_function(
+                "() => document.querySelector('#importAssetFile')?.files?.[0]?.name === 'coverage-import.md'"
+            )
             page.wait_for_function(
                 "() => document.querySelector('#importAssetContent')?.value.includes('Imported coverage prompt')"
             )
@@ -7266,6 +7276,11 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             page.click("#importAssetCancel")
             page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard import')")
             page.click("[data-dialog-ok]")
+            assert page.locator("#importAssetBackdrop").is_hidden()
+            page.click("#importAssetButton")
+            assert page.locator("#importAssetBackdrop").is_visible()
+            page.click("#importAssetClose")
+            assert page.locator("#importAssetBackdrop").is_hidden()
             assert page.locator("#importAssetBackdrop").is_hidden()
 
             page.fill("#studioSearchInput", "definitely-no-coverage-match")
@@ -7312,6 +7327,9 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
             assert page.locator("#newWorkflowBackdrop").is_hidden()
             page.click("#newWorkflowButton")
             page.fill("#newWorkflowName", "coverage_created_workflow")
+            page.select_option("#newWorkflowDestination", "project")
+            assert page.locator("#newWorkflowDestination").input_value() == "project"
+            page.select_option("#newWorkflowDestination", "global")
             page.click("#newWorkflowConfirm")
             page.wait_for_function(
                 "() => [...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage_created_workflow'))"
@@ -7567,6 +7585,8 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
 
             page.click("#generateWorkflowButton")
             page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            assert page.locator("#generateWorkflowBackend").count() == 1
+            assert page.locator("#generateWorkflowBackend option").count() >= 1
             page.click("#generateWorkflowConfirm")
             assert "Describe the Workflow" in page.locator("#generateWorkflowHint").inner_text()
 
@@ -7667,6 +7687,10 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.click("#generateWorkflowSaveClose")
             assert page.locator("#generateWorkflowSaveBackdrop").is_hidden()
             page.click("#generateWorkflowSave")
+            assert page.locator("#generateWorkflowSaveFilename").input_value() == "coverage-generated.workflow.yaml"
+            page.select_option("#generateWorkflowDestination", "project")
+            assert page.locator("#generateWorkflowDestination").input_value() == "project"
+            page.select_option("#generateWorkflowDestination", "global")
             page.click("#generateWorkflowSaveConfirm")
             page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
             page.wait_for_function(
