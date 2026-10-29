@@ -141,19 +141,34 @@ def test_all_static_html_controls_have_browser_behavioral_traceability() -> None
 
 
 DYNAMIC_UI_SURFACES = {
+    ROOT / "ui" / "static" / "app.js": (
+        ("project-menu-button", "project-menu-button"),
+        ("project-action-menu", "project-action-menu"),
+        ("backend-dropdown-option", "#backendDropdownMenu"),
+        ("workflow-dropdown-option", "workflow-dropdown-option"),
+        ("environment-check-toggle", "environment-check-toggle"),
+    ),
     ROOT / "ui" / "static" / "js" / "task-workspace.js": (
         ("taskWorkspaceContextMenu", "taskWorkspaceContextMenu"),
         ("data-task-context-action", "data-task-context-action"),
         ("taskCreateMenu", "taskCreateMenu"),
         # dataset.taskCreateKind becomes data-task-create-kind in the DOM.
         ("taskCreateKind", "data-task-create-kind"),
+        ("task-workspace-move-existing", "taskWorkspaceMove"),
+        ("task-workspace-workspace-option", "data-workspace-option"),
+        ("taskWorkspacePublish", "taskWorkspacePublish"),
+        ("taskWorkspaceCleanupWorktrees", "taskWorkspaceCleanupWorktrees"),
     ),
     ROOT / "ui" / "static" / "js" / "tasks-board.js": (
         ("tasksBoardContextMenu", "tasksBoardContextMenu"),
         ("data-tasks-context-action", "data-tasks-context-action"),
+        ("data-tasks-view-mode", "data-tasks-view-mode"),
     ),
     ROOT / "ui" / "static" / "js" / "project-chat.js": (
         ("project-chat-suggest-item", "project-chat-suggest-item"),
+        ("project-chat-queue-item", "project-chat-queue-item"),
+        ("project-chat-task-draft", "project-chat-task-draft"),
+        ("project-chat-ask", ".project-chat-ask"),
     ),
     ROOT / "ui" / "studio-src" / "src" / "main.tsx": (
         ("stage-context-menu", "stage-context-menu"),
