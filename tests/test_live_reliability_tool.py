@@ -3095,6 +3095,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert technical["retry_validation_required"] is True
     assert technical["retry_validation_verdict"] == "PASS"
     assert technical["retry_validation_calls"] == 1
+    assert technical["retry_snapshot_sha"] == technical["snapshot_sha"]
     assert technical["retry_merged_target_head_sha"]
     assert technical["target_head_after_retry"] != technical["target_head_before_delivery"]
 
@@ -3106,6 +3107,7 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert dirty["target_head_after_delivery"] == dirty["target_head_before_delivery"]
     assert dirty["retry_delivery"] == "merged"
     assert dirty["retry_real_merge_failure"] is False
+    assert dirty["retry_snapshot_sha"] == dirty["snapshot_sha"]
     assert dirty["retry_merged_target_head_sha"]
     assert dirty["target_head_after_retry"] != dirty["target_head_before_delivery"]
 
@@ -3187,6 +3189,11 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert active_operation["target_head_after_delivery"] == active_operation["target_head_before_delivery"]
     assert active_operation["active_operation_merge_head"]
     assert "active Git operation" in active_operation["active_operation_detail"]
+    assert active_operation["retry_delivery"] == "merged"
+    assert active_operation["retry_real_merge_failure"] is False
+    assert active_operation["retry_snapshot_sha"] == active_operation["snapshot_sha"]
+    assert active_operation["retry_merged_target_head_sha"]
+    assert active_operation["target_head_after_retry"] != active_operation["target_head_before_delivery"]
 
     main_advance = result["main_target_advance"]
     assert main_advance["requested_mode"] == "main"
@@ -3332,8 +3339,9 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert (technical_repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
     assert (dirty_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     assert not (dirty_repo / "user-uncommitted.txt").exists()
-    for repo in (history_repo, unmanaged_repo, missing_branch_repo, active_operation_repo):
+    for repo in (history_repo, unmanaged_repo, missing_branch_repo):
         assert not (repo / "health.txt").exists()
+    assert (active_operation_repo / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
     assert not (active_operation_repo / "external-operation.txt").exists()
     for repo in (target_advance_repo, main_advance_repo, auto_busy_advance_repo):
         assert (repo / "target-side.txt").read_text(encoding="utf-8") == "advanced target\n"
