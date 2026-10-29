@@ -105,28 +105,29 @@ def test_all_static_html_controls_have_test_traceability() -> None:
 
 DYNAMIC_UI_SURFACES = {
     ROOT / "ui" / "static" / "js" / "task-workspace.js": (
-        "taskWorkspaceContextMenu",
-        "data-task-context-action",
-        "taskCreateMenu",
-        "data-task-create-kind",
+        ("taskWorkspaceContextMenu", "taskWorkspaceContextMenu"),
+        ("data-task-context-action", "data-task-context-action"),
+        ("taskCreateMenu", "taskCreateMenu"),
+        # dataset.taskCreateKind becomes data-task-create-kind in the DOM.
+        ("taskCreateKind", "data-task-create-kind"),
     ),
     ROOT / "ui" / "static" / "js" / "tasks-board.js": (
-        "tasksBoardContextMenu",
-        "data-tasks-context-action",
+        ("tasksBoardContextMenu", "tasksBoardContextMenu"),
+        ("data-tasks-context-action", "data-tasks-context-action"),
     ),
     ROOT / "ui" / "static" / "js" / "project-chat.js": (
-        "project-chat-suggest-item",
+        ("project-chat-suggest-item", "project-chat-suggest-item"),
     ),
     ROOT / "ui" / "studio-src" / "src" / "main.tsx": (
-        "stage-context-menu",
-        "edge-context-menu",
-        "workflow-problems",
-        "Dismiss Workflow problems",
-        "parameter-sections",
-        "test-mode-tabs",
-        "add-stage-command",
-        "workflow-draft-recovery",
-        "create-stage-card",
+        ("stage-context-menu", "stage-context-menu"),
+        ("edge-context-menu", "edge-context-menu"),
+        ("workflow-problems", "workflow-problems"),
+        ("Dismiss Workflow problems", "Dismiss Workflow problems"),
+        ("parameter-sections", "parameter-sections"),
+        ("test-mode-tabs", "test-mode-tabs"),
+        ("add-stage-command", "add-stage-command"),
+        ("workflow-draft-recovery", "workflow-draft-recovery"),
+        ("create-stage-card", "create-stage-card"),
     ),
 }
 
@@ -147,13 +148,15 @@ def test_dynamic_ui_surfaces_have_test_traceability() -> None:
     tests = "\n".join(path.read_text(encoding="utf-8") for path in test_paths)
     missing_source = []
     missing_test = []
-    for source, tokens in DYNAMIC_UI_SURFACES.items():
+    for source, token_pairs in DYNAMIC_UI_SURFACES.items():
         production = source.read_text(encoding="utf-8")
-        for token in tokens:
-            if token not in production:
-                missing_source.append(f"{source.relative_to(ROOT)}: {token}")
-            if token not in tests:
-                missing_test.append(f"{source.relative_to(ROOT)}: {token}")
+        for source_token, test_token in token_pairs:
+            if source_token not in production:
+                missing_source.append(f"{source.relative_to(ROOT)}: {source_token}")
+            if test_token not in tests:
+                missing_test.append(
+                    f"{source.relative_to(ROOT)}: {source_token} -> {test_token}"
+                )
     assert not missing_source, f"Dynamic UI inventory drifted from production: {missing_source}"
     assert not missing_test, (
         "Dynamic UI surfaces without explicit test traceability: "
