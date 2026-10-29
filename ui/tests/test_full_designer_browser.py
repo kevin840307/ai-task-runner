@@ -235,6 +235,11 @@ flow:
                 snap.click()
                 assert snap.get_attribute("aria-pressed") == "false"
 
+                page.get_by_role("button", name="重設排列", exact=True).click()
+                page.wait_for_function(
+                    "() => document.querySelector('.studio-header .message')?.textContent?.includes('已重設畫布位置')"
+                )
+
                 palette_search = page.locator(".palette-search")
                 palette_search.fill("Handoff")
                 assert page.locator(".palette-item", has_text="Handoff").count() == 1
@@ -244,7 +249,9 @@ flow:
                 add_stage.focus()
                 add_stage.click()
                 page.locator(".add-stage-command").wait_for(state="attached")
-                page.keyboard.press("Escape")
+                page.locator(".add-stage-command-head").get_by_role(
+                    "button", name="關閉", exact=True
+                ).click()
                 page.locator(".add-stage-command").wait_for(state="detached")
                 page.wait_for_function("document.activeElement?.classList.contains('palette-command-add')")
                 page.keyboard.press("/")
@@ -283,10 +290,31 @@ flow:
                 # Stage YAML must use that draft instead of failing with
                 # "Stage not found: ai_stage" against the older saved YAML.
                 page.get_by_role("tab", name="YAML").last.click()
-                page.locator(".stage-yaml-panel textarea").wait_for(state="attached")
+                stage_yaml = page.locator(".stage-yaml-panel textarea")
+                stage_yaml.wait_for(state="attached")
                 page.wait_for_function("document.querySelector('.stage-yaml-panel textarea')?.value.includes('type: base')")
-                assert "profile: review" in page.locator(".stage-yaml-panel textarea").input_value()
+                original_stage_yaml = stage_yaml.input_value()
+                assert "profile: review" in original_stage_yaml
                 assert page.locator(".stage-yaml-error").count() == 0
+
+                stage_yaml.fill(original_stage_yaml.replace("profile: review", "profile: generic", 1))
+                page.get_by_role("button", name="套用 YAML", exact=True).click()
+                page.wait_for_function(
+                    "() => document.querySelector('.studio-header .message')?.textContent === 'Stage YAML applied to draft'"
+                )
+                page.get_by_role("tab", name="Form", exact=True).click()
+                profile_select = page.get_by_text("AI profile", exact=True).locator("..").locator("select")
+                assert profile_select.input_value() == "generic"
+
+                page.get_by_role("tab", name="YAML").last.click()
+                stage_yaml = page.locator(".stage-yaml-panel textarea")
+                stage_yaml.fill(original_stage_yaml)
+                page.get_by_role("button", name="套用 YAML", exact=True).click()
+                page.wait_for_function(
+                    "() => document.querySelector('.studio-header .message')?.textContent === 'Stage YAML applied to draft'"
+                )
+                page.get_by_role("tab", name="Form", exact=True).click()
+                assert page.get_by_text("AI profile", exact=True).locator("..").locator("select").input_value() == "review"
 
                 assert workflow.read_bytes() == original
 
@@ -295,8 +323,13 @@ flow:
                 page.locator(".modal-close-button").click()
                 page.locator(".studio-header button.primary").click()
                 page.locator(".workflow-problems").wait_for(state="attached")
-                assert page.locator(".workflow-problem.warning", has_text="ai_stage").count() == 1
+                warning_problem = page.locator(".workflow-problem.warning", has_text="ai_stage")
+                assert warning_problem.count() == 1
                 assert page.locator(".workflow-problem.error").count() == 0
+                warning_problem.click()
+                assert "selected" in (
+                    page.locator('.react-flow__node[data-id="ai_stage"]').get_attribute("class") or ""
+                )
                 page.get_by_role("button", name="Dismiss Workflow problems").click()
                 page.locator(".workflow-problems").wait_for(state="detached")
                 page.wait_for_function("document.querySelector('.studio-header .saved-badge') !== null")
@@ -1083,6 +1116,17 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 page.get_by_text("本機草稿").wait_for(state="visible")
                 recovery_box = page.locator(".workflow-draft-recovery").bounding_box()
                 assert recovery_box and recovery_box["height"] <= 48
+                page.get_by_role("button", name="捨棄", exact=True).click()
+                page.locator(".workflow-draft-recovery").wait_for(state="detached")
+                assert page.evaluate("(key) => localStorage.getItem(key)", draft_key) is None
+                assert workflow.read_text(encoding="utf-8") == canonical_before_recovery
+
+                page.evaluate(
+                    "([key, value]) => localStorage.setItem(key, JSON.stringify(value))",
+                    [draft_key, local_draft],
+                )
+                page.reload()
+                page.get_by_text("本機草稿").wait_for(state="visible")
                 page.get_by_role("button", name="還原").click()
                 page.locator('.react-flow__node[data-id="execute"]').get_by_text("Recovered Local Draft").wait_for(state="visible")
                 assert page.locator(".unsaved-badge").is_visible()
@@ -1341,6 +1385,10 @@ flow:
                 input_actions.locator("button").last.click()
                 assert test_input.input_value() == ""
                 input_actions.locator("button").first.click()
+                assert test_input.input_value().strip()
+                pass_scenario = scenario_tabs.locator("button.scenario-pass")
+                pass_scenario.click()
+                assert "active" in (pass_scenario.get_attribute("class") or "")
                 assert test_input.input_value().strip()
 
                 fallback = modal.locator("label").filter(has=page.get_by_text("Fallback Backend", exact=True)).locator("select")
@@ -1630,6 +1678,67 @@ flow:
                 command_2.wait_for(state="detached")
                 assert page.locator('.react-flow__node[data-id="command"]').count() == 1
                 assert page.locator('.react-flow__node[data-id="worker"]').count() == 1
+
+                # Reload is a separate header operation. Dirty reload is guarded;
+                # cancel preserves the draft, confirm restores canonical YAML.
+                page.get_by_role("button", name="重新載入", exact=True).click()
+                dialog = page.locator(".designer-confirm-dialog")
+                dialog.wait_for(state="visible")
+                dialog.get_by_role("button", name="取消", exact=True).click()
+                assert page.locator('.react-flow__node[data-id="command"]').count() == 1
+
+                page.get_by_role("button", name="重新載入", exact=True).click()
+                dialog.wait_for(state="visible")
+                dialog.locator("button.danger-confirm").click()
+                page.locator('.react-flow__node[data-id="worker"]').wait_for(state="attached")
+                page.wait_for_function(
+                    "() => document.querySelector('.studio-header .saved-badge') !== null"
+                )
+                assert page.locator('.react-flow__node[data-id="command"]').count() == 0
+
+                # The Stage editor footer exposes independent Duplicate/Remove controls.
+                worker = page.locator('.react-flow__node[data-id="worker"]')
+                worker.dblclick()
+                modal = page.locator(".stage-editor-modal")
+                modal.wait_for(state="visible")
+                before_nodes = page.locator(".react-flow__node:not([data-id='__start__']):not([data-id='__end__'])").count()
+                modal.get_by_title("複製目前設定，但不複製結果連線").click()
+                page.wait_for_function(
+                    "(before) => document.querySelectorAll('.react-flow__node:not([data-id=\"__start__\"]):not([data-id=\"__end__\"])').length === before + 1",
+                    arg=before_nodes,
+                )
+                modal.locator("footer button.danger").click()
+                dialog = page.locator(".designer-confirm-dialog")
+                dialog.wait_for(state="visible")
+                dialog.get_by_role("button", name="取消", exact=True).click()
+                assert page.locator(".stage-editor-modal").is_visible()
+
+                modal.locator("footer button.danger").click()
+                dialog.wait_for(state="visible")
+                dialog.locator("button.danger-confirm").click()
+                page.wait_for_function(
+                    "(before) => document.querySelectorAll('.react-flow__node:not([data-id=\"__start__\"]):not([data-id=\"__end__\"])').length === before",
+                    arg=before_nodes,
+                )
+
+                # Back is also guarded when the Workflow is dirty.
+                worker = page.locator('.react-flow__node[data-id="worker"]')
+                worker.dblclick()
+                modal = page.locator(".stage-editor-modal")
+                title_input = modal.locator("input").first
+                title_input.fill("Dirty before leaving")
+                page.locator(".modal-close-button").click()
+                page.get_by_role("button", name="← Workflows", exact=True).click()
+                dialog = page.locator(".designer-confirm-dialog")
+                dialog.wait_for(state="visible")
+                dialog.get_by_role("button", name="取消", exact=True).click()
+                assert page.url.endswith(f"id={quote(item['id'])}&project={project_q}")
+
+                page.get_by_role("button", name="← Workflows", exact=True).click()
+                dialog.wait_for(state="visible")
+                dialog.locator("button.danger-confirm").click()
+                page.wait_for_url("**/index.html?view=workflow*")
+
                 assert not errors
                 browser.close()
         finally:
