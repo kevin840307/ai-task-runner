@@ -7319,3 +7319,362 @@ def test_prompt_asset_manager_actions_import_export_and_detail_dialogs() -> None
 
             assert not errors
             browser.close()
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_workflow_generator_full_browser_lifecycle() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        base_bridge = _bridge_for(state)
+        generator = {
+            "state": "idle",
+            "job_id": "",
+            "attempt": 0,
+            "request": "",
+            "filename": "",
+        }
+
+        def draft_payload() -> dict:
+            return {
+                "workflow": (
+                    "stages:\n"
+                    "  execute:\n"
+                    "    type: base\n"
+                    "    profile: execute\n"
+                    "    prompt: common/execution.md\n"
+                    "flow:\n"
+                    "  - execute\n"
+                ),
+                "prompts": [
+                    {"name": "generated.md", "content": "Generated prompt {{ goal }}\n"},
+                ],
+                "visual": {
+                    "stages": [
+                        {
+                            "name": "execute",
+                            "type": "base",
+                            "profile": "execute",
+                            "status": "execute",
+                        }
+                    ],
+                    "flow": ["execute"],
+                },
+                "validation": "PASS",
+            }
+
+        def bridge(method: str, url: str, body_json: str):
+            parsed = urlparse(url)
+            body = json.loads(body_json or "{}")
+            query = parse_qs(parsed.query)
+            path = parsed.path
+
+            if method == "GET" and path == "/api/studio/draft":
+                return {
+                    "status": 200,
+                    "data": {
+                        "available": True,
+                        "workspace_root": str(root / ".builder"),
+                        "workspace_pattern": str(root / ".builder" / "<new-job-id>"),
+                        "message": "AI Workflow Builder is ready.",
+                    },
+                }
+            if method == "GET" and path == "/api/studio/generate/active":
+                return {"status": 200, "data": {"active": False}}
+            if method == "GET" and path == "/api/studio/generate/status":
+                job_id = query.get("job_id", [""])[0]
+                if job_id != generator["job_id"]:
+                    return {
+                        "status": 400,
+                        "data": {
+                            "code": "invalid_request",
+                            "message": "Unknown generator job",
+                            "retryable": False,
+                        },
+                    }
+                if generator["state"] == "running":
+                    if generator["attempt"] == 1:
+                        return {
+                            "status": 200,
+                            "data": {
+                                "ok": True,
+                                "job_id": job_id,
+                                "state": "running",
+                                "message": "Still generating",
+                                "workspace": str(root / ".builder" / job_id),
+                            },
+                        }
+                    if "fail" in generator["request"].lower():
+                        generator["state"] = "failed"
+                    else:
+                        generator["state"] = "ready"
+                if generator["state"] == "ready":
+                    return {
+                        "status": 200,
+                        "data": {
+                            "ok": True,
+                            "job_id": job_id,
+                            "state": "ready",
+                            "message": "Draft ready",
+                            "workspace": str(root / ".builder" / job_id),
+                            "draft": draft_payload(),
+                        },
+                    }
+                if generator["state"] == "failed":
+                    return {
+                        "status": 200,
+                        "data": {
+                            "ok": False,
+                            "job_id": job_id,
+                            "state": "failed",
+                            "message": "Synthetic Workflow Builder failure",
+                            "workspace": str(root / ".builder" / job_id),
+                        },
+                    }
+                if generator["state"] == "cancelled":
+                    return {
+                        "status": 200,
+                        "data": {
+                            "ok": True,
+                            "job_id": job_id,
+                            "state": "cancelled",
+                            "message": "Workflow generation cancelled",
+                            "workspace": str(root / ".builder" / job_id),
+                        },
+                    }
+
+            if method == "POST" and path == "/api/studio/generate":
+                generator["attempt"] += 1
+                generator["job_id"] = f"coverage-job-{generator['attempt']}"
+                generator["state"] = "running"
+                generator["request"] = str(body.get("request", ""))
+                generator["filename"] = str(body.get("filename", ""))
+                return {
+                    "status": 200,
+                    "data": {
+                        "ok": True,
+                        "job_id": generator["job_id"],
+                        "state": "running",
+                        "workspace": str(root / ".builder" / generator["job_id"]),
+                        "message": "Synthetic generation started",
+                    },
+                }
+            if method == "POST" and path == "/api/studio/generate/cancel":
+                generator["state"] = "cancelled"
+                return {
+                    "status": 200,
+                    "data": {
+                        "ok": True,
+                        "state": "cancelling",
+                        "message": "Cancelling Workflow generation…",
+                    },
+                }
+            if method == "POST" and path == "/api/studio/generate/discard":
+                generator["state"] = "idle"
+                return {"status": 200, "data": {"ok": True, "message": "Draft discarded"}}
+            if method == "POST" and path == "/api/studio/generate/validate":
+                current = draft_payload()
+                current["workflow"] = str(body.get("workflow", current["workflow"]))
+                current["prompts"] = body.get("prompts", current["prompts"])
+                return {
+                    "status": 200,
+                    "data": {
+                        "ok": True,
+                        "summary": "Validation passed",
+                        "draft": current,
+                    },
+                }
+            if method == "POST" and path == "/api/studio/generate/save":
+                project = Path(body["project"]) if body.get("project") else None
+                try:
+                    imported = state.studio_import(
+                        "workflow",
+                        body.get("filename", ""),
+                        body.get("workflow", ""),
+                        body.get("destination", "global"),
+                        project,
+                    )
+                    generator["state"] = "idle"
+                    return {
+                        "status": 200,
+                        "data": {
+                            "ok": True,
+                            "workflow": imported["item"]["path"],
+                            "item": imported["item"],
+                            "file": imported["file"],
+                            "message": f"Workflow {imported['item']['name']} saved",
+                        },
+                    }
+                except Exception as exc:
+                    return {
+                        "status": 400,
+                        "data": {
+                            "code": "invalid_request",
+                            "message": str(exc),
+                            "retryable": False,
+                        },
+                    }
+            return base_bridge(method, url, body_json)
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            page.route(
+                "http://local.test/workflow-studio-app/**",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="text/html",
+                    body="<html><body>Workflow Editor</body></html>",
+                ),
+            )
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#workflowNav")
+            page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#workflowGeneratorPage')?.hidden")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.click("#generateWorkflowBack")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.click("#generateWorkflowConfirm")
+            assert "Describe the Workflow" in page.locator("#generateWorkflowHint").inner_text()
+
+            page.fill("#generateWorkflowRequest", "Cancel this coverage generation")
+            page.fill("#generateWorkflowFilename", "cancel-coverage.workflow.yaml")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowRunning')?.hidden")
+            page.click("#generateWorkflowStop")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Cancel Workflow generation')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.fill("#generateWorkflowRequest", "Build a coverage workflow")
+            page.fill("#generateWorkflowFilename", "regenerate-coverage.workflow.yaml")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowReady')?.hidden")
+            page.click("#generateWorkflowRegenerate")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Generate a new Draft')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowReady')?.hidden")
+
+            page.click("#generateWorkflowDiscard")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard generated Workflow')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.fill("#generateWorkflowRequest", "Please fail this coverage generation")
+            page.fill("#generateWorkflowFilename", "failed-coverage.workflow.yaml")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowFailed')?.hidden")
+            assert "Synthetic Workflow Builder failure" in page.locator("#generateWorkflowFailure").inner_text()
+            page.click("#generateWorkflowRetry")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            assert "Please fail" in page.locator("#generateWorkflowRequest").input_value()
+            page.click("#generateWorkflowCancel")
+            page.wait_for_function("document.querySelector('.ui-dialog-title')?.textContent.includes('Discard Workflow request')")
+            page.click("[data-dialog-ok]")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.fill("#generateWorkflowRequest", "Fail once more for failed cancel coverage")
+            page.fill("#generateWorkflowFilename", "failed-cancel.workflow.yaml")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowFailed')?.hidden")
+            page.click("#generateWorkflowFailedCancel")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+
+            page.click("#generateWorkflowButton")
+            page.wait_for_function("!document.querySelector('#generateWorkflowForm')?.hidden")
+            page.fill("#generateWorkflowRequest", "Build and save final coverage workflow")
+            page.fill("#generateWorkflowFilename", "coverage-generated.workflow.yaml")
+            page.click("#generateWorkflowConfirm")
+            page.wait_for_function("!document.querySelector('#generateWorkflowReady')?.hidden")
+
+            page.click("#generateDraftYamlTab")
+            assert page.locator("#generateDraftYamlPanel").is_visible()
+            page.click("#generateWorkflowEditYaml")
+            assert page.locator("#generateWorkflowPreview").is_focused()
+            page.fill(
+                "#generateWorkflowPreview",
+                (
+                    "stages:\n"
+                    "  execute:\n"
+                    "    type: base\n"
+                    "    profile: execute\n"
+                    "    prompt: common/execution.md\n"
+                    "flow: [execute]\n"
+                ),
+            )
+            assert page.locator("#generateDraftDirtyHint").is_visible()
+
+            page.click("#generateDraftPromptTab")
+            assert page.locator("#generateDraftPromptPanel").is_visible()
+            page.click("#generateWorkflowEditPrompt")
+            assert page.locator("#generateDraftPromptTextarea").is_focused()
+            page.fill("#generateDraftPromptTextarea", "Edited generated prompt {{ goal }}\n")
+
+            page.click("#generateDraftVisualTab")
+            assert page.locator("#generateDraftVisualPanel").is_visible()
+            page.click("#generateWorkflowValidate")
+            page.wait_for_function(
+                "() => document.querySelector('#generateWorkflowValidation')?.textContent.includes('PASS')"
+            )
+            assert page.locator("#generateDraftDirtyHint").is_hidden()
+
+            page.click("#generateWorkflowSave")
+            assert page.locator("#generateWorkflowSaveBackdrop").is_visible()
+            page.click("#generateWorkflowSaveCancel")
+            assert page.locator("#generateWorkflowSaveBackdrop").is_hidden()
+            page.click("#generateWorkflowSave")
+            page.click("#generateWorkflowSaveClose")
+            assert page.locator("#generateWorkflowSaveBackdrop").is_hidden()
+            page.click("#generateWorkflowSave")
+            page.click("#generateWorkflowSaveConfirm")
+            page.wait_for_function("document.querySelector('#workflowGeneratorPage')?.hidden === true")
+            page.wait_for_function(
+                "() => [...document.querySelectorAll('#studioFileList .studio-file-item')].some(node => node.textContent.includes('coverage-generated.workflow.yaml'))"
+            )
+            saved = root / "runner" / "assets" / "workflows" / "coverage-generated.workflow.yaml"
+            assert saved.is_file()
+            assert "flow: [execute]" in saved.read_text(encoding="utf-8")
+
+            assert not errors
+            browser.close()
