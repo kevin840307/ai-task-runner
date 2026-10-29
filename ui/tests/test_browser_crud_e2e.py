@@ -3763,6 +3763,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#taskCreateMenu").is_hidden()
             board_menu = page.locator("#tasksBoardContextMenu")
             assert board_menu.is_visible()
+            assert board_menu.locator("[data-tasks-context-action]").count() == 4
             assert board_menu.get_by_role("button").all_inner_texts() == [
                 "Open list\n↵", "Rename\nF2", "Info\ni", "Delete\nDel",
             ]
