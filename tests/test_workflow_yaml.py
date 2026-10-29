@@ -9,7 +9,14 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState, StateStore, Task, set_stage
 from runner.workflow.flow_engine import FlowEngine
-from runner.workflow.loader import WORKFLOWS, load_workflow
+from runner.workflow.loader import (
+    WORKFLOWS,
+    default_workflow_name,
+    load_default_workflow,
+    load_workflow,
+    save_workflow,
+    workflow_fingerprint,
+)
 from runner.workflow.stages import HandoffStageSpec, StageContext, StageResult
 
 
@@ -1503,3 +1510,60 @@ flow:
     with pytest.raises(ConfigurationError, match="session_policy=main"):
         from runner.workflow.registry import create_stage
         create_stage(load_workflow(path)[0])
+
+
+
+def test_save_workflow_validates_and_uses_expected_hash(tmp_path):
+    from runner.resources import read_text
+
+    path = tmp_path / "saved.workflow.yaml"
+    initial = (
+        "stages:\n"
+        "  run:\n"
+        "    type: command\n"
+        "    command: [python, -c, \"print('ok')\"]\n"
+        "flow: [run]\n"
+    )
+    first_hash = save_workflow(path, initial)
+    assert read_text(path) == (initial, first_hash)
+    assert load_workflow(path)[0]["name"] == "run"
+
+    updated = initial.replace("print('ok')", "print('updated')")
+    second_hash = save_workflow(path, updated, expected_hash=first_hash)
+    assert second_hash != first_hash
+    assert "updated" in path.read_text(encoding="utf-8")
+
+    with pytest.raises(RunnerError, match="resource changed since it was read"):
+        save_workflow(path, initial, expected_hash=first_hash)
+
+    with pytest.raises(RunnerError, match="invalid workflow YAML"):
+        save_workflow(path, "stages: [broken")
+    assert "updated" in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("validator", "ai_prompt", "expected"),
+    [
+        ("ai", "", "ai"),
+        ("AI", "ignored", "ai"),
+        ("validate.py", "", "file"),
+        ("validate.py", "check final behavior", "mixed"),
+        (None, "", "file"),
+        (None, "check final behavior", "mixed"),
+    ],
+)
+def test_default_workflow_selection_is_deterministic(validator, ai_prompt, expected):
+    assert default_workflow_name(validator, ai_prompt) == expected
+    loaded = load_default_workflow(validator, ai_prompt)
+    assert loaded == load_workflow(WORKFLOWS[expected])
+
+
+def test_workflow_fingerprint_is_stable_for_equal_content_and_changes_with_semantics():
+    first = load_workflow(WORKFLOWS["file"])
+    second = load_workflow(WORKFLOWS["file"])
+
+    assert workflow_fingerprint(first) == workflow_fingerprint(second)
+
+    modified = [dict(stage) for stage in second]
+    modified[0] = {**modified[0], "status": "changed-for-fingerprint"}
+    assert workflow_fingerprint(first) != workflow_fingerprint(modified)
