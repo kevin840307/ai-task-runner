@@ -833,21 +833,25 @@ html[data-appearance] .task-workspace-list-row.selected{
    Outer tabs switch Task Prompt / AI Validation / Program Validation.
    Inner source tabs use a text + underline treatment instead of nested pills/cards. */
 .task-workspace-editor-input-tabs{
-  display:flex;align-items:flex-end;gap:18px;min-height:36px;margin:10px 0 0;
-  padding:0;border-bottom:1px solid var(--line);background:transparent
+  display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
+  align-items:stretch;gap:3px;min-height:42px;margin:10px 0 0;padding:3px;
+  border:1px solid color-mix(in srgb,var(--line) 88%,transparent);
+  border-radius:10px;background:var(--panel-2);box-sizing:border-box
 }
 .task-workspace-editor-input-tab{
-  position:relative;min-width:0;min-height:35px;padding:0 2px 9px;
-  border:0;border-radius:0;background:transparent;color:var(--muted);
-  box-shadow:none;font-size:10px;font-weight:780;white-space:nowrap
+  min-width:0;min-height:34px;padding:0 10px;
+  border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);
+  box-shadow:none;font-size:10px;font-weight:720;white-space:nowrap
 }
-.task-workspace-editor-input-tab:hover{background:transparent;color:var(--text)}
-.task-workspace-editor-input-tab::after{
-  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
-  border-radius:2px;background:transparent
+.task-workspace-editor-input-tab:hover{
+  border-color:color-mix(in srgb,var(--line) 78%,transparent);
+  background:color-mix(in srgb,var(--panel) 72%,transparent);color:var(--text)
 }
-.task-workspace-editor-input-tab.active{background:transparent;color:var(--accent-dark);box-shadow:none}
-.task-workspace-editor-input-tab.active::after{background:var(--accent)}
+.task-workspace-editor-input-tab.active{
+  border-color:color-mix(in srgb,var(--line) 92%,transparent);
+  background:var(--panel);color:var(--text);
+  box-shadow:0 1px 2px color-mix(in srgb,var(--text) 8%,transparent)
+}
 .task-workspace-input-grid.task-workspace-tabbed-input{
   display:block!important;grid-template-columns:none!important;gap:0!important;margin-top:0!important
 }
@@ -909,6 +913,6 @@ html[data-appearance] .task-workspace-list-row.selected{
   border-color:color-mix(in srgb,var(--line) 72%,transparent);background:var(--panel-2)
 }
 @media(max-width:620px){
-  .task-workspace-editor-input-tabs{gap:12px;overflow-x:auto}
+  .task-workspace-editor-input-tabs{grid-auto-columns:minmax(118px,1fr);overflow-x:auto}
   .task-workspace-editor-input-tab{font-size:9px}
 }
