@@ -2250,7 +2250,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             assert page.locator("[data-task-editor-tab='validator']").get_attribute("aria-selected") == "true"
             assert page.locator("[data-task-source-card='prompt']").count() == 0
             page.locator("[data-task-editor-tab='ai']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
+            page.wait_for_function("""document.querySelector('[data-task-source-card="ai"]') !== null""")
             assert page.locator("[data-task-editor-tab='ai']").get_attribute("aria-selected") == "true"
             page.locator("[data-task-editor-tab='prompt']").click()
             page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
@@ -2496,7 +2496,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("[data-task-source-card='validator']").is_visible()
             page.locator("[data-task-editor-tab='ai']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
+            page.wait_for_function("""document.querySelector('[data-task-source-card="ai"]') !== null""")
             assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
             assert page.locator("#taskWorkspaceAiValidatorPrompt").count() == 0
             page.locator("[data-task-editor-tab='prompt']").click()
@@ -2553,7 +2553,7 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.fill("#taskWorkspaceValidator", manual_validator)
             assert page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint").count() == 0
             page.locator("[data-task-editor-tab='ai']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
+            page.wait_for_function("""document.querySelector('[data-task-source-card="ai"]') !== null""")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             page.click("#taskWorkspaceSave")
@@ -5344,12 +5344,39 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             # The new hierarchy is deliberately lighter than the former nested
             # card + pill + card layout.
             light_geometry = page.locator("#taskWorkspaceEditorInputTabs").evaluate(
-                """node => ({
-                    borderBottomWidth: getComputedStyle(node).borderBottomWidth,
-                    background: getComputedStyle(node).backgroundColor,
-                })"""
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        display: style.display,
+                        gridAutoFlow: style.gridAutoFlow,
+                        borderTopWidth: style.borderTopWidth,
+                        borderRadius: style.borderRadius,
+                        paddingTop: style.paddingTop,
+                        gap: style.gap,
+                        background: style.backgroundColor,
+                    };
+                }"""
             )
-            assert light_geometry["borderBottomWidth"] == "1px"
+            assert light_geometry["display"] == "grid"
+            assert light_geometry["gridAutoFlow"] == "column"
+            assert light_geometry["borderTopWidth"] == "1px"
+            assert light_geometry["borderRadius"] == "10px"
+            assert light_geometry["paddingTop"] == "3px"
+            assert light_geometry["gap"] == "3px"
+            active_outer_tab = page.locator("[data-task-editor-tab='prompt']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        borderRadius: style.borderRadius,
+                        borderTopWidth: style.borderTopWidth,
+                        background: style.backgroundColor,
+                        boxShadow: style.boxShadow,
+                    };
+                }"""
+            )
+            assert active_outer_tab["borderRadius"] == "7px"
+            assert active_outer_tab["borderTopWidth"] == "1px"
+            assert active_outer_tab["background"] != light_geometry["background"]
             prompt_card_style = page.locator("[data-task-source-card='prompt']").evaluate(
                 """node => ({
                     borderTopWidth: getComputedStyle(node).borderTopWidth,
@@ -6225,7 +6252,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             feature_page.locator("[data-task-ai-mode][data-source-value='file']").click()
             feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
             production_page.locator("[data-task-editor-tab='ai']").click()
-            production_page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
+            production_page.wait_for_function("""document.querySelector('[data-task-source-card="ai"]') !== null""")
             production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             _assert_feature_computed_style_parity(
@@ -6304,7 +6331,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # Prompt source tabs preserve each alternate source independently.
             feature_page.locator("[data-task-goal-mode][data-source-value='inline']").click()
             production_page.locator("[data-task-editor-tab='prompt']").click()
-            production_page.wait_for_function("document.querySelector('[data-task-source-card="prompt"]') !== null")
+            production_page.wait_for_function("""document.querySelector('[data-task-source-card="prompt"]') !== null""")
             production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
             feature_page.fill("#taskPromptInline", "Prompt text retained across modes")
             production_page.fill("#taskWorkspacePrompt", "Prompt text retained across modes")
