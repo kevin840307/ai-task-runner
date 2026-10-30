@@ -7758,7 +7758,7 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
             page.click("#generateDraftPromptTab")
             assert page.locator("#generateDraftPromptPanel").is_visible()
             prompt_pills = page.locator(
-                "#generateDraftPromptList .designer-workflow-pill"
+                "#generateWorkflowPromptList .designer-workflow-pill"
             )
             assert prompt_pills.count() == 2
             prompt_pills.nth(1).click()
