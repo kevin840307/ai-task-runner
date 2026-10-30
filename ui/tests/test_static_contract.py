@@ -50,8 +50,10 @@ class StaticContractTests(unittest.TestCase):
 
         production = self.task_workspace_js
         self.assertLess(production.index("grid.append(projectField, workflowField, titleField)"), production.index("body.appendChild(workflowCaps)"))
-        self.assertLess(production.index("body.appendChild(workflowCaps)"), production.index("body.appendChild(inputGrid)"))
-        self.assertLess(production.index("body.appendChild(inputGrid)"), production.index("body.appendChild(workspaceSection)"))
+        self.assertLess(production.index("body.appendChild(workflowCaps)"), production.index("body.append(editorTabs, inputGrid)"))
+        self.assertLess(production.index("body.append(editorTabs, inputGrid)"), production.index("body.appendChild(workspaceSection)"))
+        self.assertIn('editorTabs.setAttribute("role", "tablist")', production)
+        self.assertIn('inputGrid.appendChild(editorPanel)', production)
         self.assertIn("task-workspace-project-combobox", production)
         self.assertIn("task-workspace-project-dropdown", production)
         self.assertIn("projectEditable = state.kind === \"draft\"", production)
@@ -621,14 +623,17 @@ def test_feature_reference_sidebar_and_task_filter_geometry_stays_in_sync():
     assert ".task-workspace-workspace-options" in workspace
     assert ".task-workspace-workspace-option" in workspace
     assert 'card.dataset.workspaceOption = value' in task_workspace_js
-    assert 'body.appendChild(inputGrid)' in task_workspace_js
+    assert 'body.append(editorTabs, inputGrid)' in task_workspace_js
     assert 'body.appendChild(workspaceSection)' in task_workspace_js
-    assert 'inputGrid.append(inputPrimary, inputSupporting)' in task_workspace_js
-    assert 'inputGrid.classList.add("has-mixed-validation")' in task_workspace_js
+    assert 'inputGrid.appendChild(editorPanel)' in task_workspace_js
+    assert 'if (activeEditorTab === "ai" && aiCard) editorPanel.appendChild(aiCard.card)' in task_workspace_js
+    assert 'else if (activeEditorTab === "validator" && validatorCard) editorPanel.appendChild(validatorCard.card)' in task_workspace_js
     assert 'grid.append(projectField, workflowField, titleField)' in task_workspace_js
     assert 'if (draft.items.length === 1) body.appendChild(renderDraftTitleField())' not in task_workspace_js
-    assert ".task-workspace-input-grid" in workspace
-    assert "grid-template-columns:minmax(0,1.34fr) minmax(245px,.86fr)" in workspace
+    assert ".task-workspace-editor-input-tabs" in workspace
+    assert "display:flex;gap:5px" in workspace
+    assert ".task-workspace-input-grid.task-workspace-tabbed-input" in workspace
+    assert "display:block!important" in workspace
     assert ".task-workspace-shell.workspace-route{width:min(920px,94vw);max-width:94vw}" in workspace
     assert ".task-workspace-task-primary-source textarea{min-height:112px!important}" in workspace
     assert '[["↑"' not in task_workspace_js
