@@ -755,6 +755,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     state.fieldErrors = { [fieldErrorKey(field, index)]: text };
     if (field !== "draftTitle") {
+      const activeItem = editorDraft()?.items?.[index];
+      if (activeItem) {
+        const source = sourceState(activeItem);
+        if (field === "validator") source.editorTab = "validator";
+        else if (field === "ai_validator_prompt" || field === "ai_validator_prompt_file") source.editorTab = "ai";
+        else if (field === "prompt" || field === "goal_file") source.editorTab = "prompt";
+      }
       state.index = index;
       if (state.route === "list") {
         if (isDraftState()) {
@@ -1879,6 +1886,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         aiText: String(item.ai_validator_prompt || ""),
         aiFile: String(item.ai_validator_prompt_file || ""),
         aiAsset: aiAsset ? String(item.ai_validator_prompt_file || "") : "",
+        editorTab: "prompt",
         uploadNames: {},
       };
     }
@@ -2199,6 +2207,9 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       // no AI validator (the backend correctly rejects that combination), so
       // keep the alternate values in source-state and restore them when an
       // AI-capable Workflow is selected again.
+      if (source.editorTab === "ai" && !capability?.has_ai_validator) source.editorTab = "prompt";
+      if (source.editorTab === "validator" && !capability?.requires_python_validator) source.editorTab = "prompt";
+
       if (!capability?.has_ai_validator) {
         updateItem(state.index, "ai_validator_prompt", "");
         updateItem(state.index, "ai_validator_prompt_file", "");
@@ -2399,6 +2410,60 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       return hint;
     }
 
+    const editorTabs = document.createElement("div");
+    editorTabs.id = "taskWorkspaceEditorInputTabs";
+    editorTabs.className = "task-workspace-editor-input-tabs";
+    editorTabs.setAttribute("role", "tablist");
+    editorTabs.setAttribute("aria-label", tr("task.editor_input_tabs", "Task inputs"));
+
+    const availableTabs = [
+      ["prompt", tr("task.prompt_source_title", "Task Prompt")],
+    ];
+    if (capability?.has_ai_validator) {
+      availableTabs.push(["ai", tr("task.ai_validation_title", "AI Validation")]);
+    }
+    if (capability?.requires_python_validator) {
+      availableTabs.push(["validator", tr("task.program_validation_title", "Program Validation")]);
+    }
+
+    const availableTabKeys = new Set(availableTabs.map(([key]) => key));
+    let activeEditorTab = String(source.editorTab || "prompt");
+    if (!availableTabKeys.has(activeEditorTab)) {
+      activeEditorTab = "prompt";
+      source.editorTab = "prompt";
+    }
+
+    for (const [key, label] of availableTabs) {
+      const button = document.createElement("button");
+      button.id = "taskWorkspaceEditorTab-" + key;
+      button.type = "button";
+      button.className = "task-workspace-editor-input-tab" + (key === activeEditorTab ? " active" : "");
+      button.dataset.taskEditorTab = key;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", String(key === activeEditorTab));
+      button.textContent = label;
+      button.addEventListener("click", () => {
+        if (!state) return;
+        source.editorTab = key;
+        render();
+        window.setTimeout(() => {
+          byId("taskWorkspaceEditorTab-" + key)?.focus({ preventScroll: true });
+        }, 0);
+      });
+      editorTabs.appendChild(button);
+    }
+
+    const inputGrid = document.createElement("div");
+    inputGrid.id = "taskWorkspaceInputGrid";
+    inputGrid.className = "task-workspace-input-grid task-workspace-tabbed-input";
+
+    const editorPanel = document.createElement("div");
+    editorPanel.id = "taskWorkspaceEditorInputPanel";
+    editorPanel.className = "task-workspace-editor-input-panel";
+    editorPanel.setAttribute("role", "tabpanel");
+    editorPanel.setAttribute("aria-labelledby", "taskWorkspaceEditorTab-" + activeEditorTab);
+    inputGrid.appendChild(editorPanel);
+
     const promptCard = sourceCard(
       tr("task.prompt_source_title", "Task Prompt"),
       tr("task.prompt_source_help", "Choose how this task gets its prompt"),
@@ -2471,52 +2536,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     promptCard.card.classList.add("task-workspace-prompt-source", "task-workspace-task-primary-source");
 
-    const inputGrid = document.createElement("div");
-    inputGrid.id = "taskWorkspaceInputGrid";
-    inputGrid.className = "task-workspace-input-grid";
-    const inputPrimary = document.createElement("div");
-    inputPrimary.className = "task-workspace-input-primary";
-    inputPrimary.appendChild(promptCard.card);
-    const inputSupporting = document.createElement("div");
-    inputSupporting.className = "task-workspace-input-supporting";
-    inputGrid.append(inputPrimary, inputSupporting);
-
-    const validationGrid = document.createElement("div");
-    validationGrid.className = "task-workspace-validation-grid task-workspace-validation-stack";
-
-    function pathControl(id, key, value, placeholder = "Enter file path") {
-      const input = document.createElement("input");
-      input.id = id;
-      input.value = String(value || "");
-      input.maxLength = 4096;
-      input.placeholder = placeholder;
-      input.addEventListener("input", () => {
-        const previous = String(editorDraft()?.items?.[state.index]?.[key] || "");
-        if (previous !== input.value) {
-          queueUploadCancel(previous);
-          if (source.uploadNames) delete source.uploadNames[key];
-          input.closest(".task-workspace-source-card")
-            ?.querySelector(".task-workspace-file-upload-hint")
-            ?.remove();
-        }
-        updateItem(state.index, key, input.value);
-      });
-      const row = document.createElement("div");
-      row.className = "task-workspace-path-row";
-      const upload = document.createElement("button");
-      upload.type = "button";
-      upload.className = "task-workspace-upload";
-      upload.dataset.taskUploadField = key;
-      upload.textContent = tr("task.upload_file", "Upload file");
-      upload.addEventListener("click", () => chooseUpload(key, upload));
-      row.append(input, upload);
-      return { row, input, uploadHint: stagedUploadHint(key, input.value) };
-    }
-
+    let validatorCard = null;
     if (capability?.requires_python_validator) {
-      const validatorCard = sourceCard(
-        tr("task.file_validator", "File Validator"),
-        tr("task.file_validator_help", "Required by this workflow"),
+      validatorCard = sourceCard(
+        tr("task.program_validation_title", "Program Validation"),
+        tr("task.program_validation_help", "Provide the validator program required by this Workflow."),
         "validator",
         [],
         "",
@@ -2535,11 +2559,11 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       validatorNote.textContent = tr("task.validator_upload_note", "Manual path is used as-is. Upload fills this field with the managed target path immediately; Create/Save copies the uploaded bytes to that path.");
       validatorCard.body.appendChild(validatorNote);
       appendFieldError(validatorCard.card, control.input, "validator");
-      validationGrid.appendChild(validatorCard.card);
     }
 
+    let aiCard = null;
     if (capability?.has_ai_validator) {
-      const aiCard = sourceCard(
+      aiCard = sourceCard(
         tr("task.ai_validation_title", "AI Validation"),
         source.aiMode === "default"
           ? tr("task.ai_source_default", "Workflow default")
@@ -2607,19 +2631,13 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
         aiCard.body.appendChild(sourceModePathPanel("asset", select, prompts));
         appendFieldError(aiCard.card, select, "ai_validator_prompt_file");
       }
-      validationGrid.appendChild(aiCard.card);
     }
-    if (validationGrid.children.length) {
-      inputSupporting.appendChild(validationGrid);
-      if (validationGrid.children.length > 1) inputGrid.classList.add("has-mixed-validation");
-    } else {
-      const empty = document.createElement("div");
-      empty.className = "task-workspace-validation-empty";
-      empty.textContent = tr("task.validation_none", "This Workflow needs no extra Validator input.");
-      inputSupporting.appendChild(empty);
-      inputGrid.classList.add("has-no-validation");
-    }
-    body.appendChild(inputGrid);
+
+    if (activeEditorTab === "ai" && aiCard) editorPanel.appendChild(aiCard.card);
+    else if (activeEditorTab === "validator" && validatorCard) editorPanel.appendChild(validatorCard.card);
+    else editorPanel.appendChild(promptCard.card);
+
+    body.append(editorTabs, inputGrid);
     body.appendChild(workspaceSection);
 
     const error = document.createElement("div");
