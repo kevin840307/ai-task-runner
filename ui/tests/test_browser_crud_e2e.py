@@ -3851,21 +3851,31 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#taskWorkspaceFooterInfo")
             page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
 
-            # Escape belongs to the focused top layer. The Task Workspace stays
-            # open while a Project menu, rename dialog or discard dialog closes.
+            # Modal ownership: the full-screen Task Workspace must cover the
+            # Project action trigger and any Project portal menu. Sidebar controls
+            # must never punch through a drawer/dialog stacking layer.
             active_project = page.locator("#projectList .project-row.active")
-            active_project.locator(".project-menu-button").click()
-            page.wait_for_function("document.querySelector('.project-action-menu:not([hidden])') !== null")
-            page.keyboard.press("Escape")
-            page.wait_for_function("document.querySelector('.project-action-menu:not([hidden])') === null")
-            assert page.locator("#taskWorkspaceOverlay").is_visible()
-            assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
-
-            active_project.locator(".project-menu-button").click()
-            page.locator(".project-action-menu:not([hidden])").get_by_role("button", name="Rename project").click()
-            page.wait_for_function("document.querySelector('.ui-dialog-input') !== null")
-            page.keyboard.press("Escape")
-            page.wait_for_function("document.querySelector('.ui-dialog-card') === null")
+            project_menu_button = active_project.locator(".project-menu-button")
+            assert project_menu_button.count() == 1
+            project_layer = page.evaluate(
+                """() => {
+                    const overlay = document.querySelector('#taskWorkspaceOverlay');
+                    const button = document.querySelector('#projectList .project-row.active .project-menu-button');
+                    const rect = button.getBoundingClientRect();
+                    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                    return {
+                        overlayZ: getComputedStyle(overlay).zIndex,
+                        buttonZ: getComputedStyle(button).zIndex,
+                        topInsideOverlay: !!top?.closest?.('#taskWorkspaceOverlay'),
+                        topIsProjectButton: !!top?.closest?.('.project-menu-button'),
+                    };
+                }"""
+            )
+            assert int(project_layer["overlayZ"]) > 0
+            assert project_layer["buttonZ"] == "auto"
+            assert project_layer["topInsideOverlay"] is True
+            assert project_layer["topIsProjectButton"] is False
+            assert page.locator(".project-action-menu:not([hidden])").count() == 0
             assert page.locator("#taskWorkspaceOverlay").is_visible()
             assert page.locator("#taskWorkspaceEyebrow").inner_text() == "TASK INFO"
 
@@ -5360,8 +5370,8 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert light_geometry["display"] == "grid"
             assert light_geometry["gridAutoFlow"] == "column"
             assert light_geometry["borderTopWidth"] == "1px"
-            assert light_geometry["borderRadius"] == "10px"
-            assert light_geometry["paddingTop"] == "3px"
+            assert light_geometry["borderRadius"] == "9px"
+            assert light_geometry["paddingTop"] == "4px"
             assert light_geometry["gap"] == "3px"
             active_outer_tab = page.locator("[data-task-editor-tab='prompt']").evaluate(
                 """node => {
@@ -5387,7 +5397,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     };
                 }"""
             )
-            assert active_outer_tab["borderRadius"] == "7px"
+            assert active_outer_tab["borderRadius"] == "6px"
             assert active_outer_tab["borderTopWidth"] == "1px"
             assert active_outer_tab["background"] != light_geometry["background"]
             assert active_outer_tab["background"] != inactive_outer_tab["background"]
