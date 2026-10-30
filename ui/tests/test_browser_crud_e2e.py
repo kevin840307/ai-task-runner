@@ -4170,6 +4170,19 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
             assert page.locator(".studio-workflow-main").is_visible()
 
+            # Runtime-created Prompt parameter chips are real editor operations,
+            # not decorative metadata. Clicking one must insert its token at the
+            # current textarea selection and mark the Prompt dirty.
+            page.wait_for_function(
+                "document.querySelectorAll('#studioPromptParamList .designer-param-chip').length > 0"
+            )
+            param_chip = page.locator("#studioPromptParamList .designer-param-chip").first
+            token = param_chip.inner_text()
+            page.fill("#studioPromptTextarea", "")
+            param_chip.click()
+            assert page.locator("#studioPromptTextarea").input_value() == token
+            page.wait_for_function("!document.querySelector('#saveStudioButton')?.disabled")
+
             # Prompt crash/reload recovery stays local-only and hash-gated.
             prompt_path = next(Path(td).rglob("e2e_prompt.md"))
             canonical_before_draft = prompt_path.read_text(encoding="utf-8")
