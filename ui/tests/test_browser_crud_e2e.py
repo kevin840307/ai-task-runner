@@ -5371,12 +5371,29 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                         borderTopWidth: style.borderTopWidth,
                         background: style.backgroundColor,
                         boxShadow: style.boxShadow,
+                        color: style.color,
+                        fontWeight: style.fontWeight,
+                    };
+                }"""
+            )
+            inactive_outer_tab = page.locator("[data-task-editor-tab='ai']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {
+                        background: style.backgroundColor,
+                        color: style.color,
+                        fontWeight: style.fontWeight,
+                        boxShadow: style.boxShadow,
                     };
                 }"""
             )
             assert active_outer_tab["borderRadius"] == "7px"
             assert active_outer_tab["borderTopWidth"] == "1px"
             assert active_outer_tab["background"] != light_geometry["background"]
+            assert active_outer_tab["background"] != inactive_outer_tab["background"]
+            assert active_outer_tab["color"] != inactive_outer_tab["color"]
+            assert int(active_outer_tab["fontWeight"]) > int(inactive_outer_tab["fontWeight"])
+            assert active_outer_tab["boxShadow"] != inactive_outer_tab["boxShadow"]
             prompt_card_style = page.locator("[data-task-source-card='prompt']").evaluate(
                 """node => ({
                     borderTopWidth: getComputedStyle(node).borderTopWidth,
