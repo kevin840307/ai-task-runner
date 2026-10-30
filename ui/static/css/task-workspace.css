@@ -836,7 +836,7 @@ html[data-appearance] .task-workspace-list-row.selected{
   display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
   align-items:stretch;gap:3px;min-height:42px;margin:10px 0 0;padding:3px;
   border:1px solid color-mix(in srgb,var(--line) 88%,transparent);
-  border-radius:10px;background:var(--panel-2);box-sizing:border-box
+  border-radius:10px;background:var(--panel-3);box-sizing:border-box
 }
 .task-workspace-editor-input-tab{
   min-width:0;min-height:34px;padding:0 10px;
@@ -849,7 +849,7 @@ html[data-appearance] .task-workspace-list-row.selected{
 }
 .task-workspace-editor-input-tab.active{
   border-color:color-mix(in srgb,var(--line) 96%,var(--text) 4%);
-  background:color-mix(in srgb,var(--panel) 96%,#fff 4%);
+  background:var(--panel);
   color:var(--text);font-weight:780;
   box-shadow:
     0 1px 3px color-mix(in srgb,var(--text) 14%,transparent),
