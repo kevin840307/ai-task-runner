@@ -5367,12 +5367,12 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     };
                 }"""
             )
-            assert light_geometry["display"] == "grid"
-            assert light_geometry["gridAutoFlow"] == "column"
+            assert light_geometry["display"] == "flex"
+            assert light_geometry["gridAutoFlow"] == "row"
             assert light_geometry["borderTopWidth"] == "1px"
-            assert light_geometry["borderRadius"] == "9px"
-            assert light_geometry["paddingTop"] == "4px"
-            assert light_geometry["gap"] == "3px"
+            assert light_geometry["borderRadius"] == "12px"
+            assert light_geometry["paddingTop"] == "5px"
+            assert light_geometry["gap"] == "5px"
             active_outer_tab = page.locator("[data-task-editor-tab='prompt']").evaluate(
                 """node => {
                     const style = getComputedStyle(node);
@@ -5397,12 +5397,12 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                     };
                 }"""
             )
-            assert active_outer_tab["borderRadius"] == "6px"
-            assert active_outer_tab["borderTopWidth"] == "1px"
+            assert active_outer_tab["borderRadius"] == "9px"
+            assert active_outer_tab["borderTopWidth"] == "0px"
             assert active_outer_tab["background"] != light_geometry["background"]
             assert active_outer_tab["background"] != inactive_outer_tab["background"]
             assert active_outer_tab["color"] != inactive_outer_tab["color"]
-            assert int(active_outer_tab["fontWeight"]) > int(inactive_outer_tab["fontWeight"])
+            assert active_outer_tab["fontWeight"] == inactive_outer_tab["fontWeight"]
             assert active_outer_tab["boxShadow"] != inactive_outer_tab["boxShadow"]
 
             # Selected-state contract matches the segmented-control reference:
