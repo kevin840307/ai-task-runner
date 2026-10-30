@@ -264,6 +264,8 @@ DYNAMIC_UI_SURFACES = {
         ("backend-dropdown-option", "backend-dropdown-option"),
         ("workflow-dropdown-option", "workflow-dropdown-option"),
         ("environment-check-toggle", "environment-check-toggle"),
+        ("studio-empty-action", "studio-empty-action"),
+        ("designer-param-chip", "designer-param-chip"),
     ),
     ROOT / "ui" / "static" / "js" / "task-workspace.js": (
         ("taskWorkspaceContextMenu", "taskWorkspaceContextMenu"),
