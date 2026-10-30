@@ -827,3 +827,88 @@ html[data-appearance] .task-workspace-list-row.selected{
 .task-workspace-context-menu .danger-item{color:#b42318}
 .task-workspace-context-menu kbd{font:700 7px/1 Inter,Segoe UI,sans-serif;color:var(--muted)}
 .task-workspace-context-separator{height:1px;margin:4px 3px;background:#edf0f3}
+
+
+/* Task Editor input tabs: keep the hierarchy light.
+   Outer tabs switch Task Prompt / AI Validation / Program Validation.
+   Inner source tabs use a text + underline treatment instead of nested pills/cards. */
+.task-workspace-editor-input-tabs{
+  display:flex;align-items:flex-end;gap:18px;min-height:36px;margin:10px 0 0;
+  padding:0;border-bottom:1px solid var(--line);background:transparent
+}
+.task-workspace-editor-input-tab{
+  position:relative;min-width:0;min-height:35px;padding:0 2px 9px;
+  border:0;border-radius:0;background:transparent;color:var(--muted);
+  box-shadow:none;font-size:10px;font-weight:780;white-space:nowrap
+}
+.task-workspace-editor-input-tab:hover{background:transparent;color:var(--text)}
+.task-workspace-editor-input-tab::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  border-radius:2px;background:transparent
+}
+.task-workspace-editor-input-tab.active{background:transparent;color:var(--accent-dark);box-shadow:none}
+.task-workspace-editor-input-tab.active::after{background:var(--accent)}
+.task-workspace-input-grid.task-workspace-tabbed-input{
+  display:block!important;grid-template-columns:none!important;gap:0!important;margin-top:0!important
+}
+.task-workspace-editor-input-panel{min-width:0;padding-top:5px}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-card{
+  border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-head,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-primary-source>.task-workspace-source-head,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-file-source>.task-workspace-source-head{
+  min-height:0;margin:0;padding:7px 0 4px;border:0;background:transparent
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-head>div:first-child{
+  min-height:0
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-head small{
+  margin:2px 0 0;font-size:8px
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-body{
+  padding:6px 0 0
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-primary-source .task-workspace-source-tabs,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-ai-source .task-workspace-source-tabs{
+  display:flex;width:auto;min-width:0;height:28px;min-height:28px;gap:14px;padding:0;
+  border:0;border-radius:0;background:transparent;box-sizing:border-box
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs button,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-primary-source .task-workspace-source-tabs button,
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-ai-source .task-workspace-source-tabs button{
+  position:relative;flex:0 0 auto;width:auto;min-width:0;height:28px;min-height:28px;
+  padding:0 1px;border:0;border-radius:0;background:transparent;color:var(--muted);
+  box-shadow:none;font-size:8.5px;font-weight:780;white-space:nowrap;overflow:visible;text-overflow:clip
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs button::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:1.5px;background:transparent
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs button:hover{
+  background:transparent;color:var(--text)
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs button.active{
+  background:transparent;color:var(--accent-dark);box-shadow:none
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-source-tabs button.active::after{
+  background:var(--accent)
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-primary-source{
+  border:0;box-shadow:none
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-ai-source{opacity:1}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-task-file-source{
+  border:0
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-required-chip{
+  padding:2px 6px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--line));
+  background:transparent;font-size:7px
+}
+.task-workspace-shell.task-editor-route .task-workspace-editor-input-panel .task-workspace-compact-default-value{
+  border-color:color-mix(in srgb,var(--line) 72%,transparent);background:var(--panel-2)
+}
+@media(max-width:620px){
+  .task-workspace-editor-input-tabs{gap:12px;overflow-x:auto}
+  .task-workspace-editor-input-tab{font-size:9px}
+}
