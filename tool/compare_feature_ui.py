@@ -548,6 +548,35 @@ TASK_EDITOR = PanelSpec(
     ),
 )
 
+
+# The Task input area intentionally diverges from the accepted prototype:
+# production now uses capability-aware outer tabs and a lighter, single-panel
+# source editor. Keep prototype parity for the surrounding drawer, fields,
+# uploads, workspace selector, and motion, but do not force the retired
+# simultaneous-card geometry back into production.
+_TASK_EDITOR_TABBED_INPUT_SELECTORS = (
+    ".task-workspace-input-grid",
+    ".task-workspace-source-card",
+    ".task-workspace-source-head",
+    ".task-workspace-source-body",
+    ".task-workspace-task-primary-source",
+    ".task-workspace-validation-stack",
+    ".task-workspace-task-file-source",
+    ".task-workspace-task-ai-source",
+    ".task-workspace-source-tabs",
+)
+TASK_EDITOR = PanelSpec(
+    TASK_EDITOR.production_path,
+    tuple(
+        pair
+        for pair in TASK_EDITOR.pairs
+        if not any(
+            token in pair.production_selector
+            for token in _TASK_EDITOR_TABBED_INPUT_SELECTORS
+        )
+    ),
+)
+
 TASK_LIST = PanelSpec(
     "ui/static/css/task-workspace.css",
     (
