@@ -2536,6 +2536,35 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
     promptCard.card.classList.add("task-workspace-prompt-source", "task-workspace-task-primary-source");
 
+    function pathControl(id, key, value, placeholder = "Enter file path") {
+      const input = document.createElement("input");
+      input.id = id;
+      input.value = String(value || "");
+      input.maxLength = 4096;
+      input.placeholder = placeholder;
+      input.addEventListener("input", () => {
+        const previous = String(editorDraft()?.items?.[state.index]?.[key] || "");
+        if (previous !== input.value) {
+          queueUploadCancel(previous);
+          if (source.uploadNames) delete source.uploadNames[key];
+          input.closest(".task-workspace-source-card")
+            ?.querySelector(".task-workspace-file-upload-hint")
+            ?.remove();
+        }
+        updateItem(state.index, key, input.value);
+      });
+      const row = document.createElement("div");
+      row.className = "task-workspace-path-row";
+      const upload = document.createElement("button");
+      upload.type = "button";
+      upload.className = "task-workspace-upload";
+      upload.dataset.taskUploadField = key;
+      upload.textContent = tr("task.upload_file", "Upload file");
+      upload.addEventListener("click", () => chooseUpload(key, upload));
+      row.append(input, upload);
+      return { row, input, uploadHint: stagedUploadHint(key, input.value) };
+    }
+
     let validatorCard = null;
     if (capability?.requires_python_validator) {
       validatorCard = sourceCard(
