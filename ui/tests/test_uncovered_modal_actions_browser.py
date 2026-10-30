@@ -653,3 +653,84 @@ def test_workflow_library_context_open_rename_duplicate_export_delete_actions() 
             assert page.get_by_text("Workflow Editor", exact=True).is_visible()
             assert errors == []
             browser.close()
+
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_empty_workflow_and_prompt_library_create_ctas_open_real_modals() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+        base_bridge = _bridge_for(state)
+
+        def bridge(method: str, url: str, body_json: str):
+            parsed = urlparse(url)
+            response = base_bridge(method, url, body_json)
+            if method == "GET" and parsed.path == "/api/studio/files":
+                data = dict(response["data"])
+                data["workflows"] = []
+                data["prompts"] = []
+                return {"status": response["status"], "data": data}
+            return response
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1366, "height": 820})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", bridge)
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            _install_main_ui_styles(page, static_root)
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            page.click("#promptNav")
+            page.wait_for_function(
+                "document.querySelector('#promptNav')?.classList.contains('active')"
+            )
+            create_prompt = page.locator(
+                ".studio-empty-action", has_text="Create Prompt"
+            )
+            create_prompt.wait_for(state="visible")
+            create_prompt.click()
+            page.locator("#newPromptBackdrop").wait_for(state="visible")
+            assert page.locator("#newPromptName").is_visible()
+            page.click("#newPromptCancel")
+            page.locator("#newPromptBackdrop").wait_for(state="hidden")
+
+            page.click("#workflowNav")
+            page.wait_for_function(
+                "document.querySelector('#workflowNav')?.classList.contains('active')"
+            )
+            create_workflow = page.locator(
+                ".studio-empty-action", has_text="Create Workflow"
+            )
+            create_workflow.wait_for(state="visible")
+            create_workflow.click()
+            page.locator("#newWorkflowBackdrop").wait_for(state="visible")
+            assert page.locator("#newWorkflowName").is_visible()
+            page.click("#newWorkflowCancel")
+            page.locator("#newWorkflowBackdrop").wait_for(state="hidden")
+
+            assert errors == []
+            browser.close()
