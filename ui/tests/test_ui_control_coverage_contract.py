@@ -307,6 +307,9 @@ DYNAMIC_UI_SURFACES = {
         ("project-chat-task-draft", "project-chat-task-draft"),
         ("project-chat-ask", ".project-chat-ask"),
     ),
+    ROOT / "ui" / "static" / "js" / "workflow-generator.js": (
+        ("designer-workflow-pill", "designer-workflow-pill"),
+    ),
     ROOT / "ui" / "studio-src" / "src" / "main.tsx": (
         ("stage-context-menu", "stage-context-menu"),
         ("edge-context-menu", "edge-context-menu"),
