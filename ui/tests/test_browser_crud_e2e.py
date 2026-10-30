@@ -5360,6 +5360,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
                         display: style.display,
                         gridAutoFlow: style.gridAutoFlow,
                         borderTopWidth: style.borderTopWidth,
+                        borderTopColor: style.borderTopColor,
                         borderRadius: style.borderRadius,
                         paddingTop: style.paddingTop,
                         gap: style.gap,
@@ -5404,6 +5405,14 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert active_outer_tab["color"] != inactive_outer_tab["color"]
             assert active_outer_tab["fontWeight"] == inactive_outer_tab["fontWeight"]
             assert active_outer_tab["boxShadow"] != inactive_outer_tab["boxShadow"]
+            if color_scheme == "light":
+                # Lock the exact visual tokens from the provided HTML reference.
+                assert light_geometry["background"] == "rgb(242, 245, 243)"
+                assert light_geometry["borderTopColor"] == "rgb(228, 235, 230)"
+                assert active_outer_tab["background"] == "rgb(255, 255, 255)"
+                assert active_outer_tab["color"] == "rgb(36, 105, 77)"
+                assert inactive_outer_tab["color"] == "rgb(102, 117, 108)"
+                assert inactive_outer_tab["background"] == "rgba(0, 0, 0, 0)"
 
             # Selected-state contract matches the segmented-control reference:
             # exactly one tab is visually raised; clicking AI transfers that
