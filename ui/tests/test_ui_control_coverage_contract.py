@@ -284,6 +284,7 @@ DYNAMIC_UI_SURFACES = {
         ("task-workspace-move-close", "task-workspace-move-close"),
         ("task-workspace-move-option", "task-workspace-move-option"),
         ("taskSourceMode", "data-task-source-mode"),
+        ("taskEditorTab", "data-task-editor-tab"),
         ("task-workspace-project-toggle", "task-workspace-project-toggle"),
         ("task-workspace-project-dropdown-option", "task-workspace-project-dropdown-option"),
         ("taskUploadField", "data-task-upload-field"),
