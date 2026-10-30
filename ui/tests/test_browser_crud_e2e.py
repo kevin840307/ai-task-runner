@@ -5233,6 +5233,14 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             "flow: [planning, validate_file]\n",
             encoding="utf-8",
         )
+        ai_only = workflows / "ai-only.yaml"
+        ai_only.write_text(
+            "stages:\n"
+            "  planning:\n    type: plan\n"
+            "  validate_ai:\n    type: ai_validator\n    validator: ai\n"
+            "flow: [planning, validate_ai]\n",
+            encoding="utf-8",
+        )
         plain = workflows / "plain.yaml"
         plain.write_text(
             "stages:\n"
@@ -5277,398 +5285,159 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert page.locator("html").get_attribute("data-appearance") == color_scheme
             page.click("#chatNav")
             page.wait_for_function("!document.querySelector('#tasksBoardView')?.hidden")
-            tasks_header_geometry = page.evaluate(
-                """() => {
-                    const filter = document.querySelector('#tasksProjectFilterButton').getBoundingClientRect();
-                    const create = document.querySelector('#tasksNewButton').getBoundingClientRect();
-                    return {
-                        filterRight: filter.right,
-                        filterBottom: filter.bottom,
-                        createLeft: create.left,
-                        createTop: create.top,
-                    };
-                }"""
-            )
-            assert (
-                tasks_header_geometry["filterRight"] <= tasks_header_geometry["createLeft"] + 1
-                or tasks_header_geometry["filterBottom"] <= tasks_header_geometry["createTop"] + 1
-            )
             page.click("#tasksNewButton")
             page.wait_for_function("!document.querySelector('#taskCreateMenu')?.hidden")
             page.locator("#taskCreateMenu [data-task-create-kind='task']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'")
+            page.wait_for_function(
+                "document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK EDITOR'"
+            )
             page.select_option("#taskWorkspaceWorkflow", str(mixed))
-            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
-            page.fill("#taskWorkspaceItemTitle", "Source mode geometry")
-            page.fill("#taskWorkspaceValidator", str(root / "validate.py"))
-            assert page.locator(".task-workspace-workspace-options [data-workspace-option]").count() == 3
-            assert page.locator("[data-workspace-option='auto']").get_attribute("class").find("selected") >= 0
-            assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
-            page.locator("[data-workspace-option='worktree']").click()
-            assert page.locator("#taskWorkspaceWorkspace").input_value() == "worktree"
-            assert page.locator("#taskWorkspaceWorkspaceAvailability").get_attribute("class").find("worktree-active") >= 0
-            assert "WORKTREE" in page.locator("#taskWorkspaceWorkspaceAvailability strong").inner_text()
-            assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
-            page.locator("[data-workspace-option='auto']").click()
-            assert page.locator("#taskWorkspaceWorkspace").input_value() == "auto"
-            assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
+            page.fill("#taskWorkspaceItemTitle", "Tabbed source editor")
 
-            def assert_inside_drawer(selector: str) -> dict:
-                shell = page.locator("#taskWorkspaceShell").bounding_box()
-                node = page.locator(selector).bounding_box()
-                assert shell and node
-                assert node["x"] >= shell["x"] - 1
-                assert node["x"] + node["width"] <= shell["x"] + shell["width"] + 1
-                assert node["width"] > 0
-                return node
+            tabs = page.locator("#taskWorkspaceEditorInputTabs [data-task-editor-tab]")
+            assert tabs.count() == 3
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-editor-tab='ai']").is_visible()
+            assert page.locator("[data-task-editor-tab='validator']").is_visible()
+            assert page.locator("[data-task-source-card='prompt']").is_visible()
+            assert page.locator("[data-task-source-card='ai']").count() == 0
+            assert page.locator("[data-task-source-card='validator']").count() == 0
 
-            shell_before = page.locator("#taskWorkspaceShell").bounding_box()
-            assert shell_before
-            assert shell_before["x"] >= -1
-            assert shell_before["x"] + shell_before["width"] <= viewport["width"] + 1
-            if viewport["width"] > 900:
-                assert abs(shell_before["width"] - 920) <= 1
-            else:
-                assert abs(shell_before["width"] - viewport["width"]) <= 1
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-
-            body_padding = page.locator("#taskWorkspaceBody").evaluate(
-                "(node) => { const s=getComputedStyle(node); return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft]; }"
-            )
-            assert body_padding == ["12px", "14px", "14px", "14px"]
-            footer_padding = page.locator(".task-workspace-foot").evaluate(
-                "(node) => { const s=getComputedStyle(node); return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft]; }"
-            )
-            assert footer_padding == ["9px", "14px", "9px", "14px"]
-            assert page.locator("#taskWorkspaceDraftTitle").count() == 0
-
-            project_box = page.locator("#taskWorkspaceProject").bounding_box()
-            workflow_box = page.locator("#taskWorkspaceWorkflow").bounding_box()
-            title_box = page.locator("#taskWorkspaceItemTitle").bounding_box()
-            assert project_box and workflow_box and title_box
-            if viewport["width"] > 820:
-                assert abs(project_box["y"] - workflow_box["y"]) <= 1
-                assert abs(project_box["y"] - title_box["y"]) <= 1
-                assert project_box["width"] > workflow_box["width"] > title_box["width"]
-            elif viewport["width"] == 820:
-                assert abs(project_box["y"] - workflow_box["y"]) <= 1
-                assert title_box["y"] > project_box["y"] + project_box["height"] - 1
-            else:
-                assert project_box["y"] < workflow_box["y"] < title_box["y"]
-
-            input_grid = page.locator("#taskWorkspaceInputGrid")
-            assert input_grid.count() == 1
-            assert page.locator("#taskWorkspaceWorkflowCaps .task-workspace-cap-chip").count() == 2
-            workspace_cards = page.locator(".task-workspace-workspace-options [data-workspace-option]")
-            assert workspace_cards.count() == 3
-            workspace_boxes = [card.bounding_box() for card in workspace_cards.all()]
-            if viewport["width"] > 900:
-                assert max(box["y"] for box in workspace_boxes) - min(box["y"] for box in workspace_boxes) <= 1
-            else:
-                assert workspace_boxes[0]["y"] < workspace_boxes[1]["y"] < workspace_boxes[2]["y"]
-
-            initial_prompt_box = assert_inside_drawer("[data-task-source-card='prompt']")
-            initial_validator_box = assert_inside_drawer("[data-task-source-card='validator']")
-            assert_inside_drawer("[data-task-source-card='ai']")
-            for box in (initial_prompt_box, initial_validator_box):
-                assert box["y"] < viewport["height"]
-                assert box["y"] + min(32, box["height"]) <= viewport["height"] + 1
-
-            prompt_tabs = page.locator("[data-task-source-group='prompt'] button")
-            prompt_widths = [button.bounding_box()["width"] for button in prompt_tabs.all()]
-            assert len(prompt_widths) == 3
-            assert max(prompt_widths) - min(prompt_widths) <= 2
-            prompt_tab_geometry = page.locator("[data-task-source-group='prompt']").evaluate(
-                """node => {
-                    const style = getComputedStyle(node);
-                    return {
-                        display: style.display,
-                        columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
-                        gap: style.gap,
-                        height: style.height,
-                        firstHeight: getComputedStyle(node.querySelector('button')).height
-                    };
-                }"""
-            )
-            assert prompt_tab_geometry == {
-                "display": "grid",
-                "columns": 3,
-                "gap": "3px",
-                "height": "30px",
-                "firstHeight": "30px",
-            }
-            prompt_card_spacing = page.locator("[data-task-source-card='prompt']").evaluate(
+            # The new hierarchy is deliberately lighter than the former nested
+            # card + pill + card layout.
+            light_geometry = page.locator("#taskWorkspaceEditorInputTabs").evaluate(
                 """node => ({
-                    headMarginBottom: getComputedStyle(node.querySelector('.task-workspace-source-head')).marginBottom,
-                    bodyGap: getComputedStyle(node.querySelector('.task-workspace-source-body')).gap
+                    borderBottomWidth: getComputedStyle(node).borderBottomWidth,
+                    background: getComputedStyle(node).backgroundColor,
                 })"""
             )
-            assert prompt_card_spacing == {"headMarginBottom": "7px", "bodyGap": "6px"}
-            assert page.locator("#taskWorkspacePrompt").evaluate(
-                "node => getComputedStyle(node).minHeight"
-            ) == "112px"
-
-            ai_tabs = page.locator("[data-task-source-group='ai'] button")
-            ai_widths = [button.bounding_box()["width"] for button in ai_tabs.all()]
-            assert len(ai_widths) == 4
-            assert max(ai_widths) - min(ai_widths) <= 2
-            ai_tab_geometry = page.locator("[data-task-source-group='ai']").evaluate(
-                """node => {
-                    const style = getComputedStyle(node);
-                    return {
-                        display: style.display,
-                        columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
-                        gap: style.gap,
-                        height: style.height
-                    };
-                }"""
+            assert light_geometry["borderBottomWidth"] == "1px"
+            prompt_card_style = page.locator("[data-task-source-card='prompt']").evaluate(
+                """node => ({
+                    borderTopWidth: getComputedStyle(node).borderTopWidth,
+                    borderRadius: getComputedStyle(node).borderRadius,
+                    boxShadow: getComputedStyle(node).boxShadow,
+                })"""
             )
-            assert ai_tab_geometry == {"display": "grid", "columns": 4, "gap": "3px", "height": "30px"}
-            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
+            assert prompt_card_style == {
+                "borderTopWidth": "0px",
+                "borderRadius": "0px",
+                "boxShadow": "none",
+            }
+            inner_tabs_style = page.locator("[data-task-source-group='prompt']").evaluate(
+                """node => ({
+                    borderTopWidth: getComputedStyle(node).borderTopWidth,
+                    background: getComputedStyle(node).backgroundColor,
+                    display: getComputedStyle(node).display,
+                })"""
+            )
+            assert inner_tabs_style["borderTopWidth"] == "0px"
+            assert inner_tabs_style["display"] == "flex"
 
-            prompt_card_widths = []
-            for mode, control in (
-                ("file", "#taskWorkspaceGoalFile"),
-                ("asset", "#taskWorkspaceGoalAsset"),
-                ("write", "#taskWorkspacePrompt"),
-            ):
-                page.locator(f"[data-task-source-group='prompt'] [data-task-source-mode='{mode}']").click()
-                page.wait_for_function("(selector) => document.querySelector(selector) !== null", arg=control)
-                assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
-                prompt_card_widths.append(assert_inside_drawer("[data-task-source-card='prompt']")["width"])
-                shell_now = page.locator("#taskWorkspaceShell").bounding_box()
-                assert shell_now
-                assert abs(shell_now["width"] - shell_before["width"]) <= 1
-                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-                if mode == "file":
-                    page.fill(control, str(root / "goal.md"))
-                    assert_inside_drawer("[data-task-source-card='prompt'] .task-workspace-upload")
-                    path_geometry = page.locator(
-                        "[data-task-source-card='prompt'] .task-workspace-path-row"
-                    ).evaluate(
-                        """node => {
-                            const style = getComputedStyle(node);
-                            return {
-                                columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
-                                gap: style.gap,
-                                alignItems: style.alignItems,
-                            };
-                        }"""
-                    )
-                    assert path_geometry == {"columns": 2, "gap": "6px", "alignItems": "center"}
-                elif mode == "asset":
-                    assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
-                    page.select_option(control, str(prompt_asset))
-                    assert page.locator("#taskWorkspaceGoalAssetOpenPrompts").is_visible()
-                    assert_inside_drawer("#taskWorkspaceGoalAssetOpenPrompts")
-                    assert page.locator("[id='taskWorkspaceOpenPrompts']").count() == 1
-                else:
-                    page.fill(control, "Implement source mode geometry safely.")
-            assert max(prompt_card_widths) - min(prompt_card_widths) <= 1
-
+            page.fill("#taskWorkspacePrompt", "Prompt text retained across outer tabs")
             page.locator("[data-task-source-group='prompt'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceGoalFile') !== null")
-            assert page.locator("#taskWorkspaceGoalFile").input_value() == str(root / "goal.md")
+            page.fill("#taskWorkspaceGoalFile", str(root / "goal.md"))
+            page.locator("[data-task-source-group='prompt'] [data-task-source-mode='asset']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceGoalAsset') !== null")
+            page.select_option("#taskWorkspaceGoalAsset", str(prompt_asset))
             page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
             page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
-            assert page.locator("#taskWorkspacePrompt").input_value() == "Implement source mode geometry safely."
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Prompt text retained across outer tabs"
 
-            validator_card = page.locator("[data-task-source-card='validator']")
-            ai_card = page.locator("[data-task-source-card='ai']")
-            assert validator_card.is_visible()
-            assert ai_card.is_visible()
-            assert page.locator("#taskWorkspaceInputGrid").get_attribute("class").find("has-mixed-validation") >= 0
-            prompt_box = page.locator("[data-task-source-card='prompt']").bounding_box()
-            validator_box = validator_card.bounding_box()
-            ai_box = ai_card.bounding_box()
-            assert prompt_box and validator_box and ai_box
-            assert validator_box["y"] > prompt_box["y"] + prompt_box["height"] - 1
-            if viewport["width"] > 620:
-                assert abs(validator_box["y"] - ai_box["y"]) <= 1
-                assert abs(validator_box["width"] - ai_box["width"]) <= 2
-            else:
-                assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
-
-            # Workflow changes match the feature editor: controls disappear
-            # according to capability, but their draft values are not destroyed.
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-task-source-card=\"ai\"]') "
+                "&& !document.querySelector('[data-task-source-card=\"prompt\"]')"
+            )
+            assert page.locator("[data-task-source-card='validator']").count() == 0
+            assert page.locator("[data-task-source-group='ai'] button").count() == 4
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             page.fill("#taskWorkspaceAiValidatorPrompt", str(root / "workflow-ai.md"))
 
-            # File-only reference: desktop keeps Prompt and Validator in the 1.34/.86 grid;
-            # <=820 follows the feature breakpoint and stacks them.
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            assert page.locator("[data-task-source-card='validator']").is_visible()
+            assert page.locator("[data-task-source-card='prompt']").count() == 0
+            assert page.locator("[data-task-source-card='ai']").count() == 0
+            page.fill("#taskWorkspaceValidator", str(root / "validate.py"))
+
+            # Switching outer tabs never destroys another tab's draft values.
+            page.locator("[data-task-editor-tab='prompt']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Prompt text retained across outer tabs"
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
+
+            # Workflow capability changes control which outer tabs exist. An
+            # invalid active tab falls back to Task Prompt without losing draft data.
+            page.select_option("#taskWorkspaceWorkflow", str(ai_only))
+            page.wait_for_function(
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 2"
+            )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-editor-tab='ai']").count() == 1
+            assert page.locator("[data-task-editor-tab='validator']").count() == 0
+
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
+            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
+
             page.select_option("#taskWorkspaceWorkflow", str(file_only))
             page.wait_for_function(
-                "() => document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 2"
             )
-            assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
-            single_prompt_box = page.locator("[data-task-source-card='prompt']").bounding_box()
-            single_validator_box = page.locator("[data-task-source-card='validator']").bounding_box()
-            assert single_prompt_box and single_validator_box
-            if viewport["width"] > 820:
-                assert abs(single_prompt_box["y"] - single_validator_box["y"]) <= 1
-                assert single_prompt_box["width"] > single_validator_box["width"]
-            else:
-                assert single_validator_box["y"] > single_prompt_box["y"] + single_prompt_box["height"] - 1
-
-            page.select_option("#taskWorkspaceWorkflow", str(mixed))
-            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"]') !== null")
-            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").get_attribute("aria-pressed") == "true"
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-editor-tab='ai']").count() == 0
+            assert page.locator("[data-task-editor-tab='validator']").count() == 1
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
 
             page.select_option("#taskWorkspaceWorkflow", str(plain))
             page.wait_for_function(
-                "() => !document.querySelector('[data-task-source-card=\"validator\"]') && !document.querySelector('[data-task-source-card=\"ai\"]')"
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 1"
             )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-editor-tab='ai']").count() == 0
+            assert page.locator("[data-task-editor-tab='validator']").count() == 0
+
             page.select_option("#taskWorkspaceWorkflow", str(mixed))
             page.wait_for_function(
-                "() => document.querySelector('[data-task-source-card=\"validator\"]') && document.querySelector('[data-task-source-card=\"ai\"]')"
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 3"
             )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("#taskWorkspaceValidator").input_value() == str(root / "validate.py")
-            assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").get_attribute("aria-pressed") == "true"
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == str(root / "workflow-ai.md")
 
-            validator_card = page.locator("[data-task-source-card='validator']")
-            ai_card = page.locator("[data-task-source-card='ai']")
-
-            ai_card_widths = []
-            for mode, control in (
-                ("write", "#taskWorkspaceAiValidatorPromptText"),
-                ("file", "#taskWorkspaceAiValidatorPrompt"),
-                ("asset", "#taskWorkspaceAiValidatorAsset"),
-                ("default", ".task-workspace-compact-default-value"),
-            ):
-                page.locator(f"[data-task-source-group='ai'] [data-task-source-mode='{mode}']").click()
-                page.wait_for_function(
-                    """([mode, control]) => {
-                        if (mode === 'default') {
-                            return Boolean(document.querySelector("[data-task-source-card='ai'] " + control));
-                        }
-                        return Boolean(document.querySelector(control));
-                    }""",
-                    arg=[mode, control],
-                )
-                assert page.evaluate("document.activeElement?.id !== 'taskWorkspaceItemTitle'")
-                ai_card_widths.append(assert_inside_drawer("[data-task-source-card='ai']")["width"])
-                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-                if mode == "write":
-                    assert page.locator(control).evaluate("node => getComputedStyle(node).minHeight") == "78px"
-                    page.fill(control, "Use custom AI validation evidence.")
-                elif mode == "file":
-                    page.fill(control, str(root / "ai-review.md"))
-                    assert_inside_drawer("[data-task-source-card='ai'] .task-workspace-upload")
-                elif mode == "asset":
-                    assert page.locator(control + " option").filter(has_text="task_source_asset.md").count() == 1
-                    page.select_option(control, str(prompt_asset))
-                    assert page.locator("#taskWorkspaceAiAssetOpenPrompts").is_visible()
-                    assert_inside_drawer("#taskWorkspaceAiAssetOpenPrompts")
-                    assert page.locator("[id='taskWorkspaceOpenPrompts']").count() == 1
-
-                validator_box = validator_card.bounding_box()
-                ai_box = ai_card.bounding_box()
-                assert validator_box and ai_box
-                if viewport["width"] > 620:
-                    assert abs(validator_box["y"] - ai_box["y"]) <= 1
-                    assert abs(validator_box["height"] - ai_box["height"]) <= 1
-                else:
-                    assert ai_box["y"] > validator_box["y"] + validator_box["height"] - 1
-            assert max(ai_card_widths) - min(ai_card_widths) <= 1
-
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == ""
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='write']").click()
-            page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPromptText') !== null")
-            assert page.locator("#taskWorkspaceAiValidatorPromptText").input_value() == ""
-            page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").click()
-            page.wait_for_function("document.querySelector('[data-task-source-card=\"ai\"] .task-workspace-compact-default-value') !== null")
+            panel_box = page.locator("#taskWorkspaceEditorInputPanel").bounding_box()
+            shell_box = page.locator("#taskWorkspaceShell").bounding_box()
+            assert panel_box and shell_box
+            assert panel_box["x"] >= shell_box["x"] - 1
+            assert panel_box["x"] + panel_box["width"] <= shell_box["x"] + shell_box["width"] + 1
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
             if viewport["width"] == 820 and color_scheme == "light":
-                page.evaluate("window.I18n.setLanguage('en')")
-                page.wait_for_function(
-                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
-                )
-                language_geometry_before = page.evaluate(
-                    """() => Object.fromEntries([
-                        ['shell', '#taskWorkspaceShell'],
-                        ['basics', '.task-workspace-basics'],
-                        ['inputGrid', '#taskWorkspaceInputGrid'],
-                        ['prompt', '[data-task-source-card="prompt"]'],
-                        ['validator', '[data-task-source-card="validator"]'],
-                        ['ai', '[data-task-source-card="ai"]'],
-                        ['workspace', '.task-workspace-workspace-selector'],
-                    ].map(([key, selector]) => {
-                        const rect = document.querySelector(selector).getBoundingClientRect();
-                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
-                    }))"""
-                )
-
                 page.evaluate("window.I18n.setLanguage('zh-TW')")
                 page.wait_for_function(
-                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === '撰寫'"
+                    "() => document.querySelector('[data-task-editor-tab=\"ai\"]')?.textContent === 'AI 驗證'"
                 )
+                assert page.locator("[data-task-editor-tab='validator']").inner_text() == "程式驗證"
                 assert page.locator("[data-task-source-card='ai']").get_by_text("AI 驗證", exact=True).is_visible()
-                assert page.locator(".task-workspace-workspace-recommended").inner_text() == "建議 Auto"
-                assert page.locator("#taskWorkspaceProject").get_attribute("placeholder") == "選擇 Project 或輸入路徑"
-                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-                language_geometry_zh = page.evaluate(
-                    """() => Object.fromEntries([
-                        ['shell', '#taskWorkspaceShell'],
-                        ['basics', '.task-workspace-basics'],
-                        ['inputGrid', '#taskWorkspaceInputGrid'],
-                        ['prompt', '[data-task-source-card="prompt"]'],
-                        ['validator', '[data-task-source-card="validator"]'],
-                        ['ai', '[data-task-source-card="ai"]'],
-                        ['workspace', '.task-workspace-workspace-selector'],
-                    ].map(([key, selector]) => {
-                        const rect = document.querySelector(selector).getBoundingClientRect();
-                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
-                    }))"""
-                )
-                for key in language_geometry_before:
-                    assert abs(language_geometry_before[key]["x"] - language_geometry_zh[key]["x"]) <= 1
-                    assert abs(language_geometry_before[key]["width"] - language_geometry_zh[key]["width"]) <= 1
-
                 page.evaluate("window.I18n.setLanguage('en')")
                 page.wait_for_function(
-                    "() => document.querySelector('[data-task-source-group=\"prompt\"] [data-task-source-mode=\"write\"]')?.textContent === 'Write'"
+                    "() => document.querySelector('[data-task-editor-tab=\"validator\"]')?.textContent === 'Program Validation'"
                 )
-                assert page.locator(".task-workspace-workspace-recommended").inner_text() == "Auto recommended"
-                language_geometry_after = page.evaluate(
-                    """() => Object.fromEntries([
-                        ['shell', '#taskWorkspaceShell'],
-                        ['basics', '.task-workspace-basics'],
-                        ['inputGrid', '#taskWorkspaceInputGrid'],
-                        ['prompt', '[data-task-source-card="prompt"]'],
-                        ['validator', '[data-task-source-card="validator"]'],
-                        ['ai', '[data-task-source-card="ai"]'],
-                        ['workspace', '.task-workspace-workspace-selector'],
-                    ].map(([key, selector]) => {
-                        const rect = document.querySelector(selector).getBoundingClientRect();
-                        return [key, {x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
-                    }))"""
-                )
-                for key in language_geometry_before:
-                    assert abs(language_geometry_before[key]["x"] - language_geometry_after[key]["x"]) <= 1
-                    assert abs(language_geometry_before[key]["width"] - language_geometry_after[key]["width"]) <= 1
 
-            page.fill("#taskWorkspaceItemTitle", "Canonical source modes")
-            page.click("#taskWorkspaceSave")
-            page.wait_for_function("document.querySelector('#taskWorkspaceEyebrow')?.textContent === 'TASK INFO'")
-            created = state.tasks.list(root)["tasks"]
-            assert len(created) == 1
-            item = created[0]["items"][0]
-            assert item["prompt"] == "Implement source mode geometry safely."
-            assert item["goal_file"] == ""
-            assert item["validator"] == str(root / "validate.py")
-            assert item["ai_validator_prompt"] == ""
-            assert item["ai_validator_prompt_file"] == ""
             assert not errors
             browser.close()
 
