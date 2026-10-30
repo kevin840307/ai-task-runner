@@ -832,29 +832,35 @@ html[data-appearance] .task-workspace-list-row.selected{
    Outer tabs switch Task Prompt / AI Validation / Program Validation.
    Inner source tabs use a text + underline treatment instead of nested pills/cards. */
 .task-workspace-editor-input-tabs{
-  display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
-  align-items:stretch;gap:3px;min-height:42px;margin:10px 0 0;padding:4px;
-  border:1px solid var(--line);border-radius:9px;
-  background:color-mix(in srgb,var(--panel-3) 62%,var(--line) 38%);
+  display:flex;gap:5px;min-height:44px;margin:10px 0 0;padding:5px;
+  border:1px solid #e4ebe6;border-radius:12px;background:#f2f5f3;
   box-sizing:border-box
 }
 .task-workspace-editor-input-tab{
-  min-width:0;min-height:32px;padding:0 10px;
-  border:1px solid transparent;border-radius:6px;
-  background:transparent!important;color:var(--muted)!important;
+  flex:1;min-width:0;min-height:34px;padding:0 9px;
+  border:0!important;border-radius:9px;
+  background:transparent!important;color:#66756c!important;
   box-shadow:none!important;font-size:10px;font-weight:700;white-space:nowrap
 }
 .task-workspace-editor-input-tab[aria-selected="false"]:hover{
-  border-color:transparent!important;
-  background:color-mix(in srgb,var(--panel) 28%,transparent)!important;
-  color:var(--text)!important
+  border:0!important;background:rgba(255,255,255,.38)!important;color:#3f4d45!important
 }
 .task-workspace-editor-input-tab[aria-selected="true"]{
-  border-color:color-mix(in srgb,var(--line) 86%,var(--text) 14%)!important;
-  background:var(--panel)!important;color:var(--text)!important;font-weight:800;
-  box-shadow:
-    0 1px 3px color-mix(in srgb,var(--text) 14%,transparent),
-    0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)!important
+  border:0!important;background:#fff!important;color:#24694d!important;font-weight:700;
+  box-shadow:0 1px 5px #19362712!important
+}
+html[data-appearance="dark"] .task-workspace-editor-input-tabs{
+  border-color:var(--line);background:var(--panel-3)
+}
+html[data-appearance="dark"] .task-workspace-editor-input-tab{
+  color:var(--muted)!important
+}
+html[data-appearance="dark"] .task-workspace-editor-input-tab[aria-selected="false"]:hover{
+  background:color-mix(in srgb,var(--panel) 28%,transparent)!important;color:var(--text)!important
+}
+html[data-appearance="dark"] .task-workspace-editor-input-tab[aria-selected="true"]{
+  background:var(--panel)!important;color:var(--accent-dark)!important;
+  box-shadow:var(--shadow-sm)!important
 }
 .task-workspace-input-grid.task-workspace-tabbed-input{
   display:block!important;grid-template-columns:none!important;gap:0!important;margin-top:0!important
@@ -917,6 +923,6 @@ html[data-appearance] .task-workspace-list-row.selected{
   border-color:color-mix(in srgb,var(--line) 72%,transparent);background:var(--panel-2)
 }
 @media(max-width:620px){
-  .task-workspace-editor-input-tabs{grid-auto-columns:minmax(118px,1fr);overflow-x:auto}
-  .task-workspace-editor-input-tab{font-size:9px}
+  .task-workspace-editor-input-tabs{overflow-x:auto}
+  .task-workspace-editor-input-tab{flex:1 0 118px;font-size:9px}
 }
