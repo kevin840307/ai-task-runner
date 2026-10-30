@@ -52,10 +52,9 @@
 .task-create-menu button small{display:block;margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.35}
 .project-chat-new-task{min-height:28px;padding:4px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text);font-size:10px;font-weight:800}
 
-/* The Task shell stays modal over the workspace, but the active Project action
-   trigger remains reachable so Rename/Remove dialogs can own Escape above it.
-   The menu itself is already portaled at z-index 4900. */
-body.task-workspace-open .project-row.active .project-menu-button{z-index:530}
+/* Task Workspace owns the modal layer. Project action triggers must stay
+   below the full-screen Task overlay instead of punching through it. */
+body.task-workspace-open .project-menu-button{z-index:auto}
 
 
 .task-workspace-result-card {
@@ -834,26 +833,28 @@ html[data-appearance] .task-workspace-list-row.selected{
    Inner source tabs use a text + underline treatment instead of nested pills/cards. */
 .task-workspace-editor-input-tabs{
   display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
-  align-items:stretch;gap:3px;min-height:42px;margin:10px 0 0;padding:3px;
-  border:1px solid color-mix(in srgb,var(--line) 88%,transparent);
-  border-radius:10px;background:var(--panel-3);box-sizing:border-box
+  align-items:stretch;gap:3px;min-height:42px;margin:10px 0 0;padding:4px;
+  border:1px solid var(--line);border-radius:9px;
+  background:color-mix(in srgb,var(--panel-3) 62%,var(--line) 38%);
+  box-sizing:border-box
 }
 .task-workspace-editor-input-tab{
-  min-width:0;min-height:34px;padding:0 10px;
-  border:1px solid transparent;border-radius:7px;background:transparent;
-  color:var(--muted);box-shadow:none;font-size:10px;font-weight:650;white-space:nowrap
+  min-width:0;min-height:32px;padding:0 10px;
+  border:1px solid transparent;border-radius:6px;
+  background:transparent!important;color:var(--muted)!important;
+  box-shadow:none!important;font-size:10px;font-weight:700;white-space:nowrap
 }
-.task-workspace-editor-input-tab:hover:not(.active){
-  border-color:transparent;
-  background:color-mix(in srgb,var(--panel) 34%,transparent);color:var(--text)
+.task-workspace-editor-input-tab[aria-selected="false"]:hover{
+  border-color:transparent!important;
+  background:color-mix(in srgb,var(--panel) 28%,transparent)!important;
+  color:var(--text)!important
 }
-.task-workspace-editor-input-tab.active{
-  border-color:color-mix(in srgb,var(--line) 96%,var(--text) 4%);
-  background:var(--panel);
-  color:var(--text);font-weight:780;
+.task-workspace-editor-input-tab[aria-selected="true"]{
+  border-color:color-mix(in srgb,var(--line) 86%,var(--text) 14%)!important;
+  background:var(--panel)!important;color:var(--text)!important;font-weight:800;
   box-shadow:
     0 1px 3px color-mix(in srgb,var(--text) 14%,transparent),
-    inset 0 1px 0 color-mix(in srgb,#fff 82%,transparent)
+    0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)!important
 }
 .task-workspace-input-grid.task-workspace-tabbed-input{
   display:block!important;grid-template-columns:none!important;gap:0!important;margin-top:0!important
