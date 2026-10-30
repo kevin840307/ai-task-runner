@@ -5344,6 +5344,8 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
 
             tabs = page.locator("#taskWorkspaceEditorInputTabs [data-task-editor-tab]")
             assert tabs.count() == 3
+            assert page.locator("#taskWorkspaceWorkflowCaps").is_visible()
+            assert page.locator("#taskWorkspaceInputGrid").is_visible()
             assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
             assert page.locator("[data-task-editor-tab='ai']").is_visible()
             assert page.locator("[data-task-editor-tab='validator']").is_visible()
