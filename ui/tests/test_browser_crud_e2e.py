@@ -6090,8 +6090,9 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             )
             production_page.select_option("#taskWorkspaceWorkflow", str(mixed))
             production_page.wait_for_function(
-                "document.querySelector('[data-task-source-card=\"ai\"]') !== null"
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 3"
             )
+            assert production_page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
 
             # Interactive state parity was previously missing from the geometry gate.
             # Compare actual browser-computed selected Workspace and Project-menu
@@ -6149,73 +6150,11 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
                     ".task-workspace-basics",
                     ["display", "gridTemplateColumns", "gap", "alignItems"],
                 ),
-                (
-                    "#newTaskModal .task-input-grid",
-                    "#taskWorkspaceInputGrid",
-                    ["display", "gridTemplateColumns", "gap", "alignItems", "marginTop"],
-                ),
-                (
-                    "#newTaskModal .task-project-field>label",
-                    ".task-workspace-project-field>span:first-child",
-                    ["fontSize", "fontWeight", "textTransform", "letterSpacing"],
-                ),
-                (
-                    "#newTaskModal .task-project-field input",
-                    "#taskWorkspaceProject",
-                    [
-                        "height", "minHeight", "fontSize",
-                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
-                    ],
-                ),
-                (
-                    "#newTaskModal .field-help",
-                    ".task-workspace-field-help",
-                    ["marginTop", "fontSize", "lineHeight"],
-                ),
-                (
-                    "#newTaskModal .task-primary-source>.source-head",
-                    "[data-task-source-card='prompt']>.task-workspace-source-head",
-                    [
-                        "display", "gridTemplateColumns", "gap", "minHeight",
-                        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
-                        "marginBottom",
-                    ],
-                ),
-                (
-                    "#newTaskModal .task-primary-source .source-tabs",
-                    "[data-task-source-group='prompt']",
-                    ["display", "gridTemplateColumns", "gap", "height", "minWidth"],
-                ),
-                (
-                    "#newTaskModal .task-primary-source .task-source-mode-panel>textarea",
-                    "#taskWorkspacePrompt",
-                    ["minHeight", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "lineHeight"],
-                ),
-                (
-                    "#newTaskModal .task-ai-source .source-tabs",
-                    "[data-task-source-group='ai']",
-                    ["display", "gridTemplateColumns", "gap", "height", "minWidth"],
-                ),
-                (
-                    "#newTaskModal .task-primary-source .source-head strong",
-                    "[data-task-source-card='prompt'] .task-workspace-source-head strong",
-                    ["fontSize"],
-                ),
-                (
-                    "#newTaskModal .task-primary-source .source-head small",
-                    "[data-task-source-card='prompt'] .task-workspace-source-head small",
-                    ["fontSize"],
-                ),
-                (
-                    "#newTaskModal .task-file-source .cap-chip",
-                    "[data-task-source-card='validator'] .task-workspace-required-chip",
-                    ["fontSize"],
-                ),
-                (
-                    "#newTaskModal .task-file-source .source-note",
-                    "[data-task-source-card='validator'] .task-workspace-source-note",
-                    ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "lineHeight"],
-                ),
+                # Task input/source geometry intentionally diverges here:
+                # production uses capability-aware outer tabs and a lighter
+                # single-panel source editor. The dedicated tabbed-editor browser
+                # test owns that hierarchy; this parity gate keeps comparing the
+                # shared drawer basics, workspace selector, footer and motion.
                 (
                     "#newTaskModal .task-editor-secondary",
                     ".task-workspace-editor-secondary",
