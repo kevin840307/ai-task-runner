@@ -5400,7 +5400,7 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             # selected treatment and clears it from Prompt.
             page.locator("[data-task-editor-tab='ai']").click()
             page.wait_for_function(
-                "() => document.querySelector('[data-task-editor-tab="ai"]')?.getAttribute('aria-selected') === 'true'"
+                """() => document.querySelector('[data-task-editor-tab="ai"]')?.getAttribute('aria-selected') === 'true'"""
             )
             assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "false"
             assert "active" not in (page.locator("[data-task-editor-tab='prompt']").get_attribute("class") or "").split()
