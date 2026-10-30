@@ -5394,6 +5394,34 @@ def test_task_editor_source_modes_keep_shared_drawer_geometry(viewport, color_sc
             assert active_outer_tab["color"] != inactive_outer_tab["color"]
             assert int(active_outer_tab["fontWeight"]) > int(inactive_outer_tab["fontWeight"])
             assert active_outer_tab["boxShadow"] != inactive_outer_tab["boxShadow"]
+
+            # Selected-state contract matches the segmented-control reference:
+            # exactly one tab is visually raised; clicking AI transfers that
+            # selected treatment and clears it from Prompt.
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function(
+                "() => document.querySelector('[data-task-editor-tab="ai"]')?.getAttribute('aria-selected') === 'true'"
+            )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "false"
+            assert "active" not in (page.locator("[data-task-editor-tab='prompt']").get_attribute("class") or "").split()
+            assert "active" in (page.locator("[data-task-editor-tab='ai']").get_attribute("class") or "").split()
+            ai_selected_style = page.locator("[data-task-editor-tab='ai']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {background: style.backgroundColor, boxShadow: style.boxShadow};
+                }"""
+            )
+            prompt_unselected_style = page.locator("[data-task-editor-tab='prompt']").evaluate(
+                """node => {
+                    const style = getComputedStyle(node);
+                    return {background: style.backgroundColor, boxShadow: style.boxShadow};
+                }"""
+            )
+            assert ai_selected_style["background"] != prompt_unselected_style["background"]
+            assert ai_selected_style["boxShadow"] != prompt_unselected_style["boxShadow"]
+            page.locator("[data-task-editor-tab='prompt']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
+
             prompt_card_style = page.locator("[data-task-source-card='prompt']").evaluate(
                 """node => ({
                     borderTopWidth: getComputedStyle(node).borderTopWidth,
