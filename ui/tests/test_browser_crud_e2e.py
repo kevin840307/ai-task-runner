@@ -2237,7 +2237,24 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.locator("[data-workspace-option='main']").click()
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
+            page.wait_for_function(
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 3"
+            )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+
+            # Existing Task Edit uses the same capability-aware outer tabs as
+            # New Task. Exercise every visible tab, then return to Prompt so
+            # the dirty-close matrix below owns the same editable control.
+            page.locator("[data-task-editor-tab='validator']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            assert page.locator("[data-task-editor-tab='validator']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-source-card='prompt']").count() == 0
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
+            assert page.locator("[data-task-editor-tab='ai']").get_attribute("aria-selected") == "true"
+            page.locator("[data-task-editor-tab='prompt']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
+            assert page.locator("#taskWorkspacePrompt").input_value() == "Dirty standalone prompt"
 
             for guard_kind in ("header", "footer", "x", "escape", "prompts"):
                 if guard_kind == "header":
@@ -2471,10 +2488,19 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             page.fill("#taskWorkspacePrompt", "First list prompt")
             mixed_workflow = str(state.repo_root / "runner" / "assets" / "workflows" / "mixed.yaml")
             page.select_option("#taskWorkspaceWorkflow", mixed_workflow)
+            page.wait_for_function(
+                "() => document.querySelectorAll('#taskWorkspaceEditorInputTabs [data-task-editor-tab]').length === 3"
+            )
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            page.locator("[data-task-editor-tab='validator']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
-            assert page.locator("[data-task-source-card='ai']").is_visible()
+            assert page.locator("[data-task-source-card='validator']").is_visible()
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
             assert page.locator("[data-task-source-group='ai'] [data-task-source-mode='default']").get_attribute("aria-pressed") == "true"
             assert page.locator("#taskWorkspaceAiValidatorPrompt").count() == 0
+            page.locator("[data-task-editor-tab='prompt']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
             page.fill("#taskWorkspaceItemTitle", "First list child dirty")
 
             # A dirty child Editor and a dirty parent Task List Draft are two
@@ -2505,8 +2531,13 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             # as a substitute for saving an item.
             page.click("#taskWorkspaceSave")
             page.wait_for_function("document.querySelector('#taskWorkspaceValidator')?.getAttribute('aria-invalid') === 'true'")
+            assert page.locator("[data-task-editor-tab='validator']").get_attribute("aria-selected") == "true"
             assert page.locator(".task-workspace-field-error").get_by_text("File Validator is required", exact=False).is_visible()
+            page.locator("[data-task-editor-tab='prompt']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspacePrompt') !== null")
             assert page.locator("#taskWorkspacePrompt").input_value() == "First list prompt"
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
 
             with page.expect_file_chooser() as chooser:
                 page.locator("[data-task-upload-field='validator']").click()
@@ -2521,6 +2552,8 @@ def test_shared_new_task_menu_creates_task_and_task_list() -> None:
             manual_validator = str(state.repo_root / "validate.py")
             page.fill("#taskWorkspaceValidator", manual_validator)
             assert page.locator("[data-task-source-card='validator'] .task-workspace-file-upload-hint").count() == 0
+            page.locator("[data-task-editor-tab='ai']").click()
+            page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
             page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             page.click("#taskWorkspaceSave")
@@ -5187,6 +5220,11 @@ def test_task_board_opens_each_task_with_its_own_project_catalog() -> None:
             assert page.locator("#taskWorkspaceProject").input_value() == str(second.resolve())
             assert page.locator("#taskWorkspaceWorkflow").input_value() == str(second_workflow.resolve())
             assert page.locator("#taskWorkspaceWorkflow option").filter(has_text="second-only.yaml").count() == 1
+            assert page.locator("[data-task-editor-tab='prompt']").get_attribute("aria-selected") == "true"
+            assert page.locator("[data-task-editor-tab='ai']").count() == 0
+            assert page.locator("[data-task-editor-tab='validator']").count() == 1
+            page.locator("[data-task-editor-tab='validator']").click()
+            page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
             assert page.locator("#taskWorkspaceValidator").is_visible()
             assert page.locator("#taskWorkspaceValidator").input_value() == str(second / "validate.py")
             assert not errors
@@ -6247,6 +6285,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # against the prototype instead of relying on selector mapping.
             feature_page.locator("[data-task-ai-mode][data-source-value='file']").click()
             feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
+            production_page.locator("[data-task-editor-tab='ai']").click()
+            production_page.wait_for_function("document.querySelector('[data-task-source-card="ai"]') !== null")
             production_page.locator("[data-task-source-group='ai'] [data-task-source-mode='file']").click()
             production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             _assert_feature_computed_style_parity(
@@ -6283,9 +6323,11 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             # produce the same retained/reset state as the final feature
             # prototype and must never redirect focus into the Title field.
             feature_page.fill("#taskValidatorFile", "feature-validator.py")
-            production_page.fill("#taskWorkspaceValidator", "feature-validator.py")
             feature_page.fill("#taskAiFile", "feature-ai-override.md")
             production_page.fill("#taskWorkspaceAiValidatorPrompt", "feature-ai-override.md")
+            production_page.locator("[data-task-editor-tab='validator']").click()
+            production_page.wait_for_function("document.querySelector('#taskWorkspaceValidator') !== null")
+            production_page.fill("#taskWorkspaceValidator", "feature-validator.py")
 
             feature_page.select_option("#newTaskWorkflow", "file.yaml")
             production_page.select_option("#taskWorkspaceWorkflow", str(feature_file_only))
@@ -6301,6 +6343,7 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
             feature_page.select_option("#newTaskWorkflow", "mixed.yaml")
             production_page.select_option("#taskWorkspaceWorkflow", str(mixed))
             feature_page.wait_for_function("document.querySelector('#taskAiFile') !== null")
+            production_page.locator("[data-task-editor-tab='ai']").click()
             production_page.wait_for_function("document.querySelector('#taskWorkspaceAiValidatorPrompt') !== null")
             assert feature_page.locator("#taskAiFile").input_value() == "feature-ai-override.md"
             assert production_page.locator("#taskWorkspaceAiValidatorPrompt").input_value() == "feature-ai-override.md"
@@ -6321,6 +6364,8 @@ def test_task_editor_and_list_computed_geometry_match_feature_prototype() -> Non
 
             # Prompt source tabs preserve each alternate source independently.
             feature_page.locator("[data-task-goal-mode][data-source-value='inline']").click()
+            production_page.locator("[data-task-editor-tab='prompt']").click()
+            production_page.wait_for_function("document.querySelector('[data-task-source-card="prompt"]') !== null")
             production_page.locator("[data-task-source-group='prompt'] [data-task-source-mode='write']").click()
             feature_page.fill("#taskPromptInline", "Prompt text retained across modes")
             production_page.fill("#taskWorkspacePrompt", "Prompt text retained across modes")
