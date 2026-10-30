@@ -7450,6 +7450,7 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
                 ),
                 "prompts": [
                     {"name": "generated.md", "content": "Generated prompt {{ goal }}\n"},
+                    {"name": "generated-review.md", "content": "Generated review {{ goal }}\n"},
                 ],
                 "visual": {
                     "stages": [
@@ -7756,9 +7757,18 @@ def test_workflow_generator_full_browser_lifecycle() -> None:
 
             page.click("#generateDraftPromptTab")
             assert page.locator("#generateDraftPromptPanel").is_visible()
+            prompt_pills = page.locator(
+                "#generateDraftPromptList .designer-workflow-pill"
+            )
+            assert prompt_pills.count() == 2
+            prompt_pills.nth(1).click()
+            page.wait_for_function(
+                "() => document.querySelector('#generateDraftPromptTextarea')?.value"
+                " === 'Generated review {{ goal }}\\n'"
+            )
             page.click("#generateWorkflowEditPrompt")
             page.wait_for_function("document.activeElement === document.querySelector('#generateDraftPromptTextarea')")
-            page.fill("#generateDraftPromptTextarea", "Edited generated prompt {{ goal }}\n")
+            page.fill("#generateDraftPromptTextarea", "Edited generated review {{ goal }}\n")
 
             page.click("#generateDraftVisualTab")
             assert page.locator("#generateDraftVisualPanel").is_visible()
