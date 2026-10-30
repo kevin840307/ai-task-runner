@@ -502,7 +502,9 @@ def test_new_task_runtime_structure_matches_final_feature_override() -> None:
     assert 'overlay.hidden = true' in PRODUCTION_JS
     assert 'if (now - createMenuOpenedAt < 80) return' in PRODUCTION_JS
     assert 'render();\n        void loadWorkspaceOptions();\n        return;' in PRODUCTION_JS
-    assert 'body.appendChild(inputGrid)' in PRODUCTION_JS
+    assert 'body.append(editorTabs, inputGrid)' in PRODUCTION_JS
+    assert 'inputGrid.appendChild(editorPanel)' in PRODUCTION_JS
+    assert 'editorTabs.setAttribute("role", "tablist")' in PRODUCTION_JS
     assert 'body.appendChild(workspaceSection)' in PRODUCTION_JS
 
 
