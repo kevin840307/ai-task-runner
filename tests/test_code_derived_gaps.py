@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -83,8 +84,16 @@ def test_git_lock_old_owner_does_not_unlink_replacement_lock(tmp_path: Path) -> 
     lock = common / filename
 
     with worktree_module._git_file_lock(repo, filename):
-        lock.unlink()
-        lock.write_text("replacement-owner\n", encoding="ascii")
+        if os.name == "nt":
+            # Windows does not allow unlinking an open lock file. Changing the
+            # ownership token still proves that the old owner must not remove a
+            # lock it no longer owns.
+            lock.write_text("replacement-owner\n", encoding="ascii")
+        else:
+            # POSIX allows a new inode to replace the path while the old owner
+            # still holds its original file descriptor.
+            lock.unlink()
+            lock.write_text("replacement-owner\n", encoding="ascii")
 
     assert lock.read_text(encoding="ascii") == "replacement-owner\n"
     lock.unlink()
