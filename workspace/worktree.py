@@ -137,11 +137,12 @@ def _git_file_lock(repo: Path, filename: str, *, heartbeat: bool = False):
             time.sleep(LOCK_POLL_SECONDS)
     stop = threading.Event()
     pulse: threading.Thread | None = None
+    owner = f"{os.getpid()}:{threading.get_ident()}:{time.monotonic_ns()}\n"
     try:
-        os.write(handle, f"{os.getpid()}\n".encode("ascii"))
+        os.write(handle, owner.encode("ascii"))
         if heartbeat:
             def keep_fresh() -> None:
-                interval = max(1.0, STALE_LOCK_SECONDS / 3)
+                interval = max(0.01, STALE_LOCK_SECONDS / 3)
                 while not stop.wait(interval):
                     try:
                         os.utime(lock, None)
@@ -160,15 +161,20 @@ def _git_file_lock(repo: Path, filename: str, *, heartbeat: bool = False):
             pulse.join(timeout=1)
         os.close(handle)
         try:
-            lock.unlink()
-        except FileNotFoundError:
+            if lock.read_text(encoding="ascii") == owner:
+                lock.unlink()
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
             pass
 
 
 @contextmanager
 def repository_git_lock(repo: Path):
-    """Short cross-process lock for repository ref/worktree mutations only."""
-    with _git_file_lock(repo, LOCK_FILENAME):
+    """Cross-process lock for repository ref/worktree mutations.
+
+    Keep the lock fresh because snapshot/cleanup operations can exceed the stale
+    threshold on large repositories.
+    """
+    with _git_file_lock(repo, LOCK_FILENAME, heartbeat=True):
         yield
 
 
