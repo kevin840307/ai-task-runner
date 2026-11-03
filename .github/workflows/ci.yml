@@ -37,11 +37,11 @@ jobs:
 
       - name: Test + Core branch coverage
         if: runner.os == 'Linux'
-        run: python -m coverage run --branch --source=runner,workspace,ui -m pytest -q
+        run: python -m coverage run --branch --source=runner,workspace,ui --omit="ui/tests/*" -m pytest -q
 
       - name: Core coverage report
         if: runner.os == 'Linux'
-        run: python -m coverage report --show-missing
+        run: python -m coverage report --show-missing --omit="ui/tests/*"
 
   studio-build:
     runs-on: ubuntu-latest
