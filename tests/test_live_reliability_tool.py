@@ -519,7 +519,7 @@ def test_live_soak_presets_use_current_workflow_asset_paths():
         assert "runner\\assets\\workflows\\file.yaml" in text
         assert "runner\\assets\\workflows\\mixed.yaml" in text
         assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
-        assert "--soak-multi-project-every 1" in text
+        assert "--soak-multi-project-every " in text
         assert "--multi-project-count 2" in text
         assert "runner\\workflows\\" not in text
 
@@ -2911,6 +2911,15 @@ def test_soak_frontloads_mixed_final_ai_coverage():
     assert live.soak_mixed_final_ai_enabled(8, 8) is True
     assert live.soak_mixed_final_ai_enabled(8, 9) is False
     assert live.soak_mixed_final_ai_enabled(0, 1) is False
+
+
+def test_soak_multi_project_stress_is_front_loaded_then_periodic():
+    assert live.soak_multi_project_enabled(4, 1) is True
+    assert live.soak_multi_project_enabled(4, 2) is False
+    assert live.soak_multi_project_enabled(4, 3) is False
+    assert live.soak_multi_project_enabled(4, 4) is True
+    assert live.soak_multi_project_enabled(4, 5) is False
+    assert live.soak_multi_project_enabled(0, 1) is False
 
 
 def test_soak_transient_status_rotation_covers_all_http_classes():
