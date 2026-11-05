@@ -1866,6 +1866,46 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     return String(state?.task?.project || state?.project || "").trim();
   }
 
+  function captureVisibleEditorInputs(item) {
+    if (!state || !item) return;
+    const source = sourceState(item);
+
+    const prompt = byId("taskWorkspacePrompt");
+    if (prompt && source.promptMode === "write") {
+      source.promptText = prompt.value;
+      item.prompt = prompt.value;
+    }
+    const goalFile = byId("taskWorkspaceGoalFile");
+    if (goalFile && source.promptMode === "file") {
+      source.promptFile = goalFile.value;
+      item.goal_file = goalFile.value;
+    }
+    const promptAsset = byId("taskWorkspacePromptAsset");
+    if (promptAsset && source.promptMode === "asset") {
+      source.promptAsset = promptAsset.value;
+      item.goal_file = promptAsset.value;
+    }
+
+    const aiText = byId("taskWorkspaceAiValidatorPromptText");
+    if (aiText && source.aiMode === "write") {
+      source.aiText = aiText.value;
+      item.ai_validator_prompt = aiText.value;
+    }
+    const aiFile = byId("taskWorkspaceAiValidatorPrompt");
+    if (aiFile && source.aiMode === "file") {
+      source.aiFile = aiFile.value;
+      item.ai_validator_prompt_file = aiFile.value;
+    }
+    const aiAsset = byId("taskWorkspaceAiValidatorAsset");
+    if (aiAsset && source.aiMode === "asset") {
+      source.aiAsset = aiAsset.value;
+      item.ai_validator_prompt_file = aiAsset.value;
+    }
+
+    const validator = byId("taskWorkspaceValidator");
+    if (validator) item.validator = validator.value;
+  }
+
   function sourceState(item) {
     if (!state) return {};
     if (!state.sourceModes) state.sourceModes = {};
@@ -2195,6 +2235,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     workflow.value = String(item.workflow || "");
     workflow.addEventListener("change", () => {
       const activeItem = editorDraft()?.items?.[state.index] || item;
+      captureVisibleEditorInputs(activeItem);
       const source = sourceState(activeItem);
       updateItem(state.index, "workflow", workflow.value);
       const capability = workflowMeta(workflow.value);
@@ -2350,6 +2391,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
 
       radio.addEventListener("change", () => {
         if (!radio.checked || radio.disabled) return;
+        captureVisibleEditorInputs(editorDraft()?.items?.[state.index] || item);
         workspace.value = value;
         updateItem(state.index, "workspace", value);
         render();
@@ -2359,6 +2401,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
     }
 
     workspace.addEventListener("change", () => {
+      captureVisibleEditorInputs(editorDraft()?.items?.[state.index] || item);
       updateItem(state.index, "workspace", workspace.value);
       render();
     });
@@ -2444,6 +2487,7 @@ export function createTaskWorkspaceController({ api, confirmDialog, showError, o
       button.textContent = label;
       button.addEventListener("click", () => {
         if (!state) return;
+        captureVisibleEditorInputs(editorDraft()?.items?.[state.index] || item);
         source.editorTab = key;
         render();
         window.setTimeout(() => {
