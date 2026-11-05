@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic fake agent for the concurrent Runner/worktree conflict example."""
+"""Deterministic fake agent for concurrent Runner/worktree conflict recovery tests."""
 from __future__ import annotations
 
 import json
@@ -15,12 +15,21 @@ stage = prompt_stage(prompt)
 
 
 def _case_marker(text: str) -> str:
-    if "Merge-repair task only" in text or "TASK_B_RECOVERY" in text:
+    if "TASK_C_RECOVERY" in text:
+        return "TASK_C_RECOVERY"
+    if "TASK_B_RECOVERY" in text:
         return "TASK_B_RECOVERY"
+    if "Merge-repair task only" in text:
+        if "TASK_C" in text:
+            return "TASK_C_RECOVERY"
+        if "TASK_B" in text:
+            return "TASK_B_RECOVERY"
     if "TASK_A" in text:
         return "TASK_A"
     if "TASK_B" in text:
         return "TASK_B"
+    if "TASK_C" in text:
+        return "TASK_C"
     return ""
 
 
@@ -32,7 +41,9 @@ if stage in {"plan_finalize", "plan_refine"}:
     title = {
         "TASK_A": "TASK_A_WRITE",
         "TASK_B": "TASK_B_WRITE",
+        "TASK_C": "TASK_C_WRITE",
         "TASK_B_RECOVERY": "TASK_B_RECOVERY",
+        "TASK_C_RECOVERY": "TASK_C_RECOVERY",
     }[marker]
     answer = {
         "tasks": [{
@@ -45,10 +56,17 @@ if stage in {"plan_finalize", "plan_refine"}:
 elif stage == "plan_judge":
     answer = {"accepted": True, "issues": []}
 elif stage == "execute":
-    if "TASK_B_RECOVERY" in prompt:
+    if "TASK_C_RECOVERY" in prompt:
+        current = (root / "app.txt").read_text(encoding="utf-8")
+        if current != "task-a + task-b\n":
+            print(f"unexpected TASK_C recovery base: {current!r}", file=sys.stderr)
+            raise SystemExit(11)
+        (root / "app.txt").write_text("task-a + task-b + task-c\n", encoding="utf-8")
+        answer = "ported TASK_C onto the latest TASK_A + TASK_B target"
+    elif "TASK_B_RECOVERY" in prompt:
         current = (root / "app.txt").read_text(encoding="utf-8")
         if current != "task-a\n":
-            print(f"unexpected recovery base: {current!r}", file=sys.stderr)
+            print(f"unexpected TASK_B recovery base: {current!r}", file=sys.stderr)
             raise SystemExit(8)
         (root / "app.txt").write_text("task-a + task-b\n", encoding="utf-8")
         answer = "ported TASK_B onto the latest TASK_A target"
@@ -58,12 +76,21 @@ elif stage == "execute":
     elif "TASK_B_WRITE" in prompt:
         (root / "app.txt").write_text("task-b\n", encoding="utf-8")
         answer = "wrote TASK_B"
+    elif "TASK_C_WRITE" in prompt:
+        (root / "app.txt").write_text("task-c\n", encoding="utf-8")
+        answer = "wrote TASK_C"
     else:
         print("unknown execute case", file=sys.stderr)
         raise SystemExit(9)
 elif stage in {"review", "review_finalize"}:
     content = (root / "app.txt").read_text(encoding="utf-8") if (root / "app.txt").is_file() else ""
-    completed = content in {"task-a\n", "task-b\n", "task-a + task-b\n"}
+    completed = content in {
+        "task-a\n",
+        "task-b\n",
+        "task-c\n",
+        "task-a + task-b\n",
+        "task-a + task-b + task-c\n",
+    }
     answer = {
         "completed": completed,
         "reason": "deterministic integration check",
@@ -71,7 +98,13 @@ elif stage in {"review", "review_finalize"}:
     }
 elif stage == "validator":
     content = (root / "app.txt").read_text(encoding="utf-8") if (root / "app.txt").is_file() else ""
-    passed = content in {"task-a\n", "task-b\n", "task-a + task-b\n"}
+    passed = content in {
+        "task-a\n",
+        "task-b\n",
+        "task-c\n",
+        "task-a + task-b\n",
+        "task-a + task-b + task-c\n",
+    }
     answer = {
         "passed": passed,
         "reason": "deterministic validator",
