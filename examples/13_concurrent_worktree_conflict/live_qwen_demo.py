@@ -16,8 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = Path(__file__).resolve().parent
 RUNNER = ROOT / "ai_task_runner.py"
-WORKFLOW_SOURCE = EXAMPLE / "live_qwen_workflow.yaml"
-PROMPT_SOURCE = EXAMPLE / "live_qwen_prompt.md"
+RALPHY_WORKFLOW = ROOT / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -49,8 +48,6 @@ def _init_project(base: Path) -> Path:
     _git(project, "config", "user.name", "AI Task Runner Live Qwen Demo")
     _git(project, "config", "user.email", "live-qwen-demo@example.invalid")
     (project / "shared.txt").write_text("enabled_tasks=BASE\n", encoding="utf-8")
-    shutil.copy2(WORKFLOW_SOURCE, project / "live_qwen_workflow.yaml")
-    shutil.copy2(PROMPT_SOURCE, project / "live_qwen_prompt.md")
     _git(project, "add", ".")
     _git(project, "commit", "-m", "live Qwen conflict demo base")
     return project
@@ -76,7 +73,8 @@ def _task_goal(marker: str) -> str:
         f"LIVE WORKTREE CONFLICT TEST - {marker}. "
         "Edit only shared.txt. The file is a single comma-separated enabled_tasks list. "
         f"Add {marker} exactly once while preserving every entry already present. "
-        "Do not remove BASE. Do not modify any other file and do not run Git commands. "
+        "Do not remove BASE. Do not modify any other file. Do not run Git commands. "
+        "Do not create tests, docs, config, helper files, or workflow files; shared.txt is the only deliverable. "
         f"On the initial base, the expected logical entries are BASE and {marker}. "
         "If this same task is later replayed in a merge-recovery workspace where another "
         "entry such as TASK_A already exists, preserve that newer entry and add this task's "
@@ -93,7 +91,7 @@ def _create_task(tasks: TaskService, project: Path, marker: str) -> dict[str, An
                 {
                     "title": f"Add {marker}",
                     "prompt": _task_goal(marker),
-                    "workflow": str(project / "live_qwen_workflow.yaml"),
+                    "workflow": str(RALPHY_WORKFLOW),
                     "project": str(project),
                     "workspace": "main",
                 }
@@ -118,7 +116,7 @@ def _runner_command(
         "--project-root",
         str(project),
         "--workflow",
-        str(project / "live_qwen_workflow.yaml"),
+        str(RALPHY_WORKFLOW),
         "--backend",
         "qwen",
         "--command",
@@ -275,7 +273,7 @@ def run_live_demo(
             "model": "",
             "mode": "auto",
             "reasoning": "medium",
-            "workflow": str(project / "live_qwen_workflow.yaml"),
+            "workflow": str(RALPHY_WORKFLOW),
         },
         backend_default=lambda _project: "qwen",
         resolve_workflow=lambda _project, selected: Path(selected),
