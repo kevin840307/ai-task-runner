@@ -6537,6 +6537,180 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         raise RuntimeError("Active-operation retry published foreign merge content")
     manager_active.cleanup(prepared_active)
 
+    # 14) Simulate a process crash after MergeManager durably owns the merge
+    # transaction. A fresh MergeManager instance must reconcile/abort only its
+    # owned MERGE_HEAD and retry from the same queue head without duplicating
+    # history or losing either side of the merged tree.
+    repo_restart, manager_restart, prepared_restart = _prepare_merge_probe(
+        root,
+        "merge-owned-restart-preflight",
+        task_id="live-merge-owned-restart",
+    )
+    (prepared_restart.project_root / "restart-task.txt").write_text(
+        "task-side\n", encoding="utf-8"
+    )
+    snapshot_restart = manager_restart.snapshot_result(prepared_restart)
+    (repo_restart / "restart-target.txt").write_text(
+        "target-side\n", encoding="utf-8"
+    )
+    _delivery_git(repo_restart, "add", "restart-target.txt")
+    _delivery_git(repo_restart, "commit", "-m", "advance target before owned crash")
+    restart_target_head = _delivery_git(
+        repo_restart, "rev-parse", "HEAD"
+    ).stdout.strip()
+
+    def crash_owned_validation(_project: Path) -> str:
+        raise KeyboardInterrupt("injected merge-owner process crash")
+
+    crashed = False
+    try:
+        MergeManager().merge(
+            prepared_restart,
+            snapshot_restart,
+            validate=crash_owned_validation,
+        )
+    except KeyboardInterrupt:
+        crashed = True
+    if not crashed:
+        raise RuntimeError("Owned merge restart preflight did not inject the crash")
+
+    restart_merge_head = _delivery_git(
+        repo_restart, "rev-parse", "-q", "--verify", "MERGE_HEAD"
+    ).stdout.strip()
+    if restart_merge_head != snapshot_restart.task_snapshot_sha:
+        raise RuntimeError(
+            "Owned merge crash did not retain the expected MERGE_HEAD transaction"
+        )
+    if _delivery_git(repo_restart, "rev-parse", "HEAD").stdout.strip() != restart_target_head:
+        raise RuntimeError("Owned merge crash advanced target HEAD before commit")
+
+    restart_validation_calls = 0
+
+    def validate_restart(project: Path) -> str:
+        nonlocal restart_validation_calls
+        restart_validation_calls += 1
+        return (
+            "PASS"
+            if (
+                (project / "restart-task.txt").read_text(encoding="utf-8")
+                == "task-side\n"
+                and (project / "restart-target.txt").read_text(encoding="utf-8")
+                == "target-side\n"
+            )
+            else "SOURCE_FAIL"
+        )
+
+    restart_result = MergeManager().merge(
+        prepared_restart,
+        snapshot_restart,
+        validate=validate_restart,
+    )
+    if (
+        restart_result.status != "merged"
+        or restart_result.merge_queue_seq != 1
+        or restart_result.verdict != "PASS"
+        or restart_validation_calls != 1
+    ):
+        raise RuntimeError(
+            "Owned merge restart did not recover idempotently: "
+            f"status={restart_result.status} seq={restart_result.merge_queue_seq} "
+            f"verdict={restart_result.verdict} calls={restart_validation_calls}"
+        )
+    restart_merge_head_after = _delivery_git(
+        repo_restart, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False
+    )
+    if restart_merge_head_after.returncode == 0:
+        raise RuntimeError("Owned merge restart left MERGE_HEAD behind")
+    if _delivery_git(repo_restart, "status", "--porcelain").stdout.strip():
+        raise RuntimeError("Owned merge restart left the target Project dirty")
+    manager_restart.cleanup(prepared_restart)
+
+    # 15) When orchestration explicitly chooses fallback for a failed queue
+    # head, releasing that owned slot must unblock the next Main Task without
+    # resequencing or leaking the failed source into the target.
+    repo_release = _create_delivery_probe_repo(root, "merge-release-head-preflight")
+    release_manager = WorkspaceManager(
+        worktree_root=root / "merge-release-head-preflight-worktrees"
+    )
+    release_settings = {
+        "auto_workspace_policy": "always-main",
+        "allow_concurrent_main_tasks": True,
+    }
+    prepared_release_a = release_manager.prepare(
+        repo_release,
+        task_id="live-merge-release-a",
+        run_number=1,
+        requested_mode="main",
+        execution_settings=release_settings,
+        main_running=False,
+    )
+    prepared_release_b = release_manager.prepare(
+        repo_release,
+        task_id="live-merge-release-b",
+        run_number=1,
+        requested_mode="main",
+        execution_settings=release_settings,
+        main_running=True,
+    )
+    (prepared_release_a.project_root / "app.txt").write_text(
+        "failed-head\n", encoding="utf-8"
+    )
+    snapshot_release_a = release_manager.snapshot_result(prepared_release_a)
+    (prepared_release_b.project_root / "release-b.txt").write_text(
+        "next-task\n", encoding="utf-8"
+    )
+    snapshot_release_b = release_manager.snapshot_result(prepared_release_b)
+    (repo_release / "app.txt").write_text("target-side\n", encoding="utf-8")
+    _delivery_git(repo_release, "add", "app.txt")
+    _delivery_git(repo_release, "commit", "-m", "conflict release queue head")
+
+    release_merger = MergeManager()
+    release_head = release_merger.merge(
+        prepared_release_a,
+        snapshot_release_a,
+        validate=lambda _project: "PASS",
+    )
+    release_waiting = release_merger.merge(
+        prepared_release_b,
+        snapshot_release_b,
+        validate=lambda _project: "PASS",
+    )
+    if (
+        release_head.status != "conflict"
+        or release_head.merge_queue_seq != 1
+        or release_waiting.status != "pending_merge"
+        or release_waiting.merge_queue_seq != 2
+    ):
+        raise RuntimeError(
+            "Fallback queue release precondition mismatch: "
+            f"head={release_head.status}/{release_head.merge_queue_seq} "
+            f"next={release_waiting.status}/{release_waiting.merge_queue_seq}"
+        )
+    if not release_merger.release_merge_slot(
+        prepared_release_a,
+        snapshot_release_a,
+    ):
+        raise RuntimeError("Failed queue head was not released for fallback")
+    release_delivered = MergeManager().merge(
+        prepared_release_b,
+        snapshot_release_b,
+        validate=lambda _project: "PASS",
+    )
+    if (
+        release_delivered.status != "merged"
+        or release_delivered.merge_queue_seq != 2
+    ):
+        raise RuntimeError(
+            "Next Task did not deliver after failed queue-head release: "
+            f"status={release_delivered.status} seq={release_delivered.merge_queue_seq}"
+        )
+    if (repo_release / "release-b.txt").read_text(encoding="utf-8") != "next-task\n":
+        raise RuntimeError("Queue-head release lost the next Task result")
+    if (repo_release / "app.txt").read_text(encoding="utf-8") != "target-side\n":
+        raise RuntimeError("Queue-head release leaked failed source content")
+    release_manager.cleanup(prepared_release_b)
+    release_manager.cleanup(prepared_release_a)
+
     return {
         "clean": clean_result.status,
         "target_advance": advanced_result.status,
@@ -6579,6 +6753,13 @@ def merge_cross_matrix_preflight(root: Path) -> dict[str, object]:
         "active_operation_retry": active_retry.status,
         "active_operation_retry_real_failure": active_retry.real_merge_failure,
         "active_operation_retry_snapshot_sha": snapshot_active.task_snapshot_sha,
+        "owned_restart": restart_result.status,
+        "owned_restart_seq": restart_result.merge_queue_seq,
+        "owned_restart_validation_calls": restart_validation_calls,
+        "fallback_release_head": release_head.status,
+        "fallback_release_waiting": release_waiting.status,
+        "fallback_release_delivered": release_delivered.status,
+        "fallback_release_delivered_seq": release_delivered.merge_queue_seq,
     }
 
 RUNNER_WORKSPACE_DELIVERY_CASES = tuple(
