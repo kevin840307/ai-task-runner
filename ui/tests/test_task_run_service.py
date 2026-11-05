@@ -2068,7 +2068,9 @@ def test_two_concurrent_main_tasks_same_file_auto_recover_and_merge(tmp_path: Pa
     recovery_root = Path(recovery["workspace"]["project_root"])
     assert recovery_root != root_b
     assert (recovery_root / "app.txt").read_text(encoding="utf-8") == "base\ntask-a: enabled\n"
-    assert "task-b: enabled" in Path(recovery["patch_path"]).read_text(encoding="utf-8")
+    patch_path = Path(recovery["patch_path"])
+    assert patch_path.name == "f1.patch"
+    assert "task-b: enabled" in patch_path.read_text(encoding="utf-8")
     assert "Merge-repair task only" in launches[-1][1]
 
     (recovery_root / "app.txt").write_text(
