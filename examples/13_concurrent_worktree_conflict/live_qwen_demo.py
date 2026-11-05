@@ -414,6 +414,51 @@ def run_live_demo(
     if merge_count < 2:
         raise RuntimeError(f"Expected at least two merge commits, got {merge_count}")
 
+    # Exercise the production retained-workspace cleanup path as part of the
+    # live reliability contract. Long-running multi-Project soak must prove it
+    # does not accumulate Task/Recovery worktrees or local branches forever.
+    cleaned_a = service.cleanup(
+        project,
+        task_a["task_id"],
+        request_id="cleanup-live-qwen-task-a",
+    )
+    cleaned_b = service.cleanup(
+        project,
+        task_b["task_id"],
+        request_id="cleanup-live-qwen-task-b",
+    )
+    cleanup_rows = []
+    for cleaned in (cleaned_a, cleaned_b):
+        lifecycle = cleaned.get("workspace_cleanup")
+        if isinstance(lifecycle, dict):
+            rows = lifecycle.get("results")
+            if isinstance(rows, list):
+                cleanup_rows.extend(row for row in rows if isinstance(row, dict))
+
+    worktree_lines = _git(project, "worktree", "list", "--porcelain").splitlines()
+    worktree_paths = [
+        line.partition(" ")[2].strip()
+        for line in worktree_lines
+        if line.startswith("worktree ")
+    ]
+    if len(worktree_paths) != 1 or Path(worktree_paths[0]).resolve() != project.resolve():
+        raise RuntimeError(
+            "Task/Recovery worktrees leaked after production cleanup: "
+            + repr(worktree_paths)
+        )
+    local_branches = [
+        line.strip()
+        for line in _git(project, "branch", "--format=%(refname:short)").splitlines()
+        if line.strip().startswith(("local/task/", "local/recovery/"))
+    ]
+    if local_branches:
+        raise RuntimeError(
+            "Task/Recovery local branches leaked after production cleanup: "
+            + ", ".join(local_branches)
+        )
+    if set(_enabled_tasks(project / "shared.txt")) != {"BASE", "TASK_A", "TASK_B"}:
+        raise RuntimeError("Workspace cleanup changed the delivered Main result")
+
     history = _git(project, "--no-pager", "log", "--graph", "--oneline", "--decorate", "-12")
     final_text = (project / "shared.txt").read_text(encoding="utf-8")
 
@@ -438,6 +483,9 @@ def run_live_demo(
         "logs": str(logs),
         "launches": launches,
         "source_status": source_status,
+        "cleanup_result_count": len(cleanup_rows),
+        "remaining_worktrees": len(worktree_paths),
+        "remaining_local_task_branches": local_branches,
     }
 
 
