@@ -69,3 +69,23 @@ def test_live_qwen_conflict_bat_calls_real_qwen_not_mock_agent() -> None:
     assert "mock_agent.py" not in lowered
     assert "conflict_recovery_agent.py" not in lowered
     assert "live_qwen_workflow.yaml" not in lowered
+
+
+def test_live_qwen_clean_check_ignores_only_runner_runtime_state(tmp_path: Path) -> None:
+    module = _load_live_demo()
+    project = module._init_project(tmp_path)
+
+    runtime = project / ".ai-task-runner" / "ui"
+    runtime.mkdir(parents=True)
+    (runtime / "tasks.json").write_text('{"tasks": []}\n', encoding="utf-8")
+
+    # This is intentionally the same exception used by production MergeManager:
+    # runner-owned lifecycle metadata is allowed to be untracked.
+    assert module._source_status_ignoring_runner_runtime(project) == ""
+
+    unexpected = project / "unexpected.txt"
+    unexpected.write_text("real source change\n", encoding="utf-8")
+    status = module._source_status_ignoring_runner_runtime(project)
+
+    assert "unexpected.txt" in status
+    assert ".ai-task-runner" not in status
