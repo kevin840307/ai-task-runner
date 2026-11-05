@@ -60,7 +60,9 @@ def test_concurrent_real_runners_conflict_then_recovery_merges_cleanly(tmp_path:
     assert (project / "shared.txt").read_text(encoding="utf-8") == "TASK-A\nTASK-B\n"
     assert _git(project, "status", "--porcelain") == ""
     graph = _git(project, "log", "--graph", "--oneline", "--all", "-12")
-    assert "AI Task Runner merge" in graph
+    merge_count = int(_git(project, "rev-list", "--merges", "--count", "HEAD"))
+    assert merge_count == 2
+    assert graph.count("Merge task-") >= 2
 
 
 def test_windows_demo_bat_executes_the_same_production_demo() -> None:
