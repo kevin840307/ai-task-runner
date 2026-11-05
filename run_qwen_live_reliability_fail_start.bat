@@ -3,11 +3,11 @@ setlocal
 pushd "%~dp0"
 
 rem Fast re-run entry point after a live reliability failure.
-rem Reuse the canonical 0.5H gate so smoke-matrix coverage cannot drift.
-rem Default: resume from the currently reproduced failed probe (37 = yaml-list-endurance).
+rem Reuse the canonical 0.5H gate so smoke-matrix and multi-Project coverage cannot drift.
+rem Default: resume from yaml-list-endurance (42 in the current ordered probe list).
 rem Override example:
-rem   run_qwen_live_reliability_fail_start.bat --start-probe 38
-call "tool\qwen_live_reliability_0_5h.bat" --start-probe 37 %*
+rem   run_qwen_live_reliability_fail_start.bat --start-probe 43
+call "tool\qwen_live_reliability_0_5h.bat" --start-probe 42 %*
 
 set "RC=%ERRORLEVEL%"
 popd
