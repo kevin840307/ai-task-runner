@@ -5159,6 +5159,7 @@ def multi_project_multi_task_delivery_probe(
             "--timeout",
             str(timeout_seconds),
             "--json",
+            "--cleanup",
         ]
         completed = subprocess.run(
             command,
