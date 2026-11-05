@@ -509,6 +509,41 @@ def test_snapshot_excludes_only_explicit_run_owned_runtime_path(tmp_path: Path):
     assert (runtime / "state.json").is_file()
 
 
+def test_snapshot_never_stages_long_runtime_file_inside_excluded_path(tmp_path: Path):
+    repo = _repo(tmp_path)
+    manager = WorkspaceManager(worktree_root=tmp_path / "worktrees")
+    prepared = manager.prepare(
+        repo,
+        task_id="task-" + "l" * 32,
+        run_number=1,
+        requested_mode="worktree",
+        execution_settings={
+            "auto_workspace_policy": "always-worktree",
+            "allow_concurrent_main_tasks": False,
+        },
+        main_running=False,
+    )
+    runtime = prepared.project_root / ".ai-task-runner" / "ui" / "merge-recovery"
+    runtime.mkdir(parents=True)
+    # Python can create this path on the Windows CI image, while Git with its
+    # normal path handling used to fail during the initial git add -A.
+    long_runtime_file = runtime / (("runtime-" * 18) + "state.patch")
+    long_runtime_file.write_text("runtime-only\n", encoding="utf-8")
+    (prepared.project_root / "feature.txt").write_text("deliver me\n", encoding="utf-8")
+
+    snapshot = manager.snapshot_result(
+        prepared,
+        excluded_paths=(prepared.project_root / ".ai-task-runner",),
+    )
+
+    assert snapshot.created_commit is True
+    changed = set(
+        _git(prepared.worktree_path, "show", "--pretty=", "--name-only", "HEAD").splitlines()
+    )
+    assert "feature.txt" in changed
+    assert not any(path.startswith(".ai-task-runner/") for path in changed)
+    assert long_runtime_file.is_file()
+
 def test_snapshot_rejects_exclude_path_outside_task_worktree(tmp_path: Path):
     repo = _repo(tmp_path)
     manager = WorkspaceManager()
