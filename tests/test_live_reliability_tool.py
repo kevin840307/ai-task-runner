@@ -4509,6 +4509,7 @@ def test_multi_project_delivery_probe_runs_independent_real_path_commands(
     assert len(set(result["project_paths"])) == 3
     assert len(calls) == 3
     assert all("--json" in command for command in calls)
+    assert all("--cleanup" in command for command in calls)
     assert all(
         command[command.index("--qwen-command") + 1] == "qwen-live"
         for command in calls
