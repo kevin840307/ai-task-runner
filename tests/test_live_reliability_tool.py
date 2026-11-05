@@ -33,6 +33,8 @@ def settings(tmp_path: Path) -> live.Settings:
         soak_timeout_every=6,
         soak_yaml_every=7,
         soak_sandbox_every=7,
+        soak_multi_project_every=0,
+        multi_project_count=2,
     )
 
 
@@ -517,6 +519,8 @@ def test_live_soak_presets_use_current_workflow_asset_paths():
         assert "runner\\assets\\workflows\\file.yaml" in text
         assert "runner\\assets\\workflows\\mixed.yaml" in text
         assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
+        assert "--soak-multi-project-every 1" in text
+        assert "--multi-project-count 2" in text
         assert "runner\\workflows\\" not in text
 
 
@@ -526,6 +530,8 @@ def test_live_reliability_defaults_cover_long_http_and_disconnect_windows(monkey
     assert args.long_http_outage_seconds == live.API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS
     assert args.long_api_outage_seconds == 180
     assert args.single_process_yaml_items == 0
+    assert args.soak_multi_project_every == 0
+    assert args.multi_project_count == 2
 
 
 def test_live_source_revision_records_head_and_tracked_dirty_state(monkeypatch):
@@ -665,6 +671,7 @@ def test_dense_coverage_requires_every_mixed_probe_and_transient_http_class():
         timeout_probes=1,
         yaml_runs=1,
         sandbox_runs=1,
+        multi_project_runs=1,
         elapsed_seconds=1800,
     )
     live.require_dense_coverage(complete)
@@ -678,6 +685,7 @@ def test_dense_coverage_requires_every_mixed_probe_and_transient_http_class():
                 transient_status_counts={429: 1, 502: 1, 503: 1},
                 timeout_probes=1,
                 yaml_runs=1,
+                multi_project_runs=1,
                 elapsed_seconds=1800,
             )
         )
@@ -692,6 +700,7 @@ def test_dense_coverage_requires_every_mixed_probe_and_transient_http_class():
                 timeout_probes=1,
                 yaml_runs=1,
                 sandbox_runs=1,
+                multi_project_runs=1,
                 elapsed_seconds=1800,
             )
         )
@@ -4432,10 +4441,78 @@ def test_fail_start_launcher_reuses_canonical_0_5h_gate_and_allows_override():
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert 'call "tool\\qwen_live_reliability_0_5h.bat" --start-probe 37 %*' in text
+    expected_index = live.PROBE_ORDER.index("yaml-list-endurance") + 1
+    assert (
+        f'call "tool\\qwen_live_reliability_0_5h.bat" '
+        f'--start-probe {expected_index} %*'
+    ) in text
     assert "--high-density" not in text
     assert "--example-smoke-matrix-project" not in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
+
+
+def test_multi_project_delivery_probe_runs_independent_real_path_commands(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    demo = tmp_path / "live_qwen_demo.py"
+    demo.write_text("# fixture\n", encoding="utf-8")
+    monkeypatch.setattr(live, "LIVE_CONCURRENT_CONFLICT_DEMO", demo)
+
+    calls: list[list[str]] = []
+    call_lock = threading.Lock()
+
+    def fake_run(command, **kwargs):
+        root = Path(command[command.index("--root") + 1])
+        index = int(root.name.rsplit("-", 1)[-1])
+        payload = {
+            "project": str(root / "project"),
+            "final_entries": ["BASE", "TASK_A", "TASK_B"],
+            "merge_count": 2,
+            "source_status": "",
+            "launches": [
+                {"label": "task-a", "goal": "TASK_A"},
+                {"label": "task-b", "goal": "TASK_B"},
+                {
+                    "label": "recovery-1",
+                    "goal": "Merge-repair task only. TASK_B",
+                },
+            ],
+        }
+        with call_lock:
+            calls.append(list(command))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(live.subprocess, "run", fake_run)
+    config = replace(
+        settings(tmp_path),
+        command="qwen-live",
+        multi_project_count=3,
+    )
+
+    result = live.multi_project_multi_task_delivery_probe(
+        config,
+        tmp_path,
+        "multi-project-probe",
+    )
+
+    assert result["projects"] == 3
+    assert result["tasks"] == 6
+    assert result["recoveries"] == 3
+    assert result["runner_launches"] == 9
+    assert result["merge_commits"] == 6
+    assert len(set(result["project_paths"])) == 3
+    assert len(calls) == 3
+    assert all("--json" in command for command in calls)
+    assert all(
+        command[command.index("--qwen-command") + 1] == "qwen-live"
+        for command in calls
+    )
 
 
 def test_batch_gates_forward_live_probe_selector_arguments():
