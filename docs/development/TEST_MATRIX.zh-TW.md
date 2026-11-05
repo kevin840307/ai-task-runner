@@ -71,7 +71,8 @@ tool\qwen_live_reliability_0_5h.bat
 
 ```powershell
 tool\qwen_live_reliability_24h.bat --list-probes
-# --start-probe 使用 --list-probes 顯示的 1-based 序號
+# 先在清單找到 review-failure-routing 等 probe 對應的 1-based 序號，
+# --start-probe 只接受該數字，不接受名稱。
 tool\qwen_live_reliability_24h.bat --start-probe 29
 ```
 
