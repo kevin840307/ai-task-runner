@@ -207,7 +207,7 @@ def run_demo(
     patch = manager.recovery_patch(task_b, snapshot_b)
     patch_root = recovery.project_root / ".ai-task-runner" / "ui" / "merge-recovery"
     patch_root.mkdir(parents=True, exist_ok=True)
-    patch_path = patch_root / f"{task_b.task_id}-r{task_b.run_number}-f1.patch"
+    patch_path = patch_root / "f1.patch"
     patch_path.write_text(patch, encoding="utf-8")
     if verbose:
         print(f"[6] Recovery worktree: {recovery.worktree_path}")
