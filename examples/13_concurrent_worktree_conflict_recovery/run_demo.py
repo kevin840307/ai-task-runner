@@ -8,10 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from workspace import MergeManager, WorkspaceManager
-
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from workspace import MergeManager, WorkspaceManager
 HERE = Path(__file__).resolve().parent
 RUNNER = ROOT / "ai_task_runner.py"
 MOCK_AGENT = HERE / "mock_agent.py"
