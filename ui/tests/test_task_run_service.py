@@ -1960,3 +1960,138 @@ def test_reconcile_reuses_persisted_snapshot_instead_of_turning_pending_delivery
     assert second["run"]["workspace_result"]["snapshot"] == first_snapshot
     assert second["run"]["workspace_result"]["merge"]["status"] == "validation_required"
     assert not (repo / "result.txt").exists()
+
+
+def test_two_concurrent_main_tasks_same_file_auto_recover_and_merge(tmp_path: Path):
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    first = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="same-file-a",
+        title="Concurrent A",
+    )
+    second = _task(
+        tasks,
+        repo,
+        workspace="main",
+        request_id="same-file-b",
+        title="Concurrent B",
+    )
+    runtimes: dict[Path, dict] = {}
+    launches = []
+
+    def launch(project: Path, goal: str | None, **kwargs):
+        root = Path(project).resolve()
+        launches.append((root, goal, dict(kwargs)))
+        runtimes[root] = {
+            "running": True,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }
+
+    def read_runtime(project: Path):
+        return dict(runtimes.get(Path(project).resolve(), {
+            "running": False,
+            "launching": False,
+            "completed": False,
+            "resumable": False,
+            "actions": {},
+        }))
+
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {
+            "auto_workspace_policy": "always-main",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": True,
+        },
+        preferences=lambda _project: {
+            "agent": "qwen",
+            "model": "",
+            "mode": "auto",
+            "reasoning": "medium",
+            "workflow": str(repo / "workflow.yaml"),
+        },
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=launch,
+        read_runtime=read_runtime,
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        validate_merge=lambda _project, _goal, **_kwargs: "PASS",
+        workspace_manager=WorkspaceManager(worktree_root=repo.parent / "worktrees"),
+        auto_watch=False,
+    )
+
+    running_a = service.start(repo, first["task_id"], request_id="same-file-run-a")
+    running_b = service.start(repo, second["task_id"], request_id="same-file-run-b")
+    root_a = Path(running_a["run"]["workspace"]["project_root"])
+    root_b = Path(running_b["run"]["workspace"]["project_root"])
+
+    assert root_a != root_b
+    assert running_a["run"]["workspace"]["task_base_sha"] == running_b["run"]["workspace"]["task_base_sha"]
+
+    (root_a / "app.txt").write_text("base\ntask-a: enabled\n", encoding="utf-8")
+    (root_b / "app.txt").write_text("base\ntask-b: enabled\n", encoding="utf-8")
+
+    runtimes[root_a] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+    closed_a = service.reconcile(repo, first["task_id"])
+    assert closed_a["status"] == "closed"
+    assert closed_a["run"]["phase"] == "merged"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "base\ntask-a: enabled\n"
+
+    runtimes[root_b] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+    recovering_b = service.reconcile(repo, second["task_id"])
+    assert recovering_b["status"] == "ongoing"
+    assert recovering_b["run"]["phase"] == "conflict_recovery"
+    assert recovering_b["merge_failure_count"] == 1
+    assert recovering_b["run"]["workspace_result"]["merge"]["status"] == "conflict"
+    assert recovering_b["run"]["workspace_result"]["merge"]["conflict_files"] == ["app.txt"]
+
+    recovery = recovering_b["run"]["workspace_result"]["recovery"]
+    recovery_root = Path(recovery["workspace"]["project_root"])
+    assert recovery_root != root_b
+    assert (recovery_root / "app.txt").read_text(encoding="utf-8") == "base\ntask-a: enabled\n"
+    assert "task-b: enabled" in Path(recovery["patch_path"]).read_text(encoding="utf-8")
+    assert "Merge-repair task only" in launches[-1][1]
+
+    (recovery_root / "app.txt").write_text(
+        "base\ntask-a: enabled\ntask-b: enabled\n",
+        encoding="utf-8",
+    )
+    runtimes[recovery_root] = {
+        "running": False,
+        "launching": False,
+        "completed": True,
+        "resumable": False,
+        "actions": {},
+    }
+
+    closed_b = service.reconcile(repo, second["task_id"])
+    assert closed_b["status"] == "closed"
+    assert closed_b["run"]["phase"] == "merged"
+    assert closed_b["merge_failure_count"] == 1
+    assert closed_b["run"]["workspace_result"]["merge"]["status"] == "merged"
+    assert closed_b["run"]["workspace_result"]["merge_source"]["workspace"]["task_branch"].startswith(
+        f"local/recovery/{second['task_id']}-r1-f1"
+    )
+    assert (repo / "app.txt").read_text(encoding="utf-8") == (
+        "base\ntask-a: enabled\ntask-b: enabled\n"
+    )
+    assert _git(repo, "status", "--porcelain") == ""
