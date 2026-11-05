@@ -17,6 +17,7 @@ EXAMPLE = Path(__file__).resolve().parent
 RUNNER = ROOT / "ai_task_runner.py"
 AGENT = EXAMPLE / "mock_agent.py"
 WORKFLOW_SOURCE = EXAMPLE / "workflow.yaml"
+EXECUTION_PROMPT_SOURCE = ROOT / "runner" / "assets" / "prompts" / "common" / "execution.md"
 
 sys.path.insert(0, str(ROOT))
 from workspace import MergeManager, WorkspaceManager  # noqa: E402
@@ -45,6 +46,9 @@ def _init_project(base: Path) -> Path:
     _git(project, "config", "user.email", "concurrent-demo@example.invalid")
     (project / "shared.txt").write_text("BASE\n", encoding="utf-8")
     shutil.copy2(WORKFLOW_SOURCE, project / "workflow.yaml")
+    prompt_root = project / "common"
+    prompt_root.mkdir()
+    shutil.copy2(EXECUTION_PROMPT_SOURCE, prompt_root / "execution.md")
     _git(project, "add", ".")
     _git(project, "commit", "-m", "demo base")
     return project
