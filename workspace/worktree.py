@@ -349,7 +349,7 @@ def snapshot_task_result(
         before = git(worktree, "rev-parse", "HEAD").stdout.strip()
         dirty = bool(git(worktree, "status", "--porcelain=v1", "-z").stdout)
         if dirty:
-            git(worktree, "add", "-A")
+            excluded_relative: list[Path] = []
             for value in excluded_paths:
                 excluded = Path(value).expanduser().resolve()
                 try:
@@ -360,6 +360,17 @@ def snapshot_task_result(
                     ) from exc
                 if not relative.parts:
                     raise WorkspaceError("Snapshot exclude path cannot be the Task worktree root")
+                excluded_relative.append(relative)
+
+            add_args = ["add", "-A", "--", "."]
+            add_args.extend(
+                f":(exclude){relative.as_posix()}"
+                for relative in excluded_relative
+            )
+            git(worktree, *add_args)
+            # Keep the reset as a fail-closed second line of defence in case a
+            # future Git/pathspec change stages an explicitly excluded path.
+            for relative in excluded_relative:
                 git(
                     worktree,
                     "reset",
