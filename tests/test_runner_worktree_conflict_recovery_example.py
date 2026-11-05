@@ -282,3 +282,238 @@ def test_two_concurrent_runner_worktrees_auto_recover_conflict_and_merge(
     # Both deliveries are explicit --no-ff merge boundaries in Project history.
     merge_count = int(_git(repo, "rev-list", "--merges", "--count", "HEAD"))
     assert merge_count == 2
+
+def test_three_concurrent_runner_worktrees_recover_in_fifo_against_latest_main(
+    tmp_path: Path,
+) -> None:
+    """Production-path E2E for three concurrent Tasks and chained conflict recovery.
+
+    This proves that a later recovery is created from the latest merged target,
+    not from the original Task base, while a third Task remains pending behind
+    the recovery queue head.
+    """
+    repo = _repo(tmp_path)
+    tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
+    task_a = _task(tasks, repo, "TASK_A")
+    task_b = _task(tasks, repo, "TASK_B")
+    task_c = _task(tasks, repo, "TASK_C")
+
+    runtime: dict[Path, dict] = {}
+    runtime_lock = threading.Lock()
+    initial_launch_barrier = threading.Barrier(3)
+    launches: list[tuple[Path, str]] = []
+    agent_command = subprocess.list2cmdline([sys.executable, str(AGENT)])
+
+    def launch(project: Path, goal: str | None, **_kwargs) -> None:
+        project = Path(project).resolve()
+        goal_text = str(goal or "")
+        is_recovery = goal_text.startswith("Merge-repair task only.")
+
+        with runtime_lock:
+            launches.append((project, goal_text))
+            runtime[project] = {
+                "running": True,
+                "launching": False,
+                "completed": False,
+                "resumable": False,
+                "stale": False,
+                "has_state": True,
+                "actions": {},
+            }
+
+        if not is_recovery:
+            initial_launch_barrier.wait(timeout=30)
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "--goal",
+                goal_text,
+                "--project-root",
+                str(project),
+                "--validator",
+                "ai",
+                "--backend",
+                "qwen",
+                "--command",
+                agent_command,
+                "--stage-retries",
+                "1",
+                "--retry-delay",
+                "0",
+                "--retry-max-delay",
+                "0",
+                "--agent-timeout",
+                "30",
+                "--planning-timeout",
+                "30",
+                "--validator-timeout",
+                "30",
+                "--agent-idle-after-change-timeout",
+                "0",
+                "--final-ai-validations",
+                "1",
+                "--final-ai-required-passes",
+                "1",
+                "--no-ui-project-register",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=90,
+        )
+        assert completed.returncode == 0, completed.stdout + "\n" + completed.stderr
+
+        with runtime_lock:
+            runtime[project] = {
+                "running": False,
+                "launching": False,
+                "completed": True,
+                "resumable": False,
+                "stale": False,
+                "has_state": True,
+                "actions": {},
+            }
+
+    def read_runtime(project: Path) -> dict:
+        with runtime_lock:
+            return dict(runtime.get(Path(project).resolve(), {
+                "running": False,
+                "launching": False,
+                "completed": False,
+                "resumable": False,
+                "stale": False,
+                "has_state": False,
+                "actions": {},
+            }))
+
+    service = TaskRunService(
+        tasks,
+        execution_settings=lambda: {
+            "auto_workspace_policy": "always-main",
+            "merge_failure_limit": 3,
+            "allow_concurrent_main_tasks": True,
+        },
+        preferences=lambda _project: {
+            "agent": "qwen",
+            "model": "",
+            "mode": "auto",
+            "workflow": str(repo / "workflow.yaml"),
+        },
+        backend_default=lambda _project: "qwen",
+        resolve_workflow=lambda _project, selected: Path(selected),
+        launch=launch,
+        read_runtime=read_runtime,
+        stop_runtime=lambda _project: None,
+        resume_runtime=lambda _project: None,
+        workspace_manager=WorkspaceManager(worktree_root=tmp_path / "worktrees"),
+        poll_interval=0.05,
+        auto_watch=False,
+    )
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [
+            pool.submit(service.start, repo, task["task_id"], request_id=f"run-{label}")
+            for task, label in (
+                (task_a, "task-a"),
+                (task_b, "task-b"),
+                (task_c, "task-c"),
+            )
+        ]
+        started_a, started_b, started_c = [
+            future.result(timeout=60) for future in futures
+        ]
+
+    workspaces = [
+        started_a["run"]["workspace"],
+        started_b["run"]["workspace"],
+        started_c["run"]["workspace"],
+    ]
+    roots = [Path(workspace["project_root"]) for workspace in workspaces]
+    assert len({workspace["task_base_sha"] for workspace in workspaces}) == 1
+    assert len({workspace["task_branch"] for workspace in workspaces}) == 3
+    assert len({root.resolve() for root in roots}) == 3
+    assert [root.joinpath("app.txt").read_text(encoding="utf-8") for root in roots] == [
+        "task-a\n",
+        "task-b\n",
+        "task-c\n",
+    ]
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "base\n"
+
+    closed_a = service.reconcile(repo, task_a["task_id"])
+    assert closed_a["status"] == "closed"
+    assert closed_a["run"]["phase"] == "merged"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "task-a\n"
+    head_after_a = _git(repo, "rev-parse", "HEAD")
+
+    recovering_b = service.reconcile(repo, task_b["task_id"])
+    assert recovering_b["status"] == "ongoing"
+    assert recovering_b["run"]["phase"] == "conflict_recovery"
+    recovery_b = recovering_b["run"]["workspace_result"]["recovery"]
+    recovery_b_root = Path(recovery_b["workspace"]["project_root"])
+    assert recovery_b["workspace"]["task_base_sha"] == head_after_a
+    assert recovery_b_root.joinpath("app.txt").read_text(encoding="utf-8") == (
+        "task-a + task-b\n"
+    )
+    assert "TASK_B" in recovery_b["prompt"]
+    assert "task-b" in Path(recovery_b["patch_path"]).read_text(encoding="utf-8")
+
+    # C reaches delivery while B still owns the FIFO head. It must not overtake
+    # B or mutate Main before B's recovery snapshot is merged.
+    waiting_c = service.reconcile(repo, task_c["task_id"])
+    assert waiting_c["status"] == "ongoing"
+    assert waiting_c["run"]["phase"] == "pending_merge"
+    assert waiting_c["run"]["workspace_result"]["merge"]["status"] == "pending_merge"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "task-a\n"
+
+    closed_b = service.reconcile(repo, task_b["task_id"])
+    assert closed_b["status"] == "closed"
+    assert closed_b["run"]["phase"] == "merged"
+    assert (repo / "app.txt").read_text(encoding="utf-8") == "task-a + task-b\n"
+    head_after_b = _git(repo, "rev-parse", "HEAD")
+    assert head_after_b != head_after_a
+
+    # C now becomes queue head. Its original snapshot conflicts, so recovery C
+    # must be based on the target that already contains both A and recovered B.
+    recovering_c = service.reconcile(repo, task_c["task_id"])
+    assert recovering_c["status"] == "ongoing"
+    assert recovering_c["run"]["phase"] == "conflict_recovery"
+    assert recovering_c["merge_failure_count"] == 1
+    result_c = recovering_c["run"]["workspace_result"]
+    assert result_c["last_merge_failure"]["status"] == "conflict"
+    assert result_c["last_merge_failure"]["conflict_files"] == ["app.txt"]
+
+    recovery_c = result_c["recovery"]
+    recovery_c_root = Path(recovery_c["workspace"]["project_root"])
+    assert recovery_c["workspace"]["task_base_sha"] == head_after_b
+    assert recovery_c_root.joinpath("app.txt").read_text(encoding="utf-8") == (
+        "task-a + task-b + task-c\n"
+    )
+    assert "TASK_C" in recovery_c["prompt"]
+    assert "task-c" in Path(recovery_c["patch_path"]).read_text(encoding="utf-8")
+
+    closed_c = service.reconcile(repo, task_c["task_id"])
+    assert closed_c["status"] == "closed"
+    assert closed_c["run"]["phase"] == "merged"
+    assert closed_c["merge_failure_count"] == 1
+    assert (repo / "app.txt").read_text(encoding="utf-8") == (
+        "task-a + task-b + task-c\n"
+    )
+    assert _git(repo, "status", "--porcelain") == ""
+
+    # Original outputs remain immutable evidence and are never rewritten by
+    # conflict recovery.
+    assert roots[0].joinpath("app.txt").read_text(encoding="utf-8") == "task-a\n"
+    assert roots[1].joinpath("app.txt").read_text(encoding="utf-8") == "task-b\n"
+    assert roots[2].joinpath("app.txt").read_text(encoding="utf-8") == "task-c\n"
+
+    assert len(launches) == 5
+    recovery_goals = [
+        goal for _root, goal in launches if goal.startswith("Merge-repair task only.")
+    ]
+    assert len(recovery_goals) == 2
+    assert any("TASK_B" in goal for goal in recovery_goals)
+    assert any("TASK_C" in goal for goal in recovery_goals)
+    assert int(_git(repo, "rev-list", "--merges", "--count", "HEAD")) == 3
+
