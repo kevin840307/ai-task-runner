@@ -95,7 +95,7 @@ tool\qwen_live_reliability_24h.bat
 - committed workflow/task position 不遺失；
 - role Session 不損壞；
 - resume 時 frozen Workflow/Prompt resource 穩定；
-- 24H soak 每輪都包含多 Project concurrent Task/worktree/merge/recovery stress；
+- 24H soak 第 1 輪一定跑 multi-Project stress，之後每 2 輪重跑一次 concurrent Task/worktree/merge/recovery；
 - `summary.json` 的 `soak_multi_project_runs`、`soak_multi_project_projects`、`soak_multi_project_tasks`、`soak_multi_project_recoveries` 必須持續累積；
 - 每次 multi-Project stress 完成後清除暫存 Project，且最終 `active_process_markers == 0`；
 - conflict recovery 必須從最新 target HEAD 建立，不能覆蓋先前已合併 Task。
