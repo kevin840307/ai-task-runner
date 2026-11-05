@@ -966,6 +966,19 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml
     assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
 
 
+def test_live_reliability_24h_uses_denser_multi_project_soak_than_short_gate():
+    short = (ROOT / "tool" / "qwen_live_reliability_0_5h.bat").read_text(
+        encoding="utf-8"
+    )
+    long = (ROOT / "tool" / "qwen_live_reliability_24h.bat").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--soak-multi-project-every 4 --multi-project-count 2" in short
+    assert "--soak-multi-project-every 2 --multi-project-count 2" in long
+    assert "multi-Project + concurrent Task + worktree + FIFO merge + conflict recovery" in long
+
+
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
     work = tmp_path / ".ai-task-runner"
     history = work / "debug" / "history"
