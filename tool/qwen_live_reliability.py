@@ -5211,6 +5211,21 @@ def multi_project_multi_task_delivery_probe(
                 f"multi-project Project {index} left source changes: "
                 f"{payload.get('source_status')}"
             )
+        if int(payload.get("cleanup_result_count") or 0) < 3:
+            raise RuntimeError(
+                f"multi-project Project {index} did not clean original + recovery "
+                f"workspaces: {payload.get('cleanup_result_count')}"
+            )
+        if int(payload.get("remaining_worktrees") or 0) != 1:
+            raise RuntimeError(
+                f"multi-project Project {index} leaked worktrees after cleanup: "
+                f"{payload.get('remaining_worktrees')}"
+            )
+        if payload.get("remaining_local_task_branches"):
+            raise RuntimeError(
+                f"multi-project Project {index} leaked local Task/Recovery branches: "
+                f"{payload.get('remaining_local_task_branches')}"
+            )
         return payload
 
     with ThreadPoolExecutor(max_workers=count) as pool:
