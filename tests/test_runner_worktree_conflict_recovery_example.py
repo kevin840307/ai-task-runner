@@ -6,12 +6,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from runner.api import RunRequest, run
 from ui.task_run_service import TaskRunService
 from ui.task_service import TaskService
 from workspace import WorkspaceManager
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "ai_task_runner.py"
 AGENT = ROOT / "tests" / "conflict_recovery_agent.py"
 
 
@@ -63,8 +63,9 @@ def test_two_concurrent_runner_worktrees_auto_recover_conflict_and_merge(
 ) -> None:
     """End-to-end example: two Runners -> two worktrees -> conflict -> recovery -> merge.
 
-    The real Runner, WorkspaceManager, snapshots, MergeManager and TaskRunService
-    are used. Only the model is deterministic so this remains an offline CI test.
+    The real Runner supervisor/worker subprocesses, WorkspaceManager, snapshots,
+    MergeManager and TaskRunService are used. Only the model is deterministic so
+    this remains an offline CI test.
     """
     repo = _repo(tmp_path)
     tasks = TaskService(workflow_requirements=lambda _p, _w: {"exists": True})
@@ -75,7 +76,7 @@ def test_two_concurrent_runner_worktrees_auto_recover_conflict_and_merge(
     runtime_lock = threading.Lock()
     initial_launch_barrier = threading.Barrier(2)
     launches: list[tuple[Path, str]] = []
-    agent_command = f'"{sys.executable}" "{AGENT}"'
+    agent_command = subprocess.list2cmdline([sys.executable, str(AGENT)])
 
     def launch(project: Path, goal: str | None, **_kwargs) -> None:
         project = Path(project).resolve()
@@ -99,25 +100,46 @@ def test_two_concurrent_runner_worktrees_auto_recover_conflict_and_merge(
         if not is_recovery:
             initial_launch_barrier.wait(timeout=30)
 
-        result = run(
-            RunRequest(
-                goal=goal_text,
-                project_root=str(project),
-                validator="ai",
-                backend="qwen",
-                command=agent_command,
-                stage_retries=1,
-                retry_delay=0,
-                retry_max_delay=0,
-                agent_timeout=30,
-                planning_timeout=30,
-                validator_timeout=30,
-                agent_idle_after_change_timeout=0,
-                final_ai_validations=1,
-                final_ai_required_passes=1,
-            )
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "--goal",
+                goal_text,
+                "--project-root",
+                str(project),
+                "--validator",
+                "ai",
+                "--backend",
+                "qwen",
+                "--command",
+                agent_command,
+                "--stage-retries",
+                "1",
+                "--retry-delay",
+                "0",
+                "--retry-max-delay",
+                "0",
+                "--agent-timeout",
+                "30",
+                "--planning-timeout",
+                "30",
+                "--validator-timeout",
+                "30",
+                "--agent-idle-after-change-timeout",
+                "0",
+                "--final-ai-validations",
+                "1",
+                "--final-ai-required-passes",
+                "1",
+                "--no-ui-project-register",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=90,
         )
-        assert result.completed is True
+        assert completed.returncode == 0, completed.stdout + "\n" + completed.stderr
 
         with runtime_lock:
             runtime[project] = {
