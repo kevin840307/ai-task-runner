@@ -3041,6 +3041,13 @@ def test_merge_cross_matrix_preflight_covers_delivery_failure_guards_and_recover
     assert result["active_operation_retry"] == "merged"
     assert result["active_operation_retry_real_failure"] is False
     assert result["active_operation_retry_snapshot_sha"]
+    assert result["owned_restart"] == "merged"
+    assert result["owned_restart_seq"] == 1
+    assert result["owned_restart_validation_calls"] == 1
+    assert result["fallback_release_head"] == "conflict"
+    assert result["fallback_release_waiting"] == "pending_merge"
+    assert result["fallback_release_delivered"] == "merged"
+    assert result["fallback_release_delivered_seq"] == 2
 
     assert not (tmp_path / "merge-source-fail-preflight" / "task-side.txt").exists()
     assert (tmp_path / "merge-technical-error-preflight" / "task-side.txt").read_text(
