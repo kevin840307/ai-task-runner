@@ -1,9 +1,0 @@
-stages:
-  execute:
-    type: base
-    profile: execute
-    prompt: common/execution.md
-    mode: write
-    track_changes: true
-flow:
-  - execute
