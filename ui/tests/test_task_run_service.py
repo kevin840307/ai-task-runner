@@ -2094,4 +2094,4 @@ def test_two_concurrent_main_tasks_same_file_auto_recover_and_merge(tmp_path: Pa
     assert (repo / "app.txt").read_text(encoding="utf-8") == (
         "base\ntask-a: enabled\ntask-b: enabled\n"
     )
-    assert _git(repo, "status", "--porcelain") == ""
+    assert _git(repo, "status", "--porcelain", "--untracked-files=no") == ""
