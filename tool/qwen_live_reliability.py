@@ -351,6 +351,8 @@ class SoakResult:
     multi_project_projects: int = 0
     multi_project_tasks: int = 0
     multi_project_recoveries: int = 0
+    multi_project_first_elapsed_seconds: float = 0
+    multi_project_last_elapsed_seconds: float = 0
     elapsed_seconds: float = 0
     resource_start: dict[str, int] = field(default_factory=dict)
     resource_max: dict[str, int] = field(default_factory=dict)
@@ -5307,6 +5309,10 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 f"soak-multi-project-{run_number:04d}",
                 project_count=settings.multi_project_count,
             )
+            multi_elapsed = time.monotonic() - started
+            first_multi_elapsed = result.multi_project_first_elapsed_seconds
+            if result.multi_project_runs == 0:
+                first_multi_elapsed = multi_elapsed
             result = replace(
                 result,
                 multi_project_runs=result.multi_project_runs + 1,
@@ -5319,6 +5325,8 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 multi_project_recoveries=(
                     result.multi_project_recoveries + int(multi_result["recoveries"])
                 ),
+                multi_project_first_elapsed_seconds=first_multi_elapsed,
+                multi_project_last_elapsed_seconds=multi_elapsed,
             )
 
         project = create_project(root, f"soak-{run_number:04d}")
@@ -5446,6 +5454,55 @@ def require_dense_coverage(result: SoakResult) -> None:
     )
     if missing:
         raise RuntimeError("high-density soak missed: " + ", ".join(missing))
+
+
+def require_long_haul_multi_project_coverage(
+    result: SoakResult,
+    *,
+    hours: float,
+    project_count: int,
+) -> None:
+    """Require repeated and late multi-Project delivery evidence for long soaks.
+
+    A 24H gate must not pass merely because one multi-Project probe succeeded near
+    startup. Require multiple independent conflict/recovery cycles and evidence
+    that the same production path was still healthy late in the requested soak.
+    """
+    if float(hours) < 24:
+        return
+    projects = max(2, int(project_count))
+    minimum_runs = 6
+    minimum_projects = minimum_runs * projects
+    minimum_tasks = minimum_projects * 2
+    minimum_recoveries = minimum_projects
+    late_boundary = float(hours) * 3600 * 0.75
+
+    failures: list[str] = []
+    if result.multi_project_runs < minimum_runs:
+        failures.append(
+            f"multi-project cycles {result.multi_project_runs} < {minimum_runs}"
+        )
+    if result.multi_project_projects < minimum_projects:
+        failures.append(
+            f"multi-project Projects {result.multi_project_projects} < {minimum_projects}"
+        )
+    if result.multi_project_tasks < minimum_tasks:
+        failures.append(
+            f"multi-project Tasks {result.multi_project_tasks} < {minimum_tasks}"
+        )
+    if result.multi_project_recoveries < minimum_recoveries:
+        failures.append(
+            f"conflict recoveries {result.multi_project_recoveries} < {minimum_recoveries}"
+        )
+    if result.multi_project_last_elapsed_seconds < late_boundary:
+        failures.append(
+            "last multi-project cycle ended too early: "
+            f"{result.multi_project_last_elapsed_seconds:.1f}s < {late_boundary:.1f}s"
+        )
+    if failures:
+        raise RuntimeError(
+            "24H multi-project/worktree/merge coverage failed: " + "; ".join(failures)
+        )
 
 
 @contextmanager
@@ -7637,6 +7694,12 @@ def main() -> int:
             if args.high_density and args.hours:
                 require_dense_coverage(soak_result)
             if args.hours:
+                require_long_haul_multi_project_coverage(
+                    soak_result,
+                    hours=args.hours,
+                    project_count=args.multi_project_count,
+                )
+            if args.hours:
                 print_probe_pass("soak", f"{args.hours:g}H soak completed ({soak_result.completed} runs)")
     summary = {
         "passed": True,
@@ -7715,6 +7778,12 @@ def main() -> int:
         "soak_multi_project_projects": soak_result.multi_project_projects,
         "soak_multi_project_tasks": soak_result.multi_project_tasks,
         "soak_multi_project_recoveries": soak_result.multi_project_recoveries,
+        "soak_multi_project_first_elapsed_seconds": round(
+            soak_result.multi_project_first_elapsed_seconds, 3
+        ),
+        "soak_multi_project_last_elapsed_seconds": round(
+            soak_result.multi_project_last_elapsed_seconds, 3
+        ),
         "resource_observation": {
             "start": soak_result.resource_start,
             "max": soak_result.resource_max,
