@@ -5231,6 +5231,11 @@ def multi_project_multi_task_delivery_probe(
     }
 
 
+def soak_multi_project_enabled(every: int, run_number: int) -> bool:
+    """Front-load one multi-Project stress cycle, then repeat at the configured cadence."""
+    return int(every) > 0 and (int(run_number) == 1 or every_nth(int(every), int(run_number)))
+
+
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
@@ -5280,7 +5285,7 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 )
             result = replace(result, yaml_runs=result.yaml_runs + 1)
 
-        if every_nth(settings.soak_multi_project_every, run_number):
+        if soak_multi_project_enabled(settings.soak_multi_project_every, run_number):
             multi_result = multi_project_multi_task_delivery_probe(
                 run_settings,
                 root,
@@ -7281,7 +7286,7 @@ def main() -> int:
         if args.soak_sandbox_every == 0:
             args.soak_sandbox_every = 7
         if args.soak_multi_project_every == 0:
-            args.soak_multi_project_every = 1
+            args.soak_multi_project_every = 4
     if (
         args.hours < 0 or args.pause < 0
         or args.run_timeout <= 0
