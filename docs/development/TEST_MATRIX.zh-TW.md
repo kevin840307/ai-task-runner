@@ -61,6 +61,9 @@ tool\qwen_live_reliability_0_5h.bat
 - YAML List resume；
 - custom Stage / custom dynamic producer；
 - protected-file policy；
+- Runner + Worktree + snapshot + FIFO MergeQueue + MergeManager；
+- 同專案 concurrent Main Task 的真實 Git conflict 與 Recovery Runner；
+- 多 Project 同時各跑多 Task，確認 repository-scoped queue/lock 不互相污染；
 - timeout/recovery budget；
 - final AI voting。
 
@@ -68,9 +71,8 @@ tool\qwen_live_reliability_0_5h.bat
 
 ```powershell
 tool\qwen_live_reliability_24h.bat --list-probes
-tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
-# 也支援 1-based 序號，例如：
-tool\qwen_live_reliability_24h.bat --start-probe 25
+# --start-probe 使用 --list-probes 顯示的 1-based 序號
+tool\qwen_live_reliability_24h.bat --start-probe 29
 ```
 
 `--start-probe` 只略過指定步驟之前的 probes；後續 probes 與原本要求的 soak 仍會繼續。partial-run summary 會記錄起始 probe，且不會把被 skip 的 probes 誤標為 PASS。
@@ -92,9 +94,13 @@ tool\qwen_live_reliability_24h.bat
 - state/log 不會無限成長；
 - committed workflow/task position 不遺失；
 - role Session 不損壞；
-- resume 時 frozen Workflow/Prompt resource 穩定。
+- resume 時 frozen Workflow/Prompt resource 穩定；
+- 24H soak 每輪都包含多 Project concurrent Task/worktree/merge/recovery stress；
+- `summary.json` 的 `soak_multi_project_runs`、`soak_multi_project_projects`、`soak_multi_project_tasks`、`soak_multi_project_recoveries` 必須持續累積；
+- 每次 multi-Project stress 完成後清除暫存 Project，且最終 `active_process_markers == 0`；
+- conflict recovery 必須從最新 target HEAD 建立，不能覆蓋先前已合併 Task。
 
-Deterministic CI、短 live gate、24H soak 是三個不同的信心層級。
+Deterministic CI、短 live gate、24H soak 是三個不同的信心層級。24H PASS 是 24×7 運行的高信心證據，但不是對未來所有故障的數學保證。
 
 - Workflow Library 右鍵 Chat 顯示切換（顯示/隱藏）與 Chat picker 即時過濾。
 - 沒有有效已保存 Workflow 偏好時，Chat 預設選擇 `ralphy_ai_validate.yaml`。
