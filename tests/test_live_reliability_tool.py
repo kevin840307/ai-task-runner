@@ -2922,6 +2922,48 @@ def test_soak_multi_project_stress_is_front_loaded_then_periodic():
     assert live.soak_multi_project_enabled(0, 1) is False
 
 
+def test_24h_gate_requires_repeated_and_late_multi_project_delivery():
+    complete = live.SoakResult(
+        completed=20,
+        multi_project_runs=6,
+        multi_project_projects=12,
+        multi_project_tasks=24,
+        multi_project_recoveries=12,
+        multi_project_first_elapsed_seconds=120,
+        multi_project_last_elapsed_seconds=23 * 3600,
+        elapsed_seconds=24 * 3600,
+    )
+    live.require_long_haul_multi_project_coverage(
+        complete,
+        hours=24,
+        project_count=2,
+    )
+
+    with pytest.raises(RuntimeError, match="multi-project cycles"):
+        live.require_long_haul_multi_project_coverage(
+            replace(complete, multi_project_runs=5),
+            hours=24,
+            project_count=2,
+        )
+
+    with pytest.raises(RuntimeError, match="ended too early"):
+        live.require_long_haul_multi_project_coverage(
+            replace(
+                complete,
+                multi_project_last_elapsed_seconds=12 * 3600,
+            ),
+            hours=24,
+            project_count=2,
+        )
+
+    # Short confidence gates should not inherit the 24H minimum-count rule.
+    live.require_long_haul_multi_project_coverage(
+        live.SoakResult(),
+        hours=0.5,
+        project_count=2,
+    )
+
+
 def test_soak_transient_status_rotation_covers_all_http_classes():
     assert [
         live._soak_transient_status_code(run_number, 2)
@@ -3457,6 +3499,21 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     assert (conflict_repo / "recovery-target-side.txt").read_text(
         encoding="utf-8"
     ) == "advanced during recovery\n"
+
+
+def test_merge_cross_matrix_includes_restart_and_queue_fallback_contracts():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    start = source.index("def merge_cross_matrix_preflight")
+    end = source.index("\nRUNNER_WORKSPACE_DELIVERY_CASES", start)
+    block = source[start:end]
+
+    assert "merge-owned-restart-preflight" in block
+    assert "KeyboardInterrupt" in block
+    assert "restart_result = MergeManager().merge(" in block
+    assert "merge-release-head-preflight" in block
+    assert "release_merge_slot(" in block
+    assert '"owned_restart": restart_result.status' in block
+    assert '"fallback_release_delivered": release_delivered.status' in block
 
 
 def test_runner_workspace_delivery_live_probe_runs_before_multi_project_and_api_recovery():
@@ -4480,6 +4537,9 @@ def test_multi_project_delivery_probe_runs_independent_real_path_commands(
             "final_entries": ["BASE", "TASK_A", "TASK_B"],
             "merge_count": 2,
             "source_status": "",
+            "cleanup_result_count": 3,
+            "remaining_worktrees": 1,
+            "remaining_local_task_branches": [],
             "launches": [
                 {"label": "task-a", "goal": "TASK_A"},
                 {"label": "task-b", "goal": "TASK_B"},
