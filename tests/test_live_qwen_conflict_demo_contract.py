@@ -89,3 +89,14 @@ def test_live_qwen_clean_check_ignores_only_runner_runtime_state(tmp_path: Path)
 
     assert "unexpected.txt" in status
     assert ".ai-task-runner" not in status
+
+def test_live_qwen_conflict_demo_cleans_task_and_recovery_workspaces() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert source.count("service.cleanup(") >= 2
+    assert '"worktree", "list", "--porcelain"' in source
+    assert '"local/task/"' in source
+    assert '"local/recovery/"' in source
+    assert '"cleanup_result_count": len(cleanup_rows)' in source
+    assert '"remaining_worktrees": len(worktree_paths)' in source
+
