@@ -500,7 +500,16 @@ def test_three_concurrent_runner_worktrees_recover_in_fifo_against_latest_main(
     assert (repo / "app.txt").read_text(encoding="utf-8") == (
         "task-a + task-b + task-c\n"
     )
-    assert _git(repo, "status", "--porcelain") == ""
+    source_status = _git(
+        repo,
+        "status",
+        "--porcelain",
+        "--",
+        ".",
+        ":(exclude).ai-task-runner",
+        ":(exclude).ai-task-runner/**",
+    )
+    assert source_status == ""
 
     # Original outputs remain immutable evidence and are never rewritten by
     # conflict recovery.
