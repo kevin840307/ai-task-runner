@@ -1023,9 +1023,11 @@ class TaskRunService:
     ) -> Path:
         root = recovery.project_root / ".ai-task-runner" / "ui" / "merge-recovery"
         root.mkdir(parents=True, exist_ok=True)
-        path = root / (
-            f"{recovery.task_id}-r{recovery.run_number}-f{int(failure_number)}.patch"
-        )
+        # Keep the runtime-owned patch name intentionally short. Recovery
+        # worktree roots are already identity-scoped; repeating the full Task
+        # id here can exceed Windows Git path limits before snapshot exclusions
+        # are applied.
+        path = root / f"f{int(failure_number)}.patch"
         path.write_text(str(patch), encoding="utf-8")
         return path
 
