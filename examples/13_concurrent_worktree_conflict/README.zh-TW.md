@@ -114,6 +114,27 @@ Task B Runner ─┘
                 Merge Main
 ```
 
+另外同一份 production-path pytest 已補 **3 Task chained recovery**：
+
+```text
+Task A / B / C 同時從同一 Main HEAD 啟動
+  ↓
+A merge
+  ↓
+B conflict -> Recovery(B) 基於最新 A -> merge
+  ↓
+C 在 B recovery 期間維持 pending_merge
+  ↓
+C conflict -> Recovery(C) 必須基於最新 A+B -> merge
+  ↓
+Final Main = A+B+C
+```
+
+同時 `tests/test_concurrent_worktree_conflict_demo.py` 會平行啟動兩個獨立 Project，
+每個 Project 各自執行兩個 Runner + conflict recovery，用來驗證 repository-scoped
+worktree / merge queue / Git lock 不會跨 Project 污染。
+
+
 AI 本身仍使用 deterministic test agent，所以 CI 不需要外部 Qwen；Runner process、worktree、snapshot、conflict detection、recovery orchestration 與 merge 都是 production code。
 
 
