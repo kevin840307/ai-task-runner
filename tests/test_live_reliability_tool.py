@@ -3459,10 +3459,11 @@ def test_runner_workspace_delivery_probe_crosses_runner_worktree_and_merge_with_
     ) == "advanced during recovery\n"
 
 
-def test_runner_workspace_delivery_live_probe_runs_between_file_protection_and_api_recovery():
+def test_runner_workspace_delivery_live_probe_runs_before_multi_project_and_api_recovery():
     index = live.PROBE_ORDER.index("runner-workspace-delivery")
     assert live.PROBE_ORDER[index - 1] == "file-protection"
-    assert live.PROBE_ORDER[index + 1] == "api-502"
+    assert live.PROBE_ORDER[index + 1] == "multi-project-task-delivery"
+    assert live.PROBE_ORDER[index + 2] == "api-502"
 
 
 def test_runner_workspace_delivery_case_matrix_covers_modes_policies_and_target_failures():
