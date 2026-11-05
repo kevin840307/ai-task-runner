@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
@@ -26,6 +27,7 @@ if str(ROOT) not in sys.path:
 RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
+LIVE_CONCURRENT_CONFLICT_DEMO = ROOT / "examples" / "13_concurrent_worktree_conflict" / "live_qwen_demo.py"
 EXPECTED = "AI Task Runner live probe passed."
 
 from runner.config.defaults import MAX_TRANSITION_HISTORY
@@ -76,6 +78,7 @@ PROBE_ORDER = (
     "validator-failure-routing",
     "file-protection",
     "runner-workspace-delivery",
+    "multi-project-task-delivery",
     "api-502",
     "api-429",
     "api-503",
@@ -331,6 +334,8 @@ class Settings:
     soak_timeout_every: int
     soak_yaml_every: int
     soak_sandbox_every: int
+    soak_multi_project_every: int
+    multi_project_count: int
 
 
 @dataclass(frozen=True)
@@ -342,6 +347,10 @@ class SoakResult:
     timeout_probes: int = 0
     yaml_runs: int = 0
     sandbox_runs: int = 0
+    multi_project_runs: int = 0
+    multi_project_projects: int = 0
+    multi_project_tasks: int = 0
+    multi_project_recoveries: int = 0
     elapsed_seconds: float = 0
     resource_start: dict[str, int] = field(default_factory=dict)
     resource_max: dict[str, int] = field(default_factory=dict)
@@ -445,6 +454,24 @@ def arguments() -> argparse.Namespace:
         type=int,
         default=0,
         help="run every Nth soak task with Qwen sandbox enabled; 0 disables",
+    )
+    parser.add_argument(
+        "--soak-multi-project-every",
+        type=int,
+        default=0,
+        help=(
+            "run a real-Qwen multi-project concurrent Task/worktree/merge/recovery "
+            "stress probe every N soak runs; 0 disables"
+        ),
+    )
+    parser.add_argument(
+        "--multi-project-count",
+        type=int,
+        default=2,
+        help=(
+            "number of independent Projects to stress concurrently in each "
+            "multi-project Task/worktree/merge/recovery probe"
+        ),
     )
     parser.add_argument(
         "--high-density",
@@ -5091,6 +5118,118 @@ def _record_resource_snapshot(
         handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
+def multi_project_multi_task_delivery_probe(
+    settings: Settings,
+    root: Path,
+    case_name: str = "multi-project-task-delivery",
+    *,
+    project_count: int | None = None,
+) -> dict[str, object]:
+    """Stress real Qwen across independent Projects with concurrent Main Tasks.
+
+    Each Project runs the production example path:
+    TaskRunService -> isolated Task worktrees -> real Runner/Qwen -> snapshot ->
+    MergeQueue/MergeManager -> real conflict -> latest-target recovery worktree ->
+    recovery Runner/Qwen -> final merge.
+
+    Projects are executed concurrently so repository locks and merge queues must
+    remain repository-scoped. This intentionally excludes browser/UI operation.
+    """
+    count = int(project_count or settings.multi_project_count)
+    if count < 2:
+        raise RuntimeError("multi-project reliability probe requires at least two Projects")
+    if not LIVE_CONCURRENT_CONFLICT_DEMO.is_file():
+        raise RuntimeError(
+            f"live concurrent conflict demo is missing: {LIVE_CONCURRENT_CONFLICT_DEMO}"
+        )
+
+    parent = root / case_name
+    parent.mkdir(parents=True, exist_ok=False)
+    timeout_seconds = max(60, int(settings.agent_timeout))
+
+    def run_project(index: int) -> dict[str, object]:
+        project_root = parent / f"project-{index:02d}"
+        command = [
+            sys.executable,
+            str(LIVE_CONCURRENT_CONFLICT_DEMO),
+            "--root",
+            str(project_root),
+            "--qwen-command",
+            settings.command,
+            "--timeout",
+            str(timeout_seconds),
+            "--json",
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=settings.run_timeout,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"multi-project live conflict Project {index} failed "
+                f"({completed.returncode}):\n"
+                f"{completed.stdout[-6000:]}\n{completed.stderr[-6000:]}"
+            )
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"multi-project live conflict Project {index} returned invalid JSON: "
+                f"{completed.stdout[-6000:]}"
+            ) from exc
+
+        entries = set(payload.get("final_entries") or [])
+        if entries != {"BASE", "TASK_A", "TASK_B"}:
+            raise RuntimeError(
+                f"multi-project Project {index} final entries mismatch: {sorted(entries)}"
+            )
+        if int(payload.get("merge_count") or 0) < 2:
+            raise RuntimeError(
+                f"multi-project Project {index} did not retain two delivery merge boundaries"
+            )
+        launches = payload.get("launches")
+        if not isinstance(launches, list) or len(launches) < 3:
+            raise RuntimeError(
+                f"multi-project Project {index} did not run two Tasks plus recovery"
+            )
+        recovery_launches = [
+            row for row in launches
+            if isinstance(row, dict)
+            and str(row.get("goal") or "").startswith("Merge-repair task only.")
+        ]
+        if len(recovery_launches) != 1:
+            raise RuntimeError(
+                f"multi-project Project {index} expected exactly one recovery Runner, "
+                f"got {len(recovery_launches)}"
+            )
+        if str(payload.get("source_status") or ""):
+            raise RuntimeError(
+                f"multi-project Project {index} left source changes: "
+                f"{payload.get('source_status')}"
+            )
+        return payload
+
+    with ThreadPoolExecutor(max_workers=count) as pool:
+        futures = [pool.submit(run_project, index) for index in range(1, count + 1)]
+        projects = [future.result(timeout=settings.run_timeout) for future in futures]
+
+    project_paths = [str(row.get("project") or "") for row in projects]
+    if len(set(project_paths)) != count:
+        raise RuntimeError("multi-project probe did not use independent Project repositories")
+
+    return {
+        "projects": count,
+        "tasks": count * 2,
+        "recoveries": count,
+        "runner_launches": sum(len(row.get("launches") or []) for row in projects),
+        "merge_commits": sum(int(row.get("merge_count") or 0) for row in projects),
+        "project_paths": project_paths,
+    }
+
+
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
@@ -5139,6 +5278,27 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                     f"soak-yaml-{run_number:04d}",
                 )
             result = replace(result, yaml_runs=result.yaml_runs + 1)
+
+        if every_nth(settings.soak_multi_project_every, run_number):
+            multi_result = multi_project_multi_task_delivery_probe(
+                run_settings,
+                root,
+                f"soak-multi-project-{run_number:04d}",
+                project_count=settings.multi_project_count,
+            )
+            result = replace(
+                result,
+                multi_project_runs=result.multi_project_runs + 1,
+                multi_project_projects=(
+                    result.multi_project_projects + int(multi_result["projects"])
+                ),
+                multi_project_tasks=(
+                    result.multi_project_tasks + int(multi_result["tasks"])
+                ),
+                multi_project_recoveries=(
+                    result.multi_project_recoveries + int(multi_result["recoveries"])
+                ),
+            )
 
         project = create_project(root, f"soak-{run_number:04d}")
         mixed = soak_mixed_final_ai_enabled(
@@ -5254,6 +5414,7 @@ def require_dense_coverage(result: SoakResult) -> None:
             ("timeout", result.timeout_probes),
             ("YAML List", result.yaml_runs),
             ("sandbox", result.sandbox_runs),
+            ("multi-project Task/worktree/merge/recovery", result.multi_project_runs),
         )
         if count < 1
     ]
@@ -7118,6 +7279,8 @@ def main() -> int:
             args.soak_yaml_every = 7
         if args.soak_sandbox_every == 0:
             args.soak_sandbox_every = 7
+        if args.soak_multi_project_every == 0:
+            args.soak_multi_project_every = 1
     if (
         args.hours < 0 or args.pause < 0
         or args.run_timeout <= 0
@@ -7128,6 +7291,8 @@ def main() -> int:
         or args.soak_timeout_every < 0
         or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
+        or args.soak_multi_project_every < 0
+        or args.multi_project_count < 2
         or args.long_http_outage_seconds <= 0
         or args.long_api_outage_seconds <= 0
         or args.single_process_yaml_items < 0
@@ -7154,6 +7319,8 @@ def main() -> int:
         args.soak_timeout_every,
         args.soak_yaml_every,
         args.soak_sandbox_every,
+        args.soak_multi_project_every,
+        args.multi_project_count,
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
@@ -7178,6 +7345,7 @@ def main() -> int:
     worktree_isolation: dict[str, object] = {}
     merge_cross_matrix: dict[str, object] = {}
     runner_workspace_delivery: dict[str, object] = {}
+    multi_project_task_delivery: dict[str, object] = {}
     transient_observed = False
     soak_result = SoakResult()
     example_results: list[tuple[ExampleSmokeCase, Path]] = []
@@ -7322,6 +7490,19 @@ def main() -> int:
             print_probe_pass(
                 "runner-workspace-delivery",
                 "real Runner × Auto/Main/Worktree policy + busy-block guards + target-advance + conflict/recovery merge cross probe",
+            )
+        if probe_enabled("multi-project-task-delivery", start_probe):
+            multi_project_task_delivery = multi_project_multi_task_delivery_probe(
+                settings,
+                run_root,
+                "multi-project-task-delivery-probe",
+                project_count=args.multi_project_count,
+            )
+            print_probe_pass(
+                "multi-project-task-delivery",
+                f"real Qwen {multi_project_task_delivery['projects']} Projects / "
+                f"{multi_project_task_delivery['tasks']} concurrent Tasks / "
+                f"{multi_project_task_delivery['recoveries']} conflict recoveries",
             )
         if probe_enabled("api-502", start_probe):
             transient_observed = api_recovery_probe(settings, run_root)
@@ -7487,6 +7668,7 @@ def main() -> int:
         "review_failure_routing_probe": probe_enabled("review-failure-routing", start_probe),
         "validator_failure_routing_probe": probe_enabled("validator-failure-routing", start_probe),
         "runner_workspace_delivery_probe": runner_workspace_delivery,
+        "multi_project_task_delivery_probe": multi_project_task_delivery,
         "yaml_list_resume_probe": probe_enabled("yaml-list-resume", start_probe),
         "yaml_list_item_runtime_options_probe": probe_enabled("yaml-list-resume", start_probe),
         "yaml_list_final_ai_quorum_probe": probe_enabled("yaml-list-resume", start_probe),
@@ -7506,6 +7688,12 @@ def main() -> int:
         "soak_yaml_runs": soak_result.yaml_runs,
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
+        "soak_multi_project_every": settings.soak_multi_project_every,
+        "multi_project_count": settings.multi_project_count,
+        "soak_multi_project_runs": soak_result.multi_project_runs,
+        "soak_multi_project_projects": soak_result.multi_project_projects,
+        "soak_multi_project_tasks": soak_result.multi_project_tasks,
+        "soak_multi_project_recoveries": soak_result.multi_project_recoveries,
         "resource_observation": {
             "start": soak_result.resource_start,
             "max": soak_result.resource_max,
