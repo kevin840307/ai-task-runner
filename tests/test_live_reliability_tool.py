@@ -3494,7 +3494,7 @@ def test_runner_workspace_delivery_case_matrix_covers_modes_policies_and_target_
 
 
 def test_live_probe_order_runs_long_soak_last():
-    assert len(live.PROBE_ORDER) == 50
+    assert len(live.PROBE_ORDER) == 51
     assert live.PROBE_ORDER[-1] == "soak"
     assert live.PROBE_ORDER[-7:] == (
         "example-smoke",
@@ -3508,12 +3508,12 @@ def test_live_probe_order_runs_long_soak_last():
 
 
 def test_dynamic_handoff_extended_live_probes_run_before_soak():
-    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 45
-    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 46
-    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 47
-    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 48
-    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 49
-    assert live.PROBE_ORDER.index("soak") + 1 == 50
+    assert live.PROBE_ORDER.index("bundled-dynamic-handoff") + 1 == 46
+    assert live.PROBE_ORDER.index("dynamic-handoff-role-matrix") + 1 == 47
+    assert live.PROBE_ORDER.index("dynamic-handoff-final-recovery") + 1 == 48
+    assert live.PROBE_ORDER.index("dynamic-handoff-api-recovery") + 1 == 49
+    assert live.PROBE_ORDER.index("dynamic-handoff-stop-resume") + 1 == 50
+    assert live.PROBE_ORDER.index("soak") + 1 == 51
 
 
 def test_main_executes_long_soak_after_dynamic_handoff_probes():
