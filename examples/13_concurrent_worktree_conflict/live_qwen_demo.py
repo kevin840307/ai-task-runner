@@ -41,6 +41,24 @@ def _git(cwd: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _source_status_ignoring_runner_runtime(project: Path) -> str:
+    """Match production MergeManager target-clean semantics.
+
+    TaskService intentionally persists lifecycle state under .ai-task-runner.
+    That runner-owned metadata must not make the source Project appear dirty,
+    while every other uncommitted Project change remains a hard failure.
+    """
+    return _git(
+        project,
+        "status",
+        "--porcelain=v1",
+        "--",
+        ".",
+        ":(exclude).ai-task-runner",
+        ":(exclude).ai-task-runner/**",
+    )
+
+
 def _init_project(base: Path) -> Path:
     project = base / "project"
     project.mkdir(parents=True)
@@ -386,8 +404,12 @@ def run_live_demo(
     final_values = set(_enabled_tasks(project / "shared.txt"))
     if final_values != {"BASE", "TASK_A", "TASK_B"}:
         raise RuntimeError(f"Final Main content is wrong: {sorted(final_values)}")
-    if _git(project, "status", "--porcelain"):
-        raise RuntimeError("Final Main worktree is dirty")
+    source_status = _source_status_ignoring_runner_runtime(project)
+    if source_status:
+        raise RuntimeError(
+            "Final Main has uncommitted source changes outside runner-owned runtime state:\n"
+            + source_status
+        )
     merge_count = int(_git(project, "rev-list", "--merges", "--count", "HEAD"))
     if merge_count < 2:
         raise RuntimeError(f"Expected at least two merge commits, got {merge_count}")
@@ -415,6 +437,7 @@ def run_live_demo(
         "history": history,
         "logs": str(logs),
         "launches": launches,
+        "source_status": source_status,
     }
 
 
