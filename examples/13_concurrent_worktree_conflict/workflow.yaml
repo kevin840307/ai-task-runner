@@ -1,0 +1,11 @@
+stages:
+  execute:
+    type: base
+    profile: execute
+    prompt: common/execution.md
+    instructions: Apply the deterministic concurrent-worktree demo change and finish.
+    mode: write
+    track_changes: true
+
+flow:
+  - execute
